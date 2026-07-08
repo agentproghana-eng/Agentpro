@@ -171,7 +171,7 @@ if (process.env.NODE_ENV !== 'test') {
       logger.info(`🚀 Agent Pro Ghana API running on port ${PORT}`);
       logger.info(`📊 Environment: ${process.env.NODE_ENV}`);
     });
-  } catch (error) {
+    } catch (error) {
     logger.error('Failed to start server:', error);
     process.exit(1);
   }
