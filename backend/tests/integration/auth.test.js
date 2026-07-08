@@ -1,6 +1,5 @@
 const request = require('supertest');
 const app = require('../../server');
-const { apiLimiter } = require('../../src/middleware/rateLimit');
 
 // ─── Auth Integration Tests ───────────────────────────────────
 
@@ -122,6 +121,8 @@ describe('Protected Routes', () => {
 
 // ─── Health Check ─────────────────────────────────────────────
 
+// ─── Health Check ─────────────────────────────────────────────
+
 describe('GET /health', () => {
   it('returns health status', async () => {
     const res = await request(app).get('/health');
@@ -129,6 +130,8 @@ describe('GET /health', () => {
     expect([200, 503]).toContain(res.status);
     expect(res.body).toHaveProperty('app');
     expect(res.body).toHaveProperty('services');
+  });
+});
 
 // ─── 404 Handling ─────────────────────────────────────────────
 
