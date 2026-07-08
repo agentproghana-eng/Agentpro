@@ -136,8 +136,8 @@ describe('Rate Limiting', () => {
   it('returns 429 after too many requests', async () => {
     // Make 101 rapid requests — should trigger rate limit
     const promises = Array.from({ length: 105 }, () =>
-      request(app).get('/health')
-    );
+  request(app).get('/api/v1/transactions')
+);
     const results = await Promise.all(promises);
     const rateLimited = results.some(r => r.status === 429);
     expect(rateLimited).toBe(true);
