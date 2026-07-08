@@ -3,9 +3,9 @@ class AppConstants {
 
   // ── API ──────────────────────────────────────────────────────
   static const String apiBaseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'https://api.agentproghana.com/v1',
-  );
+  'API_BASE_URL',
+  defaultValue: 'http://127.0.0.1:3000/v1',
+);
 
   // For local development:
   // static const String apiBaseUrl = 'http://10.0.2.2:3000/v1';
