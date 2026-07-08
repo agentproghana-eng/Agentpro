@@ -123,7 +123,7 @@ describe('Protected Routes', () => {
 
 describe('GET /health', () => {
   it('returns health status', async () => {
-    const res = await request(app).get('/health');
+    const res = await app.use('/api/', apiLimiter);
     expect([200, 503]).toContain(res.status);
     expect(res.body).toHaveProperty('app');
     expect(res.body).toHaveProperty('services');
