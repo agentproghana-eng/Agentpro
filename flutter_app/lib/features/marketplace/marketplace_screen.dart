@@ -1,5 +1,6 @@
 // marketplace_screen.dart
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
@@ -22,7 +23,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     setState(() => _loading = true);
     try {
       final res = await ApiClient.instance.get('/marketplace',
-        queryParameters: if (search != null && search.isNotEmpty) {'search': search} else {});
+        queryParameters: (search != null && search.isNotEmpty) ? {'search': search} : {});
       if (mounted) setState(() { _ads = res.data['data'] ?? []; _loading = false; });
     } catch (_) { if (mounted) setState(() => _loading = false); }
   }
