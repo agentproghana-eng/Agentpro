@@ -171,7 +171,7 @@ jobs:
 
       - name: Build debug APK
         working-directory: flutter_app
-        run: flutter build apk --debug --stacktrace
+        run: flutter build apk --debug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
