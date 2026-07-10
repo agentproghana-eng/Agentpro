@@ -145,14 +145,18 @@ const PORT = process.env.PORT || 3000;
 
 async function startServer() {
   try {
-    console.log('DEBUG DATABASE_URL exists:', (process.env.DATABASE_URL ? 'YES' : 'NO'), 'length:', (process.env.DATABASE_URL || '').length);
     // Connect to PostgreSQL
     await connectDB();
     logger.info('✅ PostgreSQL connected');
 
-    // Connect to Redis
-    await connectRedis();
-    logger.info('✅ Redis connected');
+    // Connect to Redis (non-fatal: app runs with reduced functionality
+    // - no token blacklisting, no caching - if Redis is unavailable)
+    try {
+      await connectRedis();
+      logger.info('✅ Redis connected');
+    } catch (redisErr) {
+      logger.warn('⚠️  Redis unavailable, continuing without it:', redisErr.message);
+    }
 
 // Initialize Firebase (skip during tests)
 if (process.env.NODE_ENV !== 'test') {
