@@ -14,5 +14,3 @@ restartPolicyMaxRetries = 3
 [[services]]
 name = "agentpro-api"
 
-[services.networking]
-port = 3000
