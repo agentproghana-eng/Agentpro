@@ -31,7 +31,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   }
 
   void _addWelcome() {
-    _messages.add(_ChatMessage(
+    _messages.add(const _ChatMessage(
       role: 'assistant',
       content: 'Akwaaba! 👋 I\'m your Agent Pro Ghana AI Assistant.\n\n'
           'I can help you with:\n'
@@ -71,7 +71,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     } on DioException catch (_) {
       if (mounted) {
         setState(() {
-          _messages.add(_ChatMessage(
+          _messages.add(const _ChatMessage(
             role: 'assistant',
             content: 'Sorry, I\'m having trouble connecting right now. Please try again.',
             isError: true,
