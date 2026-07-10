@@ -43,16 +43,18 @@ subprojects { subproject ->
 }
 
 // Fix for "Inconsistent JVM Target Compatibility" errors in third-party
-// plugins (e.g. flutter_jailbreak_detection) whose own build.gradle
-// doesn't explicitly set a Kotlin jvmTarget, letting it default to a
-// newer value than their Java target (1.8). Applied project-wide using
-// tasks.withType(...).configureEach, which lazily configures tasks as
-// they're created — avoids the evaluation-order issues afterEvaluate
-// caused earlier in this file.
+// plugins whose own build.gradle files disagree on Java/Kotlin targets
+// (some assume 1.8, some assume 17). Forces BOTH Java and Kotlin compile
+// tasks project-wide to the same target (17, matching the JDK/AGP/Gradle
+// versions already in use), rather than picking one side arbitrarily.
 allprojects {
     tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
         kotlinOptions {
-            jvmTarget = "1.8"
+            jvmTarget = "17"
         }
+    }
+    tasks.withType(JavaCompile).configureEach {
+        sourceCompatibility = "17"
+        targetCompatibility = "17"
     }
 }
