@@ -95,7 +95,7 @@ app.get('/health', async (req, res) => {
     redisStatus = 'unhealthy';
   }
 
-  const status = dbStatus === 'healthy' && redisStatus === 'healthy' ? 200 : 503;
+  const status = dbStatus === 'healthy' ? 200 : 503;
 
   res.status(status).json({
     success: status === 200,
