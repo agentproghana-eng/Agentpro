@@ -7,6 +7,7 @@ import 'package:agent_pro_ghana/core/services/ussd_service.dart';
 // ── Commission calculation tests (pure Dart, no Flutter needed) ──
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   group('Commission Calculations', () {
     test('calculates 2% commission correctly', () {
       final gross = 500.0 * 0.02;
