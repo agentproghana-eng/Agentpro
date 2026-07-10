@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/auth/auth_bloc.dart';
@@ -75,7 +76,9 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: BlocConsumer<AuthBloc, AuthState>(
+      body: Stack(
+        children: [
+          BlocConsumer<AuthBloc, AuthState>(
         listener: (context, state) {
           if (state is AuthError) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -222,6 +225,23 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           );
         },
+      ),
+          Positioned(
+            bottom: 8,
+            right: 12,
+            child: FutureBuilder<PackageInfo>(
+              future: PackageInfo.fromPlatform(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return const SizedBox.shrink();
+                final info = snapshot.data!;
+                return Text(
+                  "v${info.version}+${info.buildNumber}",
+                  style: TextStyle(fontSize: 10, color: Colors.grey.withOpacity(0.6)),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
