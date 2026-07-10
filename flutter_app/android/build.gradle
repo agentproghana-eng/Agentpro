@@ -42,19 +42,28 @@ subprojects { subproject ->
     }
 }
 
+// Fix for "Inconsistent JVM Target Compatibility" errors. Uses the same
+// proven plugins.withId pattern as the namespace fix above, applied per
+// plugin rather than a generic subprojects-wide rule (which failed:
+// the android extension was not yet available at that point for some
+// plugins).
 subprojects { subproject ->
     subproject.plugins.withId("com.android.library") {
-        subproject.android {
-            compileOptions {
-                sourceCompatibility JavaVersion.VERSION_17
-                targetCompatibility JavaVersion.VERSION_17
+        if (["flutter_jailbreak_detection", "image_picker_android"].contains(subproject.name)) {
+            subproject.android {
+                compileOptions {
+                    sourceCompatibility JavaVersion.VERSION_17
+                    targetCompatibility JavaVersion.VERSION_17
+                }
             }
         }
     }
     subproject.plugins.withId("org.jetbrains.kotlin.android") {
-        subproject.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-            kotlinOptions {
-                jvmTarget = "17"
+        if (["flutter_jailbreak_detection", "image_picker_android"].contains(subproject.name)) {
+            subproject.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+                kotlinOptions {
+                    jvmTarget = "17"
+                }
             }
         }
     }
