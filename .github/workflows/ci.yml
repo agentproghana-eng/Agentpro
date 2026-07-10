@@ -173,6 +173,11 @@ jobs:
         working-directory: flutter_app
         run: flutter build apk --debug
 
+      - name: Get full stacktrace if build failed
+        if: failure()
+        working-directory: flutter_app/android
+        run: ./gradlew assembleDebug --stacktrace
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
