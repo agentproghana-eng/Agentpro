@@ -42,19 +42,20 @@ subprojects { subproject ->
     }
 }
 
-// Fix for "Inconsistent JVM Target Compatibility" errors in third-party
-// plugins whose own build.gradle files disagree on Java/Kotlin targets
-// (some assume 1.8, some assume 17). Forces BOTH Java and Kotlin compile
-// tasks project-wide to the same target (17, matching the JDK/AGP/Gradle
-// versions already in use), rather than picking one side arbitrarily.
-allprojects {
-    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-        kotlinOptions {
-            jvmTarget = "17"
+subprojects { subproject ->
+    subproject.plugins.withId("com.android.library") {
+        subproject.android {
+            compileOptions {
+                sourceCompatibility JavaVersion.VERSION_17
+                targetCompatibility JavaVersion.VERSION_17
+            }
         }
     }
-    tasks.withType(JavaCompile).configureEach {
-        sourceCompatibility = "17"
-        targetCompatibility = "17"
+    subproject.plugins.withId("org.jetbrains.kotlin.android") {
+        subproject.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+            kotlinOptions {
+                jvmTarget = "17"
+            }
+        }
     }
 }
