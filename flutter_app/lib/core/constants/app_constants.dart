@@ -4,7 +4,7 @@ class AppConstants {
   // ── API ──────────────────────────────────────────────────────
 static const String apiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://127.0.0.1:3000/v1',
+  defaultValue: 'https://agentpro-production-5ece.up.railway.app/api/v1',
 );
 
   // For local development:
