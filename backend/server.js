@@ -145,6 +145,7 @@ const PORT = process.env.PORT || 3000;
 
 async function startServer() {
   try {
+    console.log('DEBUG DATABASE_URL exists:', (process.env.DATABASE_URL ? 'YES' : 'NO'), 'length:', (process.env.DATABASE_URL || '').length);
     // Connect to PostgreSQL
     await connectDB();
     logger.info('✅ PostgreSQL connected');
