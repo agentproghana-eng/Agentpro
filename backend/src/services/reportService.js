@@ -3,6 +3,8 @@ const ExcelJS = require('exceljs');
 const { query } = require('../config/database');
 const { uploadPDF } = require('../config/cloudinary');
 const { logger } = require('../utils/logger');
+const path = require('path');
+const LOGO_PATH = path.join(__dirname, '..', 'agentpro-logo-transparent.png');
 
 const GHS = (n) => `GH₵ ${parseFloat(n || 0).toFixed(2)}`;
 const dateStr = (d) => d ? new Date(d).toLocaleDateString('en-GH') : '—';
@@ -57,8 +59,8 @@ async function generateTransactionReceipt(transaction) {
     await new Promise((resolve) => {
       doc.on('end', resolve);
 
-      // Header
       doc.rect(0, 0, doc.page.width, 60).fill(COLORS.primary);
+      try { doc.image(LOGO_PATH, 20, 8, { height: 24 }); } catch (e) { logger.warn('Logo image not found, skipping:', e.message); }
       doc.fillColor('white').fontSize(14).font('Helvetica-Bold')
         .text('Agent Pro Ghana', 20, 14, { align: 'center' });
       doc.fontSize(8).font('Helvetica')
@@ -141,6 +143,7 @@ async function generateTransactionReportPDF({ transactions, filters, summary, ti
 
     // Header
     doc.rect(0, 0, doc.page.width, 70).fill(COLORS.primary);
+    try { doc.image(LOGO_PATH, 15, 15, { height: 40 }); } catch (e) { logger.warn('Logo image not found, skipping:', e.message); }
     doc.fillColor('white').fontSize(18).font('Helvetica-Bold')
       .text('Agent Pro Ghana', 40, 15);
     doc.fontSize(11).font('Helvetica')
@@ -329,6 +332,7 @@ async function generateCommissionReportPDF({ commissions, summary, title, groupB
     doc.on('end', resolve);
 
     doc.rect(0, 0, doc.page.width, 70).fill(COLORS.primary);
+    try { doc.image(LOGO_PATH, 15, 15, { height: 40 }); } catch (e) { logger.warn('Logo image not found, skipping:', e.message); }
     doc.fillColor('white').fontSize(18).font('Helvetica-Bold')
       .text('Agent Pro Ghana', 40, 15);
     doc.fontSize(11).font('Helvetica')
