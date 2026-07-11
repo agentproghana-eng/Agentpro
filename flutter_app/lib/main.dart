@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
 
 import 'core/api/api_client.dart';
@@ -25,8 +24,6 @@ void main() async {
   // Initialize Firebase
   await Firebase.initializeApp();
 
-  // Crashlytics
-  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
 
   // Initialize encrypted storage
   await StorageService.init();
