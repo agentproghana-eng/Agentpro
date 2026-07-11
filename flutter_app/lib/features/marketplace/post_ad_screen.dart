@@ -6,7 +6,7 @@ import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
 
-/// Create a new Market Centre advertisement.
+/// Create a new Business Hub advertisement.
 ///
 /// This only creates the ad record (status: pending_review). Publishing
 /// requires two further steps the user does afterward, from the "My Ads"

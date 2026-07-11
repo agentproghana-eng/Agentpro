@@ -475,7 +475,7 @@ class _OwnerMoreTab extends StatelessWidget {
             ));
           }),
           _T(Icons.smart_toy_outlined, 'AI Assistant', () => context.push('/ai')),
-          _T(Icons.storefront_outlined, 'Market Centre', () => context.push('/marketplace')),
+          _T(Icons.storefront_outlined, 'Business Hub', () => context.push('/marketplace')),
           _T(Icons.card_membership_outlined, 'Subscription', () => context.push('/subscription')),
           _T(Icons.settings_outlined, 'Settings', () => context.push('/settings')),
           const Divider(),

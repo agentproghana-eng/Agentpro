@@ -356,7 +356,7 @@ class _ManagerMoreTab extends StatelessWidget {
           _Tile(Icons.bar_chart_outlined, 'Reports', () => context.push('/reports')),
           _Tile(Icons.smart_toy_outlined, 'AI Assistant', () => context.push('/ai')),
           _Tile(Icons.swap_horiz, 'Transactions', () => context.push('/transactions')),
-          _Tile(Icons.storefront_outlined, 'Market Centre', () => context.push('/marketplace')),
+          _Tile(Icons.storefront_outlined, 'Business Hub', () => context.push('/marketplace')),
           _Tile(Icons.settings_outlined, 'Settings', () => context.push('/settings')),
           const Divider(),
           _Tile(Icons.logout, 'Sign Out', () => context.read<AuthBloc>().add(AuthLogoutEvent()),

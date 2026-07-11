@@ -129,7 +129,7 @@ const NAV = [
   { path: '/registrations', icon: '🔔', label: 'Registrations' },
   { path: '/subscriptions', icon: '💳', label: 'Subscriptions' },
   { path: '/companies', icon: '🏢', label: 'Companies' },
-  { path: '/marketplace', icon: '🛒', label: 'Marketplace' },
+  { path: '/marketplace', icon: '🛒', label: 'Business Hub' },
   { path: '/commissions', icon: '💰', label: 'Commissions' },
   { path: '/ussd', icon: '📱', label: 'USSD Templates' },
   { path: '/config', icon: '⚙️', label: 'System Config' },

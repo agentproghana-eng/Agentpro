@@ -32,7 +32,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Market Centre'),
+        title: const Text('Business Hub'),
         actions: [
           TextButton.icon(
             onPressed: () => context.push('/marketplace/mine'),
@@ -47,7 +47,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           child: TextField(
             controller: _searchCtrl,
             decoration: InputDecoration(
-              hintText: 'Search Market Centre...',
+              hintText: 'Search Business Hub...',
               prefixIcon: const Icon(Icons.search),
               suffixIcon: IconButton(icon: const Icon(Icons.clear), onPressed: () { _searchCtrl.clear(); _load(); }),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),

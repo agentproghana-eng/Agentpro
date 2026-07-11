@@ -174,7 +174,7 @@ class _StatusExplainer extends StatelessWidget {
       'active' => (
         Icons.check_circle,
         AppTheme.successColor,
-        'Live on Market Centre',
+        'Live on Business Hub',
         expiresAt != null
             ? 'Your ad is published and visible to all users until '
                 '${DateFormat('dd MMM yyyy').format(DateTime.parse(expiresAt!))}.'

@@ -371,7 +371,7 @@ class _MoreTab extends StatelessWidget {
         children: [
           _MoreTile(Icons.bar_chart_outlined, 'Reports', () => context.push('/reports')),
           _MoreTile(Icons.smart_toy_outlined, 'AI Assistant', () => context.push('/ai')),
-          _MoreTile(Icons.storefront_outlined, 'Market Centre', () => context.push('/marketplace')),
+          _MoreTile(Icons.storefront_outlined, 'Business Hub', () => context.push('/marketplace')),
           _MoreTile(Icons.card_membership_outlined, 'Subscription', () => context.push('/subscription')),
           _MoreTile(Icons.settings_outlined, 'Settings', () => context.push('/settings')),
           const Divider(),
