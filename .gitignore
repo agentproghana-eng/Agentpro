@@ -30,3 +30,4 @@ admin_portal/.env
 .idea/
 .vscode/
 *.iml
+*.jks
