@@ -184,6 +184,30 @@ jobs:
           name: debug-apk
           path: flutter_app/build/app/outputs/flutter-apk/app-debug.apk
 
+      - name: Decode release keystore
+        working-directory: flutter_app
+        run: echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > agentpro-release.jks
+
+      - name: Write key.properties
+        working-directory: flutter_app/android
+        run: |
+          cat > key.properties << EOF
+          storePassword=${{ secrets.RELEASE_STORE_PASSWORD }}
+          keyPassword=${{ secrets.RELEASE_KEY_PASSWORD }}
+          keyAlias=${{ secrets.RELEASE_KEY_ALIAS }}
+          storeFile=../agentpro-release.jks
+          EOF
+
+      - name: Build release APK
+        working-directory: flutter_app
+        run: flutter build apk --release
+
+      - name: Upload release APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: flutter_app/build/app/outputs/flutter-apk/app-release.apk
+
   # ── Deploy Backend (main branch only) ────────────────────
   deploy-backend:
     name: Deploy Backend to Railway
