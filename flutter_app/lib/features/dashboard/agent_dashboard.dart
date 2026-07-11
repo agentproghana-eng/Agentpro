@@ -164,7 +164,7 @@ class _HomeTab extends StatelessWidget {
                     physics: const NeverScrollableScrollPhysics(),
                     crossAxisSpacing: 12,
                     mainAxisSpacing: 12,
-                    childAspectRatio: 1.4,
+                    childAspectRatio: 1.1,
                     children: [
                       InfoCard(
                         title: 'Transactions',

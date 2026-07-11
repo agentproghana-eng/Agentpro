@@ -156,7 +156,7 @@ class _OverviewTab extends StatelessWidget {
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   crossAxisSpacing: 12, mainAxisSpacing: 12,
-                  childAspectRatio: 1.4,
+                  childAspectRatio: 1.1,
                   children: [
                     InfoCard(title: 'Transactions Today', value: '${today?['transaction_count'] ?? 0}',
                       icon: Icons.swap_horiz, subtitle: 'All agents'),
