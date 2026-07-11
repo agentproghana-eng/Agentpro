@@ -33,3 +33,10 @@
     public static *** v(...);
     public static *** i(...);
 }
+
+# Google Play Core deferred components - app does not use dynamic
+# feature delivery, but the Flutter engine references these classes
+# optionally. Safe to ignore since they are never actually called.
+-dontwarn com.google.android.play.core.splitcompat.**
+-dontwarn com.google.android.play.core.splitinstall.**
+-dontwarn com.google.android.play.core.tasks.**
