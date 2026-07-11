@@ -133,12 +133,17 @@ const requireActiveSubscription = async (req, res, next) => {
       });
     }
 
-    if (sub.plan === 'free') {
-      return res.status(403).json({
-        success: false,
-        message: 'This feature requires a Business Plan subscription.',
-        code: 'UPGRADE_REQUIRED'
-      });
+    if (sub.plan === "free") {
+      const trialActive = sub.expires_at && new Date(sub.expires_at) > new Date();
+      if (!trialActive) {
+        return res.status(403).json({
+          success: false,
+          message: "Your 30-day free trial has ended. Please subscribe to the Business Plan to continue.",
+          code: "TRIAL_EXPIRED"
+        });
+      }
+      req.subscription = sub;
+      return next();
     }
 
     if (sub.status !== 'active' && sub.status !== 'grace_period') {

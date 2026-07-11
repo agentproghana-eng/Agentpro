@@ -2,6 +2,9 @@ const express = require('express');
 const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
 const { query } = require('../config/database');
+const { withTransaction } = require('../config/database');
+const { sendWelcomeEmail } = require('../services/emailService');
+const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
 
 router.use(authenticate, authorize('superuser'));
@@ -38,6 +41,77 @@ router.get('/pending-registrations', async (req, res) => {
     );
     res.json({ success: true, data: result.rows });
   } catch (e) { res.status(500).json({ success: false, message: 'Failed to fetch registrations' }); }
+});
+
+// ── Approve Registration (starts 30-day free trial) ────────────
+router.patch("/pending-registrations/:company_id/approve", async (req, res) => {
+  const { company_id } = req.params;
+
+  try {
+    const result = await withTransaction(async (client) => {
+      const companyCheck = await client.query(
+        "SELECT id, name, status FROM companies WHERE id = $1",
+        [company_id]
+      );
+      if (companyCheck.rows.length === 0) {
+        throw { statusCode: 404, message: "Company not found" };
+      }
+      if (companyCheck.rows[0].status !== "pending") {
+        throw { statusCode: 400, message: `Company is already ${companyCheck.rows[0].status}, not pending` };
+      }
+
+      await client.query(
+        `UPDATE companies SET status = 'active', updated_at = NOW() WHERE id = $1`,
+        [company_id]
+      );
+
+      const ownerResult = await client.query(
+        `UPDATE users SET status = 'active', updated_at = NOW()
+         WHERE company_id = $1 AND role = 'business_owner'
+         RETURNING id, email, first_name, last_name`,
+        [company_id]
+      );
+      if (ownerResult.rows.length === 0) {
+        throw { statusCode: 404, message: "No business owner found for this company" };
+      }
+      const owner = ownerResult.rows[0];
+
+      await client.query(
+        `UPDATE subscriptions SET status = 'active', started_at = NOW(), expires_at = NOW() + INTERVAL '30 days', updated_at = NOW() WHERE company_id = $1 AND plan = 'free'`,
+        [company_id]
+      );
+
+      return { company: companyCheck.rows[0], owner };
+    });
+
+    try {
+      await sendWelcomeEmail(result.owner.email, result.owner.first_name, result.company.name);
+    } catch (emailErr) {
+      logger.error("Failed to send approval welcome email:", emailErr);
+    }
+
+    await auditLog({
+      userId: req.user.id,
+      companyId: company_id,
+      action: "REGISTRATION_APPROVED",
+      entityType: "company",
+      entityId: company_id,
+      newValues: { status: "active", trial_days: 30 },
+      ipAddress: req.ip,
+      requestId: req.requestId,
+    });
+
+    res.json({
+      success: true,
+      message: `${result.company.name} approved. 30-day free trial started for ${result.owner.email}.`,
+    });
+  } catch (e) {
+    if (e.statusCode) {
+      return res.status(e.statusCode).json({ success: false, message: e.message });
+    }
+    logger.error("Approve registration error:", e);
+    res.status(500).json({ success: false, message: "Failed to approve registration" });
+  }
 });
 
 // ── System Config ─────────────────────────────────────────────

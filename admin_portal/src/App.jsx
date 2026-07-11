@@ -265,8 +265,13 @@ function RegistrationsPage() {
   useEffect(load, []);
 
   const approve = async (companyId) => {
-    // Approval happens via subscription payment verification
-    toast.success('To activate this account, verify their subscription payment in Subscriptions.');
+    try {
+      const res = await API.patch(`/admin/pending-registrations/${companyId}/approve`);
+      toast.success(res.data.message || "Approved! 30-day free trial started.");
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Failed to approve registration");
+    }
   };
 
   return (
@@ -295,9 +300,11 @@ function RegistrationsPage() {
                 <div><span className="text-gray-500">Ghana Card:</span> {r.ghana_card_number || '—'}</div>
                 <div><span className="text-gray-500">Applied:</span> {new Date(r.created_at).toLocaleDateString()}</div>
               </div>
-              <p className="text-xs text-gray-400 mt-4 bg-blue-50 p-3 rounded-lg">
-                💡 To activate this account, ask the business owner to submit payment, then verify it under Subscriptions.
-              </p>
+              <button
+                onClick={() => approve(r.id)}
+                className="w-full mt-4 bg-primary text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-primary-dark transition">
+                ✅ Approve & Start 30-Day Free Trial
+              </button>
             </div>
           ))}
         </div>
