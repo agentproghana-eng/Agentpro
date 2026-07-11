@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const { query, withTransaction } = require('../config/database');
 const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
-const { sendEmail } = require('../services/emailService');
+const { sendEmail, sendNewEmployeeEmail } = require('../services/emailService');
 
 exports.changePassword = async (req, res) => {
   const { current_password, new_password } = req.body;
@@ -199,37 +199,14 @@ exports.createUser = async (req, res) => {
       // Note: tempPassword is intentionally NOT included in audit log values
     });
 
-    // Email the temporary password — this is the only place it's ever transmitted
+    // Email the temporary password - this is the only place it is ever transmitted
     let emailSent = true;
     try {
-      await sendEmail({
-        to: user.email,
-        subject: 'Agent Pro Ghana — Your Account Has Been Created',
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background: #006B5E; padding: 24px; text-align: center;">
-              <h1 style="color: white; margin: 0;">Agent Pro Ghana</h1>
-            </div>
-            <div style="padding: 32px; background: #f9f9f9;">
-              <h2>Hello ${first_name},</h2>
-              <p>An account has been created for you on Agent Pro Ghana as a <strong>${role}</strong>.</p>
-              <p>Your temporary login details:</p>
-              <div style="background: white; border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin: 16px 0;">
-                <p style="margin: 4px 0;"><strong>Email:</strong> ${user.email}</p>
-                <p style="margin: 4px 0;"><strong>Temporary Password:</strong> <code style="background: #f0f0f0; padding: 2px 6px; border-radius: 4px;">${tempPassword}</code></p>
-              </div>
-              <p style="color: #BA1A1A; font-weight: bold;">
-                Please log in and change this password immediately. Do not share it with anyone.
-              </p>
-              <p style="color: #666; font-size: 14px;">
-                Never share your password or MoMo PIN with anyone, including Agent Pro Ghana staff.
-              </p>
-            </div>
-          </div>
-        `,
-      });
+      const companyResult = await query("SELECT name FROM companies WHERE id = $1", [req.user.company_id]);
+      const companyName = companyResult.rows[0]?.name || "Agent Pro Ghana";
+      await sendNewEmployeeEmail(user.email, first_name, last_name, role, companyName, tempPassword);
     } catch (emailError) {
-      logger.error('Failed to send temp password email:', emailError);
+      logger.error("Failed to send new employee email:", emailError);
       emailSent = false;
     }
 
