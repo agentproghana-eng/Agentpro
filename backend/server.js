@@ -47,6 +47,7 @@ app.use(cors({
     'http://localhost',
     'http://localhost:5173',
     'http://127.0.0.1:5173',
+    'https://fastidious-flan-33d060.netlify.app',
   ],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
