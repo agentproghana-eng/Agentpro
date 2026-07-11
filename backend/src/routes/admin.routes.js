@@ -4,6 +4,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { query } = require('../config/database');
 const { withTransaction } = require('../config/database');
 const { sendWelcomeEmail } = require('../services/emailService');
+const { sendRegistrationApprovedSMS } = require('../services/smsService');
 const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
 
@@ -68,7 +69,7 @@ router.patch("/pending-registrations/:company_id/approve", async (req, res) => {
       const ownerResult = await client.query(
         `UPDATE users SET status = 'active', updated_at = NOW()
          WHERE company_id = $1 AND role = 'business_owner'
-         RETURNING id, email, first_name, last_name`,
+         RETURNING id, email, phone, first_name, last_name`,
         [company_id]
       );
       if (ownerResult.rows.length === 0) {
@@ -88,6 +89,14 @@ router.patch("/pending-registrations/:company_id/approve", async (req, res) => {
       await sendWelcomeEmail(result.owner.email, result.owner.first_name, result.company.name);
     } catch (emailErr) {
       logger.error("Failed to send approval welcome email:", emailErr);
+    }
+
+    if (result.owner.phone) {
+      try {
+        await sendRegistrationApprovedSMS(result.owner.phone, result.owner.first_name, result.company.name);
+      } catch (smsErr) {
+        logger.error("Failed to send approval SMS:", smsErr);
+      }
     }
 
     await auditLog({
