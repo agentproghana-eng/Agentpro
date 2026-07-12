@@ -5,6 +5,7 @@ const { query, withTransaction } = require('../config/database');
 const { blacklistToken, isTokenBlacklisted } = require('../config/redis');
 const { logger } = require('../utils/logger');
 const { sendPasswordResetEmail, sendWelcomeEmail } = require('../services/emailService');
+const { sendPasswordResetSMS } = require('../services/smsService');
 const { auditLog } = require('../services/auditService');
 
 // ─── Token Helpers ───────────────────────────────────────────
@@ -364,7 +365,7 @@ exports.requestPasswordReset = async (req, res) => {
 
   try {
     const result = await query(
-      'SELECT id, first_name, email FROM users WHERE email = $1',
+      'SELECT id, first_name, email, phone FROM users WHERE email = $1',
       [email.toLowerCase()]
     );
 
@@ -393,9 +394,22 @@ exports.requestPasswordReset = async (req, res) => {
       [user.id, tokenHash, expiresAt]
     );
 
-    // Send email
+    // Send email - wrapped defensively so a notification failure does
+    // not turn into a 500 for the whole password-reset request
     const resetUrl = `${process.env.APP_URL}/reset-password?token=${resetToken}&uid=${user.id}`;
-    await sendPasswordResetEmail(user.email, user.first_name, resetUrl);
+    try {
+      await sendPasswordResetEmail(user.email, user.first_name, resetUrl);
+    } catch (emailErr) {
+      logger.error("Failed to send password reset email:", emailErr);
+    }
+
+    if (user.phone) {
+      try {
+        await sendPasswordResetSMS(user.phone, user.first_name);
+      } catch (smsErr) {
+        logger.error("Failed to send password reset SMS:", smsErr);
+      }
+    }
 
     res.json({
       success: true,
