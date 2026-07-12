@@ -185,7 +185,7 @@ jobs:
           path: flutter_app/build/app/outputs/flutter-apk/app-debug.apk
 
       - name: Decode release keystore
-        working-directory: flutter_app
+        working-directory: flutter_app/android/app
         run: echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > agentpro-release.jks
 
       - name: Write key.properties
@@ -195,7 +195,7 @@ jobs:
           storePassword=${{ secrets.RELEASE_STORE_PASSWORD }}
           keyPassword=${{ secrets.RELEASE_KEY_PASSWORD }}
           keyAlias=${{ secrets.RELEASE_KEY_ALIAS }}
-          storeFile=../agentpro-release.jks
+          storeFile=agentpro-release.jks
           EOF
 
       - name: Build release APK
