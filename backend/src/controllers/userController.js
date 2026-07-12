@@ -7,6 +7,7 @@ const { query, withTransaction } = require('../config/database');
 const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
 const { sendEmail, sendNewEmployeeEmail } = require('../services/emailService');
+const { sendNewEmployeeSMS } = require('../services/smsService');
 
 exports.changePassword = async (req, res) => {
   const { current_password, new_password } = req.body;
@@ -198,17 +199,34 @@ exports.createUser = async (req, res) => {
       newValues: { email, role }, ipAddress: req.ip, requestId: req.requestId,
       // Note: tempPassword is intentionally NOT included in audit log values
     });
+    // Fetch company name once, used by both email and SMS notifications
+    // below. Wrapped defensively - a failure here should not prevent the
+    // 201 response, since user creation itself already succeeded.
+    let companyName = "Agent Pro Ghana";
+    try {
+      const companyResult = await query("SELECT name FROM companies WHERE id = $1", [req.user.company_id]);
+      companyName = companyResult.rows[0]?.name || companyName;
+    } catch (e) {
+      logger.error("Failed to fetch company name for notifications:", e);
+    }
 
     // Email the temporary password - this is the only place it is ever transmitted
     let emailSent = true;
     try {
-      const companyResult = await query("SELECT name FROM companies WHERE id = $1", [req.user.company_id]);
-      const companyName = companyResult.rows[0]?.name || "Agent Pro Ghana";
       await sendNewEmployeeEmail(user.email, first_name, last_name, role, companyName, tempPassword);
     } catch (emailError) {
       logger.error("Failed to send new employee email:", emailError);
       emailSent = false;
     }
+
+    if (phone) {
+      try {
+        await sendNewEmployeeSMS(phone, first_name, role, companyName);
+      } catch (smsErr) {
+        logger.error("Failed to send new employee SMS:", smsErr);
+      }
+    }
+
 
     res.status(201).json({
       success: true,
