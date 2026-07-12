@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:dio/dio.dart';
 import '../../core/auth/auth_bloc.dart';
 import '../../core/api/api_client.dart';
+import '../../core/services/storage_service.dart';
 import '../../core/services/biometric_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
@@ -51,6 +52,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } else {
       await BiometricService.disableBiometric();
+      // Revoking any lingering refresh token this device may have
+      // relied on for silent biometric re-entry - disabling
+      // biometric means this device should no longer have
+      // standing access.
+      try {
+        final refreshToken = await StorageService.getRefreshToken();
+        if (refreshToken != null) {
+          await ApiClient.instance.post("/auth/logout", data: {"refresh_token": refreshToken});
+        }
+      } catch (_) {}
     }
     if (mounted) setState(() => _biometricEnabled = value);
   }

@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../services/storage_service.dart';
 import '../api/api_client.dart';
+import '../services/biometric_service.dart';
 
 // ── Events ────────────────────────────────────────────────────
 abstract class AuthEvent {}
@@ -41,7 +42,19 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
   Future<void> _onCheck(AuthCheckEvent event, Emitter<AuthState> emit) async {
     final user = await StorageService.getUser();
-    final token = await StorageService.getAccessToken();
+    var token = await StorageService.getAccessToken();
+
+    // No access token yet, but a refresh token may still be present -
+    // e.g. after a logout that deliberately preserved it for a
+    // biometric-enabled device. Try to silently obtain a fresh access
+    // token before giving up.
+    if (token == null && user != null) {
+      final refreshed = await ApiClient.refreshToken();
+      if (refreshed) {
+        token = await StorageService.getAccessToken();
+      }
+    }
+
     if (user != null && token != null) {
       emit(AuthAuthenticated(user));
     } else {
@@ -73,11 +86,26 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   }
 
   Future<void> _onLogout(AuthLogoutEvent event, Emitter<AuthState> emit) async {
-    try {
-      final refreshToken = await StorageService.getRefreshToken();
-      await ApiClient.instance.post('/auth/logout', data: {'refresh_token': refreshToken});
-    } catch (_) {}
-    await StorageService.clearSession();
+    final biometricEnabled = await BiometricService.isBiometricEnabled();
+
+    if (!biometricEnabled) {
+      // Full logout: revoke everything server-side, clear all local
+      // session data.
+      try {
+        final refreshToken = await StorageService.getRefreshToken();
+        await ApiClient.instance.post("/auth/logout", data: {"refresh_token": refreshToken});
+      } catch (_) {}
+      await StorageService.clearSession();
+    } else {
+      // Soft logout: end the local UI session only, deliberately
+      // skipping the backend call, which would revoke the refresh
+      // token entirely. The refresh token stays valid so biometric
+      // can silently restore access next time. Fully revoking access
+      // for this device happens when the user disables biometric in
+      // Settings, or changes their password.
+      await StorageService.clearAccessTokenOnly();
+    }
+
     emit(AuthUnauthenticated());
   }
 }

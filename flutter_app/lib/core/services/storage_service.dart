@@ -64,5 +64,15 @@ class StorageService {
     await _storage.delete(key: _keyRefreshToken);
     await _storage.delete(key: _keyUser);
   }
+
+  /// Clears only the access token, preserving refresh token and user
+  /// data. Used when a biometric-enabled device signs out - the local
+  /// UI session ends immediately, but the device stays trusted so
+  /// biometric can silently restore access next time, without the
+  /// backend logout call that would otherwise revoke the refresh
+  /// token entirely.
+  static Future<void> clearAccessTokenOnly() async {
+    await _storage.delete(key: _keyAccessToken);
+  }
   static Future<void> clearAll() async => _storage.deleteAll();
 }

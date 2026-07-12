@@ -29,7 +29,7 @@ class ApiClient {
       onError: (DioException error, handler) async {
         // Auto-refresh on 401
         if (error.response?.statusCode == 401) {
-          final refreshed = await _refreshToken();
+          final refreshed = await refreshToken();
           if (refreshed) {
             // Retry original request with new token
             final token = await StorageService.getAccessToken();
@@ -59,7 +59,7 @@ class ApiClient {
     return dio;
   }
 
-  static Future<bool> _refreshToken() async {
+  static Future<bool> refreshToken() async {
     try {
       final refreshToken = await StorageService.getRefreshToken();
       if (refreshToken == null) return false;
