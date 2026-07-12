@@ -82,6 +82,45 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
     }
   }
 
+  Future<void> _deactivateStaff(Map<String, dynamic> user) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Delete Staff Member"),
+        content: Text(
+          "Remove ${user['first_name']} ${user['last_name']} from your company? "
+          "Their transaction history will be preserved, but they will no longer be able to log in."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Delete", style: TextStyle(color: AppTheme.errorColor)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await ApiClient.instance.patch("/users/${user['id']}", data: {"status": "deactivated"});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("${user['first_name']} removed")),
+        );
+      }
+      _load();
+    } on DioException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.response?.data?["message"] ?? "Action failed"),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    }
+  }
+
   void _showAddStaffSheet() {
     showModalBottomSheet(
       context: context,
@@ -121,10 +160,10 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
               : TabBarView(
                   controller: _tabController,
                   children: [
-                    _StaffList(staff: _filteredStaff(null), onToggle: _toggleStatus, onRefresh: _load),
-                    _StaffList(staff: _filteredStaff('manager'), onToggle: _toggleStatus, onRefresh: _load),
-                    _StaffList(staff: _filteredStaff('agent'), onToggle: _toggleStatus, onRefresh: _load),
-                    _StaffList(staff: _filteredStaff('auditor'), onToggle: _toggleStatus, onRefresh: _load),
+                    _StaffList(staff: _filteredStaff(null), onToggle: _toggleStatus, onDelete: _deactivateStaff, onRefresh: _load),
+                    _StaffList(staff: _filteredStaff('manager'), onToggle: _toggleStatus, onDelete: _deactivateStaff, onRefresh: _load),
+                    _StaffList(staff: _filteredStaff('agent'), onToggle: _toggleStatus, onDelete: _deactivateStaff, onRefresh: _load),
+                    _StaffList(staff: _filteredStaff('auditor'), onToggle: _toggleStatus, onDelete: _deactivateStaff, onRefresh: _load),
                   ],
                 ),
       floatingActionButton: FloatingActionButton.extended(
@@ -148,9 +187,10 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
 class _StaffList extends StatelessWidget {
   final List<dynamic> staff;
   final void Function(Map<String, dynamic>) onToggle;
+  final void Function(Map<String, dynamic>) onDelete;
   final Future<void> Function() onRefresh;
 
-  const _StaffList({required this.staff, required this.onToggle, required this.onRefresh});
+  const _StaffList({required this.staff, required this.onToggle, required this.onDelete, required this.onRefresh});
 
   @override
   Widget build(BuildContext context) {
@@ -198,11 +238,18 @@ class _StaffList extends StatelessWidget {
                   const SizedBox(width: 4),
                   PopupMenuButton<String>(
                     icon: const Icon(Icons.more_vert, size: 20),
-                    onSelected: (_) => onToggle(u),
+                    onSelected: (value) {
+                      if (value == "toggle") onToggle(u);
+                      if (value == "delete") onDelete(u);
+                    },
                     itemBuilder: (_) => [
                       PopupMenuItem(
-                        value: 'toggle',
-                        child: Text(isActive ? 'Suspend' : 'Activate'),
+                        value: "toggle",
+                        child: Text(isActive ? "Suspend" : "Activate"),
+                      ),
+                      PopupMenuItem(
+                        value: "delete",
+                        child: Text("Delete", style: TextStyle(color: AppTheme.errorColor)),
                       ),
                     ],
                   ),
