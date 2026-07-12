@@ -4,7 +4,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { query } = require('../config/database');
 const { withTransaction } = require('../config/database');
 const { sendWelcomeEmail } = require('../services/emailService');
-const { sendRegistrationApprovedSMS } = require('../services/smsService');
+const { sendRegistrationApprovedSMS, sendAdPaymentConfirmedSMS } = require('../services/smsService');
 const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
 
@@ -301,8 +301,15 @@ router.patch('/ads/:ad_id/moderate', async (req, res) => {
         [req.user.id, req.params.ad_id]);
 
       const { sendAdNotification } = require('../services/notificationService');
-      const ad = await query('SELECT posted_by, title FROM advertisements WHERE id = $1', [req.params.ad_id]);
+      const ad = await query("SELECT a.posted_by, a.title, u.phone, u.first_name FROM advertisements a JOIN users u ON u.id = a.posted_by WHERE a.id = $1", [req.params.ad_id]);
       if (ad.rows.length) await sendAdNotification(ad.rows[0].posted_by, { type: 'ad_approved', adTitle: ad.rows[0].title });
+        if (ad.rows.length && ad.rows[0].phone) {
+          try {
+            await sendAdPaymentConfirmedSMS(ad.rows[0].phone, ad.rows[0].first_name, ad.rows[0].title);
+          } catch (smsErr) {
+            logger.error("Failed to send ad payment confirmed SMS:", smsErr);
+          }
+        }
 
       return res.json({ success: true, message: 'Ad published' });
     }
