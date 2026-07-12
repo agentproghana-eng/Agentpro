@@ -56,7 +56,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
   List<dynamic> _filteredStaff(String? role) {
     // Staff list already excludes the owner themself server-side scoping by company,
     // but the owner record itself may appear since /users returns all company roles.
-    final base = _staff.where((u) => u['role'] != 'business_owner').toList();
+    final base = _staff.where((u) => u['role'] != 'business_owner' && u['status'] != 'deactivated').toList();
     if (role == null) return base;
     return base.where((u) => u['role'] == role).toList();
   }
