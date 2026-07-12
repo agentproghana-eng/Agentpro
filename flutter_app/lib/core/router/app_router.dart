@@ -4,6 +4,7 @@ import '../auth/auth_bloc.dart';
 import '../../features/auth/login_screen.dart';
 import '../../features/auth/register_screen.dart';
 import '../../features/auth/forgot_password_screen.dart';
+import '../../features/auth/force_password_change_screen.dart';
 import '../../features/dashboard/agent_dashboard.dart';
 import '../../features/dashboard/manager_dashboard.dart';
 import '../../features/dashboard/owner_dashboard.dart';
@@ -29,16 +30,21 @@ class AppRouter {
       initialLocation: '/',
       redirect: (context, state) {
         final isLoggedIn = authState is AuthAuthenticated;
-        final isAuthRoute = state.matchedLocation.startsWith('/auth');
+        final isAuthRoute = state.matchedLocation.startsWith("/auth");
+        final mustChangePassword = isLoggedIn &&
+            authState.user["must_change_password"] == true;
+        final isForcedChangeRoute = state.matchedLocation == "/auth/change-password-required";
 
-        if (!isLoggedIn && !isAuthRoute) return '/auth/login';
-        if (isLoggedIn && isAuthRoute) return _homeForRole(authState);
+        if (!isLoggedIn && !isAuthRoute) return "/auth/login";
+        if (mustChangePassword && !isForcedChangeRoute) return "/auth/change-password-required";
+        if (isLoggedIn && !mustChangePassword && isAuthRoute) return _homeForRole(authState);
         return null;
       },
       routes: [
         // Auth routes
         GoRoute(path: '/auth/login', builder: (_, __) => const LoginScreen()),
         GoRoute(path: '/auth/register', builder: (_, __) => const RegisterScreen()),
+        GoRoute(path: '/auth/change-password-required', builder: (_, __) => const ForcePasswordChangeScreen()),
         GoRoute(path: '/auth/forgot-password', builder: (_, __) => const ForgotPasswordScreen()),
 
         // Role dashboards
