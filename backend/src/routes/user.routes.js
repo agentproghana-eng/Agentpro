@@ -10,5 +10,6 @@ userRouter.post('/', authorize('superuser', 'business_owner'), userController.cr
 userRouter.patch('/me/password', userController.changePassword);
 userRouter.get('/:user_id', authorize('superuser', 'business_owner', 'manager'), userController.getUser);
 userRouter.patch('/:user_id', authorize('superuser', 'business_owner'), userController.updateUser);
+userRouter.patch('/:user_id/reassign-branch', authorize('superuser', 'business_owner'), userController.reassignBranch);
 
 module.exports = userRouter;

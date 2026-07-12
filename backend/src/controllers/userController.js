@@ -182,12 +182,20 @@ exports.createUser = async (req, res) => {
       const createdUser = result.rows[0];
 
       if (assignToBranch) {
-        const table = role === 'agent' ? 'agent_branches' : 'branch_managers';
-        const col = role === 'agent' ? 'agent_id' : 'manager_id';
+        // Agents and managers both get an agent_branches entry -
+        // this is where they personally process transactions.
+        // Managers additionally get a branch_managers entry for
+        // administrative oversight of that same branch.
         await client.query(
-          `INSERT INTO ${table} (${col}, branch_id, assigned_by) VALUES ($1, $2, $3)`,
+          `INSERT INTO agent_branches (agent_id, branch_id, assigned_by) VALUES ($1, $2, $3)`,
           [createdUser.id, branch_id, req.user.id]
         );
+        if (role === "manager") {
+          await client.query(
+            `INSERT INTO branch_managers (manager_id, branch_id, assigned_by) VALUES ($1, $2, $3)`,
+            [createdUser.id, branch_id, req.user.id]
+          );
+        }
       }
 
       return createdUser;
@@ -348,5 +356,72 @@ exports.getUser = async (req, res) => {
   } catch (error) {
     logger.error('Get user error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch user' });
+  }
+};
+
+// Reassign a staff member (or the owner) to a different branch.
+// Branch allocation is deliberately not permanent - owners may
+// reshuffle staff between branches at any time, including their own
+// personal transacting branch.
+exports.reassignBranch = async (req, res) => {
+  const { user_id } = req.params;
+  const { branch_id } = req.body;
+
+  if (!branch_id) {
+    return res.status(422).json({ success: false, message: "branch_id is required" });
+  }
+
+  try {
+    const userCheck = await query(
+      "SELECT id, role, first_name, last_name FROM users WHERE id = $1 AND company_id = $2",
+      [user_id, req.user.company_id]
+    );
+    if (userCheck.rows.length === 0) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+    const targetUser = userCheck.rows[0];
+
+    if (!["agent", "manager", "business_owner"].includes(targetUser.role)) {
+      return res.status(400).json({ success: false, message: `Cannot assign a branch to role: ${targetUser.role}` });
+    }
+
+    const branchCheck = await query(
+      "SELECT id FROM branches WHERE id = $1 AND company_id = $2",
+      [branch_id, req.user.company_id]
+    );
+    if (branchCheck.rows.length === 0) {
+      return res.status(400).json({ success: false, message: "Invalid branch for your company" });
+    }
+
+    await withTransaction(async (client) => {
+      await client.query("DELETE FROM agent_branches WHERE agent_id = $1", [user_id]);
+      await client.query(
+        "INSERT INTO agent_branches (agent_id, branch_id, assigned_by) VALUES ($1, $2, $3)",
+        [user_id, branch_id, req.user.id]
+      );
+      if (targetUser.role === "manager") {
+        await client.query("DELETE FROM branch_managers WHERE manager_id = $1", [user_id]);
+        await client.query(
+          "INSERT INTO branch_managers (manager_id, branch_id, assigned_by) VALUES ($1, $2, $3)",
+          [user_id, branch_id, req.user.id]
+        );
+      }
+    });
+
+    await auditLog({
+      userId: req.user.id,
+      companyId: req.user.company_id,
+      action: "BRANCH_REASSIGNED",
+      entityType: "user",
+      entityId: user_id,
+      newValues: { branch_id },
+      ipAddress: req.ip,
+      requestId: req.requestId,
+    });
+
+    res.json({ success: true, message: `${targetUser.first_name} ${targetUser.last_name} reassigned successfully.` });
+  } catch (error) {
+    logger.error("Reassign branch error:", error);
+    res.status(500).json({ success: false, message: "Failed to reassign branch" });
   }
 };
