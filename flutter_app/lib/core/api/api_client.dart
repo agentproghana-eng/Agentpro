@@ -40,7 +40,7 @@ class ApiClient {
             } catch (_) {}
           }
           // Refresh failed — force logout
-          await StorageService.clearAll();
+          await StorageService.clearSession();
         }
         return handler.next(error);
       },

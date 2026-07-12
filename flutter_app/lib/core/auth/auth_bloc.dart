@@ -77,7 +77,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       final refreshToken = await StorageService.getRefreshToken();
       await ApiClient.instance.post('/auth/logout', data: {'refresh_token': refreshToken});
     } catch (_) {}
-    await StorageService.clearAll();
+    await StorageService.clearSession();
     emit(AuthUnauthenticated());
   }
 }

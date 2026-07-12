@@ -53,5 +53,16 @@ class StorageService {
     return token != null;
   }
 
+
+  /// Clears only session data (tokens, cached user) on logout or
+  /// session expiry. Deliberately preserves device-level preferences
+  /// like biometric_enabled, since those should survive a logout -
+  /// the user should not have to re-enable biometrics after every
+  /// sign-out.
+  static Future<void> clearSession() async {
+    await _storage.delete(key: _keyAccessToken);
+    await _storage.delete(key: _keyRefreshToken);
+    await _storage.delete(key: _keyUser);
+  }
   static Future<void> clearAll() async => _storage.deleteAll();
 }
