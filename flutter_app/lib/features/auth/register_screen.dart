@@ -20,7 +20,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _emailCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _companyPhoneCtrl = TextEditingController();
-  final _ghanaCardCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
   bool _obscure = true, _obscureConfirm = true, _loading = false;
@@ -38,7 +37,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
         'last_name': _lastNameCtrl.text.trim(),
         'email': _emailCtrl.text.trim(),
         'phone': _phoneCtrl.text.trim(),
-        'ghana_card_number': _ghanaCardCtrl.text.trim(),
         'password': _passwordCtrl.text,
       });
 
@@ -169,9 +167,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   keyboardType: TextInputType.phone, prefixIcon: Icons.phone_outlined,
                   validator: (v) => v!.isEmpty ? 'Required' : null,
                 ),
-                const SizedBox(height: 14),
-                AppTextField(controller: _ghanaCardCtrl, label: 'Ghana Card Number',
-                  prefixIcon: Icons.credit_card_outlined),
               ]),
             ),
 
@@ -238,7 +233,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   void dispose() {
     for (final c in [_companyNameCtrl, _regNumberCtrl, _firstNameCtrl, _lastNameCtrl,
-      _emailCtrl, _phoneCtrl, _companyPhoneCtrl, _ghanaCardCtrl, _passwordCtrl, _confirmCtrl]) {
+      _emailCtrl, _phoneCtrl, _companyPhoneCtrl, _passwordCtrl, _confirmCtrl]) {
       c.dispose();
     }
     super.dispose();

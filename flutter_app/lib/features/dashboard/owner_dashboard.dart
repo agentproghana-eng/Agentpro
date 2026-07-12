@@ -154,7 +154,7 @@ class _AnalyticsTab extends StatelessWidget {
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   crossAxisSpacing: 12, mainAxisSpacing: 12,
-                  childAspectRatio: 1.1,
+                  childAspectRatio: 0.85,
                   children: [
                     InfoCard(
                       title: 'Today\'s Volume',
