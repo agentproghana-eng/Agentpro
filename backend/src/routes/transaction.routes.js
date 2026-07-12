@@ -32,7 +32,7 @@ router.post('/', [
   body('branch_id').isUUID().withMessage('Valid branch ID is required'),
 ],
   handleValidation,
-  authorize('agent'),
+  authorize('agent', 'business_owner', 'manager'),
   transactionController.initiateTransaction
 );
 
@@ -42,7 +42,7 @@ router.patch('/:transaction_id/complete', [
     .withMessage('Status must be success, failed, or pending_confirmation'),
 ],
   handleValidation,
-  authorize('agent'),
+  authorize('agent', 'business_owner', 'manager'),
   transactionController.completeTransaction
 );
 
