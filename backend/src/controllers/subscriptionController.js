@@ -2,6 +2,7 @@ const { query, withTransaction } = require('../config/database');
 const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
 const { sendWelcomeEmail, sendSubscriptionReminderEmail } = require('../services/emailService');
+const { sendSubscriptionRenewalSMS } = require('../services/smsService');
 const { sendToUser, sendToCompany, sendSubscriptionSuspended } = require('../services/notificationService');
 
 // ── Get Subscription Status ───────────────────────────────────
@@ -209,6 +210,13 @@ exports.verifyPayment = async (req, res) => {
             body: `Your Business Plan is now active until ${expiresAt.toLocaleDateString('en-GH')}.`,
             data: { expires_at: expiresAt.toISOString() },
           });
+          if (owner.rows[0].phone) {
+            try {
+              await sendSubscriptionRenewalSMS(owner.rows[0].phone, owner.rows[0].first_name, payment.amount, expiresAt.toLocaleDateString("en-GH"));
+            } catch (smsErr) {
+              logger.error("Failed to send subscription renewal SMS:", smsErr);
+            }
+          }
         }
 
       } else if (action === 'reject') {
