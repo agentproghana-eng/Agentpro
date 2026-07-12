@@ -147,10 +147,18 @@ exports.createUser = async (req, res) => {
   const tempPassword = password || generateTempPassword();
 
   try {
-    const existing = await query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
+    const existing = await query("SELECT id, status, company_id FROM users WHERE email = $1", [email.toLowerCase()]);
     if (existing.rows.length > 0) {
-      return res.status(409).json({ success: false, message: 'Email already in use' });
+      const existingUser = existing.rows[0];
+      if (existingUser.status !== "deactivated") {
+        return res.status(409).json({ success: false, message: "Email already in use" });
+      }
+      if (existingUser.company_id !== req.user.company_id) {
+        return res.status(409).json({ success: false, message: "Email already in use" });
+      }
+      return exports.reactivateStaffMember(req, res, existingUser.id, { first_name, last_name, phone, role, branch_id, tempPassword });
     }
+
 
     // Validate branch BEFORE creating the user — failing fast here means
     // no orphaned user record is ever created if the branch is invalid.
@@ -422,5 +430,96 @@ exports.reassignBranch = async (req, res) => {
   } catch (error) {
     logger.error("Reassign branch error:", error);
     res.status(500).json({ success: false, message: "Failed to reassign branch" });
+  }
+};
+
+// Reactivate a previously deactivated staff member under the same
+// company - preserves their original record and history rather than
+// creating a brand new one, since the email address is unique across
+// the whole platform and cannot simply be reused for a fresh account.
+exports.reactivateStaffMember = async (req, res, existingUserId, fields) => {
+  const { first_name, last_name, phone, role, branch_id, tempPassword } = fields;
+
+  const allowedRoles = req.user.role === "superuser"
+    ? ["business_owner", "manager", "agent", "auditor", "customer"]
+    : ["manager", "agent", "auditor"];
+  if (!allowedRoles.includes(role)) {
+    return res.status(403).json({ success: false, message: `Cannot create user with role: ${role}` });
+  }
+
+  try {
+    const assignToBranch = branch_id && ["agent", "manager"].includes(role);
+    if (assignToBranch) {
+      const branchCheck = await query(
+        "SELECT id FROM branches WHERE id = $1 AND company_id = $2",
+        [branch_id, req.user.company_id]
+      );
+      if (branchCheck.rows.length === 0) {
+        return res.status(400).json({ success: false, message: "Invalid branch for your company" });
+      }
+    }
+
+    const passwordHash = await bcrypt.hash(tempPassword, parseInt(process.env.BCRYPT_ROUNDS) || 12);
+
+    const user = await withTransaction(async (client) => {
+      const result = await client.query(
+        `UPDATE users SET first_name = $1, last_name = $2, phone = $3, role = $4,
+         password_hash = $5, status = 'active', must_change_password = true, updated_at = NOW()
+         WHERE id = $6 RETURNING id, email, role, status`,
+        [first_name, last_name, phone, role, passwordHash, existingUserId]
+      );
+      const reactivatedUser = result.rows[0];
+
+      await client.query("DELETE FROM agent_branches WHERE agent_id = $1", [existingUserId]);
+      await client.query("DELETE FROM branch_managers WHERE manager_id = $1", [existingUserId]);
+
+      if (assignToBranch) {
+        await client.query(
+          "INSERT INTO agent_branches (agent_id, branch_id, assigned_by) VALUES ($1, $2, $3)",
+          [existingUserId, branch_id, req.user.id]
+        );
+        if (role === "manager") {
+          await client.query(
+            "INSERT INTO branch_managers (manager_id, branch_id, assigned_by) VALUES ($1, $2, $3)",
+            [existingUserId, branch_id, req.user.id]
+          );
+        }
+      }
+
+      return reactivatedUser;
+    });
+
+    let companyName = "Agent Pro Ghana";
+    try {
+      const companyResult = await query("SELECT name FROM companies WHERE id = $1", [req.user.company_id]);
+      companyName = companyResult.rows[0]?.name || companyName;
+    } catch (e) {
+      logger.error("Failed to fetch company name for notifications:", e);
+    }
+
+    try {
+      await sendNewEmployeeEmail(user.email, first_name, last_name, role, companyName, tempPassword);
+    } catch (emailError) {
+      logger.error("Failed to send reactivation email:", emailError);
+    }
+
+    if (phone) {
+      try {
+        await sendNewEmployeeSMS(phone, first_name, role, companyName);
+      } catch (smsErr) {
+        logger.error("Failed to send reactivation SMS:", smsErr);
+      }
+    }
+
+    await auditLog({
+      userId: req.user.id, companyId: req.user.company_id,
+      action: "USER_REACTIVATED", entityType: "user", entityId: existingUserId,
+      newValues: { email: user.email, role }, ipAddress: req.ip, requestId: req.requestId,
+    });
+
+    res.status(201).json({ success: true, data: user });
+  } catch (error) {
+    logger.error("Reactivate staff error:", error);
+    res.status(500).json({ success: false, message: "Failed to reactivate staff member" });
   }
 };
