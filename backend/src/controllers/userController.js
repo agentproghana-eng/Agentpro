@@ -187,6 +187,7 @@ exports.createUser = async (req, res) => {
          VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', true) RETURNING id, email, role, status`,
         [req.user.company_id, role, first_name, last_name, email.toLowerCase(), phone, passwordHash]
       );
+      const createdUser = result.rows[0];
 
       if (assignToBranch) {
         // Agents and managers both get an agent_branches entry -
