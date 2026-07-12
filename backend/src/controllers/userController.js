@@ -53,7 +53,7 @@ exports.changePassword = async (req, res) => {
     const newHash = await bcrypt.hash(new_password, parseInt(process.env.BCRYPT_ROUNDS) || 12);
 
     await query(
-      'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
+      'UPDATE users SET password_hash = $1, must_change_password = false, updated_at = NOW() WHERE id = $2',
       [newHash, req.user.id]
     );
 
@@ -175,11 +175,10 @@ exports.createUser = async (req, res) => {
     // inconsistent state we never want to persist.
     const user = await withTransaction(async (client) => {
       const result = await client.query(
-        `INSERT INTO users (company_id, role, first_name, last_name, email, phone, password_hash, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'active') RETURNING id, email, role, status`,
+        `INSERT INTO users (company_id, role, first_name, last_name, email, phone, password_hash, status, must_change_password)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', true) RETURNING id, email, role, status`,
         [req.user.company_id, role, first_name, last_name, email.toLowerCase(), phone, passwordHash]
       );
-      const createdUser = result.rows[0];
 
       if (assignToBranch) {
         // Agents and managers both get an agent_branches entry -
