@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
+import 'staff_work_history_screen.dart';
 
 class StaffManagementScreen extends StatefulWidget {
   const StaffManagementScreen({super.key});
@@ -213,6 +214,15 @@ class _StaffList extends StatelessWidget {
           return Card(
             margin: const EdgeInsets.only(bottom: 6),
             child: ListTile(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => StaffWorkHistoryScreen(
+                    userId: u["id"],
+                    userName: "${u['first_name']} ${u['last_name']}",
+                  ),
+                ),
+              ),
               leading: CircleAvatar(
                 backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
                 child: Text(
