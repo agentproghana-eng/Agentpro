@@ -77,6 +77,19 @@ router.patch("/pending-registrations/:company_id/approve", async (req, res) => {
       }
       const owner = ownerResult.rows[0];
 
+      // Auto-create a default branch for this company and assign the
+      // owner to it as its primary transactor. Most owners run the
+      // business solo at first and need to process transactions
+      // themselves immediately, before ever hiring staff.
+      const branchResult = await client.query(
+        `INSERT INTO branches (company_id, name, created_by) VALUES ($1, $2, $3) RETURNING id`,
+        [company_id, "Main Branch", req.user.id]
+      );
+      await client.query(
+        `INSERT INTO agent_branches (agent_id, branch_id, assigned_by, is_primary) VALUES ($1, $2, $3, true)`,
+        [owner.id, branchResult.rows[0].id, req.user.id]
+      );
+
       await client.query(
         `UPDATE subscriptions SET status = 'active', started_at = NOW(), expires_at = NOW() + INTERVAL '30 days', updated_at = NOW() WHERE company_id = $1 AND plan = 'free'`,
         [company_id]
