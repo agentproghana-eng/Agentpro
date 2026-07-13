@@ -118,6 +118,13 @@ class _AnalyticsTab extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
+                    Container(
+                      width: 34, height: 34,
+                      margin: const EdgeInsets.only(right: 10, bottom: 2),
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(9)),
+                      child: Image.asset("assets/images/agentpro-logo.png", fit: BoxFit.contain),
+                    ),
                     Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         const Text('Business Dashboard', style: TextStyle(color: Colors.white70, fontSize: 12)),
