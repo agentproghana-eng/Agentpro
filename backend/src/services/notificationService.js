@@ -174,6 +174,34 @@ async function sendAdNotification(userId, { type, adTitle }) {
   return sendToUser(userId, { type, ...msg, data: { ad_title: adTitle } });
 }
 
+
+// Sends a push notification without ever writing it to the notifications
+// table. Used specifically for one-time sensitive content, like a new
+// staff member's temporary password shown to the owner as a backup
+// while email/SMS delivery is unconfirmed - this should never persist
+// in the database, only appear transiently on the recipient's device.
+async function sendEphemeral(userId, { title, body, data = {} }) {
+  try {
+    const result = await query(
+      "SELECT fcm_token FROM users WHERE id = $1 AND fcm_token IS NOT NULL",
+      [userId]
+    );
+    if (result.rows.length === 0 || !result.rows[0].fcm_token) return;
+
+    const message = {
+      token: result.rows[0].fcm_token,
+      notification: { title, body },
+      data: { ...data, click_action: "FLUTTER_NOTIFICATION_CLICK" },
+      android: {
+        priority: "high",
+        notification: { sound: "default", click_action: "FLUTTER_NOTIFICATION_CLICK" },
+      },
+    };
+    await getMessaging().send(message);
+  } catch (error) {
+    logger.error(`FCM ephemeral send error for user ${userId}:`, error);
+  }
+}
 module.exports = {
   sendToUser,
   sendToMultiple,
@@ -183,4 +211,5 @@ module.exports = {
   sendSubscriptionReminder,
   sendSubscriptionSuspended,
   sendAdNotification,
+  sendEphemeral,
 };

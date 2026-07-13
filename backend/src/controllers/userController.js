@@ -8,6 +8,7 @@ const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
 const { sendEmail, sendNewEmployeeEmail } = require('../services/emailService');
 const { sendNewEmployeeSMS } = require('../services/smsService');
+const { sendEphemeral } = require('../services/notificationService');
 
 exports.changePassword = async (req, res) => {
   const { current_password, new_password } = req.body;
@@ -241,6 +242,18 @@ exports.createUser = async (req, res) => {
       } catch (smsErr) {
         logger.error("Failed to send new employee SMS:", smsErr);
       }
+    }
+
+    // Ephemeral push to the owner as a backup, in case email/SMS
+    // delivery to the new staff member is not yet confirmed working.
+    // Never persisted to the database - see sendEphemeral.
+    try {
+      await sendEphemeral(req.user.id, {
+        title: `New staff account created: ${first_name} ${last_name}`,
+        body: `Login: ${email}. Temporary password: ${tempPassword}. Share this securely if email/SMS did not arrive.`,
+      });
+    } catch (pushErr) {
+      logger.error("Failed to send owner backup notification:", pushErr);
     }
 
 
@@ -510,6 +523,15 @@ exports.reactivateStaffMember = async (req, res, existingUserId, fields) => {
       } catch (smsErr) {
         logger.error("Failed to send reactivation SMS:", smsErr);
       }
+    }
+
+    try {
+      await sendEphemeral(req.user.id, {
+        title: `Staff account reactivated: ${first_name} ${last_name}`,
+        body: `Login: ${user.email}. New temporary password: ${tempPassword}. Share this securely if email/SMS did not arrive.`,
+      });
+    } catch (pushErr) {
+      logger.error("Failed to send owner backup notification:", pushErr);
     }
 
     await auditLog({
