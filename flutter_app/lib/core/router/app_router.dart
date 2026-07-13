@@ -12,6 +12,10 @@ import '../../features/transactions/transaction_screen.dart';
 import '../../features/transactions/transaction_progress_screen.dart';
 import '../../features/transactions/transaction_detail_screen.dart';
 import '../../features/float/float_screen.dart';
+import '../../features/balances/my_balance_screen.dart';
+import '../../features/balances/float_received_screen.dart';
+import '../../features/balances/commission_transfer_screen.dart';
+import '../../features/balances/cash_adjustment_screen.dart';
 import '../../features/reports/reports_screen.dart';
 import '../../features/ai_assistant/ai_assistant_screen.dart';
 import '../../features/subscription/subscription_screen.dart';
@@ -74,6 +78,19 @@ class AppRouter {
 
         // Float
         GoRoute(path: '/float', builder: (_, __) => const FloatScreen()),
+        GoRoute(path: '/my-balance', builder: (_, __) => const MyBalanceScreen()),
+        GoRoute(
+          path: '/balances/float-received',
+          builder: (_, state) => FloatReceivedScreen(initialProvider: (state.extra as Map)['provider'] as String),
+        ),
+        GoRoute(
+          path: '/balances/commission-transfer',
+          builder: (_, state) => CommissionTransferScreen(provider: (state.extra as Map)['provider'] as String),
+        ),
+        GoRoute(
+          path: '/balances/cash-adjustment',
+          builder: (_, state) => CashAdjustmentScreen(provider: (state.extra as Map)['provider'] as String),
+        ),
 
         // Reports
         GoRoute(path: '/reports', builder: (_, __) => const ReportsScreen()),
