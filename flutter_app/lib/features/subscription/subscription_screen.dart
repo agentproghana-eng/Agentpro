@@ -36,7 +36,6 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       await ApiClient.instance.post('/subscriptions/payment', data: {
         'momo_reference': _refCtrl.text.trim(),
         'payment_phone': _phoneCtrl.text.trim(),
-        'amount': 10.00,
       });
       if (mounted) {
         Navigator.pop(context);
@@ -84,7 +83,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Business Plan — GH₵10/month', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text("Business Plan — GH₵${((_data?[\"payment_instructions\"]?[\"amount\"] as num?) ?? 10).toStringAsFixed(2)}/month", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   const SizedBox(height: 12),
                   for (final f in [
                     'All Mobile Money transactions (MTN, Telecel, AT)',
@@ -92,7 +91,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                     'Float management & alerts',
                     'Commission tracking',
                     'Reports (PDF, Excel, CSV)',
-                    'Market Centre (Marketplace)',
+                    'Business Hub (Marketplace)',
                     'AI Assistant',
                     'Push notifications',
                     'Cloud sync',
