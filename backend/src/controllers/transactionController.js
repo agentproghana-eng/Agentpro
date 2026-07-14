@@ -205,6 +205,7 @@ exports.completeTransaction = async (req, res) => {
       if (finalStatus === 'success') {
         await updateFloat(client, tx.branch_id, tx.provider, tx.transaction_type, tx.amount, transaction_id);
         await calculateAndRecordCommission(client, tx, agentId);
+        await calculateAndRecordSendMoneyFee(client, tx, agentId);
       }
 
       const notificationType = {
@@ -483,6 +484,51 @@ async function calculateAndRecordCommission(client, transaction, agentId) {
   } catch (error) {
     logger.error('Commission calculation error:', error);
     // Don't throw — commission failure shouldn't block transaction completion
+  }
+}
+
+// Send Money fee: 1% of the amount, capped at GH20, applies only when
+// sending to a number that is NOT the sending customer's own number.
+// Never blocks transaction completion if it fails - same pattern as
+// calculateAndRecordCommission above.
+async function calculateAndRecordSendMoneyFee(client, transaction, agentId) {
+  try {
+    if (transaction.transaction_type !== "send_money") return;
+    const recipient = (transaction.recipient_phone || "").trim();
+    const customer = (transaction.customer_phone || "").trim();
+    if (!recipient || !customer || recipient === customer) return;
+
+    const amount = parseFloat(transaction.amount);
+    const fee = Math.min(amount * 0.01, 20);
+
+    await client.query("UPDATE transactions SET fee = $1 WHERE id = $2", [fee, transaction.id]);
+
+    let balanceResult = await client.query(
+      "SELECT * FROM agent_balances WHERE agent_id = $1 AND provider = $2",
+      [agentId, transaction.provider]
+    );
+    if (balanceResult.rows.length === 0) {
+      balanceResult = await client.query(
+        "INSERT INTO agent_balances (agent_id, provider) VALUES ($1, $2) RETURNING *",
+        [agentId, transaction.provider]
+      );
+    }
+    const balance = balanceResult.rows[0];
+    const cashBefore = parseFloat(balance.cash_at_hand);
+    const cashAfter = cashBefore + fee;
+
+    await client.query(
+      "UPDATE agent_balances SET cash_at_hand = $1, last_updated_at = NOW() WHERE id = $2",
+      [cashAfter, balance.id]
+    );
+    await client.query(
+      `INSERT INTO agent_balance_movements
+       (agent_id, provider, movement_type, balance_type, amount, balance_before, balance_after, transaction_id)
+       VALUES ($1, $2, 'charge_collected', 'cash_at_hand', $3, $4, $5, $6)`,
+      [agentId, transaction.provider, fee, cashBefore, cashAfter, transaction.id]
+    );
+  } catch (error) {
+    logger.error("Send Money fee calculation error:", error);
   }
 }
 
