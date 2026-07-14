@@ -17,6 +17,7 @@ import '../../features/balances/float_received_screen.dart';
 import '../../features/balances/commission_transfer_screen.dart';
 import '../../features/balances/cash_adjustment_screen.dart';
 import '../../features/balances/pending_approvals_screen.dart';
+import '../../features/support/support_screen.dart';
 import '../../features/reports/reports_screen.dart';
 import '../../features/ai_assistant/ai_assistant_screen.dart';
 import '../../features/subscription/subscription_screen.dart';
@@ -93,6 +94,7 @@ class AppRouter {
           builder: (_, state) => CashAdjustmentScreen(provider: (state.extra as Map)['provider'] as String),
         ),
         GoRoute(path: '/balances/pending-approvals', builder: (_, __) => const PendingApprovalsScreen()),
+        GoRoute(path: '/support', builder: (_, __) => const SupportScreen()),
 
         // Reports
         GoRoute(path: '/reports', builder: (_, __) => const ReportsScreen()),
