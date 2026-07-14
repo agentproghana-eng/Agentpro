@@ -288,3 +288,23 @@ exports.reviewCashAdjustment = async (req, res) => {
     res.status(500).json({ success: false, message: "Failed to review adjustment" });
   }
 };
+
+// List pending cash injections/withdrawals awaiting manager/owner review,
+// scoped to the reviewer's own company.
+exports.listPendingAdjustments = async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT abm.id, abm.agent_id, abm.provider, abm.movement_type, abm.amount,
+              abm.notes, abm.created_at, u.first_name, u.last_name
+       FROM agent_balance_movements abm
+       JOIN users u ON u.id = abm.agent_id
+       WHERE abm.status = $1 AND u.company_id = $2
+       ORDER BY abm.created_at DESC`,
+      ["pending", req.user.company_id]
+    );
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    logger.error("List pending adjustments error:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch pending adjustments" });
+  }
+};

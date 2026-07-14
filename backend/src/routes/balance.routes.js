@@ -4,6 +4,7 @@ const balanceController = require("../controllers/balanceController");
 const { authenticate, authorize } = require("../middleware/auth");
 
 router.use(authenticate);
+router.get("/pending-adjustments", authorize("superuser", "business_owner", "manager"), balanceController.listPendingAdjustments);
 
 router.get("/:agent_id?", authorize("superuser", "business_owner", "manager", "agent"), balanceController.getAgentBalances);
 router.post("/cash-out-manual", authorize("agent"), balanceController.recordCashOutManual);
