@@ -30,6 +30,7 @@ exports.getSubscription = async (req, res) => {
     const config = await query(
       "SELECT value FROM system_config WHERE key = 'agent_pro_momo_number'",
     );
+    const billing = await calculateSeatBilling(companyId);
 
     res.json({
       success: true,
@@ -38,9 +39,9 @@ exports.getSubscription = async (req, res) => {
         payment_instructions: {
           merchant_number: config.rows[0]?.value || '',
           merchant_name: 'Agent Pro Ghana',
-          amount: 10.00,
+          amount: billing.amount,
           currency: 'GHS',
-          note: 'Pay GH₵10 via MTN MoMo, then submit your transaction reference below.',
+          note: `Pay GH₵${billing.amount.toFixed(2)} via MTN MoMo (${billing.paidSeats} paid seat${billing.paidSeats !== 1 ? 's' : ''}, ${billing.freeSeats} free), then submit your transaction reference below.`,
         },
       },
     });
@@ -57,6 +58,7 @@ exports.submitPayment = async (req, res) => {
   const companyId = req.user.company_id;
 
   try {
+    const billing = await calculateSeatBilling(companyId);
     const subResult = await query(
       'SELECT * FROM subscriptions WHERE company_id = $1 ORDER BY created_at DESC LIMIT 1',
       [companyId]
@@ -86,7 +88,7 @@ exports.submitPayment = async (req, res) => {
       `INSERT INTO subscription_payments
          (subscription_id, company_id, amount, momo_reference, payment_phone, notes)
        VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [sub.id, companyId, amount || 10.00, momo_reference, payment_phone, notes]
+      [sub.id, companyId, amount || billing.amount, momo_reference, payment_phone, notes]
     );
 
     await auditLog({
@@ -338,3 +340,19 @@ exports.sendRenewalReminders = async () => {
     logger.error('Renewal reminder job error:', error);
   }
 };
+
+// Per-seat billing: every 5th active staff member (including the
+// owner) is free; the rest are paid at GH10.00 each.
+// paid_seats = total_seats - floor(total_seats / 5)
+async function calculateSeatBilling(companyId) {
+  const result = await query(
+    "SELECT COUNT(*) as count FROM users WHERE company_id = $1 AND status = $2",
+    [companyId, "active"]
+  );
+  const totalSeats = parseInt(result.rows[0].count, 10);
+  const freeSeats = Math.floor(totalSeats / 5);
+  const paidSeats = totalSeats - freeSeats;
+  const pricePerSeat = 10.00;
+  const amount = paidSeats * pricePerSeat;
+  return { totalSeats, paidSeats, freeSeats, pricePerSeat, amount };
+}
