@@ -1,4 +1,5 @@
 import "package:flutter/material.dart";
+import "package:share_plus/share_plus.dart";
 import "package:go_router/go_router.dart";
 import "../../core/api/api_client.dart";
 import "../../shared/theme/app_theme.dart";
@@ -146,6 +147,11 @@ class _PostCard extends StatelessWidget {
               const SizedBox(width: 4),
               Text("${post["comment_count"] ?? 0}", style: const TextStyle(fontSize: 11.5)),
             ]),
+            const SizedBox(width: 16),
+            InkWell(
+              onTap: () => Share.share("${post["content"] ?? ""}"),
+              child: const Icon(Icons.share_outlined, size: 15, color: Colors.grey),
+            ),
           ]),
         ]),
       ),
