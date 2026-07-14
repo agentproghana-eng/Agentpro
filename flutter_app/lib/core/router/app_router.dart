@@ -19,6 +19,9 @@ import '../../features/balances/cash_adjustment_screen.dart';
 import '../../features/balances/pending_approvals_screen.dart';
 import '../../features/support/support_screen.dart';
 import '../../features/ussd_settings/ussd_settings_screen.dart';
+import '../../features/community/community_feed_screen.dart';
+import '../../features/community/post_detail_screen.dart';
+import '../../features/community/post_moderation_screen.dart';
 import '../../features/reports/reports_screen.dart';
 import '../../features/ai_assistant/ai_assistant_screen.dart';
 import '../../features/subscription/subscription_screen.dart';
@@ -97,6 +100,12 @@ class AppRouter {
         GoRoute(path: '/balances/pending-approvals', builder: (_, __) => const PendingApprovalsScreen()),
         GoRoute(path: '/support', builder: (_, __) => const SupportScreen()),
         GoRoute(path: '/ussd-settings', builder: (_, __) => const UssdSettingsScreen()),
+        GoRoute(path: '/community', builder: (_, __) => const CommunityFeedScreen()),
+        GoRoute(
+          path: '/community/post/:post_id',
+          builder: (_, state) => PostDetailScreen(postId: state.pathParameters['post_id']!),
+        ),
+        GoRoute(path: '/community/moderation', builder: (_, __) => const PostModerationScreen()),
 
         // Reports
         GoRoute(path: '/reports', builder: (_, __) => const ReportsScreen()),
