@@ -107,6 +107,13 @@ class _HomeTab extends StatelessWidget {
                   children: [
                     Row(
                       children: [
+                        Container(
+                          width: 34, height: 34,
+                          margin: const EdgeInsets.only(right: 10),
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(9)),
+                          child: Image.asset("assets/images/agentpro-logo.png", fit: BoxFit.contain),
+                        ),
                         CircleAvatar(
                           backgroundColor: Colors.white.withOpacity(0.2),
                           child: Text(
