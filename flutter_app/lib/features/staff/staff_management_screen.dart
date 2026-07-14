@@ -128,7 +128,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: Text("Reassign ${user[\"first_name\"]} ${user[\"last_name\"]}"),
+          title: Text("Reassign ${user["first_name"]} ${user["last_name"]}"),
           content: DropdownButtonFormField<String>(
             value: selectedBranchId,
             items: _branches.map<DropdownMenuItem<String>>((b) => DropdownMenuItem(
@@ -147,7 +147,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
     );
     if (confirmed == null) return;
     try {
-      await ApiClient.instance.patch("/users/${user[\"id\"]}/reassign-branch", data: {"branch_id": confirmed});
+      await ApiClient.instance.patch("/users/${user["id"]}/reassign-branch", data: {"branch_id": confirmed});
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Branch reassigned")));
       _load();

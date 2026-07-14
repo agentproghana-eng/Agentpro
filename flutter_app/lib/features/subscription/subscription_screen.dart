@@ -83,7 +83,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("Business Plan — GH₵${((_data?[\"payment_instructions\"]?[\"amount\"] as num?) ?? 10).toStringAsFixed(2)}/month", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text("Business Plan — GH₵${((_data?["payment_instructions"]?["amount"] as num?) ?? 10).toStringAsFixed(2)}/month", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   const SizedBox(height: 12),
                   for (final f in [
                     'All Mobile Money transactions (MTN, Telecel, AT)',
