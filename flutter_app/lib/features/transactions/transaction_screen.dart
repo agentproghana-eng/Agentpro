@@ -66,6 +66,16 @@ class _TransactionScreenState extends State<TransactionScreen> {
       return;
     }
 
+
+    // Telecel/AirtelTigo Cash Out: e-cash moves directly SIM-to-SIM,
+    // invisible to USSD automation. Skip the dial entirely and record
+    // this manually instead.
+    final isManualCashOut = widget.transactionType == "cash_out" &&
+        (_selectedProvider == "telecel" || _selectedProvider == "at_money");
+    if (isManualCashOut) {
+      await _submitManualCashOut();
+      return;
+    }
     setState(() => _loading = true);
     try {
       final res = await ApiClient.instance.post('/transactions', data: {
@@ -92,6 +102,35 @@ class _TransactionScreenState extends State<TransactionScreen> {
       });
     } on DioException catch (e) {
       final msg = e.response?.data?['message'] ?? 'Failed to initiate transaction';
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _submitManualCashOut() async {
+    final amount = double.tryParse(_amountCtrl.text.replaceAll(",", ""));
+    if (amount == null || amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Enter the cash amount given to the customer")));
+      return;
+    }
+    setState(() => _loading = true);
+    try {
+      await ApiClient.instance.post("/balances/cash-out-manual", data: {
+        "provider": _selectedProvider,
+        "amount": amount,
+        "reference": _customerPhoneCtrl.text.trim(),
+        "notes": "Manual Cash Out - ${_customerNameCtrl.text.trim()}",
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Cash Out recorded successfully")));
+        context.pop();
+      }
+    } on DioException catch (e) {
+      final msg = e.response?.data?["message"] ?? "Failed to record Cash Out";
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor));
     } finally {
