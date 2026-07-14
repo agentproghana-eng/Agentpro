@@ -122,6 +122,41 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
     }
   }
 
+  Future<void> _reassignBranch(Map<String, dynamic> user) async {
+    String? selectedBranchId = user["branch_id"];
+    final confirmed = await showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text("Reassign ${user[\"first_name\"]} ${user[\"last_name\"]}"),
+          content: DropdownButtonFormField<String>(
+            value: selectedBranchId,
+            items: _branches.map<DropdownMenuItem<String>>((b) => DropdownMenuItem(
+              value: b["id"] as String,
+              child: Text(b["name"] ?? ""),
+            )).toList(),
+            onChanged: (v) => setDialogState(() => selectedBranchId = v),
+            decoration: const InputDecoration(labelText: "Branch"),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+            TextButton(onPressed: () => Navigator.pop(ctx, selectedBranchId), child: const Text("Reassign")),
+          ],
+        ),
+      ),
+    );
+    if (confirmed == null) return;
+    try {
+      await ApiClient.instance.patch("/users/${user[\"id\"]}/reassign-branch", data: {"branch_id": confirmed});
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Branch reassigned")));
+      _load();
+    } on DioException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.response?.data?["message"] ?? "Failed to reassign"), backgroundColor: AppTheme.errorColor));
+    }
+  }
+
   void _showAddStaffSheet() {
     showModalBottomSheet(
       context: context,
@@ -161,10 +196,10 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
               : TabBarView(
                   controller: _tabController,
                   children: [
-                    _StaffList(staff: _filteredStaff(null), onToggle: _toggleStatus, onDelete: _deactivateStaff, onRefresh: _load),
-                    _StaffList(staff: _filteredStaff('manager'), onToggle: _toggleStatus, onDelete: _deactivateStaff, onRefresh: _load),
-                    _StaffList(staff: _filteredStaff('agent'), onToggle: _toggleStatus, onDelete: _deactivateStaff, onRefresh: _load),
-                    _StaffList(staff: _filteredStaff('auditor'), onToggle: _toggleStatus, onDelete: _deactivateStaff, onRefresh: _load),
+                    _StaffList(staff: _filteredStaff(null), onToggle: _toggleStatus, onDelete: _deactivateStaff, onReassign: _reassignBranch, onRefresh: _load),
+                    _StaffList(staff: _filteredStaff('manager'), onToggle: _toggleStatus, onDelete: _deactivateStaff, onReassign: _reassignBranch, onRefresh: _load),
+                    _StaffList(staff: _filteredStaff('agent'), onToggle: _toggleStatus, onDelete: _deactivateStaff, onReassign: _reassignBranch, onRefresh: _load),
+                    _StaffList(staff: _filteredStaff('auditor'), onToggle: _toggleStatus, onDelete: _deactivateStaff, onReassign: _reassignBranch, onRefresh: _load),
                   ],
                 ),
       floatingActionButton: FloatingActionButton.extended(
@@ -189,9 +224,10 @@ class _StaffList extends StatelessWidget {
   final List<dynamic> staff;
   final void Function(Map<String, dynamic>) onToggle;
   final void Function(Map<String, dynamic>) onDelete;
+  final void Function(Map<String, dynamic>) onReassign;
   final Future<void> Function() onRefresh;
 
-  const _StaffList({required this.staff, required this.onToggle, required this.onDelete, required this.onRefresh});
+  const _StaffList({required this.staff, required this.onToggle, required this.onDelete, required this.onReassign, required this.onRefresh});
 
   @override
   Widget build(BuildContext context) {
@@ -251,6 +287,7 @@ class _StaffList extends StatelessWidget {
                     onSelected: (value) {
                       if (value == "toggle") onToggle(u);
                       if (value == "delete") onDelete(u);
+                      if (value == "reassign") onReassign(u);
                     },
                     itemBuilder: (_) => [
                       PopupMenuItem(
@@ -260,6 +297,10 @@ class _StaffList extends StatelessWidget {
                       PopupMenuItem(
                         value: "delete",
                         child: Text("Delete", style: TextStyle(color: AppTheme.errorColor)),
+                      ),
+                      PopupMenuItem(
+                        value: "reassign",
+                        child: Text("Reassign Branch"),
                       ),
                     ],
                   ),
