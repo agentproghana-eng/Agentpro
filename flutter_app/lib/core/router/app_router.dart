@@ -18,6 +18,7 @@ import '../../features/balances/commission_transfer_screen.dart';
 import '../../features/balances/cash_adjustment_screen.dart';
 import '../../features/balances/pending_approvals_screen.dart';
 import '../../features/support/support_screen.dart';
+import '../../features/ussd_settings/ussd_settings_screen.dart';
 import '../../features/reports/reports_screen.dart';
 import '../../features/ai_assistant/ai_assistant_screen.dart';
 import '../../features/subscription/subscription_screen.dart';
@@ -95,6 +96,7 @@ class AppRouter {
         ),
         GoRoute(path: '/balances/pending-approvals', builder: (_, __) => const PendingApprovalsScreen()),
         GoRoute(path: '/support', builder: (_, __) => const SupportScreen()),
+        GoRoute(path: '/ussd-settings', builder: (_, __) => const UssdSettingsScreen()),
 
         // Reports
         GoRoute(path: '/reports', builder: (_, __) => const ReportsScreen()),
