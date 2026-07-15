@@ -7,6 +7,9 @@ import '../../core/auth/auth_bloc.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
+import 'home_tab.dart';
+import '../community/community_feed_screen.dart';
+import '../marketplace/marketplace_screen.dart';
 
 class OwnerDashboard extends StatefulWidget {
   const OwnerDashboard({super.key});
@@ -56,10 +59,9 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
       body: IndexedStack(
         index: _navIndex,
         children: [
-          _AnalyticsTab(summary: _summary, commissions: _commissions,
-            branches: _branches, loading: _loading, user: user, onRefresh: _loadAll),
-          _BranchesTab(branches: _branches, loading: _loading),
-          const _OwnerReportsTab(),
+          HomeTab(user: user),
+          const CommunityFeedScreen(),
+          const MarketplaceScreen(),
           _OwnerMoreTab(),
         ],
       ),
@@ -67,9 +69,9 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
         selectedIndex: _navIndex,
         onDestinationSelected: (i) => setState(() => _navIndex = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.analytics_outlined), selectedIcon: Icon(Icons.analytics), label: 'Analytics'),
-          NavigationDestination(icon: Icon(Icons.store_outlined), selectedIcon: Icon(Icons.store), label: 'Branches'),
-          NavigationDestination(icon: Icon(Icons.bar_chart_outlined), selectedIcon: Icon(Icons.bar_chart), label: 'Reports'),
+          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
+          NavigationDestination(icon: Icon(Icons.people_outline), selectedIcon: Icon(Icons.people), label: 'Community'),
+          NavigationDestination(icon: Icon(Icons.storefront_outlined), selectedIcon: Icon(Icons.storefront), label: 'Business Hub'),
           NavigationDestination(icon: Icon(Icons.more_horiz), label: 'More'),
         ],
       ),
@@ -481,9 +483,13 @@ class _OwnerMoreTab extends StatelessWidget {
               duration: Duration(seconds: 4),
             ));
           }),
+          _T(Icons.account_balance_wallet_outlined, 'MoMo Balance', () => context.push('/my-balance')),
+          _T(Icons.store_outlined, 'Branches', () => context.push('/branches')),
+          _T(Icons.bar_chart_outlined, 'Reports', () => context.push('/reports')),
           _T(Icons.smart_toy_outlined, 'AI Assistant', () => context.push('/ai')),
-          _T(Icons.storefront_outlined, 'Business Hub', () => context.push('/marketplace')),
           _T(Icons.card_membership_outlined, 'Subscription', () => context.push('/subscription')),
+          _T(Icons.wifi_tethering, 'USSD Automation', () => context.push('/ussd-settings')),
+          _T(Icons.support_agent_outlined, 'Support', () => context.push('/support')),
           _T(Icons.settings_outlined, 'Settings', () => context.push('/settings')),
           const Divider(),
           _T(Icons.logout, 'Sign Out',
