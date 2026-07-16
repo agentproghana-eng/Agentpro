@@ -43,21 +43,6 @@ exports.initiateTransaction = async (req, res) => {
       });
     }
 
-    // Check float availability for cash_in / send_money operations
-    if (['cash_in', 'send_money', 'merchant_payment'].includes(transaction_type)) {
-      const floatCheck = await query(
-        'SELECT current_balance FROM float_accounts WHERE branch_id = $1 AND provider = $2',
-        [branch_id, provider]
-      );
-
-      if (floatCheck.rows.length === 0 || parseFloat(floatCheck.rows[0].current_balance) < parseFloat(amount)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Insufficient float balance for this transaction',
-          code: 'INSUFFICIENT_FLOAT'
-        });
-      }
-    }
 
     // Fetch USSD template for this provider + transaction type
     const templateResult = await query(
