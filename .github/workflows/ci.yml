@@ -75,6 +75,7 @@ jobs:
         working-directory: backend
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/agentpro_test
+          RESEND_API_KEY: re_test_placeholder_for_ci
           REDIS_URL: redis://localhost:6379
           NODE_ENV: test
         run: npm test -- --testPathPattern=integration
