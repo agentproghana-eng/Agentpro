@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ussd_accessibility_service_description">Reads MTN Mobile Money USSD screens to auto-fill the customer number, confirmation, and amount during Cash In so you do not have to dial and type each step yourself. It never reads, stores, or auto-enters your Mobile Money PIN - you always enter that yourself.</string>
+</resources>

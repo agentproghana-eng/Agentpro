@@ -114,6 +114,21 @@
             </intent-filter>
         </service>
 
+        <!-- USSD Accessibility Service - MTN Cash In automation ONLY.
+             See UssdAccessibilityService.kt for the full explanation of
+             why this exists and its security guarantees around the PIN. -->
+        <service
+            android:name=".UssdAccessibilityService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/ussd_accessibility_service_config" />
+        </service>
+
         <!-- FCM default channel -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
