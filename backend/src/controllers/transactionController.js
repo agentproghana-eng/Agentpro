@@ -20,7 +20,6 @@ exports.initiateTransaction = async (req, res) => {
     biller_code,
     biller_name,
     account_number,
-    branch_id,
     notes
   } = req.body;
 
@@ -28,21 +27,27 @@ exports.initiateTransaction = async (req, res) => {
   const companyId = req.user.company_id;
 
   try {
-    // Validate branch belongs to agent's company
-    const branchCheck = await query(
-      `SELECT b.id, b.company_id FROM branches b
+    // Determine the agent's assigned branch server-side - agents,
+    // managers, and owners never send branch_id from the client;
+    // every transaction is always recorded against whichever branch
+    // the user is currently assigned to via agent_branches (the
+    // single source of truth, kept in sync by branch assignment /
+    // reassignment endpoints and by branch creation for owners).
+    const branchLookup = await query(
+      `SELECT b.id FROM branches b
        INNER JOIN agent_branches ab ON ab.branch_id = b.id
-       WHERE ab.agent_id = $1 AND b.id = $2 AND b.status = 'active'`,
-      [agentId, branch_id]
+       WHERE ab.agent_id = $1 AND b.status = 'active'`,
+      [agentId]
     );
 
-    if (branchCheck.rows.length === 0) {
+    if (branchLookup.rows.length === 0) {
       return res.status(403).json({
         success: false,
-        message: 'Invalid branch or you are not assigned to this branch'
+        message: 'You are not currently assigned to a branch. Contact your business owner or manager.'
       });
     }
 
+    const branch_id = branchLookup.rows[0].id;
 
     // Fetch USSD template for this provider + transaction type
     const templateResult = await query(

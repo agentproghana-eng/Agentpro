@@ -25,29 +25,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
   final _notesCtrl = TextEditingController();
 
   String _selectedProvider = 'mtn';
-  String? _selectedBranchId;
-  List<Map<String, dynamic>> _branches = [];
-  bool _loading = false, _loadingBranches = true;
+  bool _loading = false;
 
   @override
   void initState() {
     super.initState();
-    _loadBranches();
-  }
-
-  Future<void> _loadBranches() async {
-    try {
-      final res = await ApiClient.instance.get('/branches');
-      if (mounted) {
-        setState(() {
-          _branches = List<Map<String, dynamic>>.from(res.data['data'] ?? []);
-          if (_branches.isNotEmpty) _selectedBranchId = _branches.first['id'];
-          _loadingBranches = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _loadingBranches = false);
-    }
   }
 
   String get _title => widget.transactionType.replaceAll('_', ' ').split(' ')
@@ -60,12 +42,6 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
   Future<void> _proceed() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedBranchId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a branch')));
-      return;
-    }
-
 
     // Telecel/AirtelTigo Cash Out: e-cash moves directly SIM-to-SIM,
     // invisible to USSD automation. Skip the dial entirely and record
@@ -87,7 +63,6 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'recipient_phone': _recipientPhoneCtrl.text.trim(),
         'biller_code': _billerCodeCtrl.text.trim(),
         'account_number': _accountNumberCtrl.text.trim(),
-        'branch_id': _selectedBranchId,
         'notes': _notesCtrl.text.trim(),
       });
 
@@ -142,9 +117,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(_title)),
-      body: _loadingBranches
-          ? const Center(child: CircularProgressIndicator())
-          : Form(
+      body: Form(
               key: _formKey,
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
@@ -191,24 +164,6 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     ),
 
                     const SizedBox(height: 20),
-
-                    // Branch selector
-                    if (_branches.isNotEmpty) ...[
-                      DropdownButtonFormField<String>(
-                        value: _selectedBranchId,
-                        decoration: InputDecoration(
-                          labelText: 'Branch',
-                          prefixIcon: const Icon(Icons.store_outlined),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        items: _branches.map((b) => DropdownMenuItem(
-                          value: b['id'] as String,
-                          child: Text(b['name'] as String),
-                        )).toList(),
-                        onChanged: (v) => setState(() => _selectedBranchId = v),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
 
                     // Customer Phone
                     if (_needsCustomer) ...[

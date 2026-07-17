@@ -29,7 +29,6 @@ router.post('/', [
     'mini_statement', 'reversal'
   ]).withMessage('Invalid transaction type'),
   body('amount').isFloat({ min: 1 }).withMessage('Amount must be a positive number'),
-  body('branch_id').isUUID().withMessage('Valid branch ID is required'),
 ],
   handleValidation,
   authorize('agent', 'business_owner', 'manager'),

@@ -52,6 +52,24 @@ exports.createBranch = async (req, res) => {
       );
     }
 
+    // If the creating user is the Business Owner and has no branch
+    // assignment yet, this becomes their default branch for recording
+    // their own transactions (owners have no separate branch_id column
+    // on users - agent_branches is the single source of truth for
+    // which branch a transaction gets recorded under).
+    if (req.user.role === 'business_owner') {
+      const existingAssignment = await query(
+        'SELECT id FROM agent_branches WHERE agent_id = $1',
+        [req.user.id]
+      );
+      if (existingAssignment.rows.length === 0) {
+        await query(
+          'INSERT INTO agent_branches (agent_id, branch_id, assigned_by) VALUES ($1, $2, $3)',
+          [req.user.id, result.rows[0].id, req.user.id]
+        );
+      }
+    }
+
     await auditLog({
       userId: req.user.id, companyId: req.user.company_id,
       action: 'BRANCH_CREATED', entityType: 'branch', entityId: result.rows[0].id,
