@@ -44,15 +44,15 @@ class _HomeTabState extends State<HomeTab> {
         SliverAppBar(
           pinned: true,
           backgroundColor: AppTheme.primaryColor,
-          expandedHeight: 190,
+          expandedHeight: 280,
           flexibleSpace: FlexibleSpaceBar(
             background: Container(
               padding: const EdgeInsets.fromLTRB(20, 50, 20, 12),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(colors: [AppTheme.primaryColor, Color(0xFF004D43)], begin: Alignment.topLeft, end: Alignment.bottomRight),
               ),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.end, children: [
-                Center(child: Image.asset("assets/images/agentpro-logo-lockup.png", height: 44)),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+                Center(child: Image.asset("assets/images/agentpro-logo-lockup.png", height: 132)),
                 const SizedBox(height: 10),
                 Text("${widget.user["first_name"] ?? ""} ${widget.user["last_name"] ?? ""}", style: const TextStyle(color: AppTheme.secondaryColor, fontSize: 15, fontWeight: FontWeight.w800)),
                 Text(widget.user["company_name"] ?? "", style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600)),
