@@ -78,6 +78,7 @@ jobs:
           RESEND_API_KEY: re_test_placeholder_for_ci
           REDIS_URL: redis://localhost:6379
           NODE_ENV: test
+          APP_NAME: Agent Pro Ghana
         run: npm test -- --testPathPattern=integration
 
       - name: Upload coverage
