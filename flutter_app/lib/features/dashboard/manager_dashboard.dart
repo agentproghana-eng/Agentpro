@@ -6,6 +6,7 @@ import '../../core/auth/auth_bloc.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
+import 'home_tab.dart';
 
 class ManagerDashboard extends StatefulWidget {
   const ManagerDashboard({super.key});
@@ -61,13 +62,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       body: IndexedStack(
         index: _navIndex,
         children: [
-          _OverviewTab(
-            summary: _summary,
-            loading: _loading,
-            user: user,
-            branches: _branches,
-            onRefresh: _loadAll,
-          ),
+            HomeTab(user: user),
           _AgentsTab(agents: _agents, loading: _loading),
           _FloatTab(accounts: _floatAccounts, loading: _loading),
           _ManagerMoreTab(),
@@ -82,185 +77,6 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           NavigationDestination(icon: Icon(Icons.account_balance_wallet_outlined), selectedIcon: Icon(Icons.account_balance_wallet), label: 'Float'),
           NavigationDestination(icon: Icon(Icons.more_horiz), label: 'More'),
         ],
-      ),
-    );
-  }
-}
-
-// ── Overview Tab ──────────────────────────────────────────────
-
-class _OverviewTab extends StatelessWidget {
-  final Map<String, dynamic>? summary;
-  final bool loading;
-  final Map<String, dynamic> user;
-  final List<dynamic> branches;
-  final VoidCallback onRefresh;
-
-  const _OverviewTab({this.summary, required this.loading, required this.user,
-    required this.branches, required this.onRefresh});
-
-  @override
-  Widget build(BuildContext context) {
-    final today = summary?['today'];
-    final month = summary?['this_month'];
-    final recent = (summary?['recent_transactions'] as List?) ?? [];
-
-    return RefreshIndicator(
-      onRefresh: () async => onRefresh(),
-      child: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            pinned: true,
-            backgroundColor: AppTheme.primaryColor,
-            expandedHeight: 140,
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                padding: const EdgeInsets.fromLTRB(20, 56, 20, 12),
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [AppTheme.primaryColor, Color(0xFF004D43)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Container(
-                      width: 34, height: 34,
-                      margin: const EdgeInsets.only(right: 10, bottom: 2),
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(9)),
-                      child: Image.asset("assets/images/agentpro-logo.png", fit: BoxFit.contain),
-                    ),
-                    Expanded(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text('Manager Portal', style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                        Text('${user['first_name']} ${user['last_name']}',
-                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                        Text('${branches.length} branch${branches.length != 1 ? 'es' : ''}',
-                          style: const TextStyle(color: Colors.white60, fontSize: 12)),
-                      ]),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.notifications_outlined, color: Colors.white),
-                      onPressed: () => context.push('/notifications'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.all(16),
-            sliver: SliverList(delegate: SliverChildListDelegate([
-              if (loading)
-                const Center(child: CircularProgressIndicator())
-              else ...[
-                // Stats grid
-                GridView.count(
-                  crossAxisCount: 2,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisSpacing: 12, mainAxisSpacing: 12,
-                  childAspectRatio: 1.1,
-                  children: [
-                    InfoCard(title: 'Transactions Today', value: '${today?['transaction_count'] ?? 0}',
-                      icon: Icons.swap_horiz, subtitle: 'All agents'),
-                    InfoCard(title: 'Volume Today', value: 'GH₵ ${_f(today?['total_amount'])}',
-                      icon: Icons.bar_chart, iconColor: AppTheme.secondaryColor),
-                    InfoCard(title: 'Monthly Commission', value: 'GH₵ ${_f(month?['net_commission'])}',
-                      icon: Icons.payments_outlined, iconColor: AppTheme.successColor),
-                    InfoCard(title: 'Active Agents', value: '—',
-                      icon: Icons.people_outline, iconColor: Colors.blue),
-                  ],
-                ),
-                const SizedBox(height: 20),
-
-                // Branches
-                SectionHeader(title: 'MY BRANCHES', actionLabel: 'Manage',
-                  onAction: () => context.push('/branches')),
-                const SizedBox(height: 8),
-                ...branches.take(3).map((b) => _BranchCard(branch: b)),
-                if (branches.length > 3)
-                  TextButton(
-                    onPressed: () => context.push('/branches'),
-                    child: Text('View all ${branches.length} branches'),
-                  ),
-
-                const SizedBox(height: 16),
-
-                // Recent Transactions
-                SectionHeader(title: 'RECENT TRANSACTIONS', actionLabel: 'See All',
-                  onAction: () => context.push('/transactions')),
-                const SizedBox(height: 8),
-                if (recent.isEmpty)
-                  const EmptyState(icon: Icons.receipt_long_outlined, title: 'No recent transactions')
-                else
-                  ...recent.take(5).map((tx) => _TxTile(tx: tx)),
-              ],
-              const SizedBox(height: 80),
-            ])),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _f(dynamic v) => NumberFormat('#,##0.00').format(double.tryParse(v?.toString() ?? '0') ?? 0);
-}
-
-class _BranchCard extends StatelessWidget {
-  final Map<String, dynamic> branch;
-  const _BranchCard({required this.branch});
-
-  @override
-  Widget build(BuildContext context) {
-    final float = double.tryParse(branch['total_float']?.toString() ?? '0') ?? 0;
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
-          child: const Icon(Icons.store, color: AppTheme.primaryColor),
-        ),
-        title: Text(branch['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text('${branch['agent_count'] ?? 0} agents · Float: GH₵ ${float.toStringAsFixed(2)}',
-          style: const TextStyle(fontSize: 12)),
-        trailing: StatusBadge(status: branch['status'] ?? 'active'),
-        onTap: () => context.push('/branches'),
-      ),
-    );
-  }
-}
-
-class _TxTile extends StatelessWidget {
-  final Map<String, dynamic> tx;
-  const _TxTile({required this.tx});
-
-  @override
-  Widget build(BuildContext context) {
-    final amount = double.tryParse(tx['amount']?.toString() ?? '0') ?? 0;
-    return Card(
-      margin: const EdgeInsets.only(bottom: 6),
-      child: ListTile(
-        dense: true,
-        leading: ProviderBadge(provider: tx['provider'] ?? ''),
-        title: Text(
-          (tx['transaction_type'] ?? '').toString().replaceAll('_', ' '),
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-        ),
-        subtitle: Text('${tx['agent_name'] ?? ''} · ${tx['branch_name'] ?? ''}',
-          style: const TextStyle(fontSize: 11)),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            GhsAmount(amount: amount, fontSize: 13),
-            StatusBadge(status: tx['status'] ?? ''),
-          ],
-        ),
-        onTap: () => context.push('/transactions/${tx['id']}'),
       ),
     );
   }

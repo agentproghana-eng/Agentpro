@@ -44,7 +44,7 @@ class _HomeTabState extends State<HomeTab> {
         SliverAppBar(
           pinned: true,
           backgroundColor: AppTheme.primaryColor,
-          expandedHeight: 168,
+          expandedHeight: 190,
           flexibleSpace: FlexibleSpaceBar(
             background: Container(
               padding: const EdgeInsets.fromLTRB(20, 50, 20, 12),
@@ -52,10 +52,11 @@ class _HomeTabState extends State<HomeTab> {
                 gradient: LinearGradient(colors: [AppTheme.primaryColor, Color(0xFF004D43)], begin: Alignment.topLeft, end: Alignment.bottomRight),
               ),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.end, children: [
-                Center(child: Image.asset("assets/images/agentpro-logo-lockup.png", height: 26)),
+                Center(child: Image.asset("assets/images/agentpro-logo-lockup.png", height: 44)),
                 const SizedBox(height: 10),
-                Text("${widget.user["first_name"] ?? ""} ${widget.user["last_name"] ?? ""}", style: const TextStyle(color: Colors.white, fontSize: 14.5, fontWeight: FontWeight.bold)),
-                Text(widget.user["company_name"] ?? "", style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                Text("${widget.user["first_name"] ?? ""} ${widget.user["last_name"] ?? ""}", style: const TextStyle(color: AppTheme.secondaryColor, fontSize: 15, fontWeight: FontWeight.w800)),
+                Text(widget.user["company_name"] ?? "", style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600)),
+                Text((widget.user["role"] ?? "").toString().replaceAll("_", " ").toUpperCase(), style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.6)),
               ]),
             ),
           ),
@@ -83,19 +84,19 @@ class _HomeTabState extends State<HomeTab> {
               crossAxisCount: 3,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 8,
-              crossAxisSpacing: 8,
-              childAspectRatio: 0.95,
+              mainAxisSpacing: 6,
+              crossAxisSpacing: 6,
+              childAspectRatio: 1.05,
               children: [
-                _QuickAction(icon: Icons.call_received, label: "Cash In", onTap: () => context.push("/transactions?type=cash_in")),
-                _QuickAction(icon: Icons.call_made, label: "Cash Out", onTap: () => context.push("/transactions?type=cash_out")),
-                _QuickAction(icon: Icons.send, label: "Send Money", onTap: () => context.push("/transactions?type=send_money")),
-                _QuickAction(icon: Icons.storefront, label: "Pay Merchant", onTap: () => context.push("/transactions?type=merchant_payment")),
-                _QuickAction(icon: Icons.receipt_long, label: "Bill Pay", onTap: () => context.push("/transactions?type=bill_payment")),
-                _QuickAction(icon: Icons.phone_android, label: "Airtime", onTap: () => context.push("/transactions?type=airtime")),
-                _QuickAction(icon: Icons.wifi, label: "Data Bundle", onTap: () => context.push("/transactions?type=data_bundle")),
-                _QuickAction(icon: Icons.account_balance_wallet, label: "Check Balance", onTap: () => context.push("/transactions?type=balance_enquiry")),
-                _QuickAction(icon: Icons.pie_chart, label: "Check Commission", onTap: () => context.push("/my-balance")),
+                _QuickAction(icon: Icons.call_received, label: "Cash In", bgColor: const Color(0xFFE6F4F1), iconColor: AppTheme.primaryColor, onTap: () => context.push("/transactions?type=cash_in")),
+                _QuickAction(icon: Icons.call_made, label: "Cash Out", bgColor: const Color(0xFFFDF3DC), iconColor: const Color(0xFFB87E00), onTap: () => context.push("/transactions?type=cash_out")),
+                _QuickAction(icon: Icons.send, label: "Send Money", bgColor: const Color(0xFFE3EEFC), iconColor: const Color(0xFF2E6FD9), onTap: () => context.push("/transactions?type=send_money")),
+                _QuickAction(icon: Icons.storefront, label: "Pay Merchant", bgColor: const Color(0xFFF0E6FA), iconColor: const Color(0xFF8B5FBF), onTap: () => context.push("/transactions?type=merchant_payment")),
+                _QuickAction(icon: Icons.receipt_long, label: "Bill Pay", bgColor: const Color(0xFFFCE8E3), iconColor: const Color(0xFFC1503D), onTap: () => context.push("/transactions?type=bill_payment")),
+                _QuickAction(icon: Icons.phone_android, label: "Airtime", bgColor: const Color(0xFFFFF7D6), iconColor: const Color(0xFFA6821A), onTap: () => context.push("/transactions?type=airtime")),
+                _QuickAction(icon: Icons.wifi, label: "Data Bundle", bgColor: const Color(0xFFE0F7F5), iconColor: const Color(0xFF14847A), onTap: () => context.push("/transactions?type=data_bundle")),
+                _QuickAction(icon: Icons.account_balance_wallet, label: "Check Balance", bgColor: const Color(0xFFDFF3EE), iconColor: const Color(0xFF1F8A6F), onTap: () => context.push("/transactions?type=balance_enquiry")),
+                _QuickAction(icon: Icons.pie_chart, label: "Check Commission", bgColor: const Color(0xFFFBE6EC), iconColor: const Color(0xFFB33F6B), onTap: () => context.push("/my-balance")),
               ],
             ),
           ),
@@ -153,20 +154,26 @@ class _QuickAction extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final Color bgColor;
+  final Color iconColor;
 
-  const _QuickAction({required this.icon, required this.label, required this.onTap});
+  const _QuickAction({required this.icon, required this.label, required this.onTap, required this.bgColor, required this.iconColor});
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(10),
       child: Container(
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 3)]),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 3)]),
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(icon, size: 22, color: AppTheme.primaryColor),
-          const SizedBox(height: 6),
-          Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600)),
+          Container(
+            width: 26, height: 26,
+            decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(8)),
+            child: Icon(icon, size: 13, color: iconColor),
+          ),
+          const SizedBox(height: 4),
+          Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w600)),
         ]),
       ),
     );
