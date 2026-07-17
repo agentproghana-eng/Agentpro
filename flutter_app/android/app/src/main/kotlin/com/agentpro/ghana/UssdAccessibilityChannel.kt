@@ -48,7 +48,7 @@ class UssdAccessibilityChannel(
                 openAccessibilitySettings()
                 result.success(null)
             }
-            "startCashInAutomation" -> startCashInAutomation(call, result)
+            "startAutomation" -> startAutomation(call, result)
             else -> result.notImplemented()
         }
     }
@@ -68,11 +68,12 @@ class UssdAccessibilityChannel(
         context.startActivity(intent)
     }
 
-    private fun startCashInAutomation(call: MethodCall, result: MethodChannel.Result) {
+    private fun startAutomation(call: MethodCall, result: MethodChannel.Result) {
         val customerPhone = call.argument<String>("customer_phone")
         val amount = call.argument<String>("amount")
+        val transactionType = call.argument<String>("transaction_type")
 
-        if (customerPhone == null || amount == null) {
+        if (customerPhone == null || amount == null || transactionType == null) {
             result.error("INVALID_ARGS", "customer_phone and amount are required", null)
             return
         }
@@ -82,7 +83,7 @@ class UssdAccessibilityChannel(
             return
         }
 
-        UssdAccessibilityService.startSession(customerPhone, amount)
+        UssdAccessibilityService.startSession(customerPhone, amount, transactionType)
 
         try {
             val dialIntent = Intent(Intent.ACTION_CALL, Uri.parse("tel:" + Uri.encode("*171#")))

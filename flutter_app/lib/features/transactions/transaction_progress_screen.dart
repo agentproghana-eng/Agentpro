@@ -109,8 +109,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     // that even a 2-step concatenated string fails immediately on this
     // gateway. Route through the Accessibility Service pilot instead.
     final transactionType = widget.data["transaction_type"] as String?;
-    if (provider == "mtn" && transactionType == "cash_in") {
-      await _startAccessibilityCashIn(transactionId, automationParams);
+    if (provider == "mtn" && (transactionType == "cash_in" || transactionType == "cash_out")) {
+      await _startAccessibilityAutomation(transactionId, automationParams, transactionType!);
       return;
     }
 
@@ -141,9 +141,10 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     await _reportResult(transactionId, result);
   }
 
-  Future<void> _startAccessibilityCashIn(
+  Future<void> _startAccessibilityAutomation(
     String transactionId,
     Map<String, String> automationParams,
+    String transactionType,
   ) async {
     final accessEngine = UssdAccessibilityEngine();
 
@@ -173,6 +174,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     final result = await accessEngine.execute(
       customerPhone: automationParams["customer_phone"] ?? "",
       amount: automationParams["amount"] ?? "",
+      transactionType: transactionType,
     );
 
     accessEngine.dispose();
