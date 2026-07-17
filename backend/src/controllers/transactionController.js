@@ -20,7 +20,8 @@ exports.initiateTransaction = async (req, res) => {
     biller_code,
     biller_name,
     account_number,
-    notes
+      notes,
+      fee
   } = req.body;
 
   const agentId = req.user.id;
@@ -66,20 +67,26 @@ exports.initiateTransaction = async (req, res) => {
     const template = templateResult.rows[0];
     const reference = `APG-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
 
+      // Transfer charge: only meaningful for send_money; the agent enters
+      // it (pre-filled client-side with an auto-calculated 1% of amount,
+      // no cap) before dialing, and it is stored on the transaction record
+      // right away so it survives even if the transaction later fails.
+      const feeValue = transaction_type === 'send_money' ? (parseFloat(fee) || 0) : 0;
+
     // Create transaction record
     const txResult = await query(
       `INSERT INTO transactions (
         reference, agent_id, branch_id, company_id, provider,
         transaction_type, status, amount, customer_phone, customer_name,
         recipient_phone, recipient_name, biller_code, biller_name,
-        account_number, notes
-      ) VALUES ($1, $2, $3, $4, $5, $6, 'initiated', $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        account_number, notes, fee
+      ) VALUES ($1, $2, $3, $4, $5, $6, 'initiated', $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
       RETURNING id, reference, status, created_at`,
       [
         reference, agentId, branch_id, companyId, provider,
         transaction_type, amount, customer_phone, customer_name,
         recipient_phone, recipient_name, biller_code, biller_name,
-        account_number, notes
+        account_number, notes, feeValue
       ]
     );
 
@@ -477,9 +484,11 @@ async function calculateAndRecordCommission(client, transaction, agentId) {
   }
 }
 
-// Send Money fee: 1% of the amount, capped at GH20, applies only when
-// sending to a number that is NOT the sending customer's own number.
-// Never blocks transaction completion if it fails - same pattern as
+// Send Money fee: entered by the agent (pre-filled with an auto-calculated
+// 1% of the amount, no cap) at the time the transaction is initiated, and
+// stored on the transaction record at that point. Applies only when sending
+// to a number that is NOT the sending customers own number. Never blocks
+// transaction completion if it fails - same pattern as
 // calculateAndRecordCommission above.
 async function calculateAndRecordSendMoneyFee(client, transaction, agentId) {
   try {
@@ -489,9 +498,14 @@ async function calculateAndRecordSendMoneyFee(client, transaction, agentId) {
     if (!recipient || !customer || recipient === customer) return;
 
     const amount = parseFloat(transaction.amount);
-    const fee = Math.min(amount * 0.01, 20);
-
-    await client.query("UPDATE transactions SET fee = $1 WHERE id = $2", [fee, transaction.id]);
+    // The fee was captured at initiation (agent-editable, pre-filled with
+    // 1% of amount, no cap). Fall back to the 1% default only if it is
+    // missing/zero - e.g. an older client that did not send one.
+    let fee = parseFloat(transaction.fee);
+    if (!fee || fee <= 0) {
+      fee = amount * 0.01;
+      await client.query("UPDATE transactions SET fee = $1 WHERE id = $2", [fee, transaction.id]);
+    }
 
     let balanceResult = await client.query(
       "SELECT * FROM agent_balances WHERE agent_id = $1 AND provider = $2",

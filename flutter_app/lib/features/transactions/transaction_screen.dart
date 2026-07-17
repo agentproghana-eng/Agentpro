@@ -23,13 +23,21 @@ class _TransactionScreenState extends State<TransactionScreen> {
   final _billerCodeCtrl = TextEditingController();
   final _accountNumberCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
+  final _feeCtrl = TextEditingController();
 
   String _selectedProvider = 'mtn';
   bool _loading = false;
+  bool _feeAutoCalculated = true;
 
   @override
   void initState() {
     super.initState();
+    _amountCtrl.addListener(() {
+      if (!_isSendMoney || !_feeAutoCalculated) return;
+      final amount = double.tryParse(_amountCtrl.text.replaceAll(',', '')) ?? 0;
+      final fee = amount * 0.01;
+      _feeCtrl.text = fee > 0 ? fee.toStringAsFixed(2) : '';
+    });
   }
 
   String get _title => widget.transactionType.replaceAll('_', ' ').split(' ')
@@ -39,6 +47,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
   bool get _needsBiller => ['bill_payment'].contains(widget.transactionType);
   bool get _needsAmount => !['balance_enquiry', 'mini_statement'].contains(widget.transactionType);
   bool get _needsCustomer => !['balance_enquiry', 'mini_statement'].contains(widget.transactionType);
+  bool get _isSendMoney => widget.transactionType == 'send_money';
 
   Future<void> _proceed() async {
     if (!_formKey.currentState!.validate()) return;
@@ -63,6 +72,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'recipient_phone': _recipientPhoneCtrl.text.trim(),
         'biller_code': _billerCodeCtrl.text.trim(),
         'account_number': _accountNumberCtrl.text.trim(),
+          'fee': _isSendMoney ? (double.tryParse(_feeCtrl.text.replaceAll(',', '')) ?? 0) : 0,
         'notes': _notesCtrl.text.trim(),
       });
 
@@ -241,6 +251,36 @@ class _TransactionScreenState extends State<TransactionScreen> {
                       const SizedBox(height: 14),
                     ],
 
+                      // Transfer Charge (Send Money only) - auto-calculated
+                      // at 1% of amount with no cap, but the agent can
+                      // always edit it to match what the network actually
+                      // charged during the USSD dial.
+                      if (_isSendMoney) ...[
+                        TextFormField(
+                          controller: _feeCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                          decoration: InputDecoration(
+                            labelText: 'Transfer Charge (GH₵)',
+                            hintText: '0.00',
+                            prefixIcon: const Icon(Icons.receipt_long_outlined),
+                            prefixText: 'GH₵  ',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                            filled: true,
+                            fillColor: Colors.grey[50],
+                            helperText: 'Auto-calculated at 1% - editable',
+                          ),
+                          onChanged: (_) => _feeAutoCalculated = false,
+                          validator: (v) {
+                            if (v == null || v.isEmpty) return null;
+                            final n = double.tryParse(v);
+                            if (n == null || n < 0) return 'Enter a valid charge';
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 14),
+                      ],
+
                     // Notes
                     AppTextField(
                       controller: _notesCtrl,
@@ -292,7 +332,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
   @override
   void dispose() {
     for (final c in [_customerPhoneCtrl, _customerNameCtrl, _amountCtrl,
-      _recipientPhoneCtrl, _billerCodeCtrl, _accountNumberCtrl, _notesCtrl]) {
+      _recipientPhoneCtrl, _billerCodeCtrl, _accountNumberCtrl, _notesCtrl, _feeCtrl]) {
       c.dispose();
     }
     super.dispose();
