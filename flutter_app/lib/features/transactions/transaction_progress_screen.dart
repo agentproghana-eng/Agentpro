@@ -105,6 +105,15 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       simSlot = 0;
     }
 
+    // MTN Cash In cannot use single-dial USSD - confirmed via live testing
+    // that even a 2-step concatenated string fails immediately on this
+    // gateway. Route through the Accessibility Service pilot instead.
+    final transactionType = widget.data["transaction_type"] as String?;
+    if (provider == "mtn" && transactionType == "cash_in") {
+      await _startAccessibilityCashIn(transactionId, automationParams);
+      return;
+    }
+
     final ussdTemplate = USSDTemplate.fromMap(template);
     _engine = USSDEngine(
       template: ussdTemplate,
@@ -129,6 +138,44 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     final result = await _engine!.execute();
 
     // Report result to backend
+    await _reportResult(transactionId, result);
+  }
+
+  Future<void> _startAccessibilityCashIn(
+    String transactionId,
+    Map<String, String> automationParams,
+  ) async {
+    final accessEngine = UssdAccessibilityEngine();
+
+    final enabled = await accessEngine.isServiceEnabled();
+    if (!enabled) {
+      const reason = "Accessibility permission is required for MTN Cash In "
+          "automation. Enable Agent Pro Ghana under Settings > "
+          "Accessibility, then try again.";
+      if (mounted) setState(() => _simWarning = reason);
+      await accessEngine.openAccessibilitySettings();
+      await _reportResult(
+        transactionId,
+        USSDResult(outcome: USSDStatus.failed, failureReason: reason, sessionLog: const []),
+      );
+      return;
+    }
+
+    accessEngine.progressStream.listen((progress) {
+      if (mounted) {
+        setState(() {
+          _status = progress.status;
+          _statusMessage = progress.message;
+        });
+      }
+    });
+
+    final result = await accessEngine.execute(
+      customerPhone: automationParams["customer_phone"] ?? "",
+      amount: automationParams["amount"] ?? "",
+    );
+
+    accessEngine.dispose();
     await _reportResult(transactionId, result);
   }
 

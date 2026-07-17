@@ -382,3 +382,84 @@ class USSDEngine {
     if (!_progressController.isClosed) _progressController.close();
   }
 }
+
+/// USSD Accessibility Engine - MTN Cash In ONLY
+///
+/// Handles the one provider/type combo where the single-dial approach
+/// above genuinely does not work (confirmed via live testing - even a
+/// 2-step concatenated dial closes the session immediately on MTN Cash
+/// In). Delegates to UssdAccessibilityService via the native platform
+/// channel, which reads and responds to the real system USSD dialog
+/// screen by screen. This class never touches the PIN - once the
+/// service reports the PIN prompt was reached, the agent completes it
+/// on the same visible system dialog themselves.
+class UssdAccessibilityEngine {
+  static const _channel = MethodChannel("com.agentpro.ghana/ussd_accessibility");
+
+  final _progressController = StreamController<USSDProgress>.broadcast();
+  Stream<USSDProgress> get progressStream => _progressController.stream;
+
+  Completer<USSDResult>? _resultCompleter;
+
+  UssdAccessibilityEngine() {
+    _channel.setMethodCallHandler(_handleNativeCall);
+  }
+
+  Future<dynamic> _handleNativeCall(MethodCall call) async {
+    switch (call.method) {
+      case "onPinPromptReached":
+        _progressController.add(const USSDProgress(
+          status: USSDStatus.awaitingPIN,
+          message: "Enter your Mobile Money PIN on the dialer screen to continue.",
+        ));
+        break;
+      case "onResult":
+        final args = call.arguments as Map;
+        final success = args["success"] as bool? ?? false;
+        final message = args["message"] as String? ?? "";
+        _resultCompleter?.complete(USSDResult(
+          outcome: success ? USSDStatus.success : USSDStatus.failed,
+          failureReason: success ? null : "Transaction did not complete: $message",
+          sessionLog: const [],
+        ));
+        break;
+    }
+  }
+
+  Future<bool> isServiceEnabled() async {
+    final result = await _channel.invokeMethod<bool>("isServiceEnabled");
+    return result ?? false;
+  }
+
+  Future<void> openAccessibilitySettings() async {
+    await _channel.invokeMethod("openAccessibilitySettings");
+  }
+
+  /// No client-side timeout here deliberately - the agent may take any
+  /// amount of time to type their PIN on the native dialog. The native
+  /// side (UssdAccessibilityService) is the sole source of truth for
+  /// when this session actually ends.
+  Future<USSDResult> execute({required String customerPhone, required String amount}) async {
+    _resultCompleter = Completer<USSDResult>();
+    _progressController.add(const USSDProgress(status: USSDStatus.dialing, message: "Dialing network..."));
+
+    try {
+      await _channel.invokeMethod("startCashInAutomation", {
+        "customer_phone": customerPhone,
+        "amount": amount,
+      });
+    } catch (e) {
+      return USSDResult(
+        outcome: USSDStatus.failed,
+        failureReason: "Failed to start automation: $e",
+        sessionLog: const [],
+      );
+    }
+
+    return _resultCompleter!.future;
+  }
+
+  void dispose() {
+    if (!_progressController.isClosed) _progressController.close();
+  }
+}
