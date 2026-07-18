@@ -31,3 +31,4 @@ admin_portal/.env
 .vscode/
 *.iml
 *.jks
+*~
