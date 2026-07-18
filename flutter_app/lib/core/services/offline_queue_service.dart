@@ -3,20 +3,6 @@ import "package:hive_flutter/hive_flutter.dart";
 import "package:uuid/uuid.dart";
 import "../api/api_client.dart";
 
-/// Offline Transaction Queue - Pilot (single-dial transaction types only)
-///
-/// Stores fully-completed transactions (already dialed and resolved via
-/// USSD) that could not be reported to the backend because the device
-/// was offline at the time. Nothing about the actual dial changes here -
-/// USSD dialing never needed internet in the first place. This queue only
-/// covers the app own API calls (initiate + complete), which do need
-/// connectivity.
-///
-/// Sync deliberately replays the existing two-step API (initiate, then
-/// complete) rather than a bespoke sync endpoint - "complete" is called
-/// immediately with the already-known result rather than waiting on a
-/// real USSD response, since that already happened offline. This reuses
-/// 100% of already-tested backend code with zero backend changes.
 class OfflineQueueService {
   static const _boxName = "offline_transaction_queue";
   static const _templateBoxName = "cached_ussd_templates";
@@ -86,10 +72,19 @@ class OfflineQueueService {
     var failed = 0;
 
     for (final tx in pending) {
+      final localId = tx["local_id"] as String;
       try {
-        final fields = Map<String, dynamic>.from(tx["request_fields"] as Map);
-        final initiateRes = await ApiClient.instance.post("/transactions", data: fields);
-        final transactionId = initiateRes.data["data"]["transaction_id"];
+        String transactionId;
+        final existingRemoteId = tx["remote_transaction_id"] as String?;
+
+        if (existingRemoteId != null) {
+          transactionId = existingRemoteId;
+        } else {
+          final fields = Map<String, dynamic>.from(tx["request_fields"] as Map);
+          final initiateRes = await ApiClient.instance.post("/transactions", data: fields);
+          transactionId = initiateRes.data["data"]["transaction_id"] as String;
+          await _saveRemoteId(localId, transactionId);
+        }
 
         await ApiClient.instance.patch("/transactions/$transactionId/complete", data: {
           "status": tx["status"],
@@ -98,7 +93,7 @@ class OfflineQueueService {
           "ussd_session_log": tx["session_log"],
         });
 
-        await _markSynced(tx["local_id"] as String);
+        await _markSynced(localId);
         succeeded++;
       } catch (_) {
         failed++;
@@ -106,5 +101,13 @@ class OfflineQueueService {
     }
 
     return {"succeeded": succeeded, "failed": failed};
+  }
+
+  static Future<void> _saveRemoteId(String localId, String transactionId) async {
+    final raw = _box.get(localId);
+    if (raw == null) return;
+    final tx = jsonDecode(raw as String) as Map<String, dynamic>;
+    tx["remote_transaction_id"] = transactionId;
+    await _box.put(localId, jsonEncode(tx));
   }
 }

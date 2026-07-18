@@ -11,6 +11,7 @@ import '../../features/dashboard/owner_dashboard.dart';
 import '../../features/transactions/transaction_screen.dart';
 import '../../features/transactions/transaction_progress_screen.dart';
 import '../../features/transactions/transaction_detail_screen.dart';
+import '../../features/sync/sync_queue_screen.dart';
 import '../../features/float/float_screen.dart';
 import '../../features/balances/my_balance_screen.dart';
 import '../../features/balances/float_received_screen.dart';
@@ -81,6 +82,7 @@ class AppRouter {
           path: '/transactions/:id',
           builder: (_, state) => TransactionDetailScreen(transactionId: state.pathParameters['id']!),
         ),
+        GoRoute(path: '/sync', builder: (_, __) => const SyncQueueScreen()),
 
         // Float
         GoRoute(path: '/float', builder: (_, state) => FloatScreen(branchId: state.uri.queryParameters['branch_id'])),
