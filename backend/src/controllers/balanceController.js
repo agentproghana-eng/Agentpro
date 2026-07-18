@@ -33,7 +33,19 @@ exports.getAgentBalances = async (req, res) => {
       [targetAgentId]
     );
 
-    res.json({ success: true, data: result.rows });
+    const existingByProvider = {};
+    result.rows.forEach((row) => { existingByProvider[row.provider] = row; });
+
+    const allProviders = ["mtn", "telecel", "at_money"];
+    const data = allProviders.map((provider) => existingByProvider[provider] || {
+      provider,
+      e_float_balance: "0.00",
+      cash_at_hand: "0.00",
+      commission_balance: "0.00",
+      last_updated_at: null,
+    });
+
+    res.json({ success: true, data: data });
   } catch (error) {
     logger.error("Get agent balances error:", error);
     res.status(500).json({ success: false, message: "Failed to fetch balances" });

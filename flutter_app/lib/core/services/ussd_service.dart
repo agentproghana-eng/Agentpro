@@ -439,14 +439,15 @@ class UssdAccessibilityEngine {
   /// amount of time to type their PIN on the native dialog. The native
   /// side (UssdAccessibilityService) is the sole source of truth for
   /// when this session actually ends.
-  Future<USSDResult> execute({required String customerPhone, required String amount}) async {
+  Future<USSDResult> execute({required String customerPhone, required String amount, required String transactionType}) async {
     _resultCompleter = Completer<USSDResult>();
     _progressController.add(const USSDProgress(status: USSDStatus.dialing, message: "Dialing network..."));
 
     try {
-      await _channel.invokeMethod("startCashInAutomation", {
+      await _channel.invokeMethod("startAutomation", {
         "customer_phone": customerPhone,
         "amount": amount,
+        "transaction_type": transactionType,
       });
     } catch (e) {
       return USSDResult(

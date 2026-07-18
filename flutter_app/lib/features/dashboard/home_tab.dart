@@ -44,15 +44,15 @@ class _HomeTabState extends State<HomeTab> {
         SliverAppBar(
           pinned: true,
           backgroundColor: AppTheme.primaryColor,
-          expandedHeight: 190,
+          expandedHeight: 280,
           flexibleSpace: FlexibleSpaceBar(
             background: Container(
               padding: const EdgeInsets.fromLTRB(20, 50, 20, 12),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(colors: [AppTheme.primaryColor, Color(0xFF004D43)], begin: Alignment.topLeft, end: Alignment.bottomRight),
               ),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.end, children: [
-                Center(child: Image.asset("assets/images/agentpro-logo-lockup.png", height: 44)),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+                Center(child: Image.asset("assets/images/agentpro-logo-lockup.png", height: 132)),
                 const SizedBox(height: 10),
                 Text("${widget.user["first_name"] ?? ""} ${widget.user["last_name"] ?? ""}", style: const TextStyle(color: AppTheme.secondaryColor, fontSize: 15, fontWeight: FontWeight.w800)),
                 Text(widget.user["company_name"] ?? "", style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600)),
@@ -86,7 +86,7 @@ class _HomeTabState extends State<HomeTab> {
               physics: const NeverScrollableScrollPhysics(),
               mainAxisSpacing: 6,
               crossAxisSpacing: 6,
-              childAspectRatio: 1.05,
+              childAspectRatio: 0.9,
               children: [
                 _QuickAction(icon: Icons.call_received, label: "Cash In", bgColor: const Color(0xFFE6F4F1), iconColor: AppTheme.primaryColor, onTap: () => context.push("/transactions?type=cash_in")),
                 _QuickAction(icon: Icons.call_made, label: "Cash Out", bgColor: const Color(0xFFFDF3DC), iconColor: const Color(0xFFB87E00), onTap: () => context.push("/transactions?type=cash_out")),
@@ -173,7 +173,7 @@ class _QuickAction extends StatelessWidget {
             child: Icon(icon, size: 13, color: iconColor),
           ),
           const SizedBox(height: 4),
-          Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w600)),
+          Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
         ]),
       ),
     );

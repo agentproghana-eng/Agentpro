@@ -26,9 +26,9 @@ class SimInfoChannel(
         private const val TAG = "SimInfo"
 
         // Ghana network operator codes
-        private val MTN_OPERATORS = setOf("62003", "62003")      // MTN Ghana
-        private val TELECEL_OPERATORS = setOf("62006")            // Telecel (formerly Vodafone)
-        private val AT_OPERATORS = setOf("62002", "62007")        // AirtelTigo (AT)
+        private val MTN_OPERATORS = setOf("62001")               // MTN Ghana
+        private val TELECEL_OPERATORS = setOf("62002")            // Telecel (formerly Vodafone)
+        private val AT_OPERATORS = setOf("62003", "62006")        // AirtelTigo (Tigo 62003, Airtel 62006)
     }
 
     fun register(channelName: String) {

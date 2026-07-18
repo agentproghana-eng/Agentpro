@@ -43,6 +43,7 @@ class UssdAccessibilityService : AccessibilityService() {
         // watching for a final result after it, it just stops all input.
         @Volatile var pendingCustomerPhone: String? = null
         @Volatile var pendingAmount: String? = null
+        @Volatile var pendingTransactionType: String? = null
         @Volatile var isSessionActive: Boolean = false
         @Volatile var reachedPinPrompt: Boolean = false
 
@@ -50,10 +51,11 @@ class UssdAccessibilityService : AccessibilityService() {
         // service can report progress back to Flutter.
         var listener: UssdAccessibilityListener? = null
 
-        fun startSession(customerPhone: String, amount: String) {
+        fun startSession(customerPhone: String, amount: String, transactionType: String) {
             pendingCustomerPhone = customerPhone
             pendingAmount = amount
             isSessionActive = true
+            pendingTransactionType = transactionType
             reachedPinPrompt = false
         }
 
@@ -62,6 +64,7 @@ class UssdAccessibilityService : AccessibilityService() {
             reachedPinPrompt = false
             pendingCustomerPhone = null
             pendingAmount = null
+            pendingTransactionType = null
         }
     }
 
@@ -87,15 +90,19 @@ class UssdAccessibilityService : AccessibilityService() {
 
         when {
             reachedPinPrompt -> handleAfterPinPrompt(screenText)
-            screenText.contains("mainmenuagent") && screenText.contains("3) cash in") ->
+            pendingTransactionType == "cash_in" && screenText.contains("mainmenuagent") && screenText.contains("3) cash in") ->
                 respond(root, "3")
-            screenText.contains("cash in") && screenText.contains("1) mobile money user") ->
+            pendingTransactionType == "cash_out" && screenText.contains("mainmenuagent") && screenText.contains("2) cash out") ->
+                respond(root, "2")
+            pendingTransactionType == "cash_in" && screenText.contains("cash in") && screenText.contains("1) mobile money user") ->
+                respond(root, "1")
+            pendingTransactionType == "cash_out" && screenText.contains("cash out") && screenText.contains("1) mobile money user") ->
                 respond(root, "1")
             screenText.contains("repeat mobile number") ->
                 pendingCustomerPhone?.let { respond(root, it) }
             screenText.contains("enter mobile number") ->
                 pendingCustomerPhone?.let { respond(root, it) }
-            screenText.contains("enter amount") ->
+            screenText.contains("amount") ->
                 pendingAmount?.let { respond(root, it) }
             screenText.contains("enter mm pin") || screenText.contains("enter your pin") -> {
                 reachedPinPrompt = true

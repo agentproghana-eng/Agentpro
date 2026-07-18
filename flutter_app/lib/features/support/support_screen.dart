@@ -16,6 +16,11 @@ class SupportScreen extends StatelessWidget {
     if (await canLaunchUrl(uri)) await launchUrl(uri);
   }
 
+  Future<void> _whatsapp(String number) async {
+    final uri = Uri.parse("https://wa.me/$number");
+    if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -72,6 +77,26 @@ class SupportScreen extends StatelessWidget {
                 Text("support@agentproghana.com", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
               ]),
             ),
+            const SizedBox(height: 10),
+            InkWell(
+              onTap: () => _call("0207438990"),
+              child: const Row(children: [
+                Icon(Icons.call_outlined, size: 18, color: AppTheme.primaryColor),
+                SizedBox(width: 8),
+                Text("0207438990", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              ]),
+            ),
+            const SizedBox(height: 10),
+            InkWell(
+              onTap: () => _whatsapp("233207438990"),
+              child: const Row(children: [
+                Icon(Icons.chat_outlined, size: 18, color: AppTheme.primaryColor),
+                SizedBox(width: 8),
+                Text("WhatsApp: 0207438990", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              ]),
+            ),
+            const SizedBox(height: 10),
+            const Text("Mon - Fri, 8:00 AM - 5:00 PM", style: TextStyle(fontSize: 11, color: Colors.grey)),
           ]),
         ),
       ]),
