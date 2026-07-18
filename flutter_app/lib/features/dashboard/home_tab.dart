@@ -86,7 +86,7 @@ class _HomeTabState extends State<HomeTab> {
               physics: const NeverScrollableScrollPhysics(),
               mainAxisSpacing: 6,
               crossAxisSpacing: 6,
-              childAspectRatio: 1.05,
+              childAspectRatio: 0.9,
               children: [
                 _QuickAction(icon: Icons.call_received, label: "Cash In", bgColor: const Color(0xFFE6F4F1), iconColor: AppTheme.primaryColor, onTap: () => context.push("/transactions?type=cash_in")),
                 _QuickAction(icon: Icons.call_made, label: "Cash Out", bgColor: const Color(0xFFFDF3DC), iconColor: const Color(0xFFB87E00), onTap: () => context.push("/transactions?type=cash_out")),
@@ -173,7 +173,7 @@ class _QuickAction extends StatelessWidget {
             child: Icon(icon, size: 13, color: iconColor),
           ),
           const SizedBox(height: 4),
-          Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w600)),
+          Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
         ]),
       ),
     );
