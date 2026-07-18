@@ -9,15 +9,28 @@ exports.getFloatOverview = async (req, res) => {
   const companyId = req.user.role === 'superuser'
     ? req.params.company_id
     : req.user.company_id;
-
+  const { branch_id } = req.query;
   try {
+    const conditions = ["b.company_id = $1", "b.status = 'active'"];
+    const params = [companyId];
+
+    if (req.user.role === 'manager') {
+      params.push(req.user.id);
+      conditions.push(`b.id IN (SELECT branch_id FROM branch_managers WHERE manager_id = $${params.length})`);
+    }
+
+    if (branch_id) {
+      params.push(branch_id);
+      conditions.push(`b.id = $${params.length}`);
+    }
+
     const result = await query(
       `SELECT fa.*, b.name as branch_name, b.id as branch_id
        FROM float_accounts fa
        INNER JOIN branches b ON fa.branch_id = b.id
-       WHERE b.company_id = $1 AND b.status = 'active'
+       WHERE ${conditions.join(' AND ')}
        ORDER BY b.name, fa.provider`,
-      [companyId]
+      params
     );
 
     // Aggregate totals per provider

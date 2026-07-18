@@ -4,7 +4,8 @@ import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
 
 class FloatScreen extends StatefulWidget {
-  const FloatScreen({super.key});
+  final String? branchId;
+  const FloatScreen({super.key, this.branchId});
   @override
   State<FloatScreen> createState() => _FloatScreenState();
 }
@@ -19,7 +20,7 @@ class _FloatScreenState extends State<FloatScreen> {
 
   Future<void> _load() async {
     try {
-      final res = await ApiClient.instance.get('/float/overview');
+      final res = await ApiClient.instance.get('/float/overview', queryParameters: widget.branchId != null ? {'branch_id': widget.branchId} : null);
       if (mounted) setState(() {
         _accounts = res.data['data']['accounts'] ?? [];
         _total = double.tryParse(res.data['data']['grand_total']?.toString() ?? '0') ?? 0;
@@ -50,7 +51,7 @@ class _FloatScreenState extends State<FloatScreen> {
                         Text('GH₵ ${_total.toStringAsFixed(2)}',
                           style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 4),
-                        Text('All providers · All branches', style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                        Text(widget.branchId != null ? 'All providers · This branch' : 'All providers · All branches', style: const TextStyle(color: Colors.white60, fontSize: 12)),
                       ]),
                     ),
                   ),

@@ -96,7 +96,7 @@ class _BranchesScreenState extends State<BranchesScreen> {
                                       Row(children: [
                                         Expanded(
                                           child: OutlinedButton.icon(
-                                            onPressed: () => context.push('/float'),
+                                            onPressed: () => context.push('/float?branch_id=${b['id']}'),
                                             icon: const Icon(Icons.account_balance_wallet, size: 16),
                                             label: const Text('Float'),
                                           ),

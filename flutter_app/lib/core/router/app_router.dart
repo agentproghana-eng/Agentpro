@@ -83,7 +83,7 @@ class AppRouter {
         ),
 
         // Float
-        GoRoute(path: '/float', builder: (_, __) => const FloatScreen()),
+        GoRoute(path: '/float', builder: (_, state) => FloatScreen(branchId: state.uri.queryParameters['branch_id'])),
         GoRoute(path: '/my-balance', builder: (_, __) => const MyBalanceScreen()),
         GoRoute(
           path: '/balances/float-received',
