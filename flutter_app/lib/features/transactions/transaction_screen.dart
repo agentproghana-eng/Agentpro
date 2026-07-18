@@ -5,7 +5,8 @@ import 'package:dio/dio.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
-
+import 'package:connectivity_plus/connectivity_plus.dart';
+import '../../core/services/offline_queue_service.dart';
 class TransactionScreen extends StatefulWidget {
   final String transactionType;
   const TransactionScreen({super.key, required this.transactionType});
@@ -62,6 +63,52 @@ class _TransactionScreenState extends State<TransactionScreen> {
       return;
     }
     setState(() => _loading = true);
+
+    // Offline path: only for provider+type combos that already have a
+    // cached USSD template from a prior successful online run. If
+    // offline with no cached template yet, fall through to the normal
+    // online attempt below, which will fail with a clear network error -
+    // this combo needs to succeed online at least once before it can
+    // work offline.
+    final connectivity = await Connectivity().checkConnectivity();
+    final isOffline = connectivity.every((r) => r == ConnectivityResult.none);
+    final cachedTemplate = OfflineQueueService.getCachedTemplate(_selectedProvider, widget.transactionType);
+
+
+    if (isOffline && cachedTemplate != null) {
+      final localId = "local_${DateTime.now().millisecondsSinceEpoch}";
+      final requestFields = {
+        "provider": _selectedProvider,
+        "transaction_type": widget.transactionType,
+        "amount": double.tryParse(_amountCtrl.text.replaceAll(",", "")) ?? 0,
+        "customer_phone": _customerPhoneCtrl.text.trim(),
+        "customer_name": _customerNameCtrl.text.trim(),
+        "recipient_phone": _recipientPhoneCtrl.text.trim(),
+        "biller_code": _billerCodeCtrl.text.trim(),
+        "account_number": _accountNumberCtrl.text.trim(),
+        "fee": _isSendMoney ? (double.tryParse(_feeCtrl.text.replaceAll(",", "")) ?? 0) : 0,
+        "notes": _notesCtrl.text.trim(),
+      };
+
+      if (!mounted) return;
+      context.push("/transactions/progress", extra: {
+        "transaction": {
+          "transaction_id": localId,
+          "reference": "OFFLINE-$localId",
+          "status": "initiated",
+          "ussd_template": cachedTemplate,
+        },
+        "provider": _selectedProvider,
+        "transaction_type": widget.transactionType,
+        "amount": _amountCtrl.text,
+        "customer_phone": _customerPhoneCtrl.text.trim(),
+        "customer_name": _customerNameCtrl.text.trim(),
+        "request_fields": requestFields,
+      });
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
+
     try {
       final res = await ApiClient.instance.post('/transactions', data: {
         'provider': _selectedProvider,
@@ -75,6 +122,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
           'fee': _isSendMoney ? (double.tryParse(_feeCtrl.text.replaceAll(',', '')) ?? 0) : 0,
         'notes': _notesCtrl.text.trim(),
       });
+
+      final template = res.data["data"]["ussd_template"] as Map<String, dynamic>?;
+      if (template != null) {
+        await OfflineQueueService.cacheTemplate(_selectedProvider, widget.transactionType, template);
+      }
 
       if (!mounted) return;
       context.push('/transactions/progress', extra: {

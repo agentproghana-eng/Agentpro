@@ -7,7 +7,7 @@ import '../../core/services/sim_card_service.dart';
 import '../../core/services/permission_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
-
+import '../../core/services/offline_queue_service.dart';
 class TransactionProgressScreen extends StatefulWidget {
   final Map<String, dynamic> data;
   const TransactionProgressScreen({super.key, required this.data});
@@ -199,6 +199,33 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       USSDStatus.pendingConfirmation => 'pending_confirmation',
       _ => 'failed',
     };
+
+    // Offline transaction: this local ID means the dial already
+    // happened but the app has no connectivity to report it. Queue it
+    // for sync instead of calling the real API, which would just fail.
+    if (transactionId.startsWith("local_")) {
+      final requestFields = Map<String, dynamic>.from(widget.data["request_fields"] as Map);
+      await OfflineQueueService.queueTransaction(
+        requestFields: requestFields,
+        status: statusString,
+        networkReference: result.networkReference,
+        failureReason: result.failureReason,
+        sessionLog: result.sessionLog,
+      );
+      if (mounted) {
+        setState(() {
+          _completed = true;
+          _outcome = result.outcome;
+          _failureReason = result.failureReason;
+          _completedTransaction = {
+            "reference": transactionId,
+            "status": statusString,
+            "offline_pending_sync": true,
+          };
+        });
+      }
+      return;
+    }
 
     try {
       final res = await ApiClient.instance.patch(

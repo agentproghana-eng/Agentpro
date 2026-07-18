@@ -11,7 +11,7 @@ import 'core/services/notification_service.dart';
 import 'core/services/inactivity_service.dart';
 import 'core/router/app_router.dart';
 import 'shared/theme/app_theme.dart';
-
+import 'core/services/offline_queue_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -28,6 +28,8 @@ void main() async {
   // Initialize encrypted storage
   await StorageService.init();
 
+  // Initialize offline transaction queue
+  await OfflineQueueService.init();
   // Initialize notifications
   await NotificationService.init();
 
