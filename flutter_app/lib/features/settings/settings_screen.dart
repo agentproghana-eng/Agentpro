@@ -6,6 +6,8 @@ import '../../core/auth/auth_bloc.dart';
 import '../../core/api/api_client.dart';
 import '../../core/services/storage_service.dart';
 import '../../core/services/biometric_service.dart';
+import 'package:go_router/go_router.dart';
+import '../../core/services/offline_queue_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
 
@@ -117,6 +119,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
             builder: (_) => const _ChangePasswordSheet(),
           ),
+        ),
+
+        ListTile(
+          leading: const Icon(Icons.sync, color: AppTheme.primaryColor),
+          title: const Text("Offline Sync"),
+          subtitle: Text(OfflineQueueService.pendingCount > 0
+              ? "${OfflineQueueService.pendingCount} pending"
+              : "All synced"),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => context.push("/sync"),
         ),
 
         const Divider(),
