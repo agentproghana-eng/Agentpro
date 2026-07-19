@@ -184,6 +184,8 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
           controller: _tabController,
           isScrollable: true,
           indicatorColor: Colors.white,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white,
           tabs: const [
             Tab(text: 'All'),
             Tab(text: 'Managers'),
@@ -218,6 +220,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
               icon: const Icon(Icons.person_add),
               label: const Text('Add Staff'),
               backgroundColor: AppTheme.primaryColor,
+              foregroundColor: AppTheme.secondaryColor,
             ),
     );
   }

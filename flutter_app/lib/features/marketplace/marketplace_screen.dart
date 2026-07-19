@@ -77,6 +77,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         icon: const Icon(Icons.add),
         label: const Text('Post Ad'),
         backgroundColor: AppTheme.primaryColor,
+        foregroundColor: AppTheme.secondaryColor,
       ),
     );
   }
