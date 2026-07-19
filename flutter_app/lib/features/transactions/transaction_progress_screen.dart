@@ -138,6 +138,37 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     return;
   }
 
+  // Not MTN/Telecel's hardcoded flows - check whether a custom USSD
+  // Flow Builder flow exists for this provider/transaction_type before
+  // falling back to the single-dial USSDEngine below. Silently falls
+  // through if none exists (404) or the lookup fails for any other
+  // reason - most provider/type combos simply aren't customized, which
+  // is the normal, expected case, not an error worth surfacing.
+  try {
+    final resolveRes = await ApiClient.instance.get(
+      '/ussd-flows/resolve',
+      queryParameters: {'provider': provider, 'transaction_type': transactionType},
+    );
+    final flowData = resolveRes.data['data'] as Map<String, dynamic>;
+    final steps = (flowData['steps'] as List).cast<Map<String, dynamic>>();
+    final successMarkers = (flowData['success_markers'] as List?)?.cast<String>();
+    final failureMarkers = (flowData['failure_markers'] as List?)?.cast<String>();
+    final dialCode = flowData['dial_code'] as String;
+
+    await _startAccessibilityAutomation(
+      transactionId, automationParams, transactionType!, provider, null,
+      dialCode: dialCode, steps: steps, successMarkers: successMarkers, failureMarkers: failureMarkers,
+    );
+    return;
+  } on DioException catch (e) {
+    // 404 just means no custom flow exists for this combo - fall
+    // through to the single-dial path below, same as always. Any
+    // other error also falls through rather than blocking the
+    // transaction entirely on a lookup failure.
+  } catch (_) {
+    // Ignore and fall through to single-dial below.
+  }
+
   final ussdTemplate = USSDTemplate.fromMap(template);
   _engine = USSDEngine(
     template: ussdTemplate,
@@ -170,8 +201,12 @@ Future<void> _startAccessibilityAutomation(
   Map<String, String> automationParams,
   String transactionType,
   String provider,
-  String? operatorId,
-) async {
+  String? operatorId, {
+  String? dialCode,
+  List<Map<String, dynamic>>? steps,
+  List<String>? successMarkers,
+  List<String>? failureMarkers,
+}) async {
   final accessEngine = UssdAccessibilityEngine();
 
   final enabled = await accessEngine.isServiceEnabled();
@@ -203,6 +238,10 @@ Future<void> _startAccessibilityAutomation(
     transactionType: transactionType,
     provider: provider,
     operatorId: operatorId,
+    dialCode: dialCode,
+    steps: steps,
+    successMarkers: successMarkers,
+    failureMarkers: failureMarkers,
   );
 
   accessEngine.dispose();
