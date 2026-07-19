@@ -110,4 +110,30 @@ class OfflineQueueService {
     tx["remote_transaction_id"] = transactionId;
     await _box.put(localId, jsonEncode(tx));
   }
+
+  /// Queue a completion sync for a transaction that already exists on
+  /// the backend (created while online) but whose completion PATCH
+  /// failed due to lost connectivity. Skips the POST step entirely on
+  /// sync - remote_transaction_id is already known, so syncNow()'s
+  /// existing existingRemoteId branch goes straight to the PATCH.
+  static Future<String> queuePendingCompletion({
+    required String transactionId,
+    required String status,
+    String? networkReference,
+    String? failureReason,
+    required List<Map<String, dynamic>> sessionLog,
+  }) async {
+    final localId = "local_${const Uuid().v4()}";
+    await _box.put(localId, jsonEncode({
+      "local_id": localId,
+      "remote_transaction_id": transactionId,
+      "status": status,
+      "network_reference": networkReference,
+      "failure_reason": failureReason,
+      "session_log": sessionLog,
+      "queued_at": DateTime.now().toIso8601String(),
+      "synced": false,
+    }));
+    return localId;
+  }
 }

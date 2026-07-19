@@ -247,6 +247,34 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         });
       }
     } on DioException catch (e) {
+      // e.response == null means the request never reached the server
+      // (dropped connectivity, timeout) - genuinely retryable, so queue
+      // it rather than showing a dead-end failure. e.response != null
+      // means the server responded with a real error (validation,
+      // auth, etc.) - retrying would just fail again, so keep showing
+      // that as before.
+      if (e.response == null) {
+        await OfflineQueueService.queuePendingCompletion(
+          transactionId: transactionId,
+          status: statusString,
+          networkReference: result.networkReference,
+          failureReason: result.failureReason,
+          sessionLog: result.sessionLog,
+        );
+        if (mounted) {
+          setState(() {
+            _completed = true;
+            _outcome = result.outcome;
+            _failureReason = result.failureReason;
+            _completedTransaction = {
+              "reference": transactionId,
+              "status": statusString,
+              "offline_pending_sync": true,
+            };
+          });
+        }
+        return;
+      }
       if (mounted) {
         setState(() {
           _completed = true;
