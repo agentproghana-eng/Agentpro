@@ -8,6 +8,8 @@ import '../../core/services/permission_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
 import '../../core/services/offline_queue_service.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../core/auth/auth_bloc.dart';
 class TransactionProgressScreen extends StatefulWidget {
   final Map<String, dynamic> data;
   const TransactionProgressScreen({super.key, required this.data});
@@ -105,81 +107,107 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       simSlot = 0;
     }
 
-    // MTN Cash In cannot use single-dial USSD - confirmed via live testing
-    // that even a 2-step concatenated string fails immediately on this
-    // gateway. Route through the Accessibility Service pilot instead.
-    final transactionType = widget.data["transaction_type"] as String?;
-    if (provider == "mtn" && (transactionType == "cash_in" || transactionType == "cash_out")) {
-      await _startAccessibilityAutomation(transactionId, automationParams, transactionType!);
-      return;
-    }
+  // MTN Cash In/Out and Telecel Deposit cannot use single-dial USSD -
+  // confirmed via live testing that even a short concatenated dial
+  // string fails immediately on both gateways. Route through the
+  // Accessibility Service pilot instead. Telecel Cash Out ("Withdrawal")
+  // is deliberately NOT included here - it's a manual-entry transaction
+  // (money already moved peer-to-peer to the agent's SIM), never a
+  // USSD dial at all.
+  final transactionType = widget.data["transaction_type"] as String?;
+  final isMtnAccessibilityFlow = provider == "mtn" && (transactionType == "cash_in" || transactionType == "cash_out");
+  final isTelecelDepositFlow = provider == "telecel" && transactionType == "cash_in";
 
-    final ussdTemplate = USSDTemplate.fromMap(template);
-    _engine = USSDEngine(
-      template: ussdTemplate,
-      automationParams: automationParams,
-      provider: provider,
-      simSlot: simSlot,
-    );
-
-    // Listen to progress stream — the new engine only reports status +
-    // message, no step counts, since there's no more multi-step loop
-    // (see ussd_service.dart for why: a single dial replaces navigation).
-    _engine!.progressStream.listen((progress) {
-      if (mounted) {
-        setState(() {
-          _status = progress.status;
-          _statusMessage = progress.message;
-        });
+  if (isMtnAccessibilityFlow || isTelecelDepositFlow) {
+    String? operatorId;
+    if (isTelecelDepositFlow) {
+      final authState = context.read<AuthBloc>().state;
+      operatorId = authState is AuthAuthenticated ? authState.user['telecel_operator_id'] as String? : null;
+      if (operatorId == null || operatorId.isEmpty) {
+        const reason = "Telecel Operator ID is not set. Go to Settings > "
+            "USSD Automation and save your Operator ID, then try again.";
+        if (mounted) setState(() => _simWarning = reason);
+        await _reportResult(
+          transactionId,
+          USSDResult(outcome: USSDStatus.failed, failureReason: reason, sessionLog: const []),
+        );
+        return;
       }
-    });
-
-    // Execute USSD
-    final result = await _engine!.execute();
-
-    // Report result to backend
-    await _reportResult(transactionId, result);
+    }
+    await _startAccessibilityAutomation(transactionId, automationParams, transactionType!, provider, operatorId);
+    return;
   }
 
-  Future<void> _startAccessibilityAutomation(
-    String transactionId,
-    Map<String, String> automationParams,
-    String transactionType,
-  ) async {
-    final accessEngine = UssdAccessibilityEngine();
+  final ussdTemplate = USSDTemplate.fromMap(template);
+  _engine = USSDEngine(
+    template: ussdTemplate,
+    automationParams: automationParams,
+    provider: provider,
+    simSlot: simSlot,
+  );
 
-    final enabled = await accessEngine.isServiceEnabled();
-    if (!enabled) {
-      const reason = "Accessibility permission is required for MTN Cash In "
-          "automation. Enable Agent Pro Ghana under Settings > "
-          "Accessibility, then try again.";
-      if (mounted) setState(() => _simWarning = reason);
-      await accessEngine.openAccessibilitySettings();
-      await _reportResult(
-        transactionId,
-        USSDResult(outcome: USSDStatus.failed, failureReason: reason, sessionLog: const []),
-      );
-      return;
+  // Listen to progress stream — the new engine only reports status +
+  // message, no step counts, since there's no more multi-step loop
+  // (see ussd_service.dart for why: a single dial replaces navigation).
+  _engine!.progressStream.listen((progress) {
+    if (mounted) {
+      setState(() {
+        _status = progress.status;
+        _statusMessage = progress.message;
+      });
     }
+  });
 
-    accessEngine.progressStream.listen((progress) {
-      if (mounted) {
-        setState(() {
-          _status = progress.status;
-          _statusMessage = progress.message;
-        });
-      }
-    });
+  // Execute USSD
+  final result = await _engine!.execute();
 
-    final result = await accessEngine.execute(
-      customerPhone: automationParams["customer_phone"] ?? "",
-      amount: automationParams["amount"] ?? "",
-      transactionType: transactionType,
+  // Report result to backend
+  await _reportResult(transactionId, result);
+}
+
+Future<void> _startAccessibilityAutomation(
+  String transactionId,
+  Map<String, String> automationParams,
+  String transactionType,
+  String provider,
+  String? operatorId,
+) async {
+  final accessEngine = UssdAccessibilityEngine();
+
+  final enabled = await accessEngine.isServiceEnabled();
+  if (!enabled) {
+    const reason = "Accessibility permission is required for automated "
+        "USSD transactions. Enable Agent Pro Ghana under Settings > "
+        "Accessibility, then try again.";
+    if (mounted) setState(() => _simWarning = reason);
+    await accessEngine.openAccessibilitySettings();
+    await _reportResult(
+      transactionId,
+      USSDResult(outcome: USSDStatus.failed, failureReason: reason, sessionLog: const []),
     );
-
-    accessEngine.dispose();
-    await _reportResult(transactionId, result);
+    return;
   }
+
+  accessEngine.progressStream.listen((progress) {
+    if (mounted) {
+      setState(() {
+        _status = progress.status;
+        _statusMessage = progress.message;
+      });
+    }
+  });
+
+  final result = await accessEngine.execute(
+    customerPhone: automationParams["customer_phone"] ?? "",
+    amount: automationParams["amount"] ?? "",
+    transactionType: transactionType,
+    provider: provider,
+    operatorId: operatorId,
+  );
+
+  accessEngine.dispose();
+  await _reportResult(transactionId, result);
+}
 
   String _providerLabel(String provider) => switch (provider) {
     'mtn' => 'MTN',

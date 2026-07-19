@@ -11,19 +11,21 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
 /**
- * Bridges Flutter to UssdAccessibilityService for the MTN Cash In pilot.
+ * Bridges Flutter to UssdAccessibilityService for MTN Cash In/Out and
+ * Telecel Deposit.
  *
  * - Checks whether the accessibility service is enabled, and opens the
  *   system Accessibility Settings screen so the user can enable it (there
  *   is no one-tap grant for this on Android - it requires the user to
  *   navigate Settings themselves).
  * - Starts an automation session: stores the transaction params on the
- * service, then places the actual outgoing call to *171# via
- *   Intent.ACTION_CALL (this is what makes Android show its own native
- *   USSD dialog, which the already-running accessibility service can
- *   then read and respond to - a DIFFERENT dial mechanism than
- *   USSDMethodChannel's sendUssdRequest(), which deliberately shows no
- *   dialog at all and is unsuitable for this multi-step flow).
+ *   service, then places the actual outgoing call via Intent.ACTION_CALL
+ *   (this is what makes Android show its own native USSD dialog, which
+ *   the already-running accessibility service can then read and respond
+ *   to - a DIFFERENT dial mechanism than USSDMethodChannel's
+ *   sendUssdRequest(), which deliberately shows no dialog at all and is
+ *   unsuitable for this multi-step flow). The dial number depends on
+ *   provider: *171# for MTN, *110# for Telecel.
  * - Forwards progress (PIN prompt reached, final result) back to
  *   Flutter via this same channel's invokeMethod, since those events
  *   originate from the service asynchronously, not from a direct
@@ -72,9 +74,16 @@ class UssdAccessibilityChannel(
         val customerPhone = call.argument<String>("customer_phone")
         val amount = call.argument<String>("amount")
         val transactionType = call.argument<String>("transaction_type")
+        val provider = call.argument<String>("provider") ?: "mtn"
+        val operatorId = call.argument<String>("operator_id")
 
         if (customerPhone == null || amount == null || transactionType == null) {
             result.error("INVALID_ARGS", "customer_phone and amount are required", null)
+            return
+        }
+
+        if (provider == "telecel" && operatorId.isNullOrBlank()) {
+            result.error("MISSING_OPERATOR_ID", "Telecel Operator ID is required - set it in USSD Automation settings", null)
             return
         }
 
@@ -83,10 +92,12 @@ class UssdAccessibilityChannel(
             return
         }
 
-        UssdAccessibilityService.startSession(customerPhone, amount, transactionType)
+        UssdAccessibilityService.startSession(customerPhone, amount, transactionType, provider, operatorId)
+
+        val dialCode = if (provider == "telecel") "*110#" else "*171#"
 
         try {
-            val dialIntent = Intent(Intent.ACTION_CALL, Uri.parse("tel:" + Uri.encode("*171#")))
+            val dialIntent = Intent(Intent.ACTION_CALL, Uri.parse("tel:" + Uri.encode(dialCode)))
             dialIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(dialIntent)
             result.success(true)
