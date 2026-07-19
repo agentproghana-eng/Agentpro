@@ -28,6 +28,7 @@ const aiRoutes = require('./src/routes/ai.routes');
 const notificationRoutes = require('./src/routes/notification.routes');
 const adminRoutes = require('./src/routes/admin.routes');
 const branchRoutes = require('./src/routes/branch.routes');
+const ussdFlowRoutes = require('./src/routes/ussdFlow.routes');
 
 const app = express();
 
@@ -133,6 +134,7 @@ app.use(`${API}/reports`, reportRoutes);
 app.use(`${API}/ai`, aiRoutes);
 app.use(`${API}/notifications`, notificationRoutes);
 app.use(`${API}/admin`, adminRoutes);
+app.use(`${API}/ussd-flows`, ussdFlowRoutes);
 
 // 404 handler
 app.use((req, res) => {
