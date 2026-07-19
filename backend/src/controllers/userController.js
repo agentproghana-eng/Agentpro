@@ -95,6 +95,19 @@ exports.listUsers = async (req, res) => {
       conditions.push(`u.company_id = $${idx++}`);
       params.push(req.user.company_id);
     }
+
+    // Managers only see agents assigned to branches they manage - mirrors
+    // the branch scoping already applied to Float accounts. Without this,
+    // a manager could see every staff member company-wide even though
+    // they can't edit any of them (edit routes are owner/superuser only).
+    if (req.user.role === 'manager') {
+      conditions.push(`u.id IN (
+        SELECT ab.agent_id FROM agent_branches ab
+        WHERE ab.branch_id IN (SELECT branch_id FROM branch_managers WHERE manager_id = $${idx++})
+      )`);
+      params.push(req.user.id);
+    }
+
     if (role) { conditions.push(`u.role = $${idx++}`); params.push(role); }
     if (status) { conditions.push(`u.status = $${idx++}`); params.push(status); }
 
@@ -372,6 +385,22 @@ exports.getUser = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Access denied' });
     }
 
+    // Managers can only view agents assigned to branches they manage -
+    // same restriction as listUsers, enforced here too so a manager can't
+    // bypass list-level scoping by requesting a user_id directly. A
+    // manager viewing their own record is always allowed.
+    if (req.user.role === 'manager' && user_id !== req.user.id) {
+      const managerScope = await query(
+        `SELECT 1 FROM agent_branches ab
+         WHERE ab.agent_id = $1
+           AND ab.branch_id IN (SELECT branch_id FROM branch_managers WHERE manager_id = $2)`,
+        [user_id, req.user.id]
+      );
+      if (managerScope.rows.length === 0) {
+        return res.status(403).json({ success: false, message: 'Access denied' });
+      }
+    }
+
     delete targetUser.company_id; // internal field, not part of public response shape
     res.json({ success: true, data: targetUser });
   } catch (error) {
@@ -380,10 +409,6 @@ exports.getUser = async (req, res) => {
   }
 };
 
-// Reassign a staff member (or the owner) to a different branch.
-// Branch allocation is deliberately not permanent - owners may
-// reshuffle staff between branches at any time, including their own
-// personal transacting branch.
 exports.reassignBranch = async (req, res) => {
   const { user_id } = req.params;
   const { branch_id } = req.body;
