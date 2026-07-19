@@ -11,6 +11,16 @@ exports.listBranches = async (req, res) => {
     const conditions = companyId ? ['b.company_id = $1'] : [];
     const params = companyId ? [companyId] : [];
 
+    // Managers only see branches they actually manage - without this, a
+    // manager sees every branch in the company, same class of gap
+    // already fixed for listUsers (Manager visibility scoping,
+    // migration/commit earlier tonight) and now listTransactions too.
+    if (req.user.role === 'manager') {
+      const idx = params.length + 1;
+      conditions.push(`b.id IN (SELECT branch_id FROM branch_managers WHERE manager_id = $${idx})`);
+      params.push(req.user.id);
+    }
+
     const result = await query(
       `SELECT b.*,
               COUNT(DISTINCT ab.agent_id) as agent_count,

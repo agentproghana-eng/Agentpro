@@ -271,11 +271,17 @@ exports.getTransaction = async (req, res) => {
     let whereClause = 'WHERE t.id = $1';
     const params = [transaction_id];
 
-    // Scope access by role
+    // Scope access by role. Managers only see transactions from
+    // branches they actually manage - without this they'd see every
+    // company transaction, same class of gap already fixed for
+    // listUsers and listBranches.
     if (req.user.role === 'agent') {
       whereClause += ' AND t.agent_id = $2';
       params.push(req.user.id);
-    } else if (['manager', 'business_owner', 'auditor'].includes(req.user.role)) {
+    } else if (req.user.role === 'manager') {
+      whereClause += ' AND t.branch_id IN (SELECT branch_id FROM branch_managers WHERE manager_id = $2)';
+      params.push(req.user.id);
+    } else if (['business_owner', 'auditor'].includes(req.user.role)) {
       whereClause += ' AND t.company_id = $2';
       params.push(req.user.company_id);
     }
@@ -320,8 +326,23 @@ exports.listTransactions = async (req, res) => {
     from_date,
     to_date,
     customer_phone,
-    search
+    search,
+    sort_by = 'date',
+    sort_order = 'desc',
   } = req.query;
+
+  // Strict allowlist mapping a client-facing sort key to a safe SQL
+  // column expression - never interpolate the raw sort_by value
+  // directly into ORDER BY, which would be a SQL injection surface.
+  const SORT_COLUMNS = {
+    date: 't.created_at',
+    amount: 't.amount',
+    commission: 'cm.net_commission',
+    fee: 't.fee',
+    provider: 't.provider',
+  };
+  const sortColumn = SORT_COLUMNS[sort_by] || SORT_COLUMNS.date;
+  const sortDirection = sort_order === 'asc' ? 'ASC' : 'DESC';
 
   try {
     const offset = (parseInt(page) - 1) * parseInt(limit);
@@ -329,11 +350,17 @@ exports.listTransactions = async (req, res) => {
     const params = [];
     let paramIdx = 1;
 
-    // Role-based scoping
+    // Role-based scoping. Managers only see transactions from branches
+    // they actually manage - without this they'd see every company
+    // transaction, same class of gap already fixed for listUsers and
+    // listBranches.
     if (req.user.role === 'agent') {
       conditions.push(`t.agent_id = $${paramIdx++}`);
       params.push(req.user.id);
-    } else if (['manager', 'business_owner', 'auditor'].includes(req.user.role)) {
+    } else if (req.user.role === 'manager') {
+      conditions.push(`t.branch_id IN (SELECT branch_id FROM branch_managers WHERE manager_id = $${paramIdx++})`);
+      params.push(req.user.id);
+    } else if (['business_owner', 'auditor'].includes(req.user.role)) {
       conditions.push(`t.company_id = $${paramIdx++}`);
       params.push(req.user.company_id);
     }
@@ -363,12 +390,14 @@ exports.listTransactions = async (req, res) => {
                 t.amount, t.fee, t.customer_phone, t.customer_name,
                 t.network_reference, t.receipt_url, t.created_at, t.completed_at,
                 u.first_name || ' ' || u.last_name as agent_name,
-                b.name as branch_name
+                b.name as branch_name,
+                cm.net_commission
          FROM transactions t
          LEFT JOIN users u ON t.agent_id = u.id
          LEFT JOIN branches b ON t.branch_id = b.id
+         LEFT JOIN commissions cm ON cm.transaction_id = t.id
          ${whereClause}
-         ORDER BY t.created_at DESC
+         ORDER BY ${sortColumn} ${sortDirection}
          LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
         [...params, parseInt(limit), offset]
       ),
