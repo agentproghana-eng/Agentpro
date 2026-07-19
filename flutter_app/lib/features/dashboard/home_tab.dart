@@ -38,82 +38,90 @@ class _HomeTabState extends State<HomeTab> {
 
   @override
   Widget build(BuildContext context) {
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: CustomScrollView(slivers: [
-        SliverAppBar(
-          pinned: true,
-          backgroundColor: AppTheme.primaryColor,
-          expandedHeight: 280,
-          flexibleSpace: FlexibleSpaceBar(
-            background: Container(
-              padding: const EdgeInsets.fromLTRB(20, 50, 20, 12),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(colors: [AppTheme.primaryColor, Color(0xFF004D43)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+    return Column(children: [
+      // Fixed header - deliberately OUTSIDE the CustomScrollView below,
+      // not a SliverAppBar. The previous SliverAppBar had pinned: true,
+      // but that only keeps an empty bar SHAPE pinned once collapsed -
+      // the actual logo/name/company/role content still scrolled away
+      // and disappeared. Living outside the scrollable area entirely is
+      // what makes it genuinely frozen. SafeArea(bottom: false) handles
+      // the status bar instead of a hardcoded top padding guess.
+      SafeArea(
+        bottom: false,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(colors: [AppTheme.primaryColor, Color(0xFF004D43)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            Center(child: Image.asset("assets/images/agentpro-logo-lockup.png", height: 132)),
+            const SizedBox(height: 6),
+            Text("${widget.user["first_name"] ?? ""} ${widget.user["last_name"] ?? ""}", style: const TextStyle(color: AppTheme.secondaryColor, fontSize: 15, fontWeight: FontWeight.w800)),
+            Text(widget.user["company_name"] ?? "", style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600)),
+            Text((widget.user["role"] ?? "").toString().replaceAll("_", " ").toUpperCase(), style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.6)),
+          ]),
+        ),
+      ),
+      Expanded(
+        child: RefreshIndicator(
+          onRefresh: _load,
+          child: CustomScrollView(slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 3)]),
+                  child: Row(children: [
+                    Expanded(child: _ProviderTab(label: "MTN", value: "mtn", selected: _provider == "mtn", color: const Color(0xFFFFCC00), onTap: (v) => setState(() => _provider = v))),
+                    const SizedBox(width: 4),
+                    Expanded(child: _ProviderTab(label: "Telecel", value: "telecel", selected: _provider == "telecel", color: const Color(0xFFE31837), onTap: (v) => setState(() => _provider = v))),
+                    const SizedBox(width: 4),
+                    Expanded(child: _ProviderTab(label: "AirtelTigo", value: "at_money", selected: _provider == "at_money", color: const Color(0xFF003087), onTap: (v) => setState(() => _provider = v))),
+                  ]),
+                ),
               ),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-                Center(child: Image.asset("assets/images/agentpro-logo-lockup.png", height: 132)),
-                const SizedBox(height: 10),
-                Text("${widget.user["first_name"] ?? ""} ${widget.user["last_name"] ?? ""}", style: const TextStyle(color: AppTheme.secondaryColor, fontSize: 15, fontWeight: FontWeight.w800)),
-                Text(widget.user["company_name"] ?? "", style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600)),
-                Text((widget.user["role"] ?? "").toString().replaceAll("_", " ").toUpperCase(), style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.6)),
-              ]),
             ),
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 3)]),
-              child: Row(children: [
-                Expanded(child: _ProviderTab(label: "MTN", value: "mtn", selected: _provider == "mtn", color: const Color(0xFFFFCC00), onTap: (v) => setState(() => _provider = v))),
-                const SizedBox(width: 4),
-                Expanded(child: _ProviderTab(label: "Telecel", value: "telecel", selected: _provider == "telecel", color: const Color(0xFFE31837), onTap: (v) => setState(() => _provider = v))),
-                const SizedBox(width: 4),
-                Expanded(child: _ProviderTab(label: "AirtelTigo", value: "at_money", selected: _provider == "at_money", color: const Color(0xFF003087), onTap: (v) => setState(() => _provider = v))),
-              ]),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+              sliver: SliverToBoxAdapter(
+                child: GridView.count(
+                  crossAxisCount: 3,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  mainAxisSpacing: 6,
+                  crossAxisSpacing: 6,
+                  childAspectRatio: 0.9,
+                  children: _quickActionTiles(context),
+                ),
+              ),
             ),
-          ),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-          sliver: SliverToBoxAdapter(
-            child: GridView.count(
-              crossAxisCount: 3,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 6,
-              crossAxisSpacing: 6,
-              childAspectRatio: 0.9,
-              children: _quickActionTiles(context),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              sliver: SliverToBoxAdapter(
+                child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  const Text("Recent Transactions", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                  GestureDetector(onTap: () => context.push("/transactions/history"), child: const Text("See All", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryColor))),
+                ]),
+              ),
             ),
-          ),
+            if (_loading)
+              const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(30), child: Center(child: CircularProgressIndicator())))
+            else if (_recent.isEmpty)
+              const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(20), child: Center(child: Text("No transactions yet"))))
+            else
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                sliver: SliverList(delegate: SliverChildBuilderDelegate(
+                  (context, i) => _RecentTxItem(tx: _recent[i] as Map<String, dynamic>),
+                  childCount: _recent.length,
+                )),
+              ),
+          ]),
         ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-          sliver: SliverToBoxAdapter(
-            child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              const Text("Recent Transactions", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-              GestureDetector(onTap: () => context.push("/transactions/history"), child: const Text("See All", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryColor))),
-            ]),
-          ),
-        ),
-        if (_loading)
-          const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(30), child: Center(child: CircularProgressIndicator())))
-        else if (_recent.isEmpty)
-          const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(20), child: Center(child: Text("No transactions yet"))))
-        else
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-            sliver: SliverList(delegate: SliverChildBuilderDelegate(
-              (context, i) => _RecentTxItem(tx: _recent[i] as Map<String, dynamic>),
-              childCount: _recent.length,
-            )),
-          ),
-      ]),
-    );
+      ),
+    ]);
   }
 
   // MTN/AirtelTigo keep the original 9-tile grid unchanged. Telecel gets
@@ -152,6 +160,7 @@ class _HomeTabState extends State<HomeTab> {
     ];
   }
 }
+
 class _ProviderTab extends StatelessWidget {
   final String label;
   final String value;
