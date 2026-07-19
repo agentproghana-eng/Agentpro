@@ -571,3 +571,45 @@ exports.reactivateStaffMember = async (req, res, existingUserId, fields) => {
     res.status(500).json({ success: false, message: "Failed to reactivate staff member" });
   }
 };
+
+// Self-service update for settings that don't need owner/superuser
+// approval - currently just Telecel Operator ID, a fixed per-agent value
+// required as part of the USSD dial sequence for Telecel transactions.
+// Deliberately scoped to req.user.id only (mirrors changePassword's
+// pattern) - a user can only ever update their own record here, never
+// another user's, regardless of role.
+exports.updateMySettings = async (req, res) => {
+  const { telecel_operator_id } = req.body;
+
+  if (telecel_operator_id !== undefined && typeof telecel_operator_id !== 'string') {
+    return res.status(422).json({ success: false, message: 'telecel_operator_id must be a string' });
+  }
+
+  try {
+    const result = await query(
+      `UPDATE users SET telecel_operator_id = COALESCE($1, telecel_operator_id), updated_at = NOW()
+       WHERE id = $2 RETURNING id, telecel_operator_id`,
+      [telecel_operator_id, req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    await auditLog({
+      userId: req.user.id,
+      companyId: req.user.company_id,
+      action: 'SETTINGS_UPDATED',
+      entityType: 'user',
+      entityId: req.user.id,
+      newValues: { telecel_operator_id },
+      ipAddress: req.ip,
+      requestId: req.requestId,
+    });
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    logger.error('Update my settings error:', error);
+    res.status(500).json({ success: false, message: 'Failed to update settings' });
+  }
+};

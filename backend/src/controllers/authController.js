@@ -248,6 +248,7 @@ exports.login = async (req, res) => {
           subscription_status: user.subscription_status,
           subscription_expires_at: user.subscription_expires_at,
           profile_image_url: user.profile_image_url,
+          telecel_operator_id: user.telecel_operator_id,
           must_change_password: user.must_change_password
         }
       }
