@@ -13,6 +13,7 @@ import '../../features/transactions/transaction_progress_screen.dart';
 import '../../features/transactions/transaction_detail_screen.dart';
 import '../../features/sync/sync_queue_screen.dart';
 import '../../features/float/float_screen.dart';
+import '../../features/float/float_overview_screen.dart';
 import '../../features/balances/my_balance_screen.dart';
 import '../../features/balances/float_received_screen.dart';
 import '../../features/balances/commission_transfer_screen.dart';
@@ -86,6 +87,7 @@ class AppRouter {
 
         // Float
         GoRoute(path: '/float', builder: (_, state) => FloatScreen(branchId: state.uri.queryParameters['branch_id'])),
+        GoRoute(path: '/float-overview', builder: (_, __) => const FloatOverviewScreen()),
         GoRoute(path: '/my-balance', builder: (_, __) => const MyBalanceScreen()),
         GoRoute(
           path: '/balances/float-received',
