@@ -11,8 +11,9 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
 /**
- * Bridges Flutter to UssdAccessibilityService for MTN Cash In/Out and
- * Telecel Deposit.
+ * Bridges Flutter to UssdAccessibilityService for MTN Cash In/Out,
+ * Telecel Deposit, and any generic flow defined via the USSD Flow
+ * Builder.
  *
  * - Checks whether the accessibility service is enabled, and opens the
  *   system Accessibility Settings screen so the user can enable it (there
@@ -24,8 +25,10 @@ import io.flutter.plugin.common.MethodChannel
  *   the already-running accessibility service can then read and respond
  *   to - a DIFFERENT dial mechanism than USSDMethodChannel's
  *   sendUssdRequest(), which deliberately shows no dialog at all and is
- *   unsuitable for this multi-step flow). The dial number depends on
- *   provider: *171# for MTN, *110# for Telecel.
+ *   unsuitable for this multi-step flow). MTN/Telecel keep their
+ *   hardcoded dial codes (*171# for MTN, *110# for Telecel); any other provider must supply
+ *   dial_code explicitly, since it comes from that flow's own
+ *   ussd_flows.dial_code column, not a fixed lookup here.
  * - Forwards progress (PIN prompt reached, final result) back to
  *   Flutter via this same channel's invokeMethod, since those events
  *   originate from the service asynchronously, not from a direct
@@ -70,12 +73,33 @@ class UssdAccessibilityChannel(
         context.startActivity(intent)
     }
 
+    // Parses the "steps" argument (a List<Map<*, *>> as delivered by
+    // Flutter's standard MethodChannel codec) into typed FlowStep
+    // objects. Returns null (not an empty list) if no steps were
+    // supplied at all - this distinction matters, since
+    // UssdAccessibilityService treats "steps == null" as "this is an
+    // MTN/Telecel hardcoded session, not a generic one".
+    @Suppress("UNCHECKED_CAST")
+    private fun parseSteps(call: MethodCall): List<UssdAccessibilityService.FlowStep>? {
+        val raw = call.argument<List<Map<String, Any?>>>("steps") ?: return null
+        return raw.map { stepMap ->
+            val matchAll = (stepMap["match_all"] as? List<*>)?.map { it.toString() } ?: emptyList()
+            val action = stepMap["action"] as? String ?: ""
+            val actionValue = stepMap["action_value"] as? String
+            UssdAccessibilityService.FlowStep(matchAll, action, actionValue)
+        }
+    }
+
     private fun startAutomation(call: MethodCall, result: MethodChannel.Result) {
         val customerPhone = call.argument<String>("customer_phone")
         val amount = call.argument<String>("amount")
         val transactionType = call.argument<String>("transaction_type")
         val provider = call.argument<String>("provider") ?: "mtn"
         val operatorId = call.argument<String>("operator_id")
+        val explicitDialCode = call.argument<String>("dial_code")
+        val steps = parseSteps(call)
+        val successMarkers = call.argument<List<String>>("success_markers")
+        val failureMarkers = call.argument<List<String>>("failure_markers")
 
         if (customerPhone == null || amount == null || transactionType == null) {
             result.error("INVALID_ARGS", "customer_phone and amount are required", null)
@@ -87,14 +111,24 @@ class UssdAccessibilityChannel(
             return
         }
 
+        // Generic flows (provider not mtn/telecel) must supply their own
+        // dial code, since there's no hardcoded lookup for them.
+        if (provider != "mtn" && provider != "telecel" && explicitDialCode.isNullOrBlank()) {
+            result.error("MISSING_DIAL_CODE", "dial_code is required for provider: $provider", null)
+            return
+        }
+
         if (!isServiceEnabled()) {
             result.error("SERVICE_DISABLED", "Accessibility service is not enabled", null)
             return
         }
 
-        UssdAccessibilityService.startSession(customerPhone, amount, transactionType, provider, operatorId)
+        UssdAccessibilityService.startSession(
+            customerPhone, amount, transactionType, provider, operatorId,
+            steps, successMarkers, failureMarkers
+        )
 
-        val dialCode = if (provider == "telecel") "*110#" else "*171#"
+        val dialCode = explicitDialCode ?: if (provider == "telecel") "*110#" else "*171#"
 
         try {
             val dialIntent = Intent(Intent.ACTION_CALL, Uri.parse("tel:" + Uri.encode(dialCode)))
