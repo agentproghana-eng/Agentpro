@@ -8,6 +8,8 @@ import android.view.accessibility.AccessibilityNodeInfo
 
 /**
  * USSD Accessibility Automation - MTN Cash In/Out, Telecel Deposit
+ * (hardcoded, proven live), plus a generic data-driven interpreter for
+ * any other provider/transaction_type defined via the USSD Flow Builder.
  *
  * WHY THIS EXISTS: neither MTN Cash In nor Telecel Deposit accept a
  * pre-concatenated multi-step dial string (confirmed via live testing -
@@ -20,10 +22,11 @@ import android.view.accessibility.AccessibilityNodeInfo
  * auto-enters the agent's MoMo PIN. Once the screen text matches the
  * PIN-prompt signature, all automated input stops completely - the
  * agent must tap and type into the same system dialog themselves. The
- * one exception is Telecel's post-PIN confirmation step ("Press 1 to
- * confirm or 0 to cancel") - this is NOT sensitive (no secret involved,
- * just a yes/no on an amount already shown on screen), so automation
- * resumes just long enough to auto-press "1", then stops permanently.
+ * one exception is a post-PIN non-sensitive confirmation step (e.g.
+ * Telecel's "Press 1 to confirm or 0 to cancel") - not sensitive (no
+ * secret involved, just a yes/no on an amount already shown on screen),
+ * so automation resumes just long enough to auto-press once, then
+ * stops permanently.
  *
  * STATE MACHINE - MTN (confirmed via real device screenshots, July 2026):
  * 1. "MainMenuAgent ... 3) Cash In"      -> send "3" (Cash In) or "2" (Cash Out)
@@ -43,6 +46,15 @@ import android.view.accessibility.AccessibilityNodeInfo
  * 5. "Enter PIN:"                        -> STOP. Report pinPromptReached.
  * 6. "...Press 1 to confirm or 0 to cancel:" -> auto-send "1" (NOT sensitive - see above)
  * 7. Final screen (success/failure text) -> report result.
+ *
+ * GENERIC INTERPRETER (added alongside the above, never replacing it):
+ * When pendingProvider/pendingTransactionType don't match any hardcoded
+ * MTN/Telecel branch above, and pendingSteps has been supplied via
+ * startSession(), this falls through to a data-driven loop instead -
+ * see handleGenericStep() and the ussd_flows/ussd_flow_steps backend
+ * schema. This is what powers custom flows created via the USSD Flow
+ * Builder (superuser: global flows; business owner: their own company's
+ * flows) - it never touches or overrides the MTN/Telecel behavior above.
  */
 class UssdAccessibilityService : AccessibilityService() {
     companion object {
@@ -51,8 +63,9 @@ class UssdAccessibilityService : AccessibilityService() {
         // Set by UssdAccessibilityChannel right before the dial is
         // placed. reachedPinPrompt is NOT terminal - the service keeps
         // watching for a final result after it, it just stops all
-        // sensitive input. confirmSent guards Telecel's one-time
-        // post-PIN auto-confirm so it's never sent more than once.
+        // sensitive input. confirmSent guards the one-time post-PIN
+        // auto-confirm (MTN/Telecel hardcoded, or generic) so it's
+        // never sent more than once.
         @Volatile var pendingCustomerPhone: String? = null
         @Volatile var pendingAmount: String? = null
         @Volatile var pendingTransactionType: String? = null
@@ -61,6 +74,13 @@ class UssdAccessibilityService : AccessibilityService() {
         @Volatile var isSessionActive: Boolean = false
         @Volatile var reachedPinPrompt: Boolean = false
         @Volatile var confirmSent: Boolean = false
+
+        // Generic-flow-only state. Null for every MTN/Telecel session -
+        // those never set these, so their behavior is 100% unchanged
+        // from before this interpreter existed.
+        @Volatile var pendingSteps: List<FlowStep>? = null
+        @Volatile var pendingSuccessMarkers: List<String>? = null
+        @Volatile var pendingFailureMarkers: List<String>? = null
 
         // Registered by UssdAccessibilityChannel so this OS-instantiated
         // service can report progress back to Flutter.
@@ -71,13 +91,19 @@ class UssdAccessibilityService : AccessibilityService() {
             amount: String,
             transactionType: String,
             provider: String,
-            operatorId: String? = null
+            operatorId: String? = null,
+            steps: List<FlowStep>? = null,
+            successMarkers: List<String>? = null,
+            failureMarkers: List<String>? = null
         ) {
             pendingCustomerPhone = customerPhone
             pendingAmount = amount
             pendingTransactionType = transactionType
             pendingProvider = provider
             pendingOperatorId = operatorId
+            pendingSteps = steps
+            pendingSuccessMarkers = successMarkers
+            pendingFailureMarkers = failureMarkers
             isSessionActive = true
             reachedPinPrompt = false
             confirmSent = false
@@ -92,8 +118,21 @@ class UssdAccessibilityService : AccessibilityService() {
             pendingTransactionType = null
             pendingProvider = null
             pendingOperatorId = null
+            pendingSteps = null
+            pendingSuccessMarkers = null
+            pendingFailureMarkers = null
         }
     }
+
+    // One step of a generic, data-driven flow (mirrors ussd_flow_steps
+    // rows). matchAll: ALL substrings must be present in the current
+    // screen text for this step to fire - same AND semantics already
+    // used by the hardcoded MTN/Telecel branches above.
+    data class FlowStep(
+        val matchAll: List<String>,
+        val action: String,
+        val actionValue: String?
+    )
 
     interface UssdAccessibilityListener {
         fun onPinPromptReached()
@@ -138,7 +177,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 Log.d(TAG, "MTN PIN prompt reached - automation stops here")
             }
 
-            // ── Telecel Deposit ──
+            // ── Telecel Deposit (unchanged from the pilot) ──
             pendingProvider == "telecel" && screenText.contains("1 deposit") && screenText.contains("2 agent transactions") ->
                 respond(root, "1")
             pendingProvider == "telecel" && screenText.contains("enter phone no") ->
@@ -152,16 +191,18 @@ class UssdAccessibilityService : AccessibilityService() {
                 listener?.onPinPromptReached()
                 Log.d(TAG, "Telecel PIN prompt reached - automation stops sensitive input, will auto-confirm after")
             }
+
+            // ── Generic interpreter (new provider/type combos only -
+            // never reached for MTN/Telecel, since their branches above
+            // always match first) ──
+            pendingSteps != null -> handleGenericStep(root, screenText)
         }
     }
 
     // Once the PIN prompt has been seen, we never touch the PIN itself
-    // again. For Telecel specifically, one more non-sensitive step
-    // follows PIN entry - a confirmation screen ("Press 1 to confirm or
-    // 0 to cancel") showing the same amount/phone already visible on
-    // screen, no secret involved. confirmSent guards this being sent
-    // more than once. After that (or immediately for MTN, which has no
-    // such step), we only ever watch for a final result.
+    // again. MTN/Telecel's hardcoded post-PIN handling is completely
+    // unchanged; the generic-flow checks below only ever activate when
+    // pendingSteps was actually supplied (i.e. never for MTN/Telecel).
     private fun handleAfterPinPrompt(root: AccessibilityNodeInfo, screenText: String) {
         if (pendingProvider == "telecel" && !confirmSent && screenText.contains("press 1 to confirm")) {
             confirmSent = true
@@ -170,8 +211,23 @@ class UssdAccessibilityService : AccessibilityService() {
             return
         }
 
-        val successMarkers = listOf("cash in successful", "transaction successful", "successful", "received")
-        val failureMarkers = listOf("failed", "insufficient", "invalid", "error", "not found", "connection problem")
+        val steps = pendingSteps
+        if (steps != null && !confirmSent) {
+            val confirmStep = steps.find { it.action == "auto_confirm_once" && it.matchAll.all { m -> screenText.contains(m) } }
+            if (confirmStep != null) {
+                confirmSent = true
+                confirmStep.actionValue?.let { respond(root, it) }
+                Log.d(TAG, "Generic flow: auto-confirmed transaction (non-sensitive step)")
+                return
+            }
+        }
+
+        // MTN/Telecel keep their exact original hardcoded marker lists
+        // (pendingSuccessMarkers/pendingFailureMarkers are null for
+        // them). Generic flows use the markers configured on their own
+        // ussd_flows row.
+        val successMarkers = pendingSuccessMarkers ?: listOf("cash in successful", "transaction successful", "successful", "received")
+        val failureMarkers = pendingFailureMarkers ?: listOf("failed", "insufficient", "invalid", "error", "not found", "connection problem")
         val isSuccess = successMarkers.any { screenText.contains(it) }
         val isFailure = failureMarkers.any { screenText.contains(it) }
 
@@ -181,10 +237,37 @@ class UssdAccessibilityService : AccessibilityService() {
         }
     }
 
+    // Data-driven step matching for any provider/transaction_type not
+    // covered by the hardcoded MTN/Telecel branches above. First
+    // matching step wins (steps are already ordered by step_order),
+    // mirroring the same top-to-bottom priority the hardcoded `when`
+    // block above already uses.
+    private fun handleGenericStep(root: AccessibilityNodeInfo, screenText: String) {
+        val steps = pendingSteps ?: return
+        for (step in steps) {
+            if (step.matchAll.isNotEmpty() && step.matchAll.all { screenText.contains(it) }) {
+                when (step.action) {
+                    "send_digit", "send_literal" -> step.actionValue?.let { respond(root, it) }
+                    "send_customer_phone" -> pendingCustomerPhone?.let { respond(root, it) }
+                    "send_amount" -> pendingAmount?.let { respond(root, it) }
+                    "send_operator_id" -> pendingOperatorId?.let { respond(root, it) }
+                    "pin_prompt" -> {
+                        reachedPinPrompt = true
+                        listener?.onPinPromptReached()
+                        Log.d(TAG, "Generic flow: PIN prompt reached")
+                    }
+                    // auto_confirm_once is only ever actioned from
+                    // handleAfterPinPrompt(), never here.
+                }
+                return
+            }
+        }
+    }
+
     // Finds the single EditText on screen, sets its text, then finds and
     // clicks the Send button. Only ever called for menu digits, phone
-    // numbers, amounts, Operator ID, and Telecel's post-PIN confirm
-    // digit - never for PIN entry itself.
+    // numbers, amounts, Operator ID, and non-sensitive post-PIN confirm
+    // digits - never for PIN entry itself.
     private fun respond(root: AccessibilityNodeInfo, value: String) {
         val editText = findByClassName(root, "android.widget.EditText") ?: run {
             Log.w(TAG, "No EditText found on screen")
