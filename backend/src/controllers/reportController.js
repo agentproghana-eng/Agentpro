@@ -67,6 +67,20 @@ async function fetchTransactions(filters, userContext) {
   return { transactions: txResult.rows, summary: summaryResult.rows[0] };
 }
 
+// ── Resolve a branch's display name for report titles ─────────
+// Returns null if no branch_id was given or it doesn't resolve, so
+// callers can fall back to the existing generic title unchanged.
+async function resolveBranchName(branch_id) {
+  if (!branch_id) return null;
+  try {
+    const result = await query('SELECT name FROM branches WHERE id = $1', [branch_id]);
+    return result.rows[0]?.name || null;
+  } catch (e) {
+    logger.warn('Failed to resolve branch name for report title:', e.message);
+    return null;
+  }
+}
+
 // ── Transaction Report ────────────────────────────────────────
 
 exports.transactionReport = async (req, res) => {
@@ -86,7 +100,6 @@ exports.transactionReport = async (req, res) => {
     // Resolve period shortcuts
     let resolvedFrom = from_date;
     let resolvedTo = to_date || new Date().toISOString();
-
     if (period && !from_date) {
       const now = new Date();
       if (period === 'today') resolvedFrom = new Date(now.setHours(0, 0, 0, 0)).toISOString();
@@ -101,7 +114,10 @@ exports.transactionReport = async (req, res) => {
     );
 
     const periodLabel = period || `${resolvedFrom?.slice(0, 10)} to ${resolvedTo?.slice(0, 10)}`;
-    const title = `Transaction Report — ${periodLabel}`;
+    const branchName = await resolveBranchName(branch_id);
+    const title = branchName
+      ? `Transaction Report — ${branchName} — ${periodLabel}`
+      : `Transaction Report — ${periodLabel}`;
 
     if (format === 'csv') {
       const csv = generateCSV(transactions, [
@@ -181,7 +197,10 @@ exports.commissionReport = async (req, res) => {
       transaction_count: data.reduce((s, r) => s + parseInt(r.transaction_count || 0), 0),
     };
 
-    const title = `Commission Report — ${period || 'Custom Period'}`;
+    const branchName = await resolveBranchName(branch_id);
+    const title = branchName
+      ? `Commission Report — ${branchName} — ${period || 'Custom Period'}`
+      : `Commission Report — ${period || 'Custom Period'}`;
 
     if (format === 'csv') {
       const csv = generateCSV(data, [
@@ -238,8 +257,7 @@ exports.dashboardSummary = async (req, res) => {
         [startOfMonth]
       ),
       companyId ? query(
-        `SELECT COALESCE(SUM(fa.current_balance), 0) as total,
-                provider
+        `SELECT COALESCE(SUM(fa.current_balance), 0) as total, provider
          FROM float_accounts fa
          INNER JOIN branches b ON fa.branch_id = b.id
          WHERE b.company_id = $1 AND b.status = 'active'

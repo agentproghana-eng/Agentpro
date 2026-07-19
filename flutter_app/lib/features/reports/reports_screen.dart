@@ -1,6 +1,8 @@
 // reports_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:dio/dio.dart';
+import '../../core/auth/auth_bloc.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
@@ -18,13 +20,47 @@ class _ReportsScreenState extends State<ReportsScreen> {
   String _period = 'month';
   String _format = 'pdf';
   bool _loading = false;
+  bool _loadingBranches = true;
+  List<dynamic> _branches = [];
+  String? _branchId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBranches();
+  }
+
+  Future<void> _loadBranches() async {
+    // Only Owner/Manager have multiple branches to filter by - Agents
+    // work a single branch and never see this dropdown at all.
+    final role = (context.read<AuthBloc>().state as AuthAuthenticated).user['role'];
+    if (role != 'business_owner' && role != 'manager') {
+      setState(() => _loadingBranches = false);
+      return;
+    }
+    try {
+      final res = await ApiClient.instance.get('/branches');
+      if (mounted) {
+        setState(() {
+          _branches = res.data['data'] ?? [];
+          _loadingBranches = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingBranches = false);
+    }
+  }
 
   Future<void> _download(String type) async {
     setState(() => _loading = true);
     try {
       final res = await ApiClient.instance.get(
         '/reports/$type',
-        queryParameters: {'period': _period, 'format': _format},
+        queryParameters: {
+          'period': _period,
+          'format': _format,
+          if (_branchId != null) 'branch_id': _branchId,
+        },
         options: Options(responseType: ResponseType.bytes),
       );
       final dir = await getTemporaryDirectory();
@@ -42,6 +78,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Branch dropdown only ever has options for Owner/Manager - for
+    // Agents (or if branches haven't loaded yet) it's simply omitted
+    // rather than shown empty or disabled.
+    final showBranchPicker = !_loadingBranches && _branches.isNotEmpty;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Reports')),
       body: LoadingOverlay(
@@ -69,6 +110,26 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     ChoiceChip(label: Text(f.toUpperCase()),
                       selected: _format == f, onSelected: (_) => setState(() => _format = f)),
                 ]),
+                if (showBranchPicker) ...[
+                  const SizedBox(height: 12),
+                  const Text('Branch', style: TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String?>(
+                    value: _branchId,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    hint: const Text('All Branches'),
+                    items: [
+                      const DropdownMenuItem<String?>(value: null, child: Text('All Branches')),
+                      for (final b in _branches)
+                        DropdownMenuItem<String?>(value: b['id'] as String, child: Text(b['name'] ?? '')),
+                    ],
+                    onChanged: (v) => setState(() => _branchId = v),
+                  ),
+                ],
               ]),
             )),
             const SizedBox(height: 16),
