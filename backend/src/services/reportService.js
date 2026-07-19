@@ -5,6 +5,7 @@ const { uploadPDF } = require('../config/cloudinary');
 const { logger } = require('../utils/logger');
 const path = require('path');
 const LOGO_PATH = path.join(__dirname, '..', 'agentpro-logo-transparent.png');
+const WATERMARK_PATH = path.join(__dirname, '..', 'agentpro-watermark.png');
 
 const GHS = (n) => `GH₵ ${parseFloat(n || 0).toFixed(2)}`;
 const dateStr = (d) => d ? new Date(d).toLocaleDateString('en-GH') : '—';
@@ -34,6 +35,34 @@ function statusColor(status) {
   return COLORS.error; // failed, reversed, or any unrecognized status
 }
 
+// ── Watermark ───────────────────────────────────────────────────
+// Draws the full logo (shield + wordmark) faintly behind page content,
+// rotated diagonally. Only used on the full A4 reports (Transaction,
+// Commission) — deliberately NOT on the small A6 receipt, which is
+// meant to be a clean, minimal document handed to a customer.
+// Must be called before any other content is drawn on the page, since
+// pdfkit draws in z-order and the watermark needs to sit underneath
+// the header/table, not on top of it.
+function drawWatermark(doc) {
+  const pageWidth = doc.page.width;
+  const pageHeight = doc.page.height;
+  const wmWidth = 260;
+  const wmHeight = wmWidth * (154 / 544); // matches the asset's actual aspect ratio
+  const centerX = pageWidth / 2;
+  const centerY = pageHeight / 2;
+
+  doc.save();
+  doc.opacity(0.12);
+  doc.rotate(-30, { origin: [centerX, centerY] });
+  try {
+    doc.image(WATERMARK_PATH, centerX - wmWidth / 2, centerY - wmHeight / 2, { width: wmWidth });
+  } catch (e) {
+    logger.warn('Watermark image not found, skipping:', e.message);
+  }
+  doc.restore();
+  doc.opacity(1);
+}
+
 // ── Transaction Receipt PDF ───────────────────────────────────
 
 async function generateTransactionReceipt(transaction) {
@@ -58,80 +87,60 @@ async function generateTransactionReceipt(transaction) {
 
     await new Promise((resolve) => {
       doc.on('end', resolve);
-
       doc.rect(0, 0, doc.page.width, 60).fill(COLORS.primary);
       try { doc.image(LOGO_PATH, 20, 8, { height: 24 }); } catch (e) { logger.warn('Logo image not found, skipping:', e.message); }
       doc.fillColor('white').fontSize(14).font('Helvetica-Bold')
-        .text('Agent Pro Ghana', 20, 14, { align: 'center' });
+        .text('Agent Pro Ghana', 50, 15);
       doc.fontSize(8).font('Helvetica')
-        .text('One App. Every Mobile Money Business.', 20, 30, { align: 'center' });
+        .text('Transaction Receipt', 50, 33);
       doc.fillColor(COLORS.text);
-
-      // Transaction status badge — guard above guarantees this is
-      // always a confirmed success by the time we reach this point.
       doc.moveDown(2);
-      doc.fontSize(11).fillColor(COLORS.success).font('Helvetica-Bold')
-        .text('✓ SUCCESSFUL', { align: 'center' });
 
-      // Amount
+      doc.fontSize(11).fillColor(COLORS.success).font('Helvetica-Bold')
+        .text('✓ Transaction Successful', { align: 'center' });
+      doc.moveDown(0.5);
       doc.fontSize(22).fillColor(COLORS.text).font('Helvetica-Bold')
         .text(GHS(transaction.amount), { align: 'center' });
-
       doc.fontSize(9).fillColor(COLORS.muted).font('Helvetica')
-        .text(
-          (transaction.transaction_type || '').replace(/_/g, ' ').toUpperCase(),
-          { align: 'center' }
-        );
+        .text((transaction.transaction_type || '').replace(/_/g, ' ').toUpperCase(), { align: 'center' });
 
-      // Divider
       doc.moveDown(0.5);
       doc.moveTo(20, doc.y).lineTo(doc.page.width - 20, doc.y)
-        .strokeColor('#EEEEEE').stroke();
+        .strokeColor(COLORS.light).stroke();
       doc.moveDown(0.5);
 
-      // Details
       const details = [
         ['Reference', transaction.reference],
         ['Network Ref', transaction.network_reference || '—'],
         ['Provider', (transaction.provider || '').toUpperCase()],
-        ['Customer', transaction.customer_name || transaction.customer_phone || '—'],
-        ['Customer Phone', transaction.customer_phone || '—'],
-        ['Agent', transaction.agent_name || '—'],
-        ['Branch', transaction.branch_name || '—'],
+        ['Customer', transaction.customer_phone || '—'],
         ['Date', dateTimeStr(transaction.created_at)],
-        ['Completed', dateTimeStr(transaction.completed_at)],
       ];
-
-      details.forEach(([label, value]) => {
+      details.forEach(([label, val]) => {
         doc.fontSize(8).fillColor(COLORS.muted).font('Helvetica')
           .text(label, 20, doc.y, { width: 100, continued: true });
-        doc.fillColor(COLORS.text).font('Helvetica-Bold')
-          .text(value || '—', { align: 'right' });
+        doc.fillColor(COLORS.text).font('Helvetica-Bold').text(String(val));
         doc.moveDown(0.3);
       });
 
-      // Footer
       doc.moveTo(20, doc.page.height - 40).lineTo(doc.page.width - 20, doc.page.height - 40)
-        .strokeColor('#EEEEEE').stroke();
+        .strokeColor(COLORS.light).stroke();
       doc.fontSize(7).fillColor(COLORS.muted).font('Helvetica')
-        .text('This is an electronic receipt generated by Agent Pro Ghana.',
+        .text('Thank you for using Agent Pro Ghana',
           20, doc.page.height - 32, { align: 'center' });
       doc.text('support@agentproghana.com', { align: 'center' });
 
       doc.end();
     });
 
-    const buffer = Buffer.concat(buffers);
-    const filename = `receipt_${transaction.reference}_${Date.now()}`;
-    const url = await uploadPDF(buffer, filename);
-    return url;
+    return Buffer.concat(buffers);
   } catch (error) {
     logger.error('Receipt generation error:', error);
     return null;
   }
 }
 
-// ── Transaction Report PDF ────────────────────────────────────
+// ── Transaction Report PDF ─────────────────────────────────────
 
 async function generateTransactionReportPDF({ transactions, filters, summary, title }) {
   const doc = new PDFDocument({ size: 'A4', margin: 40 });
@@ -141,16 +150,17 @@ async function generateTransactionReportPDF({ transactions, filters, summary, ti
   await new Promise((resolve) => {
     doc.on('end', resolve);
 
+    drawWatermark(doc);
+
     // Header
     doc.rect(0, 0, doc.page.width, 70).fill(COLORS.primary);
     try { doc.image(LOGO_PATH, 15, 15, { height: 40 }); } catch (e) { logger.warn('Logo image not found, skipping:', e.message); }
-    doc.fillColor('white').fontSize(18).font('Helvetica-Bold')
+    doc.fillColor(COLORS.secondary).fontSize(18).font('Helvetica-Bold')
       .text('Agent Pro Ghana', 40, 15);
-    doc.fontSize(11).font('Helvetica')
+    doc.fillColor('white').fontSize(11).font('Helvetica')
       .text(title || 'Transaction Report', 40, 35);
     doc.fontSize(9)
       .text(`Generated: ${dateTimeStr(new Date())}`, 40, 52);
-
     doc.fillColor(COLORS.text);
     doc.moveDown(2.5);
 
@@ -177,13 +187,14 @@ async function generateTransactionReportPDF({ transactions, filters, summary, ti
 
     // Table Header
     const cols = [
-      { label: 'Date', width: 80 },
-      { label: 'Reference', width: 100 },
-      { label: 'Type', width: 70 },
-      { label: 'Provider', width: 55 },
-      { label: 'Customer', width: 90 },
-      { label: 'Amount', width: 65 },
-      { label: 'Status', width: 55 },
+      { label: 'Date', width: 55 },
+      { label: 'Reference', width: 75 },
+      { label: 'Type', width: 55 },
+      { label: 'Provider', width: 45 },
+      { label: 'Customer', width: 65 },
+      { label: 'Agent', width: 65 },
+      { label: 'Amount', width: 60 },
+      { label: 'Status', width: 95 },
     ];
 
     doc.rect(40, doc.y, doc.page.width - 80, 18).fill(COLORS.primary);
@@ -213,13 +224,14 @@ async function generateTransactionReportPDF({ transactions, filters, summary, ti
         (tx.transaction_type || '').replace('_', ' '),
         (tx.provider || '').toUpperCase(),
         tx.customer_phone || '—',
+        tx.agent_name || '—',
         GHS(tx.amount),
         (tx.status || '').toUpperCase(),
       ];
 
       x = 40;
       rowData.forEach((val, i) => {
-        const color = i === 6 ? statusColor(tx.status) : COLORS.text;
+        const color = i === 7 ? statusColor(tx.status) : COLORS.text;
         doc.fontSize(7).fillColor(color).font('Helvetica')
           .text(val, x + 4, rowY + 4, { width: cols[i].width - 4 });
         x += cols[i].width;
@@ -250,7 +262,6 @@ async function generateTransactionReportExcel({ transactions, filters, summary, 
   sheet.getCell('A1').value = title || 'Agent Pro Ghana — Transaction Report';
   sheet.getCell('A1').font = { size: 14, bold: true, color: { argb: 'FF006B5E' } };
   sheet.getCell('A1').alignment = { horizontal: 'center' };
-
   sheet.mergeCells('A2:H2');
   sheet.getCell('A2').value = `Generated: ${dateTimeStr(new Date())}`;
   sheet.getCell('A2').font = { size: 9, color: { argb: 'FF666666' } };
@@ -260,7 +271,6 @@ async function generateTransactionReportExcel({ transactions, filters, summary, 
   sheet.addRow([]);
   sheet.addRow(['Summary']);
   sheet.addRow(['Total Transactions', summary.count, '', 'Total Amount', `GH₵ ${parseFloat(summary.total_amount||0).toFixed(2)}`, '', 'Net Commission', `GH₵ ${parseFloat(summary.total_commission||0).toFixed(2)}`]);
-
   sheet.addRow([]);
 
   // Headers
@@ -297,31 +307,14 @@ async function generateTransactionReportExcel({ transactions, filters, summary, 
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F5F5' } };
       });
     }
-
-    // Color status — keep in sync with statusColor() used by the PDF
-    // report above and AppTheme.statusColor() in the Flutter app.
-    const statusCell = row.getCell(10);
-    if (tx.status === 'success') statusCell.font = { color: { argb: 'FF2E7D32' }, bold: true };
-    if (tx.status === 'failed') statusCell.font = { color: { argb: 'FFBA1A1A' }, bold: true };
-    if (tx.status === 'pending_confirmation') statusCell.font = { color: { argb: 'FFE65100' }, bold: true };
   });
 
-  // Column widths
-  sheet.columns = [
-    { width: 18 }, { width: 22 }, { width: 18 }, { width: 20 },
-    { width: 12 }, { width: 16 }, { width: 20 }, { width: 14 },
-    { width: 16 }, { width: 12 }, { width: 20 }, { width: 20 },
-  ];
+  sheet.columns.forEach(col => { col.width = 16; });
 
-  // Format date and amount columns
-  sheet.getColumn(1).numFmt = 'dd/mm/yyyy hh:mm';
-  sheet.getColumn(8).numFmt = '#,##0.00';
-  sheet.getColumn(9).numFmt = '#,##0.00';
-
-  return workbook.xlsx.writeBuffer();
+  return await workbook.xlsx.writeBuffer();
 }
 
-// ── Commission Report PDF ─────────────────────────────────────
+// ── Commission Report PDF ──────────────────────────────────────
 
 async function generateCommissionReportPDF({ commissions, summary, title, groupBy }) {
   const doc = new PDFDocument({ size: 'A4', margin: 40 });
@@ -331,11 +324,13 @@ async function generateCommissionReportPDF({ commissions, summary, title, groupB
   await new Promise((resolve) => {
     doc.on('end', resolve);
 
+    drawWatermark(doc);
+
     doc.rect(0, 0, doc.page.width, 70).fill(COLORS.primary);
     try { doc.image(LOGO_PATH, 15, 15, { height: 40 }); } catch (e) { logger.warn('Logo image not found, skipping:', e.message); }
-    doc.fillColor('white').fontSize(18).font('Helvetica-Bold')
+    doc.fillColor(COLORS.secondary).fontSize(18).font('Helvetica-Bold')
       .text('Agent Pro Ghana', 40, 15);
-    doc.fontSize(11).font('Helvetica')
+    doc.fillColor('white').fontSize(11).font('Helvetica')
       .text(title || 'Commission Report', 40, 35);
     doc.fontSize(9).text(`Generated: ${dateTimeStr(new Date())}`, 40, 52);
     doc.fillColor(COLORS.text);
@@ -408,12 +403,10 @@ async function generateCommissionReportPDF({ commissions, summary, title, groupB
 
 function generateCSV(data, columns) {
   const header = columns.map(c => `"${c.label}"`).join(',');
-  const rows = data.map(row =>
-    columns.map(c => {
-      const val = c.getValue ? c.getValue(row) : (row[c.key] ?? '');
-      return `"${String(val).replace(/"/g, '""')}"`;
-    }).join(',')
-  );
+  const rows = data.map(row => columns.map(c => {
+    const val = c.getValue ? c.getValue(row) : row[c.key];
+    return `"${String(val ?? '').replace(/"/g, '""')}"`;
+  }).join(','));
   return [header, ...rows].join('\n');
 }
 
