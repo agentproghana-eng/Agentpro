@@ -13,6 +13,13 @@ class AuthLoginEvent extends AuthEvent {
   AuthLoginEvent({required this.email, required this.password, this.fcmToken});
 }
 class AuthLogoutEvent extends AuthEvent {}
+// Merges updated fields into the cached user and persists them locally -
+// for self-service settings changes (e.g. Telecel Operator ID) that
+// don't require a full re-login to take effect app-wide.
+class AuthUpdateUserEvent extends AuthEvent {
+  final Map<String, dynamic> updatedFields;
+  AuthUpdateUserEvent(this.updatedFields);
+}
 
 // ── States ────────────────────────────────────────────────────
 abstract class AuthState extends Equatable {
@@ -38,6 +45,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthCheckEvent>(_onCheck);
     on<AuthLoginEvent>(_onLogin);
     on<AuthLogoutEvent>(_onLogout);
+    on<AuthUpdateUserEvent>(_onUpdateUser);
   }
 
   Future<void> _onCheck(AuthCheckEvent event, Emitter<AuthState> emit) async {
@@ -107,5 +115,15 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
 
     emit(AuthUnauthenticated());
+  }
+
+  Future<void> _onUpdateUser(AuthUpdateUserEvent event, Emitter<AuthState> emit) async {
+    final currentState = state;
+    if (currentState is AuthAuthenticated) {
+      final updatedUser = Map<String, dynamic>.from(currentState.user)
+        ..addAll(event.updatedFields);
+      await StorageService.saveUser(updatedUser);
+      emit(AuthAuthenticated(updatedUser));
+    }
   }
 }
