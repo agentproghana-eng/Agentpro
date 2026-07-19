@@ -467,6 +467,7 @@ class _OwnerReportsTab extends StatelessWidget {
   }
 }
 
+
 // ── More Tab ──────────────────────────────────────────────────
 
 class _OwnerMoreTab extends StatelessWidget {
@@ -476,29 +477,39 @@ class _OwnerMoreTab extends StatelessWidget {
       appBar: AppBar(title: const Text('More')),
       body: ListView(
         children: [
-          _T(Icons.people_outlined, 'Manage Staff', () => context.push('/users')),
-          _T(Icons.payments_outlined, 'Commission Rules', () {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('Commission rules are managed by your Agent Pro Ghana administrator.'),
-              duration: Duration(seconds: 4),
-            ));
-          }),
-          _T(Icons.account_balance_wallet_outlined, 'MoMo Balance', () => context.push('/my-balance')),
-          _T(Icons.store_outlined, 'Branches', () => context.push('/branches')),
+          const _MoreGroupLabel('MoMo'),
+          _T(Icons.receipt_long_outlined, 'Transactions', () => context.push('/transactions')),
+          _T(Icons.account_balance_wallet_outlined, 'Float Balances', () => context.push('/my-balance')),
           _T(Icons.bar_chart_outlined, 'Reports', () => context.push('/reports')),
-          _T(Icons.smart_toy_outlined, 'AI Assistant', () => context.push('/ai')),
+          _T(Icons.wifi_tethering, 'USSD Automation', () => context.push('/ussd-settings'), isNew: true),
+
+          const _MoreGroupLabel('Business'),
+          _T(Icons.people_outlined, 'Staff Management', () => context.push('/users')),
+          _T(Icons.store_outlined, 'Branches', () => context.push('/branches')),
           _T(Icons.card_membership_outlined, 'Subscription', () => context.push('/subscription')),
-          _T(Icons.wifi_tethering, 'USSD Automation', () => context.push('/ussd-settings')),
-          _T(Icons.support_agent_outlined, 'Support', () => context.push('/support')),
+
+          const _MoreGroupLabel('Support'),
+          _T(Icons.support_agent_outlined, 'Support', () => context.push('/support'), isNew: true),
           _T(Icons.settings_outlined, 'Settings', () => context.push('/settings')),
           const Divider(),
           _T(Icons.logout, 'Sign Out',
-            () => context.read<AuthBloc>().add(AuthLogoutEvent()),
-            color: AppTheme.errorColor),
+              () => context.read<AuthBloc>().add(AuthLogoutEvent()),
+              color: AppTheme.errorColor),
         ],
       ),
     );
   }
+}
+
+class _MoreGroupLabel extends StatelessWidget {
+  final String label;
+  const _MoreGroupLabel(this.label);
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
+    child: Text(label.toUpperCase(),
+        style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 1)),
+  );
 }
 
 class _T extends StatelessWidget {
@@ -506,11 +517,23 @@ class _T extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
   final Color? color;
-  const _T(this.icon, this.label, this.onTap, {this.color});
+  final bool isNew;
+  const _T(this.icon, this.label, this.onTap, {this.color, this.isNew = false});
   @override
   Widget build(BuildContext context) => ListTile(
     leading: Icon(icon, color: color ?? AppTheme.primaryColor),
-    title: Text(label, style: TextStyle(color: color)),
+    title: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: TextStyle(color: color)),
+        if (isNew) Container(
+          margin: const EdgeInsets.only(left: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(color: AppTheme.secondaryColor, borderRadius: BorderRadius.circular(6)),
+          child: const Text('NEW', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.black)),
+        ),
+      ],
+    ),
     trailing: const Icon(Icons.chevron_right, color: Colors.grey),
     onTap: onTap,
   );
