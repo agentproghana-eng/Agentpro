@@ -36,7 +36,7 @@ class AppTheme {
         elevation: 0,
         centerTitle: false,
         titleTextStyle: GoogleFonts.inter(
-          color: Colors.white,
+          color: AppTheme.secondaryColor,
           fontSize: 18,
           fontWeight: FontWeight.w600,
         ),
