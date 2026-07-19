@@ -69,7 +69,8 @@ class AppRouter {
           path: '/transactions',
           builder: (_, state) {
             final type = state.uri.queryParameters['type'] ?? 'cash_in';
-            return TransactionScreen(transactionType: type);
+            final provider = state.uri.queryParameters['provider'];
+            return TransactionScreen(transactionType: type, initialProvider: provider);
           },
         ),
         GoRoute(

@@ -9,7 +9,8 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../core/services/offline_queue_service.dart';
 class TransactionScreen extends StatefulWidget {
   final String transactionType;
-  const TransactionScreen({super.key, required this.transactionType});
+  final String? initialProvider;
+  const TransactionScreen({super.key, required this.transactionType, this.initialProvider});
 
   @override
   State<TransactionScreen> createState() => _TransactionScreenState();
@@ -26,13 +27,16 @@ class _TransactionScreenState extends State<TransactionScreen> {
   final _notesCtrl = TextEditingController();
   final _feeCtrl = TextEditingController();
 
-  String _selectedProvider = 'mtn';
+  String _selectedProvider = 'mtn';  // overridden in initState if initialProvider is passed
   bool _loading = false;
   bool _feeAutoCalculated = true;
 
   @override
   void initState() {
     super.initState();
+    if (widget.initialProvider != null) {
+      _selectedProvider = widget.initialProvider!;
+    }
     _amountCtrl.addListener(() {
       if (!_isSendMoney || !_feeAutoCalculated) return;
       final amount = double.tryParse(_amountCtrl.text.replaceAll(',', '')) ?? 0;
