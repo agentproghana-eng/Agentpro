@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:dio/dio.dart';
 import '../../core/api/api_client.dart';
+import '../../core/auth/auth_bloc.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
 import 'staff_work_history_screen.dart';
@@ -168,6 +170,13 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Managers can view this screen (server-side scoping already restricts
+    // them to agents in branches they manage) but cannot create, suspend,
+    // delete, or reassign - those routes are owner/superuser only. Rather
+    // than show controls that silently fail with a 403, hide them entirely.
+    final role = (context.read<AuthBloc>().state as AuthAuthenticated).user['role'];
+    final isReadOnly = role == 'manager';
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Manage Staff'),
@@ -196,18 +205,20 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
               : TabBarView(
                   controller: _tabController,
                   children: [
-                    _StaffList(staff: _filteredStaff(null), onToggle: _toggleStatus, onDelete: _deactivateStaff, onReassign: _reassignBranch, onRefresh: _load),
-                    _StaffList(staff: _filteredStaff('manager'), onToggle: _toggleStatus, onDelete: _deactivateStaff, onReassign: _reassignBranch, onRefresh: _load),
-                    _StaffList(staff: _filteredStaff('agent'), onToggle: _toggleStatus, onDelete: _deactivateStaff, onReassign: _reassignBranch, onRefresh: _load),
-                    _StaffList(staff: _filteredStaff('auditor'), onToggle: _toggleStatus, onDelete: _deactivateStaff, onReassign: _reassignBranch, onRefresh: _load),
+                    _StaffList(staff: _filteredStaff(null), onToggle: _toggleStatus, onDelete: _deactivateStaff, onReassign: _reassignBranch, onRefresh: _load, isReadOnly: isReadOnly),
+                    _StaffList(staff: _filteredStaff('manager'), onToggle: _toggleStatus, onDelete: _deactivateStaff, onReassign: _reassignBranch, onRefresh: _load, isReadOnly: isReadOnly),
+                    _StaffList(staff: _filteredStaff('agent'), onToggle: _toggleStatus, onDelete: _deactivateStaff, onReassign: _reassignBranch, onRefresh: _load, isReadOnly: isReadOnly),
+                    _StaffList(staff: _filteredStaff('auditor'), onToggle: _toggleStatus, onDelete: _deactivateStaff, onReassign: _reassignBranch, onRefresh: _load, isReadOnly: isReadOnly),
                   ],
                 ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showAddStaffSheet,
-        icon: const Icon(Icons.person_add),
-        label: const Text('Add Staff'),
-        backgroundColor: AppTheme.primaryColor,
-      ),
+      floatingActionButton: isReadOnly
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: _showAddStaffSheet,
+              icon: const Icon(Icons.person_add),
+              label: const Text('Add Staff'),
+              backgroundColor: AppTheme.primaryColor,
+            ),
     );
   }
 
@@ -226,8 +237,9 @@ class _StaffList extends StatelessWidget {
   final void Function(Map<String, dynamic>) onDelete;
   final void Function(Map<String, dynamic>) onReassign;
   final Future<void> Function() onRefresh;
+  final bool isReadOnly;
 
-  const _StaffList({required this.staff, required this.onToggle, required this.onDelete, required this.onReassign, required this.onRefresh});
+  const _StaffList({required this.staff, required this.onToggle, required this.onDelete, required this.onReassign, required this.onRefresh, this.isReadOnly = false});
 
   @override
   Widget build(BuildContext context) {
@@ -277,35 +289,37 @@ class _StaffList extends StatelessWidget {
                 ],
               ),
               isThreeLine: true,
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  StatusBadge(status: u['status'] ?? ''),
-                  const SizedBox(width: 4),
-                  PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert, size: 20),
-                    onSelected: (value) {
-                      if (value == "toggle") onToggle(u);
-                      if (value == "delete") onDelete(u);
-                      if (value == "reassign") onReassign(u);
-                    },
-                    itemBuilder: (_) => [
-                      PopupMenuItem(
-                        value: "toggle",
-                        child: Text(isActive ? "Suspend" : "Activate"),
-                      ),
-                      PopupMenuItem(
-                        value: "delete",
-                        child: Text("Delete", style: TextStyle(color: AppTheme.errorColor)),
-                      ),
-                      PopupMenuItem(
-                        value: "reassign",
-                        child: Text("Reassign Branch"),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+              trailing: isReadOnly
+                  ? StatusBadge(status: u['status'] ?? '')
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        StatusBadge(status: u['status'] ?? ''),
+                        const SizedBox(width: 4),
+                        PopupMenuButton<String>(
+                          icon: const Icon(Icons.more_vert, size: 20),
+                          onSelected: (value) {
+                            if (value == "toggle") onToggle(u);
+                            if (value == "delete") onDelete(u);
+                            if (value == "reassign") onReassign(u);
+                          },
+                          itemBuilder: (_) => [
+                            PopupMenuItem(
+                              value: "toggle",
+                              child: Text(isActive ? "Suspend" : "Activate"),
+                            ),
+                            PopupMenuItem(
+                              value: "delete",
+                              child: Text("Delete", style: TextStyle(color: AppTheme.errorColor)),
+                            ),
+                            PopupMenuItem(
+                              value: "reassign",
+                              child: Text("Reassign Branch"),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
             ),
           );
         },
