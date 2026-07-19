@@ -1,6 +1,7 @@
 const Anthropic = require("@anthropic-ai/sdk");
 const { query, withTransaction } = require("../config/database");
 const { logger } = require("../utils/logger");
+const { uploadAudio } = require("../config/cloudinary");
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -23,20 +24,39 @@ async function detectAdvertisement(content) {
   }
 }
 
+// Posts can be text, a voice note, or both - never neither. Voice-only
+// posts (no text at all) deliberately skip the AI ad-detection check
+// below: there is no transcription pipeline to run that check against,
+// so a voice-only post publishes immediately as 'active' regardless of
+// its actual content. This is a known, explicit tradeoff made when
+// voice notes were added (see migration 009/010), not an oversight -
+// audio moderation would require a separate transcription step that
+// doesn't exist yet.
 exports.createPost = async (req, res) => {
   const { content } = req.body;
   const trimmed = (content || "").trim();
-  if (!trimmed) {
-    return res.status(422).json({ success: false, message: "Post content is required" });
+  const audioFile = req.file;
+
+  if (!trimmed && !audioFile) {
+    return res.status(422).json({ success: false, message: "Post content or a voice note is required" });
   }
 
   try {
-    const isAd = await detectAdvertisement(trimmed);
+    let audioUrl = null;
+    if (audioFile) {
+      const filename = `${req.user.id}_${Date.now()}`;
+      audioUrl = await uploadAudio(audioFile.buffer, filename);
+    }
+
+    let isAd = false;
+    if (trimmed) {
+      isAd = await detectAdvertisement(trimmed);
+    }
     const status = isAd ? "pending_review" : "active";
 
     const result = await query(
-      "INSERT INTO agent_posts (author_id, content, status, flagged_reason) VALUES ($1, $2, $3, $4) RETURNING *",
-      [req.user.id, trimmed, status, isAd ? "AI flagged as advertisement" : null]
+      "INSERT INTO agent_posts (author_id, content, audio_url, status, flagged_reason) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+      [req.user.id, trimmed || null, audioUrl, status, isAd ? "AI flagged as advertisement" : null]
     );
 
     res.status(201).json({
@@ -101,6 +121,10 @@ exports.toggleLike = async (req, res) => {
   }
 };
 
+// Returns a flat list ordered oldest-first, with parent_comment_id
+// (NULL for a top-level comment) included via c.* - the frontend
+// builds the reply tree from this flat list rather than the backend
+// nesting it, keeping this endpoint simple and the shape stable.
 exports.listComments = async (req, res) => {
   const { post_id } = req.params;
   try {
@@ -119,17 +143,35 @@ exports.listComments = async (req, res) => {
   }
 };
 
+// parent_comment_id is optional - present means this is a reply.
+// Deliberately only one level of threading is enforced here: if the
+// referenced parent comment is itself a reply (has its own
+// parent_comment_id), this still attaches the new comment directly to
+// it rather than rejecting - the frontend is expected to flatten
+// display to one reply level, matching most social apps' UX, but nothing
+// here prevents deeper nesting at the data level.
 exports.addComment = async (req, res) => {
   const { post_id } = req.params;
-  const { content } = req.body;
+  const { content, parent_comment_id } = req.body;
   const trimmed = (content || "").trim();
   if (!trimmed) {
     return res.status(422).json({ success: false, message: "Comment content is required" });
   }
+
   try {
+    if (parent_comment_id) {
+      const parent = await query(
+        "SELECT id FROM agent_post_comments WHERE id = $1 AND post_id = $2",
+        [parent_comment_id, post_id]
+      );
+      if (parent.rows.length === 0) {
+        return res.status(422).json({ success: false, message: "Invalid parent comment for this post" });
+      }
+    }
+
     const result = await query(
-      "INSERT INTO agent_post_comments (post_id, author_id, content) VALUES ($1, $2, $3) RETURNING *",
-      [post_id, req.user.id, trimmed]
+      "INSERT INTO agent_post_comments (post_id, author_id, content, parent_comment_id) VALUES ($1, $2, $3, $4) RETURNING *",
+      [post_id, req.user.id, trimmed, parent_comment_id || null]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
   } catch (error) {

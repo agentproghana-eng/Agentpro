@@ -68,4 +68,27 @@ async function uploadPDF(buffer, filename) {
   });
 }
 
-module.exports = { cloudinary, uploadFile, deleteFile, uploadPDF };
+
+/**
+ * Upload an audio buffer (for voice note posts in the Community Hub).
+ * Mirrors uploadPDF's proven upload_stream pattern above - Cloudinary
+ * handles audio under resource_type 'video', not 'auto' or 'raw'.
+ */
+async function uploadAudio(buffer, filename) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder: 'agentpro/voice_notes',
+        resource_type: 'video',
+        public_id: filename,
+      },
+      (error, result) => {
+        if (error) reject(error);
+        else resolve(result.secure_url);
+      }
+    );
+    stream.end(buffer);
+  });
+}
+
+module.exports = { cloudinary, uploadFile, deleteFile, uploadPDF, uploadAudio };
