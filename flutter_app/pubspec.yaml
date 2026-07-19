@@ -87,6 +87,10 @@ dependencies:
   # Notifications
   flutter_local_notifications: ^17.1.2
 
+  # Voice notes (Community Hub) - unverified without a live 'flutter pub get', see chat for details
+  record: ^5.1.2
+  audioplayers: ^6.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
