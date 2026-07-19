@@ -11,6 +11,7 @@ import '../../features/dashboard/owner_dashboard.dart';
 import '../../features/transactions/transaction_screen.dart';
 import '../../features/transactions/transaction_progress_screen.dart';
 import '../../features/transactions/transaction_detail_screen.dart';
+import '../../features/transactions/transaction_history_screen.dart';
 import '../../features/sync/sync_queue_screen.dart';
 import '../../features/float/float_screen.dart';
 import '../../features/float/float_overview_screen.dart';
@@ -81,6 +82,7 @@ class AppRouter {
             return TransactionProgressScreen(data: extra);
           },
         ),
+        GoRoute(path: '/transactions/history', builder: (_, __) => const TransactionHistoryScreen()),
         GoRoute(
           path: '/transactions/:id',
           builder: (_, state) => TransactionDetailScreen(transactionId: state.pathParameters['id']!),
