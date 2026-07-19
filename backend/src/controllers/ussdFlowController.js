@@ -270,3 +270,58 @@ exports.deleteFlow = async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to delete USSD flow' });
   }
 };
+
+// ── Resolve the active flow for a provider/transaction_type ──────
+// Called by an agent's device at transaction time (not the builder UI)
+// to find out how to automate a USSD dial for anything not already
+// hardcoded (MTN/Telecel). Precedence: the calling user's own company's
+// flow wins if one exists; otherwise falls back to the global flow;
+// otherwise 404 (nothing configured, caller should fall back to
+// whatever non-automated path it already has).
+exports.resolveFlow = async (req, res) => {
+  const { provider, transaction_type } = req.query;
+
+  if (!provider || !transaction_type) {
+    return res.status(422).json({ success: false, message: 'provider and transaction_type are required' });
+  }
+
+  try {
+    let flow = null;
+
+    if (req.user.company_id) {
+      const companyResult = await query(
+        `SELECT * FROM ussd_flows
+         WHERE company_id = $1 AND provider = $2 AND transaction_type = $3 AND is_active = true`,
+        [req.user.company_id, provider, transaction_type]
+      );
+      if (companyResult.rows.length > 0) {
+        flow = companyResult.rows[0];
+      }
+    }
+
+    if (!flow) {
+      const globalResult = await query(
+        `SELECT * FROM ussd_flows
+         WHERE company_id IS NULL AND provider = $1 AND transaction_type = $2 AND is_active = true`,
+        [provider, transaction_type]
+      );
+      if (globalResult.rows.length > 0) {
+        flow = globalResult.rows[0];
+      }
+    }
+
+    if (!flow) {
+      return res.status(404).json({ success: false, message: 'No USSD flow configured for this provider and transaction type' });
+    }
+
+    const stepsResult = await query(
+      'SELECT match_all, action, action_value FROM ussd_flow_steps WHERE flow_id = $1 ORDER BY step_order',
+      [flow.id]
+    );
+
+    res.json({ success: true, data: { ...flow, steps: stepsResult.rows } });
+  } catch (error) {
+    logger.error('Resolve USSD flow error:', error);
+    res.status(500).json({ success: false, message: 'Failed to resolve USSD flow' });
+  }
+};
