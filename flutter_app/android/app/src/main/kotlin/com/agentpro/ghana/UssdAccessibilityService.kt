@@ -226,7 +226,7 @@ class UssdAccessibilityService : AccessibilityService() {
         // (pendingSuccessMarkers/pendingFailureMarkers are null for
         // them). Generic flows use the markers configured on their own
         // ussd_flows row.
-        val successMarkers = pendingSuccessMarkers ?: listOf("cash in successful", "transaction successful", "successful", "received")
+        val successMarkers = pendingSuccessMarkers ?: listOf("receive cash in", "cash in successful", "transaction successful", "successful", "received")
         val failureMarkers = pendingFailureMarkers ?: listOf("failed", "insufficient", "invalid", "error", "not found", "connection problem")
         val isSuccess = successMarkers.any { screenText.contains(it) }
         val isFailure = failureMarkers.any { screenText.contains(it) }
