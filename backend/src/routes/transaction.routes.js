@@ -28,7 +28,7 @@ router.post('/', [
     'bill_payment', 'airtime', 'data_bundle', 'balance_enquiry',
     'mini_statement', 'reversal'
   ]).withMessage('Invalid transaction type'),
-  body('amount').isFloat({ min: 1 }).withMessage('Amount must be a positive number'),
+  body('amount').isFloat({ min: 0.01 }).withMessage('Amount must be a positive number'),
 ],
   handleValidation,
   authorize('agent', 'business_owner', 'manager'),
