@@ -136,7 +136,7 @@ class UssdAccessibilityService : AccessibilityService() {
 
     interface UssdAccessibilityListener {
         fun onPinPromptReached()
-        fun onResult(success: Boolean, message: String)
+        fun onResult(outcome: String, message: String)
     }
 
     override fun onServiceConnected() {
@@ -226,13 +226,30 @@ class UssdAccessibilityService : AccessibilityService() {
         // (pendingSuccessMarkers/pendingFailureMarkers are null for
         // them). Generic flows use the markers configured on their own
         // ussd_flows row.
+        //
+        // "Connection problem or invalid MMI code" is Android's own
+        // generic USSD wrapper text - confirmed via live device testing
+        // to appear identically in TWO different real situations that
+        // must be told apart:
+        //   - preceded by "MMI complete." -> the USSD session actually
+        //     finished end-to-end (Android's own MMI transaction
+        //     completed), even though the trailing text is misleadingly
+        //     worded - this is a genuine SUCCESS.
+        //   - with no "MMI complete." anywhere on screen -> the session
+        //     was aborted before ever completing - a genuine FAILURE.
+        // What actually distinguishes the two is the presence of "MMI
+        // complete.", not the "connection problem" text itself, which
+        // is identical either way.
         val successMarkers = pendingSuccessMarkers ?: listOf("receive cash in", "cash in successful", "transaction successful", "successful", "received")
-        val failureMarkers = pendingFailureMarkers ?: listOf("failed", "insufficient", "invalid", "error", "not found", "connection problem")
-        val isSuccess = successMarkers.any { screenText.contains(it) }
-        val isFailure = failureMarkers.any { screenText.contains(it) }
+        val failureMarkers = pendingFailureMarkers ?: listOf("failed", "insufficient", "not found", "error")
+        val hasConnectionProblemText = screenText.contains("connection problem") || screenText.contains("invalid mmi code")
+        val hasMmiComplete = screenText.contains("mmi complete")
+
+        val isSuccess = successMarkers.any { screenText.contains(it) } || (hasConnectionProblemText && hasMmiComplete)
+        val isFailure = failureMarkers.any { screenText.contains(it) } || (hasConnectionProblemText && !hasMmiComplete)
 
         if (isSuccess || isFailure) {
-            listener?.onResult(isSuccess, screenText)
+            listener?.onResult(if (isSuccess) "success" else "failure", screenText)
             endSession()
         }
     }

@@ -148,9 +148,9 @@ class UssdAccessibilityChannel(
         channel.invokeMethod("onPinPromptReached", null)
     }
 
-    override fun onResult(success: Boolean, message: String) {
+    override fun onResult(outcome: String, message: String) {
         val args = HashMap<String, Any>()
-        args["success"] = success
+        args["outcome"] = outcome
         args["message"] = message
         channel.invokeMethod("onResult", args)
     }

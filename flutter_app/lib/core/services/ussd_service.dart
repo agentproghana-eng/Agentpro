@@ -415,7 +415,8 @@ class UssdAccessibilityEngine {
         break;
       case "onResult":
         final args = call.arguments as Map;
-        final success = args["success"] as bool? ?? false;
+        final outcome = args["outcome"] as String? ?? "failure";
+        final success = outcome == "success";
         final message = args["message"] as String? ?? "";
         _resultCompleter?.complete(USSDResult(
           outcome: success ? USSDStatus.success : USSDStatus.failed,
