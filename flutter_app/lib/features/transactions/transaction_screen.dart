@@ -20,12 +20,10 @@ class TransactionScreen extends StatefulWidget {
 class _TransactionScreenState extends State<TransactionScreen> {
   final _formKey = GlobalKey<FormState>();
   final _customerPhoneCtrl = TextEditingController();
-  final _customerNameCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
   final _recipientPhoneCtrl = TextEditingController();
   final _billerCodeCtrl = TextEditingController();
   final _accountNumberCtrl = TextEditingController();
-  final _notesCtrl = TextEditingController();
   final _feeCtrl = TextEditingController();
 
   String _selectedProvider = 'mtn';  // overridden in initState if initialProvider is passed
@@ -91,12 +89,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
         "transaction_type": widget.transactionType,
         "amount": double.tryParse(_amountCtrl.text.replaceAll(",", "")) ?? 0,
         "customer_phone": _customerPhoneCtrl.text.trim(),
-        "customer_name": _customerNameCtrl.text.trim(),
+        "customer_name": "",
         "recipient_phone": _recipientPhoneCtrl.text.trim(),
         "biller_code": _billerCodeCtrl.text.trim(),
         "account_number": _accountNumberCtrl.text.trim(),
         "fee": _isSendMoney ? (double.tryParse(_feeCtrl.text.replaceAll(",", "")) ?? 0) : 0,
-        "notes": _notesCtrl.text.trim(),
+        "notes": "",
       };
 
       if (!mounted) return;
@@ -111,7 +109,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         "transaction_type": widget.transactionType,
         "amount": _amountCtrl.text,
         "customer_phone": _customerPhoneCtrl.text.trim(),
-        "customer_name": _customerNameCtrl.text.trim(),
+        "customer_name": "",
         "request_fields": requestFields,
       });
       if (mounted) setState(() => _loading = false);
@@ -124,12 +122,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'transaction_type': widget.transactionType,
         'amount': double.tryParse(_amountCtrl.text.replaceAll(',', '')) ?? 0,
         'customer_phone': _customerPhoneCtrl.text.trim(),
-        'customer_name': _customerNameCtrl.text.trim(),
+        'customer_name': '',
         'recipient_phone': _recipientPhoneCtrl.text.trim(),
         'biller_code': _billerCodeCtrl.text.trim(),
         'account_number': _accountNumberCtrl.text.trim(),
         'fee': _isSendMoney ? (double.tryParse(_feeCtrl.text.replaceAll(',', '')) ?? 0) : 0,
-        'notes': _notesCtrl.text.trim(),
+        'notes': '',
       });
 
       final template = res.data["data"]["ussd_template"] as Map<String, dynamic>?;
@@ -144,7 +142,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'transaction_type': widget.transactionType,
         'amount': _amountCtrl.text,
         'customer_phone': _customerPhoneCtrl.text.trim(),
-        'customer_name': _customerNameCtrl.text.trim(),
+        'customer_name': '',
       });
     } on DioException catch (e) {
       final msg = e.response?.data?['message'] ?? 'Failed to initiate transaction';
@@ -168,7 +166,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         "provider": _selectedProvider,
         "amount": amount,
         "reference": _customerPhoneCtrl.text.trim(),
-        "notes": "Manual Cash Out - ${_customerNameCtrl.text.trim()}",
+        "notes": "Manual Cash Out",
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -245,12 +243,6 @@ class _TransactionScreenState extends State<TransactionScreen> {
                   keyboardType: TextInputType.phone,
                   prefixIcon: Icons.phone_outlined,
                   validator: (v) => v!.isEmpty ? 'Customer phone is required' : null,
-                ),
-                const SizedBox(height: 14),
-                AppTextField(
-                  controller: _customerNameCtrl,
-                  label: 'Customer Name (optional)',
-                  prefixIcon: Icons.person_outline,
                 ),
                 const SizedBox(height: 14),
               ],
@@ -342,15 +334,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 const SizedBox(height: 14),
               ],
 
-              // Notes
-              AppTextField(
-                controller: _notesCtrl,
-                label: 'Notes (optional)',
-                prefixIcon: Icons.note_outlined,
-                maxLines: 2,
-              ),
-
-              const SizedBox(height: 24),
+              const SizedBox(height: 10),
 
               // Security/info notice - content depends on whether this is
               // a real USSD dial (PIN entered on the network's own screen)
@@ -417,8 +401,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
   @override
   void dispose() {
-    for (final c in [_customerPhoneCtrl, _customerNameCtrl, _amountCtrl,
-        _recipientPhoneCtrl, _billerCodeCtrl, _accountNumberCtrl, _notesCtrl, _feeCtrl]) {
+    for (final c in [_customerPhoneCtrl, _amountCtrl,
+        _recipientPhoneCtrl, _billerCodeCtrl, _accountNumberCtrl, _feeCtrl]) {
       c.dispose();
     }
     super.dispose();
