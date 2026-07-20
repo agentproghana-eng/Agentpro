@@ -87,6 +87,10 @@ dependencies:
   # Notifications
   flutter_local_notifications: ^17.1.2
 
+  # Offline PIN unlock - hashing (already resolves cleanly as a
+  # transitive dependency; promoted to direct since we now import it)
+  crypto: ^3.0.3
+
   # Voice notes (Community Hub) - unverified without a live 'flutter pub get', see chat for details
   record: ^6.0.0
   audioplayers: ^6.1.0

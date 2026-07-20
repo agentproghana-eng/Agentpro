@@ -11,6 +11,8 @@ import '../../core/services/offline_queue_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
 
+const int _kPinLength = 4;
+
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
   @override
@@ -21,6 +23,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _biometricEnabled = false;
   bool _canBiometric = false;
   String _biometricLabel = 'Biometrics';
+  bool _pinEnabled = false;
 
   @override
   void initState() {
@@ -32,11 +35,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final availability = await BiometricService.checkAvailability();
     final enabled = await BiometricService.isBiometricEnabled();
     final label = await BiometricService.getBiometricLabel();
+    final pinSet = await StorageService.hasPinSet();
     if (mounted) {
       setState(() {
         _canBiometric = availability == BiometricAvailability.available;
         _biometricEnabled = enabled;
         _biometricLabel = label;
+        _pinEnabled = pinSet;
       });
     }
   }
@@ -57,15 +62,82 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // Revoking any lingering refresh token this device may have
       // relied on for silent biometric re-entry - disabling
       // biometric means this device should no longer have
-      // standing access.
-      try {
-        final refreshToken = await StorageService.getRefreshToken();
-        if (refreshToken != null) {
-          await ApiClient.instance.post("/auth/logout", data: {"refresh_token": refreshToken});
-        }
-      } catch (_) {}
+      // standing access. Skipped if a PIN is still enabled, since
+      // that also depends on the same refresh token surviving.
+      if (!_pinEnabled) {
+        try {
+          final refreshToken = await StorageService.getRefreshToken();
+          if (refreshToken != null) {
+            await ApiClient.instance.post("/auth/logout", data: {"refresh_token": refreshToken});
+          }
+        } catch (_) {}
+      }
     }
     if (mounted) setState(() => _biometricEnabled = value);
+  }
+
+  Future<void> _togglePin(bool value) async {
+    if (value) {
+      final first = await _showPinEntryDialog('Choose a 4-digit PIN');
+      if (first == null || !mounted) return;
+      final confirm = await _showPinEntryDialog('Confirm your PIN');
+      if (confirm == null || !mounted) return;
+
+      if (first != confirm) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("PINs didn't match — try again")));
+        return;
+      }
+      context.read<AuthBloc>().add(AuthSetPinEvent(first));
+    } else {
+      context.read<AuthBloc>().add(AuthClearPinEvent());
+      // Same reasoning as biometric above - if biometric is also off,
+      // this device should no longer have standing offline access.
+      if (!_biometricEnabled) {
+        try {
+          final refreshToken = await StorageService.getRefreshToken();
+          if (refreshToken != null) {
+            await ApiClient.instance.post("/auth/logout", data: {"refresh_token": refreshToken});
+          }
+        } catch (_) {}
+      }
+    }
+    if (mounted) setState(() => _pinEnabled = value);
+  }
+
+  Future<String?> _showPinEntryDialog(String title) {
+    String digits = '';
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text(title),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            _SettingsPinDots(filled: digits.length),
+            const SizedBox(height: 20),
+            _SettingsNumericKeypad(
+              onDigit: (d) {
+                if (digits.length >= _kPinLength) return;
+                digits += d;
+                setDialogState(() {});
+                if (digits.length == _kPinLength) {
+                  Navigator.pop(ctx, digits);
+                }
+              },
+              onBackspace: () {
+                if (digits.isEmpty) return;
+                digits = digits.substring(0, digits.length - 1);
+                setDialogState(() {});
+              },
+            ),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('Cancel')),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -108,6 +180,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onChanged: _toggleBiometric,
             activeColor: AppTheme.primaryColor,
           ),
+
+        SwitchListTile(
+          secondary: const Icon(Icons.lock_outline, color: AppTheme.primaryColor),
+          title: const Text('PIN Login'),
+          subtitle: const Text('Sign in instantly with a 4-digit PIN, even offline\n(Never used for your Mobile Money PIN)'),
+          value: _pinEnabled,
+          onChanged: _togglePin,
+          activeColor: AppTheme.primaryColor,
+        ),
 
         ListTile(
           leading: const Icon(Icons.lock_reset, color: AppTheme.primaryColor),
@@ -190,6 +271,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
+class _SettingsPinDots extends StatelessWidget {
+  final int filled;
+  const _SettingsPinDots({required this.filled});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(_kPinLength, (i) {
+        final isFilled = i < filled;
+        return Container(
+          width: 16, height: 16,
+          margin: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isFilled ? AppTheme.primaryColor : Colors.transparent,
+            border: Border.all(color: AppTheme.primaryColor, width: 2),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+class _SettingsNumericKeypad extends StatelessWidget {
+  final void Function(String) onDigit;
+  final VoidCallback onBackspace;
+  const _SettingsNumericKeypad({required this.onDigit, required this.onBackspace});
+
+  Widget _key(String label, {VoidCallback? onTap, Widget? child}) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(40),
+        child: Container(
+          margin: const EdgeInsets.all(6),
+          height: 56,
+          alignment: Alignment.center,
+          child: child ?? Text(label, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(children: [
+      Row(children: ['1', '2', '3'].map((d) => _key(d, onTap: () => onDigit(d))).toList()),
+      Row(children: ['4', '5', '6'].map((d) => _key(d, onTap: () => onDigit(d))).toList()),
+      Row(children: ['7', '8', '9'].map((d) => _key(d, onTap: () => onDigit(d))).toList()),
+      Row(children: [
+        _key('', onTap: null),
+        _key('0', onTap: () => onDigit('0')),
+        _key('', onTap: onBackspace, child: const Icon(Icons.backspace_outlined, size: 20)),
+      ]),
+    ]);
+  }
+}
+
 // ── Change Password Sheet ──────────────────────────────────────
 
 class _ChangePasswordSheet extends StatefulWidget {
@@ -248,7 +388,7 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text('Change Password',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             _PasswordField(
               controller: _currentCtrl,
