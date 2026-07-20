@@ -154,4 +154,13 @@ class UssdAccessibilityChannel(
         args["message"] = message
         channel.invokeMethod("onResult", args)
     }
+
+    // TEMPORARY DIAGNOSTIC - remove once we understand why some
+    // OEM-styled MTN dialogs aren't being recognized.
+    override fun onDebugScreenText(text: String, sessionActive: Boolean) {
+        val args = HashMap<String, Any>()
+        args["text"] = text
+        args["sessionActive"] = sessionActive
+        channel.invokeMethod("onDebugScreenText", args)
+    }
 }

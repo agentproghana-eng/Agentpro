@@ -413,6 +413,20 @@ class UssdAccessibilityEngine {
           message: "Enter your Mobile Money PIN on the dialer screen to continue.",
         ));
         break;
+      case "onDebugScreenText":
+        // TEMPORARY DIAGNOSTIC - remove once we understand why some
+        // OEM-styled MTN dialogs aren't being recognized. Surfaces the
+        // raw screen text the accessibility service is actually seeing,
+        // plus whether the session is still considered active, right
+        // on the Processing screen.
+        final debugArgs = call.arguments as Map;
+        final debugText = debugArgs["text"] as String? ?? "";
+        final debugActive = debugArgs["sessionActive"] as bool? ?? false;
+        _progressController.add(USSDProgress(
+          status: USSDStatus.processing,
+          message: "[DEBUG active=$debugActive] $debugText",
+        ));
+        break;
       case "onResult":
         final args = call.arguments as Map;
         final outcome = args["outcome"] as String? ?? "failure";
