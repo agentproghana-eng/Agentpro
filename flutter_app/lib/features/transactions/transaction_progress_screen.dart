@@ -115,7 +115,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
   // (money already moved peer-to-peer to the agent's SIM), never a
   // USSD dial at all.
   final transactionType = widget.data["transaction_type"] as String?;
-  final isMtnAccessibilityFlow = provider == "mtn" && (transactionType == "cash_in" || transactionType == "cash_out");
+  final isMtnAccessibilityFlow = provider == "mtn" && (transactionType == "cash_in" || transactionType == "cash_out" || transactionType == "send_money");
   final isTelecelDepositFlow = provider == "telecel" && transactionType == "cash_in";
 
   if (isMtnAccessibilityFlow || isTelecelDepositFlow) {
@@ -207,6 +207,18 @@ Future<void> _startAccessibilityAutomation(
   List<String>? successMarkers,
   List<String>? failureMarkers,
 }) async {
+  // MTN Send Money uses the exact same Cash In USSD menu action as
+  // Cash In itself (confirmed via live device testing - same menu
+  // digit "3", same prompts, same receipt wording). The native layer
+  // only knows cash_in/cash_out branches, so translate at this
+  // boundary rather than teaching Kotlin a third transaction type it
+  // would handle identically anyway. The one real difference is WHICH
+  // phone number gets credited - the recipient's, not the customer's.
+  final nativeTransactionType = (provider == "mtn" && transactionType == "send_money") ? "cash_in" : transactionType;
+  final phoneForAutomation = (transactionType == "send_money")
+      ? (automationParams["recipient_phone"] ?? "")
+      : (automationParams["customer_phone"] ?? "");
+
   final accessEngine = UssdAccessibilityEngine();
 
   final enabled = await accessEngine.isServiceEnabled();
@@ -233,9 +245,9 @@ Future<void> _startAccessibilityAutomation(
   });
 
   final result = await accessEngine.execute(
-    customerPhone: automationParams["customer_phone"] ?? "",
+    customerPhone: phoneForAutomation,
     amount: automationParams["amount"] ?? "",
-    transactionType: transactionType,
+    transactionType: nativeTransactionType,
     provider: provider,
     operatorId: operatorId,
     dialCode: dialCode,
