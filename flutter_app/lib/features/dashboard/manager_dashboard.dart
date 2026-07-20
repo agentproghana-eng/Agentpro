@@ -55,7 +55,7 @@ class _ManagerMoreTab extends StatelessWidget {
       body: ListView(
         children: [
           const _MoreGroupLabel('MoMo'),
-          _Tile(Icons.receipt_long_outlined, 'Transactions', () => context.push('/transactions')),
+          _Tile(Icons.receipt_long_outlined, 'Transactions', () => context.push('/transactions/history')),
           _Tile(Icons.account_balance_wallet_outlined, 'Float Overview', () => context.push('/float-overview')),
           _Tile(Icons.bar_chart_outlined, 'Reports', () => context.push('/reports')),
           _Tile(Icons.wifi_tethering, 'USSD Automation', () => context.push('/ussd-settings'), isNew: true),

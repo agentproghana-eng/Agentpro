@@ -355,7 +355,7 @@ class _BranchesTab extends StatelessWidget {
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: OutlinedButton.icon(
-                                      onPressed: () => context.push('/transactions'),
+                                      onPressed: () => context.push('/transactions/history'),
                                       icon: const Icon(Icons.receipt_long, size: 16),
                                       label: const Text('Transactions'),
                                     ),
@@ -478,7 +478,7 @@ class _OwnerMoreTab extends StatelessWidget {
       body: ListView(
         children: [
           const _MoreGroupLabel('MoMo'),
-          _T(Icons.receipt_long_outlined, 'Transactions', () => context.push('/transactions')),
+          _T(Icons.receipt_long_outlined, 'Transactions', () => context.push('/transactions/history')),
           _T(Icons.account_balance_wallet_outlined, 'Float Balances', () => context.push('/my-balance')),
           _T(Icons.bar_chart_outlined, 'Reports', () => context.push('/reports')),
           _T(Icons.wifi_tethering, 'USSD Automation', () => context.push('/ussd-settings'), isNew: true),
