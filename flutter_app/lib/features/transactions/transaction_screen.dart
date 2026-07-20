@@ -22,8 +22,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
   final _customerPhoneCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
   final _recipientPhoneCtrl = TextEditingController();
-  final _billerCodeCtrl = TextEditingController();
-  final _accountNumberCtrl = TextEditingController();
+  final _referenceCtrl = TextEditingController();
   final _feeCtrl = TextEditingController();
 
   String _selectedProvider = 'mtn';  // overridden in initState if initialProvider is passed
@@ -35,6 +34,13 @@ class _TransactionScreenState extends State<TransactionScreen> {
     super.initState();
     if (widget.initialProvider != null) {
       _selectedProvider = widget.initialProvider!;
+    }
+    // Pay to Agent is confirmed MTN-only (mapped from MTN's own "Pay To"
+    // USSD menu) - force it regardless of whatever provider filter was
+    // active on Home when this tile was tapped, and hide the selector
+    // entirely so there's nothing misleading to choose from.
+    if (_needsReference) {
+      _selectedProvider = 'mtn';
     }
     _amountCtrl.addListener(() {
       if (!_isSendMoney || !_feeAutoCalculated) return;
@@ -48,9 +54,16 @@ class _TransactionScreenState extends State<TransactionScreen> {
       .map((w) => w[0].toUpperCase() + w.substring(1)).join(' ');
 
   bool get _needsRecipient => ['send_money'].contains(widget.transactionType);
-  bool get _needsBiller => ['bill_payment'].contains(widget.transactionType);
+  // Pay to Agent (MTN's "Pay To > Agent" menu option) - a number to pay
+  // plus a free-text reference, confirmed via live device mapping. No
+  // biller code or account number involved; this fully replaces what
+  // used to be a biller-code-style Bill Payment form. MTN-only.
+  bool get _needsReference => ['bill_payment'].contains(widget.transactionType);
   bool get _needsAmount => !['balance_enquiry', 'mini_statement'].contains(widget.transactionType);
-  bool get _needsCustomer => !['balance_enquiry', 'mini_statement'].contains(widget.transactionType);
+  // Send Money only needs the recipient's number - there's no separate
+  // walk-in customer involved, unlike Cash In/Cash Out/Pay to Agent,
+  // where the agent is entering a real person's phone in front of them.
+  bool get _needsCustomer => !['balance_enquiry', 'mini_statement', 'send_money'].contains(widget.transactionType);
   bool get _isSendMoney => widget.transactionType == 'send_money';
 
   // Telecel/AirtelTigo Cash Out: e-cash moves directly SIM-to-SIM,
@@ -91,8 +104,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
         "customer_phone": _customerPhoneCtrl.text.trim(),
         "customer_name": "",
         "recipient_phone": _recipientPhoneCtrl.text.trim(),
-        "biller_code": _billerCodeCtrl.text.trim(),
-        "account_number": _accountNumberCtrl.text.trim(),
+        "biller_code": "",
+        "account_number": "",
+        "payment_reference": _referenceCtrl.text.trim(),
         "fee": _isSendMoney ? (double.tryParse(_feeCtrl.text.replaceAll(",", "")) ?? 0) : 0,
         "notes": "",
       };
@@ -124,8 +138,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'customer_phone': _customerPhoneCtrl.text.trim(),
         'customer_name': '',
         'recipient_phone': _recipientPhoneCtrl.text.trim(),
-        'biller_code': _billerCodeCtrl.text.trim(),
-        'account_number': _accountNumberCtrl.text.trim(),
+        'biller_code': '',
+        'account_number': '',
+        'payment_reference': _referenceCtrl.text.trim(),
         'fee': _isSendMoney ? (double.tryParse(_feeCtrl.text.replaceAll(',', '')) ?? 0) : 0,
         'notes': '',
       });
@@ -193,56 +208,60 @@ class _TransactionScreenState extends State<TransactionScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Provider Selector
-              const Text('Select Network', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-              const SizedBox(height: 8),
-              Row(
-                children: ['mtn', 'telecel', 'at_money'].map((p) {
-                  final selected = _selectedProvider == p;
-                  final color = AppTheme.providerColor(p);
-                  final label = {'mtn': 'MTN MoMo', 'telecel': 'Telecel Cash', 'at_money': 'AT Money'}[p]!;
-                  return Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() => _selectedProvider = p),
-                      child: Container(
-                        margin: const EdgeInsets.only(right: 8),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          color: selected ? color : Colors.white,
-                          border: Border.all(color: selected ? color : Colors.grey[300]!),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Column(
-                          children: [
-                            Icon(Icons.phone_android,
-                              color: selected ? (p == 'mtn' ? Colors.black : Colors.white) : color,
-                              size: 20),
-                            const SizedBox(height: 4),
-                            Text(label,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 10, fontWeight: FontWeight.w600,
-                                color: selected ? (p == 'mtn' ? Colors.black : Colors.white) : Colors.grey[700],
-                              )),
-                          ],
+              // Provider Selector - hidden for Pay to Agent, which is
+              // confirmed MTN-only.
+              if (!_needsReference) ...[
+                const Text('Select Network', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                const SizedBox(height: 8),
+                Row(
+                  children: ['mtn', 'telecel', 'at_money'].map((p) {
+                    final selected = _selectedProvider == p;
+                    final color = AppTheme.providerColor(p);
+                    final label = {'mtn': 'MTN MoMo', 'telecel': 'Telecel Cash', 'at_money': 'AT Money'}[p]!;
+                    return Expanded(
+                      child: GestureDetector(
+                        onTap: () => setState(() => _selectedProvider = p),
+                        child: Container(
+                          margin: const EdgeInsets.only(right: 8),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: selected ? color : Colors.white,
+                            border: Border.all(color: selected ? color : Colors.grey[300]!),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Column(
+                            children: [
+                              Icon(Icons.phone_android,
+                                color: selected ? (p == 'mtn' ? Colors.black : Colors.white) : color,
+                                size: 20),
+                              const SizedBox(height: 4),
+                              Text(label,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 10, fontWeight: FontWeight.w600,
+                                  color: selected ? (p == 'mtn' ? Colors.black : Colors.white) : Colors.grey[700],
+                                )),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  );
-                }).toList(),
-              ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 20),
+              ],
 
-              const SizedBox(height: 20),
-
-              // Customer Phone
+              // Customer Phone - labeled "Enter Number" for Pay to Agent
+              // (no walk-in customer in that flow, just a number being
+              // paid), "Customer Phone Number" everywhere else.
               if (_needsCustomer) ...[
                 AppTextField(
                   controller: _customerPhoneCtrl,
-                  label: 'Customer Phone Number',
+                  label: _needsReference ? 'Enter Number' : 'Customer Phone Number',
                   hint: '024XXXXXXX',
                   keyboardType: TextInputType.phone,
                   prefixIcon: Icons.phone_outlined,
-                  validator: (v) => v!.isEmpty ? 'Customer phone is required' : null,
+                  validator: (v) => v!.isEmpty ? 'Phone number is required' : null,
                 ),
                 const SizedBox(height: 14),
               ],
@@ -260,20 +279,13 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 const SizedBox(height: 14),
               ],
 
-              // Biller (Bill Payment)
-              if (_needsBiller) ...[
+              // Reference (Pay to Agent)
+              if (_needsReference) ...[
                 AppTextField(
-                  controller: _billerCodeCtrl,
-                  label: 'Biller Code',
-                  prefixIcon: Icons.receipt_outlined,
-                  validator: (v) => v!.isEmpty ? 'Biller code is required' : null,
-                ),
-                const SizedBox(height: 14),
-                AppTextField(
-                  controller: _accountNumberCtrl,
-                  label: 'Account / Meter Number',
-                  keyboardType: TextInputType.number,
-                  prefixIcon: Icons.numbers_outlined,
+                  controller: _referenceCtrl,
+                  label: 'Reference',
+                  prefixIcon: Icons.notes_outlined,
+                  validator: (v) => v!.isEmpty ? 'Reference is required' : null,
                 ),
                 const SizedBox(height: 14),
               ],
@@ -402,7 +414,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
   @override
   void dispose() {
     for (final c in [_customerPhoneCtrl, _amountCtrl,
-        _recipientPhoneCtrl, _billerCodeCtrl, _accountNumberCtrl, _feeCtrl]) {
+        _recipientPhoneCtrl, _referenceCtrl, _feeCtrl]) {
       c.dispose();
     }
     super.dispose();
