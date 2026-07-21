@@ -14,7 +14,8 @@ SELECT 'mtn', 'airtime', '*171#',
   ARRAY['airtime payment made', 'successful'],
   ARRAY['failed', 'insufficient', 'error'],
   (SELECT id FROM users WHERE role = 'superuser' LIMIT 1)
-WHERE NOT EXISTS (SELECT 1 FROM ussd_flows WHERE provider='mtn' AND transaction_type='airtime' AND company_id IS NULL AND is_active = true);
+WHERE NOT EXISTS (SELECT 1 FROM ussd_flows WHERE provider='mtn' AND transaction_type='airtime' AND company_id IS NULL AND is_active = true)
+  AND EXISTS (SELECT 1 FROM users WHERE role = 'superuser');
 
 INSERT INTO ussd_flow_steps (flow_id, step_order, match_all, action, action_value)
 SELECT f.id, s.step_order, s.match_all, s.action::ussd_flow_action, s.action_value
@@ -38,7 +39,8 @@ SELECT 'mtn', 'data_bundle', '*171#',
   ARRAY['has been made successfully'],
   ARRAY['failed', 'insufficient', 'error'],
   (SELECT id FROM users WHERE role = 'superuser' LIMIT 1)
-WHERE NOT EXISTS (SELECT 1 FROM ussd_flows WHERE provider='mtn' AND transaction_type='data_bundle' AND company_id IS NULL AND is_active = true);
+WHERE NOT EXISTS (SELECT 1 FROM ussd_flows WHERE provider='mtn' AND transaction_type='data_bundle' AND company_id IS NULL AND is_active = true)
+  AND EXISTS (SELECT 1 FROM users WHERE role = 'superuser');
 
 INSERT INTO ussd_flow_steps (flow_id, step_order, match_all, action, action_value)
 SELECT f.id, s.step_order, s.match_all, s.action::ussd_flow_action, s.action_value
@@ -66,7 +68,8 @@ SELECT 'mtn', 'commission_balance', '*171#',
   ARRAY['current commission balance'],
   ARRAY['failed', 'error'],
   (SELECT id FROM users WHERE role = 'superuser' LIMIT 1)
-WHERE NOT EXISTS (SELECT 1 FROM ussd_flows WHERE provider='mtn' AND transaction_type='commission_balance' AND company_id IS NULL AND is_active = true);
+WHERE NOT EXISTS (SELECT 1 FROM ussd_flows WHERE provider='mtn' AND transaction_type='commission_balance' AND company_id IS NULL AND is_active = true)
+  AND EXISTS (SELECT 1 FROM users WHERE role = 'superuser');
 
 INSERT INTO ussd_flow_steps (flow_id, step_order, match_all, action, action_value)
 SELECT f.id, s.step_order, s.match_all, s.action::ussd_flow_action, s.action_value
@@ -87,7 +90,8 @@ SELECT 'mtn', 'cash_in_commission', '*171#',
   ARRAY['transaction summary will be sent'],
   ARRAY['failed', 'error'],
   (SELECT id FROM users WHERE role = 'superuser' LIMIT 1)
-WHERE NOT EXISTS (SELECT 1 FROM ussd_flows WHERE provider='mtn' AND transaction_type='cash_in_commission' AND company_id IS NULL AND is_active = true);
+WHERE NOT EXISTS (SELECT 1 FROM ussd_flows WHERE provider='mtn' AND transaction_type='cash_in_commission' AND company_id IS NULL AND is_active = true)
+  AND EXISTS (SELECT 1 FROM users WHERE role = 'superuser');
 
 INSERT INTO ussd_flow_steps (flow_id, step_order, match_all, action, action_value)
 SELECT f.id, s.step_order, s.match_all, s.action::ussd_flow_action, s.action_value
@@ -108,7 +112,8 @@ SELECT 'mtn', 'commission_transfer', '*171#',
   ARRAY['transfer of amount', 'was successful'],
   ARRAY['failed', 'error'],
   (SELECT id FROM users WHERE role = 'superuser' LIMIT 1)
-WHERE NOT EXISTS (SELECT 1 FROM ussd_flows WHERE provider='mtn' AND transaction_type='commission_transfer' AND company_id IS NULL AND is_active = true);
+WHERE NOT EXISTS (SELECT 1 FROM ussd_flows WHERE provider='mtn' AND transaction_type='commission_transfer' AND company_id IS NULL AND is_active = true)
+  AND EXISTS (SELECT 1 FROM users WHERE role = 'superuser');
 
 INSERT INTO ussd_flow_steps (flow_id, step_order, match_all, action, action_value)
 SELECT f.id, s.step_order, s.match_all, s.action::ussd_flow_action, s.action_value
