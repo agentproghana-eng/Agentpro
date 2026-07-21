@@ -29,7 +29,17 @@ router.post('/', [
     'bill_payment', 'airtime', 'data_bundle', 'balance_enquiry',
     'mini_statement', 'reversal'
   ]).withMessage('Invalid transaction type'),
-  body('amount').isFloat({ min: 0.01 }).withMessage('Amount must be a positive number'),
+  body('amount').custom((value, { req }) => {
+    // These four transaction types dial and get PIN-prompted with no
+    // amount ever entered by the agent, so the app never fills in
+    // this field - it stays at its default zero. The old flat
+    // isFloat({min: 0.01}) check rejected every one of them outright.
+    const noAmountTypes = ['balance_enquiry', 'mini_statement', 'commission_balance', 'cash_in_commission'];
+    if (noAmountTypes.includes(req.body.transaction_type)) return true;
+    const num = parseFloat(value);
+    if (isNaN(num) || num < 0.01) throw new Error('Amount must be a positive number');
+    return true;
+  }),
 ],
   handleValidation,
   authorize('agent', 'business_owner', 'manager'),
