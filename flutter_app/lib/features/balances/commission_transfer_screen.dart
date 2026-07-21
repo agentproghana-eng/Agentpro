@@ -38,6 +38,12 @@ class _CommissionTransferScreenState extends State<CommissionTransferScreen> {
     }
   }
 
+  // Actually dials the real MTN "My Wallet > Commissions > Transfer
+  // Commission to Wallet" USSD flow via the same accessibility
+  // automation pipeline every other transaction type uses - this used
+  // to just call /balances/commission-transfer directly, which only
+  // recorded a backend adjustment without ever touching the real
+  // network, despite the on-screen text claiming otherwise.
   Future<void> _submit() async {
     final amount = double.tryParse(_amountCtrl.text);
     if (amount == null || amount <= 0) {
@@ -50,13 +56,31 @@ class _CommissionTransferScreenState extends State<CommissionTransferScreen> {
     }
     setState(() { _submitting = true; _error = null; });
     try {
-      await ApiClient.instance.post("/balances/commission-transfer", data: {
-        "provider": widget.provider,
-        "amount": amount,
+      final res = await ApiClient.instance.post('/transactions', data: {
+        'provider': widget.provider,
+        'transaction_type': 'commission_transfer',
+        'amount': amount,
+        'customer_phone': '',
+        'customer_name': '',
+        'recipient_phone': '',
+        'biller_code': '',
+        'account_number': '',
+        'payment_reference': '',
+        'fee': 0,
+        'notes': '',
       });
-      if (mounted) context.pop();
+
+      if (!mounted) return;
+      context.push('/transactions/progress', extra: {
+        'transaction': res.data['data'],
+        'provider': widget.provider,
+        'transaction_type': 'commission_transfer',
+        'amount': _amountCtrl.text,
+        'customer_phone': '',
+        'customer_name': '',
+      });
     } catch (e) {
-      setState(() { _error = "Failed to transfer commission"; _submitting = false; });
+      setState(() { _error = "Failed to start commission transfer"; _submitting = false; });
     }
   }
 
@@ -89,7 +113,7 @@ class _CommissionTransferScreenState extends State<CommissionTransferScreen> {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(color: const Color(0xFFE6F4F1), borderRadius: BorderRadius.circular(10)),
                   child: const Text(
-                    "This uses your network's own USSD commission-transfer code. Since it's dialed through the app, the result is recorded automatically.",
+                    "This dials your network's own USSD commission-transfer code directly. You will enter your MoMo PIN only on the official network screen.",
                     style: TextStyle(fontSize: 11, color: AppTheme.primaryColor),
                   ),
                 ),

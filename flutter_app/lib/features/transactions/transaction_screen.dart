@@ -65,12 +65,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // Bill Payment form. MTN-only for both.
   bool get _needsReference => ['bill_payment', 'merchant_payment'].contains(widget.transactionType);
   bool get _needsMerchantId => widget.transactionType == 'merchant_payment';
-  bool get _needsAmount => !['balance_enquiry', 'mini_statement'].contains(widget.transactionType);
+  bool get _needsAmount => !['balance_enquiry', 'mini_statement', 'commission_balance', 'cash_in_commission'].contains(widget.transactionType);
   // Send Money only needs the recipient's number, and Pay to Merchant
   // only needs a Merchant ID - neither has a separate walk-in customer
   // phone field, unlike Cash In/Cash Out/Pay to Agent, where the agent
   // is entering a real person's phone in front of them.
-  bool get _needsCustomer => !['balance_enquiry', 'mini_statement', 'send_money', 'merchant_payment'].contains(widget.transactionType);
+  bool get _needsCustomer => !['balance_enquiry', 'mini_statement', 'send_money', 'merchant_payment', 'commission_balance', 'cash_in_commission'].contains(widget.transactionType);
   bool get _isSendMoney => widget.transactionType == 'send_money';
 
   // Telecel/AirtelTigo Cash Out: e-cash moves directly SIM-to-SIM,
