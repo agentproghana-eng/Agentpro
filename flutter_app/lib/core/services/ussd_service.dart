@@ -454,7 +454,7 @@ class UssdAccessibilityEngine {
   /// amount of time to type their PIN on the native dialog. The native
   /// side (UssdAccessibilityService) is the sole source of truth for
   /// when this session actually ends.
-  Future<USSDResult> execute({required String customerPhone, required String amount, required String transactionType, required String provider, String? operatorId, String? dialCode, List<Map<String, dynamic>>? steps, List<String>? successMarkers, List<String>? failureMarkers}) async {
+  Future<USSDResult> execute({required String customerPhone, required String amount, required String transactionType, required String provider, String? operatorId, String? reference, String? dialCode, List<Map<String, dynamic>>? steps, List<String>? successMarkers, List<String>? failureMarkers}) async {
     _resultCompleter = Completer<USSDResult>();
     _progressController.add(const USSDProgress(status: USSDStatus.dialing, message: "Dialing network..."));
 
@@ -465,6 +465,7 @@ class UssdAccessibilityEngine {
         "transaction_type": transactionType,
         "provider": provider,
         if (operatorId != null) "operator_id": operatorId,
+        if (reference != null) "reference": reference,
         if (dialCode != null) "dial_code": dialCode,
         if (steps != null) "steps": steps,
         if (successMarkers != null) "success_markers": successMarkers,

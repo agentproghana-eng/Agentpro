@@ -250,6 +250,7 @@ Future<void> _startAccessibilityAutomation(
     transactionType: nativeTransactionType,
     provider: provider,
     operatorId: operatorId,
+    reference: automationParams["payment_reference"],
     dialCode: dialCode,
     steps: steps,
     successMarkers: successMarkers,
