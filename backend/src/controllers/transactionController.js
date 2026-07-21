@@ -21,7 +21,9 @@ exports.initiateTransaction = async (req, res) => {
     biller_name,
     account_number,
       notes,
-      fee
+      fee,
+  payment_reference,
+  merchant_id,
   } = req.body;
 
   const agentId = req.user.id;
@@ -50,21 +52,36 @@ exports.initiateTransaction = async (req, res) => {
 
     const branch_id = branchLookup.rows[0].id;
 
-    // Fetch USSD template for this provider + transaction type
+    // Fetch USSD template for this provider + transaction type. The
+    // legacy single-dial ussd_templates table used to be the only
+    // source of truth here, but the newer Flow Builder
+    // (ussd_flows/ussd_flow_steps) system - resolved separately by
+    // Flutter via GET /ussd-flows/resolve after this call succeeds -
+    // is now an equally valid alternative automation path. This only
+    // needs to confirm *some* automation exists before letting the
+    // transaction be created; it doesn't need the flow's actual steps.
     const templateResult = await query(
       `SELECT * FROM ussd_templates
        WHERE provider = $1 AND transaction_type = $2 AND is_active = TRUE`,
       [provider, transaction_type]
     );
 
-    if (templateResult.rows.length === 0) {
+    const flowResult = await query(
+      `SELECT 1 FROM ussd_flows
+       WHERE provider = $1 AND transaction_type = $2 AND is_active = TRUE
+         AND (company_id = $3 OR company_id IS NULL)
+       LIMIT 1`,
+      [provider, transaction_type, companyId]
+    );
+
+    if (templateResult.rows.length === 0 && flowResult.rows.length === 0) {
       return res.status(400).json({
         success: false,
         message: `No USSD template found for ${provider} ${transaction_type}`
       });
     }
 
-    const template = templateResult.rows[0];
+    const template = templateResult.rows[0] || null;
     const reference = `APG-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
 
       // Transfer charge: only meaningful for send_money; the agent enters
@@ -79,14 +96,14 @@ exports.initiateTransaction = async (req, res) => {
         reference, agent_id, branch_id, company_id, provider,
         transaction_type, status, amount, customer_phone, customer_name,
         recipient_phone, recipient_name, biller_code, biller_name,
-        account_number, notes, fee
-      ) VALUES ($1, $2, $3, $4, $5, $6, 'initiated', $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        account_number, notes, fee, payment_reference, merchant_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, 'initiated', $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       RETURNING id, reference, status, created_at`,
       [
         reference, agentId, branch_id, companyId, provider,
         transaction_type, amount, customer_phone, customer_name,
         recipient_phone, recipient_name, biller_code, biller_name,
-        account_number, notes, feeValue
+        account_number, notes, feeValue, payment_reference || '', merchant_id || ''
       ]
     );
 
@@ -112,7 +129,7 @@ exports.initiateTransaction = async (req, res) => {
         transaction_id: transaction.id,
         reference: transaction.reference,
         status: transaction.status,
-        ussd_template: {
+        ussd_template: template ? {
           id: template.id,
           ussd_string_pattern: template.ussd_string_pattern,
           pin_prompt_strings: template.pin_prompt_strings,
@@ -120,14 +137,16 @@ exports.initiateTransaction = async (req, res) => {
           failure_strings: template.failure_strings,
           timeout_seconds: template.timeout_seconds,
           retry_count: template.retry_count
-        },
+        } : null,
         // Pre-filled values for USSD automation
         automation_params: {
           amount: amount.toString(),
           customer_phone: customer_phone || '',
           recipient_phone: recipient_phone || '',
           biller_code: biller_code || '',
-          account_number: account_number || ''
+          account_number: account_number || '',
+        payment_reference: payment_reference || '',
+        merchant_id: merchant_id || ''
         }
       }
     });
