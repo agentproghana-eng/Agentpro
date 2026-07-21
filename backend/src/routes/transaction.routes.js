@@ -25,6 +25,7 @@ router.post('/', [
   body('provider').isIn(['mtn', 'telecel', 'at_money']).withMessage('Invalid provider'),
   body('transaction_type').isIn([
     'cash_in', 'cash_out', 'send_money', 'merchant_payment',
+    'commission_balance', 'cash_in_commission', 'commission_transfer',
     'bill_payment', 'airtime', 'data_bundle', 'balance_enquiry',
     'mini_statement', 'reversal'
   ]).withMessage('Invalid transaction type'),
