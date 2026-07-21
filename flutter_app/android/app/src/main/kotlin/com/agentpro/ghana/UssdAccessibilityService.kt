@@ -71,6 +71,7 @@ class UssdAccessibilityService : AccessibilityService() {
         @Volatile var pendingTransactionType: String? = null
         @Volatile var pendingProvider: String? = null
         @Volatile var pendingOperatorId: String? = null
+        @Volatile var pendingReference: String? = null
         @Volatile var isSessionActive: Boolean = false
         @Volatile var reachedPinPrompt: Boolean = false
         @Volatile var confirmSent: Boolean = false
@@ -92,6 +93,7 @@ class UssdAccessibilityService : AccessibilityService() {
             transactionType: String,
             provider: String,
             operatorId: String? = null,
+            reference: String? = null,
             steps: List<FlowStep>? = null,
             successMarkers: List<String>? = null,
             failureMarkers: List<String>? = null
@@ -101,6 +103,7 @@ class UssdAccessibilityService : AccessibilityService() {
             pendingTransactionType = transactionType
             pendingProvider = provider
             pendingOperatorId = operatorId
+            pendingReference = reference
             pendingSteps = steps
             pendingSuccessMarkers = successMarkers
             pendingFailureMarkers = failureMarkers
@@ -118,6 +121,7 @@ class UssdAccessibilityService : AccessibilityService() {
             pendingTransactionType = null
             pendingProvider = null
             pendingOperatorId = null
+            pendingReference = null
             pendingSteps = null
             pendingSuccessMarkers = null
             pendingFailureMarkers = null
@@ -281,6 +285,7 @@ class UssdAccessibilityService : AccessibilityService() {
                     "send_customer_phone" -> pendingCustomerPhone?.let { respond(root, it) }
                     "send_amount" -> pendingAmount?.let { respond(root, it) }
                     "send_operator_id" -> pendingOperatorId?.let { respond(root, it) }
+                    "send_reference" -> pendingReference?.let { respond(root, it) }
                     "pin_prompt" -> {
                         reachedPinPrompt = true
                         listener?.onPinPromptReached()

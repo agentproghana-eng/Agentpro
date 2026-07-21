@@ -96,6 +96,7 @@ class UssdAccessibilityChannel(
         val transactionType = call.argument<String>("transaction_type")
         val provider = call.argument<String>("provider") ?: "mtn"
         val operatorId = call.argument<String>("operator_id")
+        val reference = call.argument<String>("reference")
         val explicitDialCode = call.argument<String>("dial_code")
         val steps = parseSteps(call)
         val successMarkers = call.argument<List<String>>("success_markers")
@@ -124,7 +125,7 @@ class UssdAccessibilityChannel(
         }
 
         UssdAccessibilityService.startSession(
-            customerPhone, amount, transactionType, provider, operatorId,
+            customerPhone, amount, transactionType, provider, operatorId, reference,
             steps, successMarkers, failureMarkers
         )
 
