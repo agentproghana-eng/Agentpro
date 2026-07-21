@@ -115,7 +115,7 @@ class _ProviderBalanceCard extends StatelessWidget {
         ]),
         const SizedBox(height: 8),
         Row(children: [
-          Expanded(child: _ActionChip(icon: Icons.swap_horiz, label: "Transfer Commission", route: "/balances/commission-transfer", provider: provider, onChanged: onChanged)),
+          Expanded(child: _ActionChip(icon: Icons.swap_horiz, label: "Transfer Commission to e-Float", route: "/balances/commission-transfer", provider: provider, onChanged: onChanged)),
         ]),
         const SizedBox(height: 24),
       ],

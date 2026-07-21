@@ -132,10 +132,12 @@ class _HomeTabState extends State<HomeTab> {
   // The remaining four still need their USSD menu paths mapped via
   // live-device testing before they can be built - shown here as muted
   // placeholders rather than navigating anywhere broken.
-  // Replaces the old direct "balance_enquiry" dial (a generic wallet
-  // balance check) with an explicit choice between the two MTN
-  // Commissions-menu balance checks confirmed via live device mapping:
-  // Commission Balance and Cash In Balance. Both are MTN-only.
+  // Three MTN Commissions-menu actions confirmed via live device
+  // mapping: two balance checks (Commission Balance, Cash In
+  // Balance) plus the actual Transfer Commission to e-Float dial -
+  // the same real USSD flow reachable from the My Balance screen,
+  // offered here too since it lives in the same MTN menu as the
+  // other two. All three are recorded as real transactions.
   Future<void> _showCommissionCheckPicker(BuildContext context) async {
     final choice = await showDialog<String>(
       context: context,
@@ -150,10 +152,17 @@ class _HomeTabState extends State<HomeTab> {
             onPressed: () => Navigator.pop(ctx, 'cash_in_commission'),
             child: const Text('Cash In Balance'),
           ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 'commission_transfer'),
+            child: const Text('Transfer Commission to e-Float'),
+          ),
         ],
       ),
     );
-    if (choice != null && context.mounted) {
+    if (choice == null || !context.mounted) return;
+    if (choice == 'commission_transfer') {
+      context.push('/balances/commission-transfer', extra: {'provider': 'mtn'});
+    } else {
       context.push('/transactions?type=$choice&provider=mtn');
     }
   }

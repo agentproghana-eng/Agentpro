@@ -87,7 +87,7 @@ class _CommissionTransferScreenState extends State<CommissionTransferScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Transfer Commission")),
+      appBar: AppBar(title: const Text("Transfer Commission to e-Float")),
       body: _loadingBalance
           ? const Center(child: CircularProgressIndicator())
           : Padding(
