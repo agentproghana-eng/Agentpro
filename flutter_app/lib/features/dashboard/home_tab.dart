@@ -136,11 +136,11 @@ class _HomeTabState extends State<HomeTab> {
   // balance check) with an explicit choice between the two MTN
   // Commissions-menu balance checks confirmed via live device mapping:
   // Commission Balance and Cash In Balance. Both are MTN-only.
-  Future<void> _showCheckBalancePicker(BuildContext context) async {
+  Future<void> _showCommissionCheckPicker(BuildContext context) async {
     final choice = await showDialog<String>(
       context: context,
       builder: (ctx) => SimpleDialog(
-        title: const Text('Check Balance'),
+        title: const Text('Check Commission'),
         children: [
           SimpleDialogOption(
             onPressed: () => Navigator.pop(ctx, 'commission_balance'),
@@ -168,8 +168,8 @@ class _HomeTabState extends State<HomeTab> {
         _QuickAction(icon: Icons.receipt_long, label: "Pay to Agent", bgColor: const Color(0xFFFCE8E3), iconColor: const Color(0xFFC1503D), onTap: () => context.push("/transactions?type=bill_payment&provider=$_provider")),
         _QuickAction(icon: Icons.phone_android, label: "Airtime", bgColor: const Color(0xFFFFF7D6), iconColor: const Color(0xFFA6821A), onTap: () => context.push("/transactions?type=airtime&provider=$_provider")),
         _QuickAction(icon: Icons.wifi, label: "Data Bundle", bgColor: const Color(0xFFE0F7F5), iconColor: const Color(0xFF14847A), onTap: () => context.push("/transactions?type=data_bundle&provider=$_provider")),
-        _QuickAction(icon: Icons.account_balance_wallet, label: "Check Balance", bgColor: const Color(0xFFDFF3EE), iconColor: const Color(0xFF1F8A6F), onTap: () => _showCheckBalancePicker(context)),
-        _QuickAction(icon: Icons.pie_chart, label: "Check Commission", bgColor: const Color(0xFFFBE6EC), iconColor: const Color(0xFFB33F6B), onTap: () => context.push("/my-balance")),
+        _QuickAction(icon: Icons.account_balance_wallet, label: "Check Balance", bgColor: const Color(0xFFDFF3EE), iconColor: const Color(0xFF1F8A6F), onTap: () => context.push("/transactions?type=balance_enquiry&provider=$_provider")),
+        _QuickAction(icon: Icons.pie_chart, label: "Check Commission", bgColor: const Color(0xFFFBE6EC), iconColor: const Color(0xFFB33F6B), onTap: () => _showCommissionCheckPicker(context)),
       ];
     }
 
