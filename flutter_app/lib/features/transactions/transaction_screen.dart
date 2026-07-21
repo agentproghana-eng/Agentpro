@@ -23,6 +23,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
   final _amountCtrl = TextEditingController();
   final _recipientPhoneCtrl = TextEditingController();
   final _referenceCtrl = TextEditingController();
+  final _merchantIdCtrl = TextEditingController();
   final _feeCtrl = TextEditingController();
 
   String _selectedProvider = 'mtn';  // overridden in initState if initialProvider is passed
@@ -35,10 +36,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
     if (widget.initialProvider != null) {
       _selectedProvider = widget.initialProvider!;
     }
-    // Pay to Agent is confirmed MTN-only (mapped from MTN's own "Pay To"
-    // USSD menu) - force it regardless of whatever provider filter was
-    // active on Home when this tile was tapped, and hide the selector
-    // entirely so there's nothing misleading to choose from.
+    // Pay to Agent and Pay to Merchant are both confirmed MTN-only
+    // (mapped from MTN's own "Pay To" USSD menu) - force it regardless
+    // of whatever provider filter was active on Home when this tile was
+    // tapped, and hide the selector entirely so there's nothing
+    // misleading to choose from.
     if (_needsReference) {
       _selectedProvider = 'mtn';
     }
@@ -54,16 +56,21 @@ class _TransactionScreenState extends State<TransactionScreen> {
       .map((w) => w[0].toUpperCase() + w.substring(1)).join(' ');
 
   bool get _needsRecipient => ['send_money'].contains(widget.transactionType);
-  // Pay to Agent (MTN's "Pay To > Agent" menu option) - a number to pay
-  // plus a free-text reference, confirmed via live device mapping. No
-  // biller code or account number involved; this fully replaces what
-  // used to be a biller-code-style Bill Payment form. MTN-only.
-  bool get _needsReference => ['bill_payment'].contains(widget.transactionType);
+  // Pay to Agent and Pay to Merchant (MTN's "Pay To" menu, both
+  // branches) - both confirmed via live device mapping to need a
+  // free-text Reference. Agent additionally needs a phone number
+  // (handled via _needsCustomer below); Merchant needs a Merchant ID
+  // instead (_needsMerchantId). Neither uses a biller code or account
+  // number - this fully replaces what used to be a biller-code-style
+  // Bill Payment form. MTN-only for both.
+  bool get _needsReference => ['bill_payment', 'merchant_payment'].contains(widget.transactionType);
+  bool get _needsMerchantId => widget.transactionType == 'merchant_payment';
   bool get _needsAmount => !['balance_enquiry', 'mini_statement'].contains(widget.transactionType);
-  // Send Money only needs the recipient's number - there's no separate
-  // walk-in customer involved, unlike Cash In/Cash Out/Pay to Agent,
-  // where the agent is entering a real person's phone in front of them.
-  bool get _needsCustomer => !['balance_enquiry', 'mini_statement', 'send_money'].contains(widget.transactionType);
+  // Send Money only needs the recipient's number, and Pay to Merchant
+  // only needs a Merchant ID - neither has a separate walk-in customer
+  // phone field, unlike Cash In/Cash Out/Pay to Agent, where the agent
+  // is entering a real person's phone in front of them.
+  bool get _needsCustomer => !['balance_enquiry', 'mini_statement', 'send_money', 'merchant_payment'].contains(widget.transactionType);
   bool get _isSendMoney => widget.transactionType == 'send_money';
 
   // Telecel/AirtelTigo Cash Out: e-cash moves directly SIM-to-SIM,
@@ -107,6 +114,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         "biller_code": "",
         "account_number": "",
         "payment_reference": _referenceCtrl.text.trim(),
+        "merchant_id": _merchantIdCtrl.text.trim(),
         "fee": _isSendMoney ? (double.tryParse(_feeCtrl.text.replaceAll(",", "")) ?? 0) : 0,
         "notes": "",
       };
@@ -141,6 +149,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'biller_code': '',
         'account_number': '',
         'payment_reference': _referenceCtrl.text.trim(),
+        'merchant_id': _merchantIdCtrl.text.trim(),
         'fee': _isSendMoney ? (double.tryParse(_feeCtrl.text.replaceAll(',', '')) ?? 0) : 0,
         'notes': '',
       });
@@ -208,8 +217,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Provider Selector - hidden for Pay to Agent, which is
-              // confirmed MTN-only.
+              // Provider Selector - hidden for Pay to Agent and Pay to
+              // Merchant, both confirmed MTN-only.
               if (!_needsReference) ...[
                 const Text('Select Network', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                 const SizedBox(height: 8),
@@ -251,9 +260,21 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 const SizedBox(height: 20),
               ],
 
+              // Merchant ID (Pay to Merchant)
+              if (_needsMerchantId) ...[
+                AppTextField(
+                  controller: _merchantIdCtrl,
+                  label: 'Merchant ID',
+                  prefixIcon: Icons.storefront_outlined,
+                  validator: (v) => v!.isEmpty ? 'Merchant ID is required' : null,
+                ),
+                const SizedBox(height: 14),
+              ],
+
               // Customer Phone - labeled "Enter Number" for Pay to Agent
               // (no walk-in customer in that flow, just a number being
-              // paid), "Customer Phone Number" everywhere else.
+              // paid), "Customer Phone Number" everywhere else. Not
+              // shown at all for Pay to Merchant (Merchant ID instead).
               if (_needsCustomer) ...[
                 AppTextField(
                   controller: _customerPhoneCtrl,
@@ -279,7 +300,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 const SizedBox(height: 14),
               ],
 
-              // Reference (Pay to Agent)
+              // Reference (Pay to Agent / Pay to Merchant)
               if (_needsReference) ...[
                 AppTextField(
                   controller: _referenceCtrl,
@@ -414,7 +435,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
   @override
   void dispose() {
     for (final c in [_customerPhoneCtrl, _amountCtrl,
-        _recipientPhoneCtrl, _referenceCtrl, _feeCtrl]) {
+        _recipientPhoneCtrl, _referenceCtrl, _merchantIdCtrl, _feeCtrl]) {
       c.dispose();
     }
     super.dispose();
