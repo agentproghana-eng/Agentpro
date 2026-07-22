@@ -467,6 +467,25 @@ Future<void> _startAccessibilityAutomation(
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
           ),
 
+          // Temporary diagnostic: surfaces the raw screen text the
+          // accessibility service captured, only when present - does not
+          // bring back the normal status subtitle otherwise. Remove once
+          // the wrong-amount root cause is confirmed and fixed.
+          if (_statusMessage.startsWith('[DEBUG')) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.grey[200],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                _statusMessage,
+                style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+              ),
+            ),
+          ],
+
           // PIN Warning
           if (isAwaitingPIN) ...[
             const SizedBox(height: 20),
