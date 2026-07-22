@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
@@ -24,6 +25,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
   USSDStatus _status = USSDStatus.idle;
   String _statusMessage = 'Preparing transaction...';
   bool _completed = false;
+  bool _showConfirmButton = false;
+  Timer? _confirmTimer;
   USSDStatus _outcome = USSDStatus.failed;
   String? _failureReason;
   Map<String, dynamic>? _completedTransaction;
@@ -185,6 +188,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       setState(() {
         _status = progress.status;
         _statusMessage = progress.message;
+        _maybeStartConfirmTimer(progress.status);
       });
     }
   });
@@ -240,6 +244,7 @@ Future<void> _startAccessibilityAutomation(
       setState(() {
         _status = progress.status;
         _statusMessage = progress.message;
+        _maybeStartConfirmTimer(progress.status);
       });
     }
   });
@@ -268,6 +273,51 @@ Future<void> _startAccessibilityAutomation(
     'at_money' => 'AT Money',
     _ => provider.toUpperCase(),
   };
+
+  void _maybeStartConfirmTimer(USSDStatus status) {
+    if (status != USSDStatus.awaitingPIN || _confirmTimer != null) return;
+    _confirmTimer = Timer(const Duration(seconds: 10), () {
+      if (mounted && !_completed) setState(() => _showConfirmButton = true);
+    });
+  }
+
+  // Manual fallback for when the automation genuinely cannot tell
+  // whether a transaction succeeded (e.g. an OEM-branded confirmation
+  // dialog the accessibility service fails to read). Never guesses on
+  // the app's own behalf - the agent must state what they actually
+  // saw on the real network screen.
+  Future<void> _confirmManually() async {
+    final outcome = await showDialog<USSDStatus>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Did the transaction succeed?"),
+        content: const Text(
+          "Check the result shown on your network screen, then choose what it said.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, USSDStatus.failed),
+            child: const Text("It failed"),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, USSDStatus.success),
+            child: const Text("It succeeded"),
+          ),
+        ],
+      ),
+    );
+    if (outcome == null) return;
+    final transaction = widget.data["transaction"] as Map<String, dynamic>;
+    final transactionId = transaction["transaction_id"] as String;
+    await _reportResult(
+      transactionId,
+      USSDResult(
+        outcome: outcome,
+        failureReason: outcome == USSDStatus.failed ? "Manually confirmed as failed by agent" : null,
+        sessionLog: const [],
+      ),
+    );
+  }
 
   Future<void> _reportResult(String transactionId, USSDResult result) async {
     // Map the engine's outcome to the backend's status values directly —
@@ -417,14 +467,6 @@ Future<void> _startAccessibilityAutomation(
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
           ),
 
-          const SizedBox(height: 12),
-
-          Text(
-            _statusMessage,
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey[600], fontSize: 15),
-          ),
-
           // PIN Warning
           if (isAwaitingPIN) ...[
             const SizedBox(height: 20),
@@ -474,6 +516,33 @@ Future<void> _startAccessibilityAutomation(
               color: isAwaitingPIN ? AppTheme.secondaryColor : AppTheme.primaryColor,
             ),
           ),
+
+          if (_showConfirmButton) ...[
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue[200]!),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    "Nothing back from the network yet. If you've already "
+                    "seen a result on your phone, you can confirm it here.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 13, color: Colors.blue[900]),
+                  ),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: _confirmManually,
+                    child: const Text('Confirm Transaction'),
+                  ),
+                ],
+              ),
+            ),
+          ],
 
           const Spacer(),
 
@@ -634,6 +703,7 @@ Future<void> _startAccessibilityAutomation(
   @override
   void dispose() {
     _pulseCtrl.dispose();
+    _confirmTimer?.cancel();
     _engine?.dispose();
     super.dispose();
   }
