@@ -73,6 +73,7 @@ class UssdAccessibilityService : AccessibilityService() {
         @Volatile var pendingOperatorId: String? = null
         @Volatile var pendingReference: String? = null
         @Volatile var pendingMerchantId: String? = null
+        @Volatile var currentStepIndex: Int = 0
         @Volatile var isSessionActive: Boolean = false
         @Volatile var reachedPinPrompt: Boolean = false
         @Volatile var confirmSent: Boolean = false
@@ -108,6 +109,7 @@ class UssdAccessibilityService : AccessibilityService() {
             pendingReference = reference
             pendingMerchantId = merchantId
             pendingSteps = steps
+            currentStepIndex = 0
             pendingSuccessMarkers = successMarkers
             pendingFailureMarkers = failureMarkers
             isSessionActive = true
@@ -127,6 +129,7 @@ class UssdAccessibilityService : AccessibilityService() {
             pendingReference = null
             pendingMerchantId = null
             pendingSteps = null
+            currentStepIndex = 0
             pendingSuccessMarkers = null
             pendingFailureMarkers = null
         }
@@ -282,8 +285,17 @@ class UssdAccessibilityService : AccessibilityService() {
     // block above already uses.
     private fun handleGenericStep(root: AccessibilityNodeInfo, screenText: String) {
         val steps = pendingSteps ?: return
-        for (step in steps) {
+        // Only ever considers steps at or after currentStepIndex, and
+        // advances past whichever step fires - critical because
+        // matchAll conditions can be short, generic phrases (e.g.
+        // "merchant id") that a LATER confirmation/PIN screen might
+        // also happen to contain. Without this, re-scanning from step
+        // 0 on every screen would re-fire an already-completed step
+        // forever instead of ever reaching the real PIN prompt.
+        for ((index, step) in steps.withIndex()) {
+            if (index < currentStepIndex) continue
             if (step.matchAll.isNotEmpty() && step.matchAll.all { screenText.contains(it) }) {
+                currentStepIndex = index + 1
                 when (step.action) {
                     "send_digit", "send_literal" -> step.actionValue?.let { respond(root, it) }
                     "send_customer_phone" -> pendingCustomerPhone?.let { respond(root, it) }
