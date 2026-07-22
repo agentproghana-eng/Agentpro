@@ -180,6 +180,18 @@ class UssdAccessibilityService : AccessibilityService() {
         when {
             reachedPinPrompt -> handleAfterPinPrompt(root, screenText)
 
+            // Generic Flow Builder flows (Airtime, Data Bundle, Commission
+            // types, Pay to Agent/Merchant, etc.) must be checked before any
+            // of the legacy hardcoded MTN/Telecel conditions below. Those
+            // were written for the original Cash In/Cash Out pilot and use
+            // broad substring matches like screenText.contains("amount"),
+            // which also match unrelated screens in newer flows (e.g.
+            // Airtime Select Amount preset menu), silently hijacking them
+            // and sending the typed amount into the wrong field entirely.
+            // pendingSteps is only ever non-null for generic flows -
+            // hardcoded MTN/Telecel sessions never set it.
+            pendingSteps != null -> handleGenericStep(root, screenText)
+
             // ── MTN (unchanged from the original pilot) ──
             pendingProvider == "mtn" && pendingTransactionType == "cash_in" && screenText.contains("mainmenuagent") && screenText.contains("3) cash in") ->
                 respond(root, "3")
@@ -219,7 +231,6 @@ class UssdAccessibilityService : AccessibilityService() {
             // ── Generic interpreter (new provider/type combos only -
             // never reached for MTN/Telecel, since their branches above
             // always match first) ──
-            pendingSteps != null -> handleGenericStep(root, screenText)
         }
     }
 
