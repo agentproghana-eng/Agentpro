@@ -41,7 +41,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
   Future<void> _startUSSD() async {
     final transaction = widget.data['transaction'] as Map<String, dynamic>;
-    final template = transaction['ussd_template'] as Map<String, dynamic>;
+    final template = transaction['ussd_template'] as Map<String, dynamic>?;
     final automationParams = Map<String, String>.from(
       (transaction['automation_params'] as Map<String, dynamic>? ?? {})
           .map((k, v) => MapEntry(k, v?.toString() ?? '')));
@@ -169,7 +169,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     // Ignore and fall through to single-dial below.
   }
 
-  final ussdTemplate = USSDTemplate.fromMap(template);
+  final ussdTemplate = USSDTemplate.fromMap(template!);
   _engine = USSDEngine(
     template: ussdTemplate,
     automationParams: automationParams,

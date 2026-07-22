@@ -32,3 +32,4 @@ admin_portal/.env
 *.iml
 *.jks
 *~
+logs/
