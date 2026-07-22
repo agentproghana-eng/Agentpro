@@ -251,6 +251,7 @@ Future<void> _startAccessibilityAutomation(
     provider: provider,
     operatorId: operatorId,
     reference: automationParams["payment_reference"],
+    merchantId: automationParams["merchant_id"],
     dialCode: dialCode,
     steps: steps,
     successMarkers: successMarkers,
