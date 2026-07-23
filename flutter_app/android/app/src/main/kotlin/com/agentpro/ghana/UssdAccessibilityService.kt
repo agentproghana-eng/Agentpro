@@ -148,9 +148,6 @@ class UssdAccessibilityService : AccessibilityService() {
     interface UssdAccessibilityListener {
         fun onPinPromptReached()
         fun onResult(outcome: String, message: String)
-        // TEMPORARY DIAGNOSTIC - remove once we understand why some
-        // OEM-styled MTN dialogs aren't being recognized.
-        fun onDebugScreenText(text: String, sessionActive: Boolean)
     }
 
     override fun onServiceConnected() {
@@ -163,16 +160,6 @@ class UssdAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
-        // TEMPORARY DIAGNOSTIC - remove once we understand why some
-        // OEM-styled MTN dialogs aren't being recognized. Fires on
-        // every accessibility event regardless of session state, so
-        // we can see both the raw text AND whether the session was
-        // still considered active when this screen appeared.
-        val debugRoot = rootInActiveWindow
-        if (debugRoot != null) {
-            listener?.onDebugScreenText(collectText(debugRoot), isSessionActive)
-        }
-
         if (!isSessionActive) return
         val root = rootInActiveWindow ?: return
         val screenText = collectText(root).lowercase()
