@@ -214,6 +214,22 @@ class _PostCard extends StatelessWidget {
 
   const _PostCard({required this.post, required this.onLike, required this.onOpen});
 
+  // Relative time for recent posts ("2h ago"), falling back to a plain
+  // date once a post is more than a week old, since "23d ago" stops
+  // being a useful unit at that point.
+  String _formatPostTime(String? createdAt) {
+    if (createdAt == null) return "";
+    final date = DateTime.tryParse(createdAt);
+    if (date == null) return "";
+    final diff = DateTime.now().difference(date);
+    if (diff.inMinutes < 1) return "Just now";
+    if (diff.inMinutes < 60) return "${diff.inMinutes}m ago";
+    if (diff.inHours < 24) return "${diff.inHours}h ago";
+    if (diff.inDays < 7) return "${diff.inDays}d ago";
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return "${months[date.month - 1]} ${date.day}, ${date.year}";
+  }
+
   @override
   Widget build(BuildContext context) {
     final isPending = post["status"] == "pending_review";
@@ -247,6 +263,7 @@ class _PostCard extends StatelessWidget {
             if (post["content"] != null && (post["content"] as String).isNotEmpty) const SizedBox(height: 8),
             _AudioPlayerBubble(url: audioUrl),
           ],
+          Text(_formatPostTime(post["created_at"] as String?), style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
           const SizedBox(height: 10),
           Row(children: [
             InkWell(onTap: onLike, child: Row(children: [
