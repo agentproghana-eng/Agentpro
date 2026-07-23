@@ -87,10 +87,10 @@ exports.listFeed = async (req, res) => {
               EXISTS(SELECT 1 FROM agent_post_likes l WHERE l.post_id = p.id AND l.user_id = $1) as liked_by_me
        FROM agent_posts p
        JOIN users u ON u.id = p.author_id
-       WHERE p.status = $2 OR (p.status = $3 AND p.author_id = $1)
+       WHERE p.status = $2 OR p.status = $4 OR (p.status = $3 AND p.author_id = $1)
        ORDER BY p.created_at DESC
-       LIMIT $4 OFFSET $5`,
-      [req.user.id, "active", "pending_review", parseInt(limit), offset]
+       LIMIT $5 OFFSET $6`,
+      [req.user.id, "active", "pending_review", "removed", parseInt(limit), offset]
     );
     res.json({ success: true, data: result.rows });
   } catch (error) {
