@@ -25,6 +25,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
   USSDStatus _status = USSDStatus.idle;
   String _statusMessage = 'Preparing transaction...';
   bool _completed = false;
+  bool _wasManuallyConfirmed = false;
   bool _showConfirmButton = false;
   Timer? _confirmTimer;
   USSDStatus _outcome = USSDStatus.failed;
@@ -307,6 +308,7 @@ Future<void> _startAccessibilityAutomation(
       ),
     );
     if (outcome == null) return;
+    _wasManuallyConfirmed = true;
     final transaction = widget.data["transaction"] as Map<String, dynamic>;
     final transactionId = transaction["transaction_id"] as String;
     await _reportResult(
@@ -611,6 +613,11 @@ Future<void> _startAccessibilityAutomation(
               Text(customerPhone, textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey[500])),
             ],
+            if (_wasManuallyConfirmed) ...[
+              const SizedBox(height: 8),
+              Text('Confirmed manually by agent', textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey[400], fontSize: 11, fontStyle: FontStyle.italic)),
+            ],
           ] else if (isPending) ...[
             Text('GH₵ $amount · ${txType.toUpperCase()}', textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w600)),
@@ -637,6 +644,11 @@ Future<void> _startAccessibilityAutomation(
             Text(_failureReason ?? 'The transaction could not be completed.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey[600])),
+            if (_wasManuallyConfirmed) ...[
+              const SizedBox(height: 8),
+              Text('Confirmed manually by agent', textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey[400], fontSize: 11, fontStyle: FontStyle.italic)),
+            ],
           ],
 
           if (_completedTransaction?['reference'] != null) ...[
