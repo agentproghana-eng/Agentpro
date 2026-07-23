@@ -50,10 +50,13 @@ class _CommissionTransferScreenState extends State<CommissionTransferScreen> {
       setState(() => _error = "Enter a valid amount");
       return;
     }
-    if (amount > _available) {
-      setState(() => _error = "Amount exceeds available commission");
-      return;
-    }
+    // Deliberately does NOT block on amount > _available. That figure
+    // is only this app's own tracked commission balance, which can
+    // drift from the real MTN-side balance if any transactions happen
+    // outside the app (manual dialing, etc.) - MTN's own network is
+    // the actual source of truth and will reject an invalid transfer
+    // via its own USSD response, which the automation already detects
+    // as a failure.
     setState(() { _submitting = true; _error = null; });
     try {
       final res = await ApiClient.instance.post('/transactions', data: {
