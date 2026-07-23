@@ -7,6 +7,7 @@ import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../core/services/offline_queue_service.dart';
+import '../../core/services/sim_card_service.dart';
 
 class TransactionScreen extends StatefulWidget {
   final String transactionType;
@@ -29,10 +30,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
   String _selectedProvider = 'mtn';  // overridden in initState if initialProvider is passed
   bool _loading = false;
   bool _feeAutoCalculated = true;
+  Map<String, SimCard?>? _simMap;
 
   @override
   void initState() {
     super.initState();
+    _loadSimMap();
     if (widget.initialProvider != null) {
       _selectedProvider = widget.initialProvider!;
     }
@@ -84,6 +87,31 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // wrong, since no PIN entry or dialing ever happens in this flow.
   bool get _isManualCashOut => widget.transactionType == "cash_out" &&
       (_selectedProvider == "telecel" || _selectedProvider == "at_money");
+
+  // Only shows provider tabs for SIMs actually present on the device.
+  // Falls back to all three if detection has not finished yet or
+  // failed, so agents are never blocked. Never overrides the forced
+  // MTN provider for Pay to Agent/Merchant, which hide the selector
+  // entirely regardless of SIM presence.
+  List<String> get _availableProviders =>
+      _simMap == null ? ["mtn", "telecel", "at_money"] : _simMap!.entries.where((e) => e.value != null).map((e) => e.key).toList();
+
+  Future<void> _loadSimMap() async {
+    try {
+      final map = await SimCardService.getNetworkSimMap();
+      if (!mounted) return;
+      setState(() {
+        _simMap = map;
+        if (!_needsReference && map[_selectedProvider] == null) {
+          final available = map.entries.where((e) => e.value != null).toList();
+          if (available.isNotEmpty) _selectedProvider = available.first.key;
+        }
+      });
+    } catch (_) {
+      // Permission denied or detection failed - leave _simMap null so
+      // the UI falls back to showing all three tabs.
+    }
+  }
 
   Future<void> _proceed() async {
     if (!_formKey.currentState!.validate()) return;
@@ -226,7 +254,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 const Text('Select Network', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                 const SizedBox(height: 8),
                 Row(
-                  children: ['mtn', 'telecel', 'at_money'].map((p) {
+                  children: _availableProviders.map((p) {
                     final selected = _selectedProvider == p;
                     final color = AppTheme.providerColor(p);
                     final label = {'mtn': 'MTN MoMo', 'telecel': 'Telecel Cash', 'at_money': 'AT Money'}[p]!;
