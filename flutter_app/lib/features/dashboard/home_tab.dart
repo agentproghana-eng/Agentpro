@@ -3,6 +3,8 @@ import "package:go_router/go_router.dart";
 import "package:intl/intl.dart";
 import "../../core/api/api_client.dart";
 import "../../shared/theme/app_theme.dart";
+import "../../core/services/sim_card_service.dart";
+import "../../core/services/sim_card_service.dart";
 
 class HomeTab extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -16,11 +18,99 @@ class _HomeTabState extends State<HomeTab> {
   String _provider = "mtn";
   List<dynamic> _recent = [];
   bool _loading = true;
+  Map<String, SimCard?>? _simMap;
+  Map<String, SimCard?>? _simMap;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _loadSimMap();
+    _loadSimMap();
+  }
+
+  Future<void> _loadSimMap() async {
+    try {
+      final map = await SimCardService.getNetworkSimMap();
+      if (!mounted) return;
+      setState(() {
+        _simMap = map;
+        // If the currently-selected provider has no detected SIM, switch
+        // to the first one that does, so the tab row never opens on a
+        // tab that is about to disappear.
+        if (map[_provider] == null) {
+          final firstAvailable = map.entries.firstWhere((e) => e.value != null, orElse: () => map.entries.first).key;
+          _provider = firstAvailable;
+        }
+      });
+    } catch (_) {
+      // Permission denied or detection failed - leave _simMap null so
+      // the UI falls back to showing all three tabs rather than none.
+    }
+  }
+
+  Future<void> _loadSimMap() async {
+    try {
+      final map = await SimCardService.getNetworkSimMap();
+      if (!mounted) return;
+      setState(() {
+        _simMap = map;
+        // If the currently-selected provider has no detected SIM, switch
+        // to the first one that does, so the tab row never opens on a
+        // tab that is about to disappear.
+        if (map[_provider] == null) {
+          final firstAvailable = map.entries.firstWhere((e) => e.value != null, orElse: () => map.entries.first).key;
+          _provider = firstAvailable;
+        }
+      });
+    } catch (_) {
+      // Permission denied or detection failed - leave _simMap null so
+      // the UI falls back to showing all three tabs rather than none.
+    }
+  }
+
+  // Only shows tabs for SIMs actually present on the device. Falls
+  // back to showing all three if detection has not finished yet or
+  // failed (permission denied, etc.), so agents are never blocked by
+  // a detection problem. If detection succeeded but found zero SIMs,
+  // shows an Insert SIM message instead of an empty or misleading tab
+  // row.
+  List<Widget> _buildProviderTabRow() {
+    final providers = _simMap == null
+        ? ["mtn", "telecel", "at_money"]
+        : _simMap!.entries.where((e) => e.value != null).map((e) => e.key).toList();
+
+    if (providers.isEmpty) {
+      return [
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(children: [
+              Icon(Icons.sim_card_alert_outlined, color: Colors.grey[500], size: 18),
+              const SizedBox(width: 8),
+              Text("Insert SIM", style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w600)),
+            ]),
+          ),
+        ),
+      ];
+    }
+
+    const labels = {"mtn": "MTN", "telecel": "Telecel", "at_money": "AirtelTigo"};
+    const colors = {"mtn": Color(0xFFFFCC00), "telecel": Color(0xFFE31837), "at_money": Color(0xFF003087)};
+
+    final widgets = <Widget>[];
+    for (var i = 0; i < providers.length; i++) {
+      final p = providers[i];
+      widgets.add(Expanded(child: _ProviderTab(
+        label: labels[p]!,
+        value: p,
+        selected: _provider == p,
+        color: colors[p]!,
+        onTap: (v) => setState(() => _provider = v),
+      )));
+      if (i < providers.length - 1) widgets.add(const SizedBox(width: 4));
+    }
+    return widgets;
   }
 
   Future<void> _load() async {
@@ -73,13 +163,7 @@ class _HomeTabState extends State<HomeTab> {
                 child: Container(
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 3)]),
-                  child: Row(children: [
-                    Expanded(child: _ProviderTab(label: "MTN", value: "mtn", selected: _provider == "mtn", color: const Color(0xFFFFCC00), onTap: (v) => setState(() => _provider = v))),
-                    const SizedBox(width: 4),
-                    Expanded(child: _ProviderTab(label: "Telecel", value: "telecel", selected: _provider == "telecel", color: const Color(0xFFE31837), onTap: (v) => setState(() => _provider = v))),
-                    const SizedBox(width: 4),
-                    Expanded(child: _ProviderTab(label: "AirtelTigo", value: "at_money", selected: _provider == "at_money", color: const Color(0xFF003087), onTap: (v) => setState(() => _provider = v))),
-                  ]),
+                  child: Row(children: _buildProviderTabRow()),
                 ),
               ),
             ),

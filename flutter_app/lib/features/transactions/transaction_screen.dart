@@ -52,8 +52,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
     });
   }
 
-  String get _title => widget.transactionType.replaceAll('_', ' ').split(' ')
-      .map((w) => w[0].toUpperCase() + w.substring(1)).join(' ');
+  String get _title {
+    if (widget.transactionType == 'bill_payment') return 'Pay to Agent';
+    return widget.transactionType.replaceAll('_', ' ').split(' ')
+        .map((w) => w[0].toUpperCase() + w.substring(1)).join(' ');
+  }
 
   bool get _needsRecipient => ['send_money'].contains(widget.transactionType);
   // Pay to Agent and Pay to Merchant (MTN's "Pay To" menu, both
