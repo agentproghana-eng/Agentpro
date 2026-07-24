@@ -133,7 +133,20 @@ class _TransactionScreenState extends State<TransactionScreen> {
     final isOffline = connectivity.every((r) => r == ConnectivityResult.none);
     final cachedTemplate = OfflineQueueService.getCachedTemplate(_selectedProvider, widget.transactionType);
 
-    if (isOffline && cachedTemplate != null) {
+    // MTN Cash In/Out/Send Money and Telecel Deposit never need a
+    // cached template - their dial code and menu steps are hardcoded
+    // in the accessibility service, not fetched from the backend, so
+    // ussd_template is null for them even after a successful online
+    // run. Gating these on cachedTemplate != null would mean they can
+    // never go offline at all. Only the custom Flow Builder path
+    // genuinely needs a prior online run to learn its dial code.
+    final isAccessibilityHardcodedFlow = (_selectedProvider == "mtn" &&
+            (widget.transactionType == "cash_in" ||
+                widget.transactionType == "cash_out" ||
+                widget.transactionType == "send_money")) ||
+        (_selectedProvider == "telecel" && widget.transactionType == "cash_in");
+
+    if (isOffline && (isAccessibilityHardcodedFlow || cachedTemplate != null)) {
       final localId = "local_${DateTime.now().millisecondsSinceEpoch}";
       final requestFields = {
         "provider": _selectedProvider,
