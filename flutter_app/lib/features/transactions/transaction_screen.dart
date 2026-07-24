@@ -201,7 +201,10 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'customer_name': '',
       });
     } on DioException catch (e) {
-      final msg = e.response?.data?['message'] ?? 'Failed to initiate transaction';
+      final msg = e.response?.data?['message'] ??
+          (e.response == null && cachedTemplate == null
+              ? "No internet, and this transaction type hasn't been completed online before, so offline mode isn't available for it yet. Connect to the internet, complete this transaction once, then it will work offline too."
+              : 'Failed to initiate transaction');
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor));
     } finally {
