@@ -132,6 +132,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
     final connectivity = await Connectivity().checkConnectivity();
     final isOffline = connectivity.every((r) => r == ConnectivityResult.none);
     final cachedTemplate = OfflineQueueService.getCachedTemplate(_selectedProvider, widget.transactionType);
+    final cachedFlow = OfflineQueueService.getCachedFlow(_selectedProvider, widget.transactionType);
 
     // MTN Cash In/Out/Send Money and Telecel Deposit never need a
     // cached template - their dial code and menu steps are hardcoded
@@ -146,7 +147,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 widget.transactionType == "send_money")) ||
         (_selectedProvider == "telecel" && widget.transactionType == "cash_in");
 
-    if (isOffline && (isAccessibilityHardcodedFlow || cachedTemplate != null)) {
+    if (isOffline && (isAccessibilityHardcodedFlow || cachedTemplate != null || cachedFlow != null)) {
       final localId = "local_${DateTime.now().millisecondsSinceEpoch}";
       final requestFields = {
         "provider": _selectedProvider,
@@ -171,6 +172,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
           "status": "initiated",
           "ussd_template": cachedTemplate,
           "automation_params": requestFields,
+          "cached_flow": cachedFlow,
         },
         "provider": _selectedProvider,
         "transaction_type": widget.transactionType,
@@ -203,6 +205,20 @@ class _TransactionScreenState extends State<TransactionScreen> {
       if (template != null) {
         await OfflineQueueService.cacheTemplate(_selectedProvider, widget.transactionType, template);
       }
+
+      // Also try to cache the Flow Builder resolve data - the create
+      // response above never includes it, only GET /ussd-flows/resolve
+      // does. Failing silently here (404 = no custom flow for this
+      // combo, or any other lookup error) is fine; the legacy template
+      // or MTN/Telecel hardcoded path covers those cases instead.
+      try {
+        final flowRes = await ApiClient.instance.get(
+          '/ussd-flows/resolve',
+          queryParameters: {'provider': _selectedProvider, 'transaction_type': widget.transactionType},
+        );
+        final flowData = flowRes.data['data'] as Map<String, dynamic>;
+        await OfflineQueueService.cacheFlow(_selectedProvider, widget.transactionType, flowData);
+      } catch (_) {}
 
       if (!mounted) return;
       context.push('/transactions/progress', extra: {

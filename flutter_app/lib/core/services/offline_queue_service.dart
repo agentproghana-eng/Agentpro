@@ -28,6 +28,25 @@ class OfflineQueueService {
     return jsonDecode(raw as String) as Map<String, dynamic>;
   }
 
+  static String _flowKey(String provider, String type) => "flow_${provider}_$type";
+
+  // Caches the Flow Builder resolve() result (dial_code, steps,
+  // success/failure markers) - the actual automation source for any
+  // provider/type combo that's been migrated off the legacy
+  // ussd_templates table. The transaction-create response never
+  // includes this; only GET /ussd-flows/resolve does, which itself
+  // needs connectivity, so it's cached here the moment it's fetched
+  // online so a later offline attempt has something to use.
+  static Future<void> cacheFlow(String provider, String transactionType, Map<String, dynamic> flow) async {
+    await _templateBox.put(_flowKey(provider, transactionType), jsonEncode(flow));
+  }
+
+  static Map<String, dynamic>? getCachedFlow(String provider, String transactionType) {
+    final raw = _templateBox.get(_flowKey(provider, transactionType));
+    if (raw == null) return null;
+    return jsonDecode(raw as String) as Map<String, dynamic>;
+  }
+
   static Future<String> queueTransaction({
     required Map<String, dynamic> requestFields,
     required String status,

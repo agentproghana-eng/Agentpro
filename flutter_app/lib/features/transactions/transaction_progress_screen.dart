@@ -142,6 +142,25 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     return;
   }
 
+  // Offline transactions carry their Flow Builder data pre-cached
+  // (from the last successful online run), since /ussd-flows/resolve
+  // itself needs connectivity and can't be called now. Use that
+  // directly instead of hitting the network.
+  final cachedFlow = transaction['cached_flow'] as Map<String, dynamic>?;
+  if (cachedFlow != null) {
+    final steps = (cachedFlow['steps'] as List).cast<Map<String, dynamic>>();
+    final successMarkers = (cachedFlow['success_markers'] as List?)?.cast<String>();
+    final failureMarkers = (cachedFlow['failure_markers'] as List?)?.cast<String>();
+    final dialCode = cachedFlow['dial_code'] as String;
+
+    await _startAccessibilityAutomation(
+      transactionId, automationParams, transactionType!, provider, null,
+      simSlot: simSlot,
+      dialCode: dialCode, steps: steps, successMarkers: successMarkers, failureMarkers: failureMarkers,
+    );
+    return;
+  }
+
   // Not MTN/Telecel's hardcoded flows - check whether a custom USSD
   // Flow Builder flow exists for this provider/transaction_type before
   // falling back to the single-dial USSDEngine below. Silently falls
