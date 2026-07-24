@@ -4,7 +4,6 @@ import "package:intl/intl.dart";
 import "../../core/api/api_client.dart";
 import "../../shared/theme/app_theme.dart";
 import "../../core/services/sim_card_service.dart";
-import "../../core/services/sim_card_service.dart";
 
 class HomeTab extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -19,14 +18,12 @@ class _HomeTabState extends State<HomeTab> {
   List<dynamic> _recent = [];
   bool _loading = true;
   Map<String, SimCard?>? _simMap;
-  Map<String, SimCard?>? _simMap;
 
   @override
   void initState() {
     super.initState();
     _load();
     _loadSimMap();
-    _loadSimMap();
   }
 
   Future<void> _loadSimMap() async {
@@ -49,25 +46,6 @@ class _HomeTabState extends State<HomeTab> {
     }
   }
 
-  Future<void> _loadSimMap() async {
-    try {
-      final map = await SimCardService.getNetworkSimMap();
-      if (!mounted) return;
-      setState(() {
-        _simMap = map;
-        // If the currently-selected provider has no detected SIM, switch
-        // to the first one that does, so the tab row never opens on a
-        // tab that is about to disappear.
-        if (map[_provider] == null) {
-          final firstAvailable = map.entries.firstWhere((e) => e.value != null, orElse: () => map.entries.first).key;
-          _provider = firstAvailable;
-        }
-      });
-    } catch (_) {
-      // Permission denied or detection failed - leave _simMap null so
-      // the UI falls back to showing all three tabs rather than none.
-    }
-  }
 
   // Only shows tabs for SIMs actually present on the device. Falls
   // back to showing all three if detection has not finished yet or
