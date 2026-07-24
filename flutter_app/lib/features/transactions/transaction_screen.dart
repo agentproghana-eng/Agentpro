@@ -157,6 +157,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
           "reference": "OFFLINE-$localId",
           "status": "initiated",
           "ussd_template": cachedTemplate,
+          "automation_params": requestFields,
         },
         "provider": _selectedProvider,
         "transaction_type": widget.transactionType,
