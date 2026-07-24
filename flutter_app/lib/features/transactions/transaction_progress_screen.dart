@@ -122,23 +122,29 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
   final isMtnAccessibilityFlow = provider == "mtn" && (transactionType == "cash_in" || transactionType == "cash_out" || transactionType == "send_money");
   final isTelecelDepositFlow = provider == "telecel" && transactionType == "cash_in";
 
-  if (isMtnAccessibilityFlow || isTelecelDepositFlow) {
-    String? operatorId;
-    if (isTelecelDepositFlow) {
-      final authState = context.read<AuthBloc>().state;
-      operatorId = authState is AuthAuthenticated ? authState.user['telecel_operator_id'] as String? : null;
-      if (operatorId == null || operatorId.isEmpty) {
-        const reason = "Telecel Operator ID is not set. Go to Settings > "
-            "USSD Automation and save your Operator ID, then try again.";
-        if (mounted) setState(() => _simWarning = reason);
-        await _reportResult(
-          transactionId,
-          USSDResult(outcome: USSDStatus.failed, failureReason: reason, sessionLog: const []),
-        );
-        return;
-      }
+  // Telecel Operator ID is needed by more than just the hardcoded
+  // Deposit flow - the Flow Builder path (Airtime, etc.) needs it too,
+  // via the send_operator_id step action. Resolved once here, ahead of
+  // both the hardcoded and custom-flow branches below, so neither has
+  // to fetch it separately or risk silently sending null.
+  String? telecelOperatorId;
+  if (provider == "telecel") {
+    final authState = context.read<AuthBloc>().state;
+    telecelOperatorId = authState is AuthAuthenticated ? authState.user['telecel_operator_id'] as String? : null;
+    if (telecelOperatorId == null || telecelOperatorId.isEmpty) {
+      const reason = "Telecel Operator ID is not set. Go to Settings > "
+          "USSD Automation and save your Operator ID, then try again.";
+      if (mounted) setState(() => _simWarning = reason);
+      await _reportResult(
+        transactionId,
+        USSDResult(outcome: USSDStatus.failed, failureReason: reason, sessionLog: const []),
+      );
+      return;
     }
-    await _startAccessibilityAutomation(transactionId, automationParams, transactionType!, provider, operatorId, simSlot: simSlot);
+  }
+
+  if (isMtnAccessibilityFlow || isTelecelDepositFlow) {
+    await _startAccessibilityAutomation(transactionId, automationParams, transactionType!, provider, telecelOperatorId, simSlot: simSlot);
     return;
   }
 
@@ -154,7 +160,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     final dialCode = cachedFlow['dial_code'] as String;
 
     await _startAccessibilityAutomation(
-      transactionId, automationParams, transactionType!, provider, null,
+      transactionId, automationParams, transactionType!, provider, telecelOperatorId,
       simSlot: simSlot,
       dialCode: dialCode, steps: steps, successMarkers: successMarkers, failureMarkers: failureMarkers,
     );
@@ -179,7 +185,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     final dialCode = flowData['dial_code'] as String;
 
     await _startAccessibilityAutomation(
-      transactionId, automationParams, transactionType!, provider, null,
+      transactionId, automationParams, transactionType!, provider, telecelOperatorId,
       simSlot: simSlot,
       dialCode: dialCode, steps: steps, successMarkers: successMarkers, failureMarkers: failureMarkers,
     );
