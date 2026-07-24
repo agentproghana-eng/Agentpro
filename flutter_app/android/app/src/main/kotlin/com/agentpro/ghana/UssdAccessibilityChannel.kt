@@ -6,6 +6,10 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
+import android.annotation.SuppressLint
+import android.telecom.PhoneAccountHandle
+import android.telecom.TelecomManager
+import android.telephony.SubscriptionManager
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -90,6 +94,31 @@ class UssdAccessibilityChannel(
         }
     }
 
+    // Resolves which PhoneAccountHandle corresponds to a physical SIM
+    // slot, so the outgoing call intent can be pinned to the right SIM
+    // instead of falling back to the device's default calling SIM (or
+    // triggering the native "Call with" picker, which this automation
+    // can't read). Primary match relies on the fact that on stock/AOSP
+    // telecom stacks a SIM-backed PhoneAccountHandle's id is the
+    // subscription id itself; falls back to positional match against
+    // callCapablePhoneAccounts (slot-ordered on virtually all devices)
+    // if that assumption doesn't hold on a given OEM stack.
+    @SuppressLint("MissingPermission")
+    private fun phoneAccountHandleForSimSlot(simSlot: Int): PhoneAccountHandle? {
+        val subscriptionManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? SubscriptionManager
+            ?: return null
+        val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
+            ?: return null
+
+        val subInfo = subscriptionManager.getActiveSubscriptionInfoForSimSlotIndex(simSlot) ?: return null
+        val targetSubId = subInfo.subscriptionId.toString()
+
+        val handles = telecomManager.callCapablePhoneAccounts
+
+        handles.firstOrNull { it.id == targetSubId }?.let { return it }
+        return handles.getOrNull(simSlot)
+    }
+
     private fun startAutomation(call: MethodCall, result: MethodChannel.Result) {
         val customerPhone = call.argument<String>("customer_phone")
         val amount = call.argument<String>("amount")
@@ -99,6 +128,7 @@ class UssdAccessibilityChannel(
         val reference = call.argument<String>("reference")
         val merchantId = call.argument<String>("merchant_id")
         val explicitDialCode = call.argument<String>("dial_code")
+        val simSlot = call.argument<Int>("sim_slot")
         val steps = parseSteps(call)
         val successMarkers = call.argument<List<String>>("success_markers")
         val failureMarkers = call.argument<List<String>>("failure_markers")
@@ -135,6 +165,11 @@ class UssdAccessibilityChannel(
         try {
             val dialIntent = Intent(Intent.ACTION_CALL, Uri.parse("tel:" + Uri.encode(dialCode)))
             dialIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (simSlot != null) {
+                phoneAccountHandleForSimSlot(simSlot)?.let { handle ->
+                    dialIntent.putExtra(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, handle)
+                }
+            }
             context.startActivity(dialIntent)
             result.success(true)
         } catch (e: SecurityException) {

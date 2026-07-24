@@ -138,7 +138,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         return;
       }
     }
-    await _startAccessibilityAutomation(transactionId, automationParams, transactionType!, provider, operatorId);
+    await _startAccessibilityAutomation(transactionId, automationParams, transactionType!, provider, operatorId, simSlot: simSlot);
     return;
   }
 
@@ -161,6 +161,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
     await _startAccessibilityAutomation(
       transactionId, automationParams, transactionType!, provider, null,
+      simSlot: simSlot,
       dialCode: dialCode, steps: steps, successMarkers: successMarkers, failureMarkers: failureMarkers,
     );
     return;
@@ -207,6 +208,7 @@ Future<void> _startAccessibilityAutomation(
   String transactionType,
   String provider,
   String? operatorId, {
+  required int simSlot,
   String? dialCode,
   List<Map<String, dynamic>>? steps,
   List<String>? successMarkers,
@@ -258,6 +260,7 @@ Future<void> _startAccessibilityAutomation(
     operatorId: operatorId,
     reference: automationParams["payment_reference"],
     merchantId: automationParams["merchant_id"],
+    simSlot: simSlot,
     dialCode: dialCode,
     steps: steps,
     successMarkers: successMarkers,
