@@ -250,7 +250,7 @@ class _HomeTabState extends State<HomeTab> {
     return [
       _QuickAction(icon: Icons.call_received, label: "Deposit", bgColor: const Color(0xFFE6F4F1), iconColor: AppTheme.primaryColor, onTap: () => context.push("/transactions?type=cash_in&provider=telecel")),
       _QuickAction(icon: Icons.call_made, label: "Withdrawal", bgColor: const Color(0xFFFDF3DC), iconColor: const Color(0xFFB87E00), onTap: () => context.push("/transactions?type=cash_out&provider=telecel")),
-      _QuickAction(icon: Icons.phone_android, label: "Airtime", bgColor: Colors.grey[200]!, iconColor: Colors.grey, onTap: () => comingSoon("Airtime")),
+      _QuickAction(icon: Icons.phone_android, label: "Airtime", bgColor: const Color(0xFFFFF7D6), iconColor: const Color(0xFFA6821A), onTap: () => context.push("/transactions?type=airtime&provider=telecel")),
       _QuickAction(icon: Icons.wifi, label: "Internet Data", bgColor: Colors.grey[200]!, iconColor: Colors.grey, onTap: () => comingSoon("Internet Data")),
       _QuickAction(icon: Icons.account_balance_wallet, label: "Balance", bgColor: Colors.grey[200]!, iconColor: Colors.grey, onTap: () => comingSoon("Balance")),
       _QuickAction(icon: Icons.pie_chart, label: "Commission", bgColor: Colors.grey[200]!, iconColor: Colors.grey, onTap: () => comingSoon("Commission")),
