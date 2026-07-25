@@ -264,6 +264,64 @@ export function CompanyDetailPage() {
   );
 }
 
+// ── Shifts Page ────────────────────────────────────────────────
+// Shift open/close history with cash variance, sourced from the same
+// /shifts endpoint agents use to open/close their own shifts -
+// superuser/business_owner/manager get the broader listShifts view.
+export function ShiftsPage() {
+  const [shifts, setShifts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [flaggedOnly, setFlaggedOnly] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await API.get('/shifts', { params: { flagged_only: flaggedOnly, limit: 50 } });
+      setShifts(res.data.data || []);
+    } catch (_) {
+      toast.error('Failed to load shifts');
+    } finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, [flaggedOnly]);
+
+  return (
+    <div>
+      <PageHeader title="Shifts" subtitle="Shift open/close history and cash variance"
+        action={
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+            <input type="checkbox" checked={flaggedOnly} onChange={e => setFlaggedOnly(e.target.checked)} />
+            Flagged only
+          </label>
+        } />
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <Table
+          loading={loading}
+          data={shifts}
+          emptyMsg="No closed shifts yet"
+          columns={[
+            { key: 'agent', label: 'Agent', render: r => `${r.first_name} ${r.last_name}` },
+            { key: 'branch_name', label: 'Branch', render: r => r.branch_name || '—' },
+            { key: 'opened_at', label: 'Opened', render: r => r.opened_at ? new Date(r.opened_at).toLocaleString() : '—' },
+            { key: 'closed_at', label: 'Closed', render: r => r.closed_at ? new Date(r.closed_at).toLocaleString() : '—' },
+            { key: 'transaction_count', label: 'Transactions', render: r => r.transaction_count ?? '—' },
+            { key: 'closing_cash_expected', label: 'Expected', render: r => `GH₵ ${parseFloat(r.closing_cash_expected || 0).toFixed(2)}` },
+            { key: 'closing_cash_actual', label: 'Actual', render: r => `GH₵ ${parseFloat(r.closing_cash_actual || 0).toFixed(2)}` },
+            { key: 'variance', label: 'Variance',
+              render: r => {
+                const v = parseFloat(r.variance || 0);
+                return (
+                  <span className={r.flagged ? 'text-red-600 font-bold' : 'text-gray-700'}>
+                    {v > 0 ? '+' : ''}{v.toFixed(2)}{r.flagged ? ' ⚠️' : ''}
+                  </span>
+                );
+              }},
+          ]}
+        />
+      </div>
+    </div>
+  );
+}
+
 // ── USSD Templates Page ───────────────────────────────────────
 
 export function USSDTemplatesPage() {
