@@ -273,6 +273,7 @@ class UssdAccessibilityService : AccessibilityService() {
         if (isSuccess || isFailure) {
             listener?.onResult(if (isSuccess) "success" else "failure", screenText)
             endSession()
+            UssdForegroundService.stop(this)
         }
     }
 

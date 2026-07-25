@@ -159,6 +159,7 @@ class UssdAccessibilityChannel(
             customerPhone, amount, transactionType, provider, operatorId, reference, merchantId,
             steps, successMarkers, failureMarkers
         )
+        UssdForegroundService.start(context)
 
         val dialCode = explicitDialCode ?: if (provider == "telecel") "*110#" else "*171#"
 
@@ -174,9 +175,11 @@ class UssdAccessibilityChannel(
             result.success(true)
         } catch (e: SecurityException) {
             UssdAccessibilityService.endSession()
+            UssdForegroundService.stop(context)
             result.error("PERMISSION_DENIED", "CALL_PHONE permission is required", null)
         } catch (e: Exception) {
             UssdAccessibilityService.endSession()
+            UssdForegroundService.stop(context)
             result.error("DIAL_ERROR", e.message, null)
         }
     }

@@ -10,6 +10,11 @@
     <!-- SIM detection -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
+    <!-- Brief foreground service shown only during an active USSD
+         automation session, so the OS doesn't kill the accessibility
+         service's process mid-transaction. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
     <!-- Network -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -129,6 +134,15 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/ussd_accessibility_service_config" />
         </service>
+
+        <!-- Brief, user-perceptible foreground service shown only
+             while a USSD automation session is actively running. See
+             UssdForegroundService.kt for why this exists instead of
+             REQUEST_IGNORE_BATTERY_OPTIMIZATIONS. -->
+        <service
+            android:name=".UssdForegroundService"
+            android:foregroundServiceType="shortService"
+            android:exported="false" />
 
         <!-- FCM default channel -->
         <meta-data
