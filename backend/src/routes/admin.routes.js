@@ -254,6 +254,174 @@ router.patch('/ussd-templates/:id', async (req, res) => {
   }
 });
 
+// ── USSD Flows (Flow Builder) ───────────────────────────────────
+// Interactive multi-step flows - the newer system that MTN Cash
+// In/Out/Send Money, Telecel Deposit, Telecel Airtime, and MTN Balance
+// Enquiry all actually run on now. Distinct from ussd-templates above
+// (the older single-dial-string system) - a provider/transaction_type
+// combo uses whichever of the two actually has an active row; this is
+// checked first by the app.
+const VALID_FLOW_ACTIONS = [
+  'send_digit', 'send_customer_phone', 'send_amount', 'send_operator_id',
+  'send_reference', 'send_merchant_id', 'send_literal', 'pin_prompt', 'auto_confirm_once'
+];
+const VALUE_REQUIRED_FLOW_ACTIONS = ['send_digit', 'send_literal', 'auto_confirm_once'];
+
+// Server-side safety net mirroring whatever the admin portal checks
+// client-side - this is the layer that actually matters, since a
+// direct API call could bypass any UI-level check entirely.
+function validateFlowSteps(steps) {
+  if (!Array.isArray(steps) || steps.length === 0) {
+    return 'At least one step is required.';
+  }
+  for (const [i, step] of steps.entries()) {
+    if (!Array.isArray(step.match_all) || step.match_all.length === 0) {
+      return `Step ${i + 1}: match_all cannot be empty — a step with no match text can never fire.`;
+    }
+    if (!VALID_FLOW_ACTIONS.includes(step.action)) {
+      return `Step ${i + 1}: "${step.action}" is not a valid action. Must be one of: ${VALID_FLOW_ACTIONS.join(', ')}.`;
+    }
+    if (VALUE_REQUIRED_FLOW_ACTIONS.includes(step.action) && !step.action_value) {
+      return `Step ${i + 1}: action "${step.action}" requires an action_value.`;
+    }
+  }
+  if (!steps.some(s => s.action === 'pin_prompt')) {
+    return 'Flow has no pin_prompt step — without one, the app will never pause for real PIN entry, and may try to auto-submit a sensitive screen.';
+  }
+  return null;
+}
+
+router.get('/ussd-flows', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT f.*, COUNT(s.id)::int AS step_count
+       FROM ussd_flows f
+       LEFT JOIN ussd_flow_steps s ON s.flow_id = f.id
+       GROUP BY f.id
+       ORDER BY f.provider, f.transaction_type`
+    );
+    res.json({ success: true, data: result.rows });
+  } catch (e) { res.status(500).json({ success: false, message: 'Failed to fetch flows' }); }
+});
+
+router.get('/ussd-flows/:id', async (req, res) => {
+  try {
+    const flowResult = await query('SELECT * FROM ussd_flows WHERE id = $1', [req.params.id]);
+    if (!flowResult.rows.length) {
+      return res.status(404).json({ success: false, message: 'Flow not found' });
+    }
+    const stepsResult = await query(
+      'SELECT * FROM ussd_flow_steps WHERE flow_id = $1 ORDER BY step_order', [req.params.id]
+    );
+    res.json({ success: true, data: { ...flowResult.rows[0], steps: stepsResult.rows } });
+  } catch (e) { res.status(500).json({ success: false, message: 'Failed to fetch flow' }); }
+});
+
+router.post('/ussd-flows', async (req, res) => {
+  const { provider, transaction_type, dial_code, success_markers, failure_markers, steps, company_id } = req.body;
+
+  if (!provider || !transaction_type) {
+    return res.status(422).json({ success: false, message: 'provider and transaction_type are required.' });
+  }
+  if (!dial_code || !dial_code.startsWith('*') || !dial_code.endsWith('#')) {
+    return res.status(422).json({ success: false, message: 'dial_code must start with * and end with #.' });
+  }
+  const stepsError = validateFlowSteps(steps);
+  if (stepsError) {
+    return res.status(422).json({ success: false, message: stepsError });
+  }
+
+  try {
+    const flow = await withTransaction(async (client) => {
+      const flowResult = await client.query(
+        `INSERT INTO ussd_flows (provider, transaction_type, dial_code, success_markers, failure_markers, company_id, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        [provider, transaction_type, dial_code, success_markers || [], failure_markers || [], company_id || null, req.user.id]
+      );
+      const newFlow = flowResult.rows[0];
+      for (const [i, step] of steps.entries()) {
+        await client.query(
+          `INSERT INTO ussd_flow_steps (flow_id, step_order, match_all, action, action_value)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [newFlow.id, i + 1, step.match_all, step.action, step.action_value || null]
+        );
+      }
+      return newFlow;
+    });
+
+    await auditLog({
+      userId: req.user.id, companyId: company_id || null,
+      action: 'USSD_FLOW_CREATED', entityType: 'ussd_flow', entityId: flow.id,
+      newValues: { provider, transaction_type, dial_code, step_count: steps.length },
+      ipAddress: req.ip, requestId: req.requestId,
+    });
+    res.json({ success: true, data: flow });
+  } catch (e) {
+    if (e.code === '23505') {
+      return res.status(409).json({ success: false, message: 'An active flow already exists for this provider + transaction type.' });
+    }
+    logger.error('Create flow error:', e);
+    res.status(500).json({ success: false, message: 'Failed to create flow' });
+  }
+});
+
+router.patch('/ussd-flows/:id', async (req, res) => {
+  const { dial_code, success_markers, failure_markers, is_active, steps } = req.body;
+
+  if (dial_code && (!dial_code.startsWith('*') || !dial_code.endsWith('#'))) {
+    return res.status(422).json({ success: false, message: 'dial_code must start with * and end with #.' });
+  }
+  if (steps !== undefined) {
+    const stepsError = validateFlowSteps(steps);
+    if (stepsError) {
+      return res.status(422).json({ success: false, message: stepsError });
+    }
+  }
+
+  try {
+    const flow = await withTransaction(async (client) => {
+      const flowResult = await client.query(
+        `UPDATE ussd_flows SET
+           dial_code = COALESCE($1, dial_code),
+           success_markers = COALESCE($2, success_markers),
+           failure_markers = COALESCE($3, failure_markers),
+           is_active = COALESCE($4, is_active),
+           updated_at = NOW()
+         WHERE id = $5 RETURNING *`,
+        [dial_code, success_markers, failure_markers, is_active, req.params.id]
+      );
+      if (!flowResult.rows.length) {
+        throw { statusCode: 404, message: 'Flow not found' };
+      }
+      if (steps !== undefined) {
+        await client.query('DELETE FROM ussd_flow_steps WHERE flow_id = $1', [req.params.id]);
+        for (const [i, step] of steps.entries()) {
+          await client.query(
+            `INSERT INTO ussd_flow_steps (flow_id, step_order, match_all, action, action_value)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [req.params.id, i + 1, step.match_all, step.action, step.action_value || null]
+          );
+        }
+      }
+      return flowResult.rows[0];
+    });
+
+    await auditLog({
+      userId: req.user.id, companyId: flow.company_id,
+      action: 'USSD_FLOW_UPDATED', entityType: 'ussd_flow', entityId: req.params.id,
+      newValues: { dial_code, is_active, step_count: steps ? steps.length : undefined },
+      ipAddress: req.ip, requestId: req.requestId,
+    });
+    res.json({ success: true, data: flow });
+  } catch (e) {
+    if (e.statusCode) {
+      return res.status(e.statusCode).json({ success: false, message: e.message });
+    }
+    logger.error('Update flow error:', e);
+    res.status(500).json({ success: false, message: 'Failed to update flow' });
+  }
+});
+
 // ── Audit Logs ────────────────────────────────────────────────
 router.get('/audit-logs', async (req, res) => {
   const { company_id, user_id, action, from_date, to_date, page = 1, limit = 50 } = req.query;

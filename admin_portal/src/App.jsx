@@ -132,6 +132,7 @@ const NAV = [
   { path: '/marketplace', icon: '🛒', label: 'Business Hub' },
   { path: '/commissions', icon: '💰', label: 'Commissions' },
   { path: '/ussd', icon: '📱', label: 'USSD Templates' },
+  { path: '/flows', icon: '🔀', label: 'USSD Flows' },
   { path: '/config', icon: '⚙️', label: 'System Config' },
   { path: '/audit', icon: '📋', label: 'Audit Logs' },
 ];
@@ -516,6 +517,7 @@ function MarketplacePage() {
 import {
   CompaniesPage,
   USSDTemplatesPage,
+  FlowsPage,
   AuditLogsPage,
   CommissionsPage,
 } from './pages.jsx';
@@ -541,6 +543,7 @@ export default function App() {
                   <Route path="/companies" element={<CompaniesPage />} />
                   <Route path="/commissions" element={<CommissionsPage />} />
                   <Route path="/ussd" element={<USSDTemplatesPage />} />
+                  <Route path="/flows" element={<FlowsPage />} />
                   <Route path="/audit" element={<AuditLogsPage />} />
                 </Routes>
               </Layout>
