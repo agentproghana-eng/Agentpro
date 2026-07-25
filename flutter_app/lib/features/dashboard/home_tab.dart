@@ -18,12 +18,47 @@ class _HomeTabState extends State<HomeTab> {
   List<dynamic> _recent = [];
   bool _loading = true;
   Map<String, SimCard?>? _simMap;
+  Set<String> _disabledTypes = {};
 
   @override
   void initState() {
     super.initState();
     _load();
     _loadSimMap();
+    _loadFeatureFlags();
+  }
+
+  // Fetches the admin-controlled kill-switch list once per screen load.
+  // Fails silently (leaves _disabledTypes empty) on any error - a
+  // feature-flag fetch failure should never block the home screen or
+  // make tiles look disabled when they're actually fine; the same
+  // check is enforced server-side regardless as the real safety net.
+  Future<void> _loadFeatureFlags() async {
+    try {
+      final res = await ApiClient.instance.get("/users/me/feature-flags");
+      final list = (res.data["data"]["disabled_transaction_types"] as List?) ?? [];
+      if (mounted) setState(() => _disabledTypes = list.map((e) => e.toString()).toSet());
+    } catch (_) {
+      // Leave _disabledTypes empty - fail open on the client, server
+      // still enforces the kill-switch either way.
+    }
+  }
+
+  // Renders a quick-action tile, automatically greying it out and
+  // blocking navigation if an admin has disabled this provider+type
+  // combo via the "disabled_transaction_types" config kill-switch.
+  Widget _tile({required IconData icon, required String label, required Color bgColor, required Color iconColor, required String type, required VoidCallback onTap}) {
+    final disabled = _disabledTypes.contains("$_provider:$type");
+    return _QuickAction(
+      icon: icon,
+      label: label,
+      bgColor: disabled ? Colors.grey[200]! : bgColor,
+      iconColor: disabled ? Colors.grey : iconColor,
+      onTap: disabled
+          ? () => ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("This feature has been temporarily disabled by your administrator.")))
+          : onTap,
+    );
   }
 
   Future<void> _loadSimMap() async {
@@ -232,14 +267,14 @@ class _HomeTabState extends State<HomeTab> {
   List<Widget> _quickActionTiles(BuildContext context) {
     if (_provider != "telecel") {
       return [
-        _QuickAction(icon: Icons.call_received, label: "Cash In", bgColor: const Color(0xFFE6F4F1), iconColor: AppTheme.primaryColor, onTap: () => context.push("/transactions?type=cash_in&provider=$_provider")),
-        _QuickAction(icon: Icons.call_made, label: "Cash Out", bgColor: const Color(0xFFFDF3DC), iconColor: const Color(0xFFB87E00), onTap: () => context.push("/transactions?type=cash_out&provider=$_provider")),
-        _QuickAction(icon: Icons.send, label: "Send Money", bgColor: const Color(0xFFE3EEFC), iconColor: const Color(0xFF2E6FD9), onTap: () => context.push("/transactions?type=send_money&provider=$_provider")),
-        _QuickAction(icon: Icons.storefront, label: "Pay to Merchant", bgColor: const Color(0xFFF0E6FA), iconColor: const Color(0xFF8B5FBF), onTap: () => context.push("/transactions?type=merchant_payment&provider=$_provider")),
-        _QuickAction(icon: Icons.receipt_long, label: "Pay to Agent", bgColor: const Color(0xFFFCE8E3), iconColor: const Color(0xFFC1503D), onTap: () => context.push("/transactions?type=bill_payment&provider=$_provider")),
-        _QuickAction(icon: Icons.phone_android, label: "Airtime", bgColor: const Color(0xFFFFF7D6), iconColor: const Color(0xFFA6821A), onTap: () => context.push("/transactions?type=airtime&provider=$_provider")),
-        _QuickAction(icon: Icons.wifi, label: "Data Bundle", bgColor: const Color(0xFFE0F7F5), iconColor: const Color(0xFF14847A), onTap: () => context.push("/transactions?type=data_bundle&provider=$_provider")),
-        _QuickAction(icon: Icons.account_balance_wallet, label: "Check Balance", bgColor: const Color(0xFFDFF3EE), iconColor: const Color(0xFF1F8A6F), onTap: () => context.push("/transactions?type=balance_enquiry&provider=$_provider")),
+        _tile(icon: Icons.call_received, label: "Cash In", bgColor: const Color(0xFFE6F4F1), iconColor: AppTheme.primaryColor, type: "cash_in", onTap: () => context.push("/transactions?type=cash_in&provider=$_provider")),
+        _tile(icon: Icons.call_made, label: "Cash Out", bgColor: const Color(0xFFFDF3DC), iconColor: const Color(0xFFB87E00), type: "cash_out", onTap: () => context.push("/transactions?type=cash_out&provider=$_provider")),
+        _tile(icon: Icons.send, label: "Send Money", bgColor: const Color(0xFFE3EEFC), iconColor: const Color(0xFF2E6FD9), type: "send_money", onTap: () => context.push("/transactions?type=send_money&provider=$_provider")),
+        _tile(icon: Icons.storefront, label: "Pay to Merchant", bgColor: const Color(0xFFF0E6FA), iconColor: const Color(0xFF8B5FBF), type: "merchant_payment", onTap: () => context.push("/transactions?type=merchant_payment&provider=$_provider")),
+        _tile(icon: Icons.receipt_long, label: "Pay to Agent", bgColor: const Color(0xFFFCE8E3), iconColor: const Color(0xFFC1503D), type: "bill_payment", onTap: () => context.push("/transactions?type=bill_payment&provider=$_provider")),
+        _tile(icon: Icons.phone_android, label: "Airtime", bgColor: const Color(0xFFFFF7D6), iconColor: const Color(0xFFA6821A), type: "airtime", onTap: () => context.push("/transactions?type=airtime&provider=$_provider")),
+        _tile(icon: Icons.wifi, label: "Data Bundle", bgColor: const Color(0xFFE0F7F5), iconColor: const Color(0xFF14847A), type: "data_bundle", onTap: () => context.push("/transactions?type=data_bundle&provider=$_provider")),
+        _tile(icon: Icons.account_balance_wallet, label: "Check Balance", bgColor: const Color(0xFFDFF3EE), iconColor: const Color(0xFF1F8A6F), type: "balance_enquiry", onTap: () => context.push("/transactions?type=balance_enquiry&provider=$_provider")),
         _QuickAction(icon: Icons.pie_chart, label: "Check Commission", bgColor: const Color(0xFFFBE6EC), iconColor: const Color(0xFFB33F6B), onTap: () => _showCommissionCheckPicker(context)),
       ];
     }
@@ -248,9 +283,9 @@ class _HomeTabState extends State<HomeTab> {
       SnackBar(content: Text("$feature automation is coming soon for Telecel")));
 
     return [
-      _QuickAction(icon: Icons.call_received, label: "Deposit", bgColor: const Color(0xFFE6F4F1), iconColor: AppTheme.primaryColor, onTap: () => context.push("/transactions?type=cash_in&provider=telecel")),
-      _QuickAction(icon: Icons.call_made, label: "Withdrawal", bgColor: const Color(0xFFFDF3DC), iconColor: const Color(0xFFB87E00), onTap: () => context.push("/transactions?type=cash_out&provider=telecel")),
-      _QuickAction(icon: Icons.phone_android, label: "Airtime", bgColor: const Color(0xFFFFF7D6), iconColor: const Color(0xFFA6821A), onTap: () => context.push("/transactions?type=airtime&provider=telecel")),
+      _tile(icon: Icons.call_received, label: "Deposit", bgColor: const Color(0xFFE6F4F1), iconColor: AppTheme.primaryColor, type: "cash_in", onTap: () => context.push("/transactions?type=cash_in&provider=telecel")),
+      _tile(icon: Icons.call_made, label: "Withdrawal", bgColor: const Color(0xFFFDF3DC), iconColor: const Color(0xFFB87E00), type: "cash_out", onTap: () => context.push("/transactions?type=cash_out&provider=telecel")),
+      _tile(icon: Icons.phone_android, label: "Airtime", bgColor: const Color(0xFFFFF7D6), iconColor: const Color(0xFFA6821A), type: "airtime", onTap: () => context.push("/transactions?type=airtime&provider=telecel")),
       _QuickAction(icon: Icons.wifi, label: "Internet Data", bgColor: Colors.grey[200]!, iconColor: Colors.grey, onTap: () => comingSoon("Internet Data")),
       _QuickAction(icon: Icons.account_balance_wallet, label: "Balance", bgColor: Colors.grey[200]!, iconColor: Colors.grey, onTap: () => comingSoon("Balance")),
       _QuickAction(icon: Icons.pie_chart, label: "Commission", bgColor: Colors.grey[200]!, iconColor: Colors.grey, onTap: () => comingSoon("Commission")),

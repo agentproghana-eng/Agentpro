@@ -596,6 +596,7 @@ function MarketplacePage() {
 
 import {
   CompaniesPage,
+  CompanyDetailPage,
   USSDTemplatesPage,
   FlowsPage,
   AuditLogsPage,
@@ -621,6 +622,7 @@ export default function App() {
                   <Route path="/marketplace" element={<MarketplacePage />} />
                   <Route path="/config" element={<ConfigPage />} />
                   <Route path="/companies" element={<CompaniesPage />} />
+                  <Route path="/companies/:companyId" element={<CompanyDetailPage />} />
                   <Route path="/commissions" element={<CommissionsPage />} />
                   <Route path="/ussd" element={<USSDTemplatesPage />} />
                   <Route path="/flows" element={<FlowsPage />} />

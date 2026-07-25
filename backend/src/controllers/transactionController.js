@@ -30,6 +30,29 @@ exports.initiateTransaction = async (req, res) => {
   const companyId = req.user.company_id;
 
   try {
+    // Kill-switch check - server-side enforcement so a stale app
+    // build that doesn't check the client-side feature flag can't
+    // bypass an admin-disabled transaction type. Fails open (allows
+    // the transaction) on any config read/parse error, matching
+    // getFeatureFlags' fail-safe behavior - a config problem should
+    // never itself block real transactions.
+    try {
+      const flagResult = await query(
+        `SELECT value FROM system_config WHERE key = 'disabled_transaction_types'`
+      );
+      if (flagResult.rows.length > 0) {
+        const disabled = JSON.parse(flagResult.rows[0].value);
+        if (Array.isArray(disabled) && disabled.includes(`${provider}:${transaction_type}`)) {
+          return res.status(403).json({
+            success: false,
+            message: 'This transaction type has been temporarily disabled by your administrator. Please try again later.',
+          });
+        }
+      }
+    } catch (flagErr) {
+      logger.error('Feature flag check failed (allowing transaction):', flagErr);
+    }
+
     // Determine the agent's assigned branch server-side - agents,
     // managers, and owners never send branch_id from the client;
     // every transaction is always recorded against whichever branch

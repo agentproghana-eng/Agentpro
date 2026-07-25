@@ -83,7 +83,7 @@ exports.changePassword = async (req, res) => {
 };
 
 exports.listUsers = async (req, res) => {
-  const { role, status, branch_id, page = 1, limit = 20 } = req.query;
+  const { role, status, branch_id, company_id, page = 1, limit = 20 } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
   try {
@@ -110,6 +110,10 @@ exports.listUsers = async (req, res) => {
 
     if (role) { conditions.push(`u.role = $${idx++}`); params.push(role); }
     if (status) { conditions.push(`u.status = $${idx++}`); params.push(status); }
+    // Only meaningful for superuser (business_owner/manager are already
+    // scoped to their own company_id above); harmless no-op for other
+    // roles since it just ANDs with their existing auto-scope.
+    if (company_id) { conditions.push(`u.company_id = $${idx++}`); params.push(company_id); }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -117,7 +121,7 @@ exports.listUsers = async (req, res) => {
       query(
         `SELECT u.id, u.role, u.first_name, u.last_name, u.email, u.phone,
                 u.status, u.created_at, u.last_login_at, u.profile_image_url,
-                c.name as company_name
+                u.company_id, c.name as company_name
          FROM users u
          LEFT JOIN companies c ON u.company_id = c.id
          ${where}
@@ -578,6 +582,30 @@ exports.reactivateStaffMember = async (req, res, existingUserId, fields) => {
 // Deliberately scoped to req.user.id only (mirrors changePassword's
 // pattern) - a user can only ever update their own record here, never
 // another user's, regardless of role.
+// App-wide kill-switch / feature-flag mechanism: lets an admin disable
+// any provider+transaction_type combo (e.g. "telecel:cash_out")
+// without an app release. Fails safe - any error or missing/malformed
+// config just returns an empty disabled list rather than blocking the
+// whole home screen from loading.
+exports.getFeatureFlags = async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT value FROM system_config WHERE key = 'disabled_transaction_types'`
+    );
+    let disabled = [];
+    if (result.rows.length > 0) {
+      try {
+        const parsed = JSON.parse(result.rows[0].value);
+        if (Array.isArray(parsed)) disabled = parsed;
+      } catch (_) { /* malformed config - fail safe with empty list */ }
+    }
+    res.json({ success: true, data: { disabled_transaction_types: disabled } });
+  } catch (e) {
+    logger.error('Get feature flags error:', e);
+    res.status(500).json({ success: false, message: 'Failed to fetch feature flags' });
+  }
+};
+
 exports.updateMySettings = async (req, res) => {
   const { telecel_operator_id } = req.body;
 

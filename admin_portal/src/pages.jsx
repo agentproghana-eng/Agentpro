@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
@@ -29,7 +30,7 @@ export function Badge({ status }) {
   );
 }
 
-export function Table({ columns, data, loading, emptyMsg = 'No data' }) {
+export function Table({ columns, data, loading, emptyMsg = 'No data', onRowClick }) {
   if (loading) return <div className="text-center py-16 text-gray-400">Loading...</div>;
   if (!data.length) return (
     <div className="text-center py-16 text-gray-400">
@@ -46,7 +47,9 @@ export function Table({ columns, data, loading, emptyMsg = 'No data' }) {
         </thead>
         <tbody className="divide-y divide-gray-50">
           {data.map((row, i) => (
-            <tr key={row.id || i} className="hover:bg-gray-50 transition">
+            <tr key={row.id || i}
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
+              className={`hover:bg-gray-50 transition ${onRowClick ? 'cursor-pointer' : ''}`}>
               {columns.map(c => (
                 <td key={c.key} className="px-4 py-3 text-gray-700">
                   {c.render ? c.render(row) : row[c.key] ?? '—'}
@@ -95,6 +98,7 @@ export function StatCard({ label, value, icon, sub, color = 'primary' }) {
 // ── Companies Page ────────────────────────────────────────────
 
 export function CompaniesPage() {
+  const navigate = useNavigate();
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -150,7 +154,101 @@ export function CompaniesPage() {
               render: r => r.created_at ? new Date(r.created_at).toLocaleDateString() : '—' },
             { key: 'actions', label: '',
               render: r => (
-                <button onClick={() => toggleStatus(r.id, r.status)}
+                <button onClick={(e) => { e.stopPropagation(); toggleStatus(r.id, r.status); }}
+                  className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
+                    r.status === 'active'
+                      ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200'
+                      : 'bg-green-50 text-green-600 hover:bg-green-100 border border-green-200'
+                  }`}>
+                  {r.status === 'active' ? 'Suspend' : 'Activate'}
+                </button>
+              )},
+          ]}
+          onRowClick={r => navigate(`/companies/${r.company_id}`)}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── Company Detail Page ───────────────────────────────────────
+// Reuses the existing /users?company_id=X endpoint rather than a
+// dedicated company route - the business owner's own row (found in
+// the same result set) doubles as the company header info, so no
+// second API call is needed.
+export function CompanyDetailPage() {
+  const { companyId } = useParams();
+  const navigate = useNavigate();
+  const [staff, setStaff] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await API.get(`/users?company_id=${companyId}&limit=100`);
+      setStaff(res.data.data || []);
+    } catch (_) {
+      toast.error('Failed to load company details');
+    } finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, [companyId]);
+
+  const owner = staff.find(u => u.role === 'business_owner');
+  const otherStaff = staff.filter(u => u.role !== 'business_owner');
+
+  const toggleStatus = async (userId, currentStatus) => {
+    const newStatus = currentStatus === 'active' ? 'suspended' : 'active';
+    try {
+      await API.patch(`/users/${userId}`, { status: newStatus });
+      toast.success(`User ${newStatus}`);
+      load();
+    } catch (_) { toast.error('Action failed'); }
+  };
+
+  if (loading) return <div className="text-center py-16 text-gray-400">Loading...</div>;
+
+  return (
+    <div>
+      <button onClick={() => navigate('/companies')}
+        className="text-sm text-primary hover:underline mb-4 flex items-center gap-1">
+        ← Back to Companies
+      </button>
+
+      {owner ? (
+        <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">{owner.company_name || '—'}</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Owner: {owner.first_name} {owner.last_name} · {owner.email} · {owner.phone || '—'}
+              </p>
+            </div>
+            <Badge status={owner.status} />
+          </div>
+        </div>
+      ) : (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 text-sm text-amber-800">
+          No business owner found for this company.
+        </div>
+      )}
+
+      <PageHeader title="Staff" subtitle={`${otherStaff.length} staff member${otherStaff.length === 1 ? '' : 's'}`} />
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <Table
+          loading={false}
+          data={otherStaff}
+          emptyMsg="No other staff yet"
+          columns={[
+            { key: 'name', label: 'Name', render: r => `${r.first_name} ${r.last_name}` },
+            { key: 'role', label: 'Role', render: r => <Badge status={r.role} /> },
+            { key: 'email', label: 'Email' },
+            { key: 'phone', label: 'Phone' },
+            { key: 'status', label: 'Status', render: r => <Badge status={r.status} /> },
+            { key: 'created_at', label: 'Joined',
+              render: r => r.created_at ? new Date(r.created_at).toLocaleDateString() : '—' },
+            { key: 'actions', label: '',
+              render: r => (
+                <button onClick={(e) => { e.stopPropagation(); toggleStatus(r.id, r.status); }}
                   className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
                     r.status === 'active'
                       ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200'

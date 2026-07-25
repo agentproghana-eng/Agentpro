@@ -9,6 +9,7 @@ userRouter.get('/', authorize('superuser', 'business_owner', 'manager'), userCon
 userRouter.post('/', authorize('superuser', 'business_owner'), userController.createUser);
 userRouter.patch('/me/password', userController.changePassword);
 userRouter.patch('/me/settings', userController.updateMySettings);
+userRouter.get('/me/feature-flags', userController.getFeatureFlags);
 userRouter.get('/:user_id', authorize('superuser', 'business_owner', 'manager'), userController.getUser);
 userRouter.patch('/:user_id', authorize('superuser', 'business_owner'), userController.updateUser);
 userRouter.patch('/:user_id/reassign-branch', authorize('superuser', 'business_owner'), userController.reassignBranch);
