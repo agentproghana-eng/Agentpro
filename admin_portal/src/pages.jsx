@@ -412,6 +412,9 @@ export function FlowsPage() {
   }, null, 2));
   const [saving, setSaving] = useState(false);
   const [validationError, setValidationError] = useState(null);
+  const [testScreenText, setTestScreenText] = useState('');
+  const [testFromStep, setTestFromStep] = useState(1);
+  const [testResult, setTestResult] = useState(undefined); // undefined = not run, null = no match, object = matched
 
   const load = async () => {
     try {
@@ -424,6 +427,9 @@ export function FlowsPage() {
 
   const startEdit = async (f) => {
     setValidationError(null);
+    setTestScreenText('');
+    setTestFromStep(1);
+    setTestResult(undefined);
     try {
       const res = await API.get(`/admin/ussd-flows/${f.id}`);
       const full = res.data.data;
@@ -438,6 +444,35 @@ export function FlowsPage() {
     } catch (_) {
       toast.error('Failed to load flow details');
     }
+  };
+
+  // Mirrors UssdAccessibilityService.kt's handleGenericStep() matching
+  // logic exactly: lowercase the screen text, find the first step at
+  // or after fromIndex whose match_all substrings are ALL present.
+  // Lets an admin verify a step will actually fire against real
+  // screen text (e.g. copied from a screenshot) without needing a
+  // live device test.
+  const runStepTest = () => {
+    let parsed;
+    try {
+      parsed = JSON.parse(editJson);
+    } catch (_) {
+      toast.error('Fix the JSON before testing');
+      return;
+    }
+    const steps = parsed.steps || [];
+    const lowerScreen = testScreenText.toLowerCase();
+    const fromIndex = testFromStep - 1;
+    let matched = null;
+    for (let i = fromIndex; i < steps.length; i++) {
+      const step = steps[i];
+      if (Array.isArray(step.match_all) && step.match_all.length > 0 &&
+          step.match_all.every(m => lowerScreen.includes(String(m).toLowerCase()))) {
+        matched = { matchedIndex: i, step };
+        break;
+      }
+    }
+    setTestResult(matched);
   };
 
   const save = async () => {
@@ -603,6 +638,40 @@ export function FlowsPage() {
                 rows={20}
                 className="w-full font-mono text-xs border border-gray-200 rounded-lg p-3
                   focus:outline-none focus:ring-2 focus:ring-primary resize-none" />
+
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Test a Screen (optional)</label>
+                <p className="text-xs text-gray-500 mb-2">
+                  Paste real text from a USSD screen (e.g. copied from a screenshot) to see which
+                  step would fire — same matching logic the app actually uses.
+                </p>
+                <textarea value={testScreenText} onChange={e => { setTestScreenText(e.target.value); setTestResult(undefined); }}
+                  rows={3} placeholder="e.g. MainMenuAgent 1) Pay To 2) Cash Out 3) Cash In..."
+                  className="w-full font-mono text-xs border border-gray-200 rounded-lg p-3 mb-2
+                    focus:outline-none focus:ring-2 focus:ring-primary resize-none" />
+                <div className="flex items-center gap-2 mb-2">
+                  <label className="text-xs text-gray-600">Starting from step:</label>
+                  <input type="number" min="1" value={testFromStep}
+                    onChange={e => setTestFromStep(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-16 border border-gray-200 rounded px-2 py-1 text-xs" />
+                  <button onClick={runStepTest}
+                    className="bg-gray-800 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-900 transition">
+                    Simulate
+                  </button>
+                </div>
+                {testResult !== undefined && (
+                  testResult ? (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-xs text-green-800">
+                      ✅ <strong>Step {testResult.matchedIndex + 1}</strong> would fire — action: <code>{testResult.step.action}</code>
+                      {testResult.step.action_value ? <> (value: <code>{testResult.step.action_value}</code>)</> : ''}
+                    </div>
+                  ) : (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-800">
+                      ❌ No step matches this text — automation would do nothing here. Check your <code>match_all</code> wording.
+                    </div>
+                  )
+                )}
+              </div>
             </div>
             <div className="p-6 border-t flex gap-3">
               <button onClick={save} disabled={saving}
