@@ -191,6 +191,7 @@ function Layout({ children }) {
 function DashboardPage() {
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     API.get('/admin/overview').then(r => { setOverview(r.data.data); setLoading(false); });
@@ -198,12 +199,15 @@ function DashboardPage() {
 
   if (loading) return <div className="text-center py-16 text-gray-400">Loading dashboard...</div>;
 
+  // path is omitted for cards with no destination page yet (Total
+  // Users, Transactions Today) - those stay non-clickable rather than
+  // navigating somewhere that doesn't exist.
   const cards = [
-    { label: 'Total Companies', value: overview?.companies?.total ?? '—', sub: `${overview?.companies?.active ?? 0} active`, color: 'blue' },
+    { label: 'Total Companies', value: overview?.companies?.total ?? '—', sub: `${overview?.companies?.active ?? 0} active`, color: 'blue', path: '/companies' },
     { label: 'Total Users', value: overview?.users?.total ?? '—', sub: 'Platform-wide', color: 'green' },
     { label: 'Transactions Today', value: overview?.transactions_today ?? '—', sub: 'All companies', color: 'purple' },
-    { label: 'Active Subscriptions', value: overview?.active_subscriptions ?? '—', sub: 'Business Plan', color: 'yellow' },
-    { label: 'Pending Ads', value: overview?.pending_ads ?? '—', sub: 'Awaiting moderation', color: 'red' },
+    { label: 'Active Subscriptions', value: overview?.active_subscriptions ?? '—', sub: 'Business Plan', color: 'yellow', path: '/subscriptions' },
+    { label: 'Pending Ads', value: overview?.pending_ads ?? '—', sub: 'Awaiting moderation', color: 'red', path: '/marketplace' },
   ];
 
   return (
@@ -211,7 +215,9 @@ function DashboardPage() {
       <h2 className="text-xl font-bold text-gray-900 mb-6">Platform Overview</h2>
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-8">
         {cards.map(card => (
-          <div key={card.label} className="bg-white rounded-xl p-4 shadow-sm">
+          <div key={card.label}
+            onClick={card.path ? () => navigate(card.path) : undefined}
+            className={`bg-white rounded-xl p-4 shadow-sm ${card.path ? 'cursor-pointer hover:shadow-md hover:ring-2 hover:ring-primary/30 transition' : ''}`}>
             <p className="text-2xl font-bold text-gray-900">{card.value}</p>
             <p className="text-sm font-medium text-gray-600 mt-1">{card.label}</p>
             <p className="text-xs text-gray-400">{card.sub}</p>
