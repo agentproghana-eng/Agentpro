@@ -19,6 +19,8 @@ class _HomeTabState extends State<HomeTab> {
   bool _loading = true;
   Map<String, SimCard?>? _simMap;
   Set<String> _disabledTypes = {};
+  Map<String, dynamic>? _currentShift;
+  bool _shiftLoading = true;
 
   @override
   void initState() {
@@ -26,6 +28,70 @@ class _HomeTabState extends State<HomeTab> {
     _load();
     _loadSimMap();
     _loadFeatureFlags();
+    _loadCurrentShift();
+  }
+
+  Future<void> _loadCurrentShift() async {
+    try {
+      final res = await ApiClient.instance.get("/shifts/current");
+      if (mounted) setState(() { _currentShift = res.data["data"]; _shiftLoading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _shiftLoading = false);
+    }
+  }
+
+  Future<void> _openShift() async {
+    try {
+      final res = await ApiClient.instance.post("/shifts/open");
+      if (mounted) setState(() => _currentShift = res.data["data"]);
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Failed to open shift")));
+    }
+  }
+
+  // Shift status card - shown above the quick action tiles. Greyed
+  // out/plain when no shift is open (tap to open), tinted and shows
+  // elapsed time when one is - tapping Close navigates to the
+  // dedicated close-shift flow and refreshes on return.
+  Widget _buildShiftCard() {
+    if (_shiftLoading) return const SizedBox.shrink();
+    final isOpen = _currentShift != null;
+    final openedAt = isOpen ? DateTime.tryParse(_currentShift!["opened_at"]?.toString() ?? "") : null;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isOpen ? const Color(0xFFE6F4F1) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 3)],
+      ),
+      child: Row(children: [
+        Icon(isOpen ? Icons.timer : Icons.timer_off_outlined,
+            color: isOpen ? AppTheme.primaryColor : Colors.grey, size: 22),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            isOpen
+                ? "Shift open since ${openedAt != null ? DateFormat('h:mm a').format(openedAt.toLocal()) : '—'}"
+                : "No active shift",
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: isOpen ? AppTheme.primaryColor : Colors.grey[700]),
+          ),
+        ),
+        ElevatedButton(
+          onPressed: isOpen
+              ? () => context.push("/shifts/close/${_currentShift!['id']}").then((_) => _loadCurrentShift())
+              : _openShift,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: isOpen ? AppTheme.errorColor : AppTheme.primaryColor,
+            minimumSize: const Size(0, 34),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+          ),
+          child: Text(isOpen ? "Close Shift" : "Open Shift", style: const TextStyle(fontSize: 12)),
+        ),
+      ]),
+    );
   }
 
   // Fetches the admin-controlled kill-switch list once per screen load.
@@ -180,6 +246,7 @@ class _HomeTabState extends State<HomeTab> {
                 ),
               ),
             ),
+            SliverToBoxAdapter(child: _buildShiftCard()),
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
               sliver: SliverToBoxAdapter(

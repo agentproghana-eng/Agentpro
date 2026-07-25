@@ -24,6 +24,7 @@ import '../../features/support/support_screen.dart';
 import '../../features/ussd_settings/ussd_settings_screen.dart';
 import '../../features/ussd_flows/ussd_flow_list_screen.dart';
 import '../../features/community/community_feed_screen.dart';
+import '../../features/shifts/close_shift_screen.dart';
 import '../../features/community/post_detail_screen.dart';
 import '../../features/community/post_moderation_screen.dart';
 import '../../features/reports/reports_screen.dart';
@@ -110,6 +111,7 @@ class AppRouter {
         GoRoute(path: '/ussd-settings', builder: (_, __) => const UssdSettingsScreen()),
         GoRoute(path: '/ussd-flows', builder: (_, __) => const UssdFlowListScreen()),
         GoRoute(path: '/community', builder: (_, __) => const CommunityFeedScreen()),
+        GoRoute(path: '/shifts/close/:shiftId', builder: (_, state) => CloseShiftScreen(shiftId: state.pathParameters['shiftId']!)),
         GoRoute(
           path: '/community/post/:post_id',
           builder: (_, state) => PostDetailScreen(postId: state.pathParameters['post_id']!),
