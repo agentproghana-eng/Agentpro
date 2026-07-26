@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/theme/app_colors.dart';
 
 class _StepDraft {
   final matchAllCtrl = TextEditingController();
@@ -141,7 +142,7 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text('PROVIDER', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+          const Text('PROVIDER', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.appSecondaryText)),
           const SizedBox(height: 8),
           Row(children: ['mtn', 'telecel', 'at_money'].map((p) {
             final selected = _provider == p;
@@ -152,13 +153,13 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
                   margin: const EdgeInsets.only(right: 6),
                   padding: const EdgeInsets.symmetric(vertical: 9),
                   decoration: BoxDecoration(
-                    color: selected ? AppTheme.primaryColor : Colors.white,
+                    color: selected ? AppTheme.primaryColor : context.appSurface,
                     borderRadius: BorderRadius.circular(9),
                   ),
                   child: Text(
                     {'mtn': 'MTN', 'telecel': 'Telecel', 'at_money': 'AT Money'}[p]!,
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: selected ? Colors.white : Colors.grey),
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: selected ? Colors.white : context.appSecondaryText),
                   ),
                 ),
               ),
@@ -166,11 +167,11 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
           }).toList()),
 
           const SizedBox(height: 16),
-          const Text('TRANSACTION TYPE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+          const Text('TRANSACTION TYPE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.appSecondaryText)),
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(10)),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
                 value: _transactionType,
@@ -182,7 +183,7 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
           ),
 
           const SizedBox(height: 16),
-          const Text('DIAL CODE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+          const Text('DIAL CODE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.appSecondaryText)),
           const SizedBox(height: 8),
           TextField(
             controller: _dialCodeCtrl,
@@ -191,7 +192,7 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
           ),
 
           const SizedBox(height: 16),
-          const Text('SUCCESS MARKERS (comma-separated)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+          const Text('SUCCESS MARKERS (comma-separated)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.appSecondaryText)),
           const SizedBox(height: 8),
           TextField(
             controller: _successMarkersCtrl,
@@ -199,7 +200,7 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
           ),
 
           const SizedBox(height: 16),
-          const Text('FAILURE MARKERS (comma-separated)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+          const Text('FAILURE MARKERS (comma-separated)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.appSecondaryText)),
           const SizedBox(height: 8),
           TextField(
             controller: _failureMarkersCtrl,
@@ -207,7 +208,7 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
           ),
 
           const SizedBox(height: 20),
-          const Text('STEPS (in order)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+          const Text('STEPS (in order)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.appSecondaryText)),
           const SizedBox(height: 8),
 
           ..._steps.asMap().entries.map((entry) {
@@ -225,7 +226,7 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
                       children: [
                         Text('Step ${i + 1}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                         IconButton(
-                          icon: const Icon(Icons.close, size: 18, color: Colors.grey),
+                          icon: Icon(Icons.close, size: 18, color: context.appSecondaryText),
                           onPressed: () => _removeStep(i),
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
@@ -233,7 +234,7 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
                       ],
                     ),
                     const SizedBox(height: 6),
-                    const Text('Match if screen contains (comma-separated, ALL must match)', style: TextStyle(fontSize: 9.5, color: Colors.grey)),
+                    const Text('Match if screen contains (comma-separated, ALL must match)', style: TextStyle(fontSize: 9.5, color: context.appSecondaryText)),
                     const SizedBox(height: 4),
                     TextField(
                       controller: step.matchAllCtrl,
@@ -241,16 +242,16 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
                       decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), hintText: 'enter phone no'),
                     ),
                     const SizedBox(height: 8),
-                    const Text('Action', style: TextStyle(fontSize: 9.5, color: Colors.grey)),
+                    const Text('Action', style: TextStyle(fontSize: 9.5, color: context.appSecondaryText)),
                     const SizedBox(height: 4),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10),
-                      decoration: BoxDecoration(border: Border.all(color: Colors.grey[300]!), borderRadius: BorderRadius.circular(6)),
+                      decoration: BoxDecoration(border: Border.all(color: context.appDivider), borderRadius: BorderRadius.circular(6)),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
                           value: step.action,
                           isExpanded: true,
-                          style: const TextStyle(fontSize: 12, color: Colors.black),
+                          style: TextStyle(fontSize: 12, color: context.appPrimaryText),
                           items: _actions.map((a) => DropdownMenuItem(value: a['value'], child: Text(a['label']!))).toList(),
                           onChanged: (v) => setState(() => step.action = v!),
                         ),
@@ -258,7 +259,7 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
                     ),
                     if (step.needsActionValue) ...[
                       const SizedBox(height: 8),
-                      const Text('Value to send', style: TextStyle(fontSize: 9.5, color: Colors.grey)),
+                      const Text('Value to send', style: TextStyle(fontSize: 9.5, color: context.appSecondaryText)),
                       const SizedBox(height: 4),
                       TextField(
                         controller: step.actionValueCtrl,
