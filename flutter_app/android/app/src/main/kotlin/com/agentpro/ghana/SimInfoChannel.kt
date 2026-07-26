@@ -73,6 +73,15 @@ class SimInfoChannel(
                     // unused field isn't worth the extra permission prompt.
                     "network" to identifyNetwork(operator),
                     "operator_code" to operator,
+                    // ICCID (the physical SIM card's own serial number) -
+                    // unlike the phone number above, this needs no
+                    // permission beyond READ_PHONE_STATE (already granted
+                    // for everything else here). Used to detect when a
+                    // different physical SIM is being used under the same
+                    // agent account than usual - not universally guaranteed
+                    // on every device/Android version, so callers must
+                    // treat a null/empty value as "unknown", not an error.
+                    "iccid" to sub.iccId,
                 )
             }
 

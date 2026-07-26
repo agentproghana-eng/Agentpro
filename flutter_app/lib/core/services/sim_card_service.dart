@@ -66,6 +66,12 @@ class SimCard {
   final String carrierName;
   final String network; // 'mtn', 'telecel', 'at_money', 'unknown'
   final String operatorCode;
+  // The physical SIM card's own serial number - not universally
+  // available on every device/Android version, so this can be empty.
+  // Used to detect when a different physical SIM is being used under
+  // the same agent account than usual, not to identify the SIM's
+  // phone number (which Android does not reliably expose).
+  final String iccid;
 
   const SimCard({
     required this.slot,
@@ -73,6 +79,7 @@ class SimCard {
     required this.carrierName,
     required this.network,
     required this.operatorCode,
+    this.iccid = '',
   });
 
   factory SimCard.fromMap(Map<String, dynamic> map) {
@@ -82,6 +89,7 @@ class SimCard {
       carrierName: map['carrier_name'] as String? ?? '',
       network: map['network'] as String? ?? 'unknown',
       operatorCode: map['operator_code'] as String? ?? '',
+      iccid: map['iccid'] as String? ?? '',
     );
   }
 
