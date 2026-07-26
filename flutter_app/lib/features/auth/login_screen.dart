@@ -7,6 +7,7 @@ import '../../core/auth/auth_bloc.dart';
 import '../../core/services/biometric_service.dart';
 import '../../core/services/storage_service.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_button.dart';
 import '../../shared/widgets/app_text_field.dart';
 
@@ -238,7 +239,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: context.appScaffoldBg,
       body: Stack(
         children: [
           BlocConsumer<AuthBloc, AuthState>(
@@ -309,7 +310,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           Text(
                             'One App. Every Mobile Money Business.',
                             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Colors.grey[600],
+                              color: context.appSecondaryText,
                             ),
                           ),
                         ],
@@ -323,7 +324,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
-                    Text('Sign in to continue', style: TextStyle(color: Colors.grey[600])),
+                    Text('Sign in to continue', style: TextStyle(color: context.appSecondaryText)),
 
                     const SizedBox(height: 28),
 
@@ -394,7 +395,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text("Don't have an account?", style: TextStyle(color: Colors.grey[600])),
+                        Text("Don't have an account?", style: TextStyle(color: context.appSecondaryText)),
                         TextButton(
                           onPressed: () => context.push('/auth/register'),
                           child: const Text('Register Business'),
@@ -432,7 +433,7 @@ class _LoginScreenState extends State<LoginScreen> {
               final info = snapshot.data!;
               return Text(
                 "v${info.version}+${info.buildNumber}",
-                style: TextStyle(fontSize: 10, color: Colors.grey.withOpacity(0.6)),
+                style: TextStyle(fontSize: 10, color: context.appSecondaryText.withOpacity(0.6)),
               );
             },
           ),
