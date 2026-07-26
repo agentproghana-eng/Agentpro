@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/utils/transaction_labels.dart';
+import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../core/services/offline_queue_service.dart';
@@ -295,8 +296,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
                           margin: const EdgeInsets.only(right: 8),
                           padding: const EdgeInsets.symmetric(vertical: 10),
                           decoration: BoxDecoration(
-                            color: selected ? color : Colors.white,
-                            border: Border.all(color: selected ? color : Colors.grey[300]!),
+                            color: selected ? color : context.appSurface,
+                            border: Border.all(color: selected ? color : context.appDivider),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Column(
@@ -309,7 +310,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontSize: 10, fontWeight: FontWeight.w600,
-                                  color: selected ? (p == 'mtn' ? Colors.black : Colors.white) : Colors.grey[700],
+                                  color: selected ? (p == 'mtn' ? Colors.black : Colors.white) : context.appSecondaryText,
                                 )),
                             ],
                           ),
@@ -385,7 +386,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     prefixText: 'GH₵  ',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     filled: true,
-                    fillColor: Colors.grey[50],
+                    fillColor: context.appSurface,
                   ),
                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   validator: (v) {
@@ -414,7 +415,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     prefixText: 'GH₵  ',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     filled: true,
-                    fillColor: Colors.grey[50],
+                    fillColor: context.appSurface,
                     helperText: 'Auto-calculated at 1% - editable',
                   ),
                   onChanged: (_) => _feeAutoCalculated = false,
@@ -459,9 +460,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.blue[50],
+                    color: context.isDarkMode ? Colors.blue[900]!.withOpacity(0.25) : Colors.blue[50],
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blue[200]!),
+                    border: Border.all(color: context.isDarkMode ? Colors.blue[700]! : Colors.blue[200]!),
                   ),
                   child: const Row(
                     children: [
