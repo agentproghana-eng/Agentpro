@@ -981,6 +981,19 @@ export function AuditLogsPage() {
               render: r => r.entity_type ? (
                 <span className="text-xs text-gray-500">{r.entity_type}</span>
               ) : '—' },
+            { key: 'details', label: 'Details',
+              render: r => {
+                const values = r.new_values || r.old_values;
+                if (!values || Object.keys(values).length === 0) return '—';
+                const summary = Object.entries(values)
+                  .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`)
+                  .join(', ');
+                return (
+                  <span className="text-xs text-gray-600 truncate max-w-xs block" title={summary}>
+                    {summary}
+                  </span>
+                );
+              }},
             { key: 'ip_address', label: 'IP',
               render: r => <span className="font-mono text-xs">{r.ip_address || '—'}</span> },
             { key: 'result', label: 'Result',
