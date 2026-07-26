@@ -3,6 +3,7 @@ import "package:flutter_bloc/flutter_bloc.dart";
 import "../../core/api/api_client.dart";
 import "../../core/auth/auth_bloc.dart";
 import "../../shared/theme/app_theme.dart";
+import "../../shared/theme/app_colors.dart";
 
 class UssdSettingsScreen extends StatefulWidget {
   const UssdSettingsScreen({super.key});
@@ -163,7 +164,7 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
           const Text("Telecel Operator ID", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
           const SizedBox(height: 4),
           const Text("Fixed per agent - the same value is used for every Telecel transaction.",
-            style: TextStyle(fontSize: 9.5, color: Colors.grey)),
+            style: TextStyle(fontSize: 9.5, color: context.appSecondaryText)),
           const SizedBox(height: 8),
           TextField(
             controller: _operatorIdCtrl,
@@ -183,7 +184,7 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
+          decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(10)),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: _transactionType,
@@ -203,13 +204,13 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
         ),
         const Padding(
           padding: EdgeInsets.only(top: 4),
-          child: Text("Placeholders: {customer_phone}, {amount}, {reference}", style: TextStyle(fontSize: 9.5, color: Colors.grey)),
+          child: Text("Placeholders: {customer_phone}, {amount}, {reference}", style: TextStyle(fontSize: 9.5, color: context.appSecondaryText)),
         ),
         const SizedBox(height: 12),
         Container(
           padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: const Color(0xFFFBE4E4), borderRadius: BorderRadius.circular(10)),
-          child: const Text("Never include a MoMo PIN in this pattern. The app can never dial, store, or see your PIN — it is always entered on the network's own screen.", style: TextStyle(fontSize: 10.5, color: Color(0xFFA33333))),
+          decoration: BoxDecoration(color: context.isDarkMode ? const Color(0xFF332020) : const Color(0xFFFBE4E4), borderRadius: BorderRadius.circular(10)),
+          child: Text("Never include a MoMo PIN in this pattern. The app can never dial, store, or see your PIN — it is always entered on the network's own screen.", style: TextStyle(fontSize: 10.5, color: context.isDarkMode ? const Color(0xFFE57373) : const Color(0xFFA33333))),
         ),
         const SizedBox(height: 16),
         if (_currentOverride != null)
@@ -243,10 +244,10 @@ class _ProviderPill extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 9),
           decoration: BoxDecoration(
-            color: selected ? AppTheme.primaryColor : Colors.white,
+            color: selected ? AppTheme.primaryColor : context.appSurface,
             borderRadius: BorderRadius.circular(9),
           ),
-          child: Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: selected ? Colors.white : Colors.grey)),
+          child: Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: selected ? Colors.white : context.appSecondaryText)),
         ),
       ),
     );
