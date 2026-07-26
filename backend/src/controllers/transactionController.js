@@ -144,6 +144,50 @@ exports.initiateTransaction = async (req, res) => {
       requestId: req.requestId
     });
 
+    // SIM fingerprint check - only meaningful when the device actually
+    // reported an ICCID (not all devices/Android versions expose it).
+    // Wrapped so any failure here never blocks the transaction itself,
+    // since this is a security signal, not a validation gate.
+    if (sim_iccid) {
+      try {
+        const knownThisSim = await query(
+          `SELECT 1 FROM agent_sim_registry WHERE agent_id = $1 AND provider = $2 AND iccid = $3`,
+          [agentId, provider, sim_iccid]
+        );
+        const hasAnyKnownSim = await query(
+          `SELECT 1 FROM agent_sim_registry WHERE agent_id = $1 AND provider = $2 LIMIT 1`,
+          [agentId, provider]
+        );
+
+        // Only flag if this agent+provider already has an established
+        // SIM on record and this transaction used a genuinely different
+        // one - not on the very first transaction ever for this combo,
+        // which is just establishing the baseline.
+        if (knownThisSim.rows.length === 0 && hasAnyKnownSim.rows.length > 0) {
+          await auditLog({
+            userId: agentId,
+            companyId,
+            action: 'NEW_SIM_DETECTED',
+            entityType: 'transaction',
+            entityId: transaction.id,
+            newValues: { provider, sim_iccid, message: 'A different physical SIM than previously seen was used for this agent/provider combo' },
+            ipAddress: req.ip,
+            requestId: req.requestId
+          });
+        }
+
+        await query(
+          `INSERT INTO agent_sim_registry (agent_id, provider, iccid, transaction_count)
+           VALUES ($1, $2, $3, 1)
+           ON CONFLICT (agent_id, provider, iccid)
+           DO UPDATE SET last_seen_at = NOW(), transaction_count = agent_sim_registry.transaction_count + 1`,
+          [agentId, provider, sim_iccid]
+        );
+      } catch (simCheckError) {
+        logger.error('SIM registry check error (non-blocking):', simCheckError);
+      }
+    }
+
     // Return transaction details + USSD template for the Flutter app
     // The app will execute USSD automation using this template
     res.status(201).json({
