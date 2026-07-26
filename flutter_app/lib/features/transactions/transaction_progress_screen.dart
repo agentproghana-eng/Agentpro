@@ -7,6 +7,7 @@ import '../../core/services/ussd_service.dart';
 import '../../core/services/sim_card_service.dart';
 import '../../core/services/permission_service.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 import '../../core/services/offline_queue_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -452,7 +453,7 @@ Future<void> _startAccessibilityAutomation(
     return PopScope(
       canPop: _completed,
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: context.appScaffoldBg,
         appBar: AppBar(
           title: const Text('Processing Transaction'),
           automaticallyImplyLeading: _completed,
@@ -576,7 +577,7 @@ Future<void> _startAccessibilityAutomation(
 
           const Spacer(),
 
-          Text('Do not close this screen', style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+          Text('Do not close this screen', style: TextStyle(color: context.appSecondaryText, fontSize: 12)),
           const SizedBox(height: 16),
         ],
       ),
@@ -635,20 +636,20 @@ Future<void> _startAccessibilityAutomation(
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),
             Text(txType.toUpperCase(), textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[600], letterSpacing: 1)),
+              style: TextStyle(color: context.appSecondaryText, letterSpacing: 1)),
             if (customerPhone.isNotEmpty) ...[
               const SizedBox(height: 4),
               Text(customerPhone, textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey[500])),
+                style: TextStyle(color: context.appSecondaryText)),
             ],
             if (_wasManuallyConfirmed) ...[
               const SizedBox(height: 8),
               Text('Confirmed manually by agent', textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey[400], fontSize: 11, fontStyle: FontStyle.italic)),
+                style: TextStyle(color: context.appSecondaryText, fontSize: 11, fontStyle: FontStyle.italic)),
             ],
           ] else if (isPending) ...[
             Text('GH₵ $amount · ${txType.toUpperCase()}', textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w600)),
+              style: TextStyle(color: context.appSecondaryText, fontWeight: FontWeight.w600)),
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
@@ -671,11 +672,11 @@ Future<void> _startAccessibilityAutomation(
             const SizedBox(height: 8),
             Text(_failureReason ?? 'The transaction could not be completed.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[600])),
+              style: TextStyle(color: context.appSecondaryText)),
             if (_wasManuallyConfirmed) ...[
               const SizedBox(height: 8),
               Text('Confirmed manually by agent', textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey[400], fontSize: 11, fontStyle: FontStyle.italic)),
+                style: TextStyle(color: context.appSecondaryText, fontSize: 11, fontStyle: FontStyle.italic)),
             ],
           ],
 
@@ -683,7 +684,7 @@ Future<void> _startAccessibilityAutomation(
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
+              decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(8)),
               child: Column(
                 children: [
                   _RefRow('Reference', _completedTransaction!['reference']),
@@ -759,7 +760,7 @@ class _RefRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
-          Text(label, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+          Text(label, style: TextStyle(color: context.appSecondaryText, fontSize: 12)),
           const Spacer(),
           Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
         ],
