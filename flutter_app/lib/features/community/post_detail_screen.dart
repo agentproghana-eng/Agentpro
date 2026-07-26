@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "../../core/api/api_client.dart";
 import "../../shared/theme/app_theme.dart";
+import "../../shared/theme/app_colors.dart";
 
 class PostDetailScreen extends StatefulWidget {
   final String postId;
@@ -98,7 +99,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       padding: const EdgeInsets.all(10),
       margin: EdgeInsets.only(bottom: 8, left: isReply ? 24 : 0),
       decoration: BoxDecoration(
-        color: isReply ? Colors.grey[100] : Colors.white,
+        color: isReply ? context.appDivider : context.appSurface,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -131,7 +132,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                       children: [
                         Container(
                           padding: const EdgeInsets.all(13),
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 4)]),
+                          decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 4)]),
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                             Text("${_post!["first_name"] ?? ""} ${_post!["last_name"] ?? ""}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                             const SizedBox(height: 6),
@@ -151,14 +152,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   ),
                   Container(
                     padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 4)]),
+                    decoration: BoxDecoration(color: context.appSurface, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 4)]),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                       if (_replyingToId != null)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 6),
                           child: Row(children: [
-                            Expanded(child: Text("Replying to $_replyingToName", style: const TextStyle(fontSize: 11, color: Colors.grey))),
-                            GestureDetector(onTap: _cancelReply, child: const Icon(Icons.close, size: 16, color: Colors.grey)),
+                            Expanded(child: Text("Replying to $_replyingToName", style: TextStyle(fontSize: 11, color: context.appSecondaryText))),
+                            GestureDetector(onTap: _cancelReply, child: Icon(Icons.close, size: 16, color: context.appSecondaryText)),
                           ]),
                         ),
                       Row(children: [
