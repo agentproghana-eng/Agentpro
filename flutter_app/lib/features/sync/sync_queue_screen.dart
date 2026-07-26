@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/services/offline_queue_service.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/theme/app_colors.dart';
 
 class SyncQueueScreen extends StatefulWidget {
   const SyncQueueScreen({super.key});
@@ -56,10 +57,10 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'These were completed offline and are stored safely on this device. '
               'They will not be lost if you close the app.',
-              style: TextStyle(color: Colors.grey),
+              style: TextStyle(color: context.appSecondaryText),
             ),
             const SizedBox(height: 24),
             SizedBox(
