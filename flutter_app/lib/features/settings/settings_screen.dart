@@ -9,6 +9,7 @@ import '../../core/services/biometric_service.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/services/offline_queue_service.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 
 const int _kPinLength = 4;
@@ -168,7 +169,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
         const Padding(
           padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-          child: Text('SECURITY', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 1)),
+          child: Text('SECURITY', style: TextStyle(fontSize: 11, color: context.appSecondaryText, fontWeight: FontWeight.bold, letterSpacing: 1)),
         ),
 
         if (_canBiometric)
@@ -215,7 +216,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const Divider(),
         const Padding(
           padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-          child: Text('ABOUT', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 1)),
+          child: Text('ABOUT', style: TextStyle(fontSize: 11, color: context.appSecondaryText, fontWeight: FontWeight.bold, letterSpacing: 1)),
         ),
         const ListTile(leading: Icon(Icons.info_outline), title: Text('Version'), trailing: Text('2.0.0')),
         ListTile(
