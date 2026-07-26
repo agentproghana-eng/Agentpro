@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "../../core/api/api_client.dart";
 import "../../shared/theme/app_theme.dart";
+import "../../shared/theme/app_colors.dart";
 
 class PostModerationScreen extends StatefulWidget {
   const PostModerationScreen({super.key});
@@ -62,13 +63,13 @@ class _PostModerationScreenState extends State<PostModerationScreen> {
                       return Container(
                         padding: const EdgeInsets.all(13),
                         margin: const EdgeInsets.only(bottom: 10),
-                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 4)]),
+                        decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 4)]),
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Text("${p["first_name"] ?? ""} ${p["last_name"] ?? ""}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                           const SizedBox(height: 6),
                           Text(p["content"] ?? "", style: const TextStyle(fontSize: 12.5)),
                           const SizedBox(height: 4),
-                          Text("Flagged: ${p["flagged_reason"] ?? "N/A"}", style: const TextStyle(fontSize: 10.5, color: Colors.grey, fontStyle: FontStyle.italic)),
+                          Text("Flagged: ${p["flagged_reason"] ?? "N/A"}", style: TextStyle(fontSize: 10.5, color: context.appSecondaryText, fontStyle: FontStyle.italic)),
                           const SizedBox(height: 10),
                           Row(children: [
                             Expanded(child: OutlinedButton(onPressed: () => _review(p["id"], "reject"), child: const Text("Reject"))),
