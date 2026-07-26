@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_bloc.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 
 // Full transaction history: Type and Provider are standalone filters
@@ -224,12 +225,12 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
             margin: const EdgeInsets.only(right: 6),
             padding: const EdgeInsets.symmetric(vertical: 7),
             decoration: BoxDecoration(
-              color: selected ? AppTheme.primaryColor : Colors.white,
+              color: selected ? AppTheme.primaryColor : context.appSurface,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(opt['label']!, textAlign: TextAlign.center,
               style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold,
-                color: selected ? Colors.white : Colors.grey)),
+                color: selected ? Colors.white : context.appSecondaryText)),
           ),
         ),
       );
@@ -238,7 +239,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
 
   Widget _filterSectionLabel(String text) => Padding(
     padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-    child: Text(text, style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey[500], letterSpacing: 0.5)),
+    child: Text(text, style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: context.appSecondaryText, letterSpacing: 0.5)),
   );
 
   @override
@@ -273,7 +274,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
+              decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(8)),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String?>(
                   value: _branchFilter,
