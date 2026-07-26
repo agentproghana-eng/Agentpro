@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/utils/transaction_labels.dart';
 import '../../shared/widgets/app_widgets.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../core/services/offline_queue_service.dart';
@@ -55,11 +56,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
     });
   }
 
-  String get _title {
-    if (widget.transactionType == 'bill_payment') return 'Pay to Agent';
-    return widget.transactionType.replaceAll('_', ' ').split(' ')
-        .map((w) => w[0].toUpperCase() + w.substring(1)).join(' ');
-  }
+  String get _title => transactionTypeLabel(widget.transactionType, _selectedProvider);
 
   bool get _needsRecipient => ['send_money'].contains(widget.transactionType);
   // Pay to Agent and Pay to Merchant (MTN's "Pay To" menu, both

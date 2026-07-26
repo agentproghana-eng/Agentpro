@@ -4,6 +4,7 @@ import "package:intl/intl.dart";
 import "../../core/api/api_client.dart";
 import "../../shared/theme/app_theme.dart";
 import "../../core/services/sim_card_service.dart";
+import "../../shared/utils/transaction_labels.dart";
 
 class HomeTab extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -438,7 +439,7 @@ class _RecentTxItem extends StatelessWidget {
         ),
         const SizedBox(width: 10),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(type.replaceAll("_", " "), style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+          Text(transactionTypeLabel(type, (tx["provider"] ?? "").toString()), style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
           Text("${tx["customer_phone"] ?? ""} · $timeStr", style: const TextStyle(fontSize: 10.5, color: Colors.grey, fontWeight: FontWeight.w700)),
         ])),
         Text("${isCashIn ? "+" : "-"}GH₵${amount.toStringAsFixed(2)}", style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: isCashIn ? AppTheme.primaryColor : const Color(0xFFB33F3F))),
