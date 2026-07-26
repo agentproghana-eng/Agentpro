@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/theme/app_colors.dart';
 import 'ussd_flow_editor_screen.dart';
 
 // Lists USSD flows: global (superuser-owned, shared by every company,
@@ -102,14 +103,18 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
                               trailing: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                 decoration: BoxDecoration(
-                                  color: isGlobal ? const Color(0xFFE8E0FF) : const Color(0xFFE6F4F1),
+                                  color: isGlobal
+                                      ? (context.isDarkMode ? const Color(0xFF2A1F45) : const Color(0xFFE8E0FF))
+                                      : context.appTileColor(const Color(0xFFE6F4F1)),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
                                   isGlobal ? 'GLOBAL' : 'MY COMPANY',
                                   style: TextStyle(
                                     fontSize: 8, fontWeight: FontWeight.w800,
-                                    color: isGlobal ? const Color(0xFF5B3FA0) : AppTheme.primaryColor,
+                                    color: isGlobal
+                                        ? (context.isDarkMode ? const Color(0xFFB39DDB) : const Color(0xFF5B3FA0))
+                                        : (context.isDarkMode ? AppTheme.primaryLight : AppTheme.primaryColor),
                                   ),
                                 ),
                               ),
