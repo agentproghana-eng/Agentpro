@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:go_router/go_router.dart";
 import "../../core/api/api_client.dart";
 import "../../shared/theme/app_theme.dart";
+import "../../shared/theme/app_colors.dart";
 
 class CashAdjustmentScreen extends StatefulWidget {
   final String provider;
@@ -70,8 +71,8 @@ class _CashAdjustmentScreenState extends State<CashAdjustmentScreen> {
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: const Color(0xFFE6F4F1), borderRadius: BorderRadius.circular(10)),
-              child: const Text("This takes effect immediately — a routine count, no approval needed.", style: TextStyle(fontSize: 11, color: AppTheme.primaryColor)),
+              decoration: BoxDecoration(color: context.appTileColor(const Color(0xFFE6F4F1)), borderRadius: BorderRadius.circular(10)),
+              child: Text("This takes effect immediately — a routine count, no approval needed.", style: TextStyle(fontSize: 11, color: context.isDarkMode ? AppTheme.primaryLight : AppTheme.primaryColor)),
             ),
           ] else ...[
             const Text("Type", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
@@ -92,8 +93,8 @@ class _CashAdjustmentScreenState extends State<CashAdjustmentScreen> {
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: const Color(0xFFFFF4D9), borderRadius: BorderRadius.circular(10)),
-              child: const Text("This needs approval from your manager or business owner before it takes effect. Your balance won't change until then.", style: TextStyle(fontSize: 11, color: Color(0xFF7A5B00))),
+              decoration: BoxDecoration(color: context.isDarkMode ? const Color(0xFF332B15) : const Color(0xFFFFF4D9), borderRadius: BorderRadius.circular(10)),
+              child: Text("This needs approval from your manager or business owner before it takes effect. Your balance won't change until then.", style: TextStyle(fontSize: 11, color: context.isDarkMode ? AppTheme.secondaryColor : const Color(0xFF7A5B00))),
             ),
           ],
           if (_error != null) ...[
@@ -126,8 +127,8 @@ class _ModeTab extends StatelessWidget {
       borderRadius: BorderRadius.circular(9),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 9),
-        decoration: BoxDecoration(color: selected ? AppTheme.primaryColor : Colors.white, borderRadius: BorderRadius.circular(9)),
-        child: Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: selected ? Colors.white : Colors.grey)),
+        decoration: BoxDecoration(color: selected ? AppTheme.primaryColor : context.appSurface, borderRadius: BorderRadius.circular(9)),
+        child: Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: selected ? Colors.white : context.appSecondaryText)),
       ),
     );
   }
@@ -146,8 +147,8 @@ class _TypeChip extends StatelessWidget {
       borderRadius: BorderRadius.circular(9),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 9),
-        decoration: BoxDecoration(color: selected ? AppTheme.primaryColor : Colors.white, borderRadius: BorderRadius.circular(9)),
-        child: Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: selected ? Colors.white : Colors.grey)),
+        decoration: BoxDecoration(color: selected ? AppTheme.primaryColor : context.appSurface, borderRadius: BorderRadius.circular(9)),
+        child: Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: selected ? Colors.white : context.appSecondaryText)),
       ),
     );
   }
