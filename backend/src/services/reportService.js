@@ -186,15 +186,20 @@ async function generateTransactionReportPDF({ transactions, filters, summary, ti
     doc.moveDown(3.5);
 
     // Table Header
+    // Widths rebalanced to fit the new SIM column within the same
+    // total (515pt = A4 width minus margins) rather than overflowing
+    // the page - full ICCID doesn't fit here, shown as last 6 digits
+    // only (full value is in the Excel report and Audit Logs).
     const cols = [
       { label: 'Date', width: 55 },
-      { label: 'Reference', width: 75 },
-      { label: 'Type', width: 55 },
+      { label: 'Reference', width: 65 },
+      { label: 'Type', width: 50 },
       { label: 'Provider', width: 45 },
-      { label: 'Customer', width: 65 },
-      { label: 'Agent', width: 65 },
+      { label: 'Customer', width: 60 },
+      { label: 'Agent', width: 60 },
       { label: 'Amount', width: 60 },
-      { label: 'Status', width: 95 },
+      { label: 'Status', width: 85 },
+      { label: 'SIM', width: 35 },
     ];
 
     doc.rect(40, doc.y, doc.page.width - 80, 18).fill(COLORS.primary);
@@ -227,6 +232,7 @@ async function generateTransactionReportPDF({ transactions, filters, summary, ti
         tx.agent_name || '—',
         GHS(tx.amount),
         (tx.status || '').toUpperCase(),
+        tx.sim_iccid ? tx.sim_iccid.slice(-6) : '—',
       ];
 
       x = 40;
@@ -277,7 +283,7 @@ async function generateTransactionReportExcel({ transactions, filters, summary, 
   const headerRow = sheet.addRow([
     'Date', 'Reference', 'Network Ref', 'Transaction Type',
     'Provider', 'Customer Phone', 'Customer Name', 'Amount (GH₵)',
-    'Commission (GH₵)', 'Status', 'Agent', 'Branch',
+    'Commission (GH₵)', 'Status', 'Agent', 'Branch', 'SIM (ICCID)',
   ]);
   headerRow.eachCell(cell => {
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF006B5E' } };
@@ -300,6 +306,7 @@ async function generateTransactionReportExcel({ transactions, filters, summary, 
       (tx.status || '').toUpperCase(),
       tx.agent_name || '',
       tx.branch_name || '',
+      tx.sim_iccid || '',
     ]);
 
     if (i % 2 === 0) {
