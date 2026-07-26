@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 
 class NotificationsScreen extends StatefulWidget {
@@ -54,13 +55,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           : '';
                       return ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: isRead ? Colors.grey[100] : AppTheme.primaryColor.withOpacity(0.15),
-                          child: Icon(Icons.notifications, color: isRead ? Colors.grey : AppTheme.primaryColor, size: 20),
+                          backgroundColor: isRead ? context.appSurface : AppTheme.primaryColor.withOpacity(0.15),
+                          child: Icon(Icons.notifications, color: isRead ? context.appSecondaryText : AppTheme.primaryColor, size: 20),
                         ),
                         title: Text(n['title'] ?? '', style: TextStyle(fontWeight: isRead ? FontWeight.normal : FontWeight.bold, fontSize: 13)),
                         subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Text(n['body'] ?? '', style: const TextStyle(fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
-                          Text(time, style: TextStyle(color: Colors.grey[400], fontSize: 11)),
+                          Text(time, style: TextStyle(color: context.appSecondaryText, fontSize: 11)),
                         ]),
                         tileColor: isRead ? null : AppTheme.primaryColor.withOpacity(0.03),
                       );
