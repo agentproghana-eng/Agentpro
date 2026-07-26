@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_bloc.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 import 'staff_work_history_screen.dart';
 
@@ -288,7 +289,7 @@ class _StaffList extends StatelessWidget {
                 children: [
                   Text(u['phone'] ?? u['email'] ?? '', style: const TextStyle(fontSize: 12)),
                   Text((u['role'] ?? '').toString().toUpperCase(),
-                    style: TextStyle(fontSize: 10, color: Colors.grey[500], letterSpacing: 0.5)),
+                    style: TextStyle(fontSize: 10, color: context.appSecondaryText, letterSpacing: 0.5)),
                 ],
               ),
               isThreeLine: true,
