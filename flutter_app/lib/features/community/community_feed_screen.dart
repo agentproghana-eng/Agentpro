@@ -8,6 +8,7 @@ import "package:audioplayers/audioplayers.dart";
 import "package:path_provider/path_provider.dart";
 import "../../core/api/api_client.dart";
 import "../../shared/theme/app_theme.dart";
+import "../../shared/theme/app_colors.dart";
 
 // NOTE: record/audioplayers are new dependencies added specifically for
 // this feature - unlike everything else touched tonight, there is no
@@ -138,7 +139,7 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
     if (_isRecording) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)]),
+        decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)]),
         child: Row(children: [
           const Icon(Icons.fiber_manual_record, color: Colors.red, size: 14),
           const SizedBox(width: 8),
@@ -152,13 +153,13 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
     if (_hasRecording) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)]),
+        decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)]),
         child: Row(children: [
           const Icon(Icons.mic, color: AppTheme.primaryColor, size: 18),
           const SizedBox(width: 8),
           Text("Voice note ready (${_formatSeconds(_recordSeconds)})", style: const TextStyle(fontSize: 12)),
           const Spacer(),
-          IconButton(icon: const Icon(Icons.close, color: Colors.grey), onPressed: _discardRecording),
+          IconButton(icon: Icon(Icons.close, color: context.appSecondaryText), onPressed: _discardRecording),
           IconButton(
             icon: _posting ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send, color: AppTheme.primaryColor),
             onPressed: _posting ? null : _submitPost,
@@ -169,7 +170,7 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)]),
+      decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)]),
       child: Row(children: [
         Expanded(child: TextField(controller: _composerCtrl, decoration: const InputDecoration(hintText: "Share something with the community...", border: InputBorder.none))),
         IconButton(icon: const Icon(Icons.mic_none, color: AppTheme.primaryColor), onPressed: _startRecording),
@@ -239,14 +240,14 @@ class _PostCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(13),
         margin: const EdgeInsets.only(bottom: 10),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 4)]),
+        decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 4)]),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             CircleAvatar(backgroundColor: AppTheme.primaryColor, child: Text(((post["first_name"] as String?) ?? "A")[0].toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
             const SizedBox(width: 8),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text("${post["first_name"] ?? ""} ${post["last_name"] ?? ""}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
-              Text((post["role"] ?? "").toString().replaceAll("_", " "), style: const TextStyle(fontSize: 10, color: Colors.grey)),
+              Text((post["role"] ?? "").toString().replaceAll("_", " "), style: TextStyle(fontSize: 10, color: context.appSecondaryText)),
             ])),
           ]),
           const SizedBox(height: 8),
@@ -254,8 +255,8 @@ class _PostCard extends StatelessWidget {
             Container(
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(color: const Color(0xFFFFF4D9), borderRadius: BorderRadius.circular(8)),
-              child: const Text("Under Review — only you can see this", style: TextStyle(fontSize: 9.5, color: Color(0xFF7A5B00), fontWeight: FontWeight.bold)),
+              decoration: BoxDecoration(color: context.isDarkMode ? const Color(0xFF332B15) : const Color(0xFFFFF4D9), borderRadius: BorderRadius.circular(8)),
+              child: Text("Under Review — only you can see this", style: TextStyle(fontSize: 9.5, color: context.isDarkMode ? AppTheme.secondaryColor : const Color(0xFF7A5B00), fontWeight: FontWeight.bold)),
             ),
           if (post["content"] != null && (post["content"] as String).isNotEmpty)
             Text(post["content"], style: const TextStyle(fontSize: 12.5)),
@@ -263,7 +264,7 @@ class _PostCard extends StatelessWidget {
             if (post["content"] != null && (post["content"] as String).isNotEmpty) const SizedBox(height: 8),
             _AudioPlayerBubble(url: audioUrl),
           ],
-          Text(_formatPostTime(post["created_at"] as String?), style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
+          Text(_formatPostTime(post["created_at"] as String?), style: TextStyle(fontSize: 10.5, color: context.appSecondaryText)),
           const SizedBox(height: 10),
           Row(children: [
             InkWell(onTap: onLike, child: Row(children: [
@@ -273,14 +274,14 @@ class _PostCard extends StatelessWidget {
             ])),
             const SizedBox(width: 16),
             Row(children: [
-              const Icon(Icons.chat_bubble_outline, size: 15, color: Colors.grey),
+              Icon(Icons.chat_bubble_outline, size: 15, color: context.appSecondaryText),
               const SizedBox(width: 4),
               Text("${post["comment_count"] ?? 0}", style: const TextStyle(fontSize: 11.5)),
             ]),
             const SizedBox(width: 16),
             InkWell(
               onTap: () => Share.share("${post["content"] ?? "Voice note"}"),
-              child: const Icon(Icons.share_outlined, size: 15, color: Colors.grey),
+              child: Icon(Icons.share_outlined, size: 15, color: context.appSecondaryText),
             ),
           ]),
         ]),
