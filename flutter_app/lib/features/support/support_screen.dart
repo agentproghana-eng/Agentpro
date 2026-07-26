@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:go_router/go_router.dart";
 import "package:url_launcher/url_launcher.dart";
 import "../../shared/theme/app_theme.dart";
+import "../../shared/theme/app_colors.dart";
 
 class SupportScreen extends StatelessWidget {
   const SupportScreen({super.key});
@@ -49,10 +50,10 @@ class SupportScreen extends StatelessWidget {
         const SizedBox(height: 16),
         Container(
           padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 4)]),
+          decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 4)]),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Text("Call Your Network", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-            const Text("For PIN issues and account problems", style: TextStyle(fontSize: 11, color: Colors.grey)),
+            Text("For PIN issues and account problems", style: TextStyle(fontSize: 11, color: context.appSecondaryText)),
             const SizedBox(height: 10),
             _CallRow(label: "MTN", number: "100", onTap: _call),
             const Divider(height: 20),
@@ -64,10 +65,10 @@ class SupportScreen extends StatelessWidget {
         const SizedBox(height: 16),
         Container(
           padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 4)]),
+          decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 4)]),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Text("App Support", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-            const Text("For questions about Agent Pro Ghana itself", style: TextStyle(fontSize: 11, color: Colors.grey)),
+            Text("For questions about Agent Pro Ghana itself", style: TextStyle(fontSize: 11, color: context.appSecondaryText)),
             const SizedBox(height: 10),
             InkWell(
               onTap: () => _email("support@agentproghana.com"),
@@ -96,7 +97,7 @@ class SupportScreen extends StatelessWidget {
               ]),
             ),
             const SizedBox(height: 10),
-            const Text("Mon - Fri, 8:00 AM - 5:00 PM", style: TextStyle(fontSize: 11, color: Colors.grey)),
+            Text("Mon - Fri, 8:00 AM - 5:00 PM", style: TextStyle(fontSize: 11, color: context.appSecondaryText)),
           ]),
         ),
       ]),
