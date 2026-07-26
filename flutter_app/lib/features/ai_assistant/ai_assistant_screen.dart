@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/theme/app_colors.dart';
 
 class AIAssistantScreen extends StatefulWidget {
   const AIAssistantScreen({super.key});
@@ -223,7 +224,7 @@ class _MessageBubble extends StatelessWidget {
               decoration: BoxDecoration(
                 color: isUser
                     ? AppTheme.primaryColor
-                    : message.isError ? AppTheme.errorColor.withOpacity(0.1) : Colors.grey[100],
+                    : message.isError ? AppTheme.errorColor.withOpacity(0.1) : context.appSurface,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(16),
                   topRight: const Radius.circular(16),
@@ -234,7 +235,7 @@ class _MessageBubble extends StatelessWidget {
               child: Text(
                 message.content,
                 style: TextStyle(
-                  color: isUser ? Colors.white : message.isError ? AppTheme.errorColor : Colors.black87,
+                  color: isUser ? Colors.white : message.isError ? AppTheme.errorColor : context.appPrimaryText,
                   fontSize: 14,
                   height: 1.4,
                 ),
@@ -268,7 +269,7 @@ class _TypingIndicatorState extends State<_TypingIndicator> with SingleTickerPro
       const SizedBox(width: 8),
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(16)),
+        decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(16)),
         child: AnimatedBuilder(
           animation: _ctrl,
           builder: (_, __) => Row(mainAxisSize: MainAxisSize.min, children: List.generate(3, (i) =>
