@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 
 class FloatScreen extends StatefulWidget {
@@ -106,7 +107,7 @@ class _FloatCard extends StatelessWidget {
         title: Text(account['branch_name'] ?? 'Branch',
           style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(isLow ? '⚠️ Low float' : 'Threshold: GH₵ ${threshold.toStringAsFixed(2)}',
-          style: TextStyle(color: isLow ? AppTheme.errorColor : Colors.grey[600], fontSize: 12)),
+          style: TextStyle(color: isLow ? AppTheme.errorColor : context.appSecondaryText, fontSize: 12)),
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.end,
@@ -115,7 +116,7 @@ class _FloatCard extends StatelessWidget {
             Text('Updated: ${account['last_updated_at'] != null
                 ? DateTime.parse(account['last_updated_at']).toLocal().toString().substring(5, 16)
                 : '—'}',
-              style: TextStyle(color: Colors.grey[400], fontSize: 10)),
+              style: TextStyle(color: context.appSecondaryText, fontSize: 10)),
           ],
         ),
       ),
