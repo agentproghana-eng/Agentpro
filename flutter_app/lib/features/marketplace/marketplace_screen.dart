@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 
 class MarketplaceScreen extends StatefulWidget {
@@ -95,7 +96,7 @@ class _AdCard extends StatelessWidget {
         onTap: () => context.push('/marketplace/ads/${ad['id']}'),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Container(height: 100, color: AppTheme.primaryColor.withOpacity(0.1),
-            child: const Center(child: Icon(Icons.image_outlined, size: 40, color: Colors.grey))),
+            child: Center(child: Icon(Icons.image_outlined, size: 40, color: context.appSecondaryText))),
           Padding(padding: const EdgeInsets.all(8), child: Column(
             crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(ad['title'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis,
@@ -104,7 +105,7 @@ class _AdCard extends StatelessWidget {
               if (price > 0) Text('GH₵ ${price.toStringAsFixed(2)}',
                 style: const TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.bold, fontSize: 13)),
               if (ad['location'] != null) Text(ad['location'],
-                style: const TextStyle(color: Colors.grey, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
+                style: TextStyle(color: context.appSecondaryText, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
             ],
           )),
         ]),
