@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "../../core/api/api_client.dart";
 import "../../shared/theme/app_theme.dart";
+import "../../shared/theme/app_colors.dart";
 
 class PendingApprovalsScreen extends StatefulWidget {
   const PendingApprovalsScreen({super.key});
@@ -117,24 +118,30 @@ class _ApprovalCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(13),
       margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 4)]),
+      decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 4)]),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(agentName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-            Text(providerLabel, style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
+            Text(providerLabel, style: TextStyle(fontSize: 10.5, color: context.appSecondaryText)),
           ]),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(color: isInjection ? const Color(0xFFE1F5E9) : const Color(0xFFFBE4E4), borderRadius: BorderRadius.circular(8)),
-            child: Text(isInjection ? "INJECTION" : "WITHDRAWAL", style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: isInjection ? const Color(0xFF1B7A43) : const Color(0xFFA33333))),
+            decoration: BoxDecoration(
+              color: isInjection
+                  ? (context.isDarkMode ? const Color(0xFF1B3327) : const Color(0xFFE1F5E9))
+                  : (context.isDarkMode ? const Color(0xFF332020) : const Color(0xFFFBE4E4)),
+              borderRadius: BorderRadius.circular(8)),
+            child: Text(isInjection ? "INJECTION" : "WITHDRAWAL", style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: isInjection
+                  ? (context.isDarkMode ? const Color(0xFF4CAF6D) : const Color(0xFF1B7A43))
+                  : (context.isDarkMode ? const Color(0xFFE57373) : const Color(0xFFA33333)))),
           ),
         ]),
         const SizedBox(height: 8),
         Text("GH₵ $amount", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
         if (notes != null && notes!.isNotEmpty) ...[
           const SizedBox(height: 4),
-          Text(notes ?? "", style: const TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic)),
+          Text(notes ?? "", style: TextStyle(fontSize: 11, color: context.appSecondaryText, fontStyle: FontStyle.italic)),
         ],
         const SizedBox(height: 10),
         Row(children: [
