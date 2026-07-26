@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:go_router/go_router.dart";
 import "../../core/api/api_client.dart";
 import "../../shared/theme/app_theme.dart";
+import "../../shared/theme/app_colors.dart";
 
 class FloatReceivedScreen extends StatefulWidget {
   final String initialProvider;
@@ -77,10 +78,10 @@ class _FloatReceivedScreenState extends State<FloatReceivedScreen> {
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: const Color(0xFFE6F4F1), borderRadius: BorderRadius.circular(10)),
-            child: const Text(
+            decoration: BoxDecoration(color: context.appTileColor(const Color(0xFFE6F4F1)), borderRadius: BorderRadius.circular(10)),
+            child: Text(
               "This adds directly to your e-Float balance. No approval needed — you're the only one who knows this happened.",
-              style: TextStyle(fontSize: 11, color: AppTheme.primaryColor),
+              style: TextStyle(fontSize: 11, color: context.isDarkMode ? AppTheme.primaryLight : AppTheme.primaryColor),
             ),
           ),
           if (_error != null) ...[
@@ -117,10 +118,10 @@ class _ProviderPill extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 9),
           decoration: BoxDecoration(
-            color: selected ? AppTheme.primaryColor : Colors.white,
+            color: selected ? AppTheme.primaryColor : context.appSurface,
             borderRadius: BorderRadius.circular(9),
           ),
-          child: Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: selected ? Colors.white : Colors.grey)),
+          child: Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: selected ? Colors.white : context.appSecondaryText)),
         ),
       ),
     );
