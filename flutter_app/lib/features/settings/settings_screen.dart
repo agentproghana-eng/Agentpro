@@ -167,8 +167,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const Divider(),
 
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
           child: Text('SECURITY', style: TextStyle(fontSize: 11, color: context.appSecondaryText, fontWeight: FontWeight.bold, letterSpacing: 1)),
         ),
 
@@ -214,8 +214,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
 
         const Divider(),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
           child: Text('ABOUT', style: TextStyle(fontSize: 11, color: context.appSecondaryText, fontWeight: FontWeight.bold, letterSpacing: 1)),
         ),
         const ListTile(leading: Icon(Icons.info_outline), title: Text('Version'), trailing: Text('2.0.0')),

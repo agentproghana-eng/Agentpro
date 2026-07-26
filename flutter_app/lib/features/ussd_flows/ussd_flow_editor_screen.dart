@@ -142,7 +142,7 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text('PROVIDER', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.appSecondaryText)),
+          Text('PROVIDER', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.appSecondaryText)),
           const SizedBox(height: 8),
           Row(children: ['mtn', 'telecel', 'at_money'].map((p) {
             final selected = _provider == p;
@@ -167,7 +167,7 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
           }).toList()),
 
           const SizedBox(height: 16),
-          const Text('TRANSACTION TYPE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.appSecondaryText)),
+          Text('TRANSACTION TYPE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.appSecondaryText)),
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -183,7 +183,7 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
           ),
 
           const SizedBox(height: 16),
-          const Text('DIAL CODE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.appSecondaryText)),
+          Text('DIAL CODE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.appSecondaryText)),
           const SizedBox(height: 8),
           TextField(
             controller: _dialCodeCtrl,
@@ -192,7 +192,7 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
           ),
 
           const SizedBox(height: 16),
-          const Text('SUCCESS MARKERS (comma-separated)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.appSecondaryText)),
+          Text('SUCCESS MARKERS (comma-separated)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.appSecondaryText)),
           const SizedBox(height: 8),
           TextField(
             controller: _successMarkersCtrl,
@@ -200,7 +200,7 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
           ),
 
           const SizedBox(height: 16),
-          const Text('FAILURE MARKERS (comma-separated)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.appSecondaryText)),
+          Text('FAILURE MARKERS (comma-separated)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.appSecondaryText)),
           const SizedBox(height: 8),
           TextField(
             controller: _failureMarkersCtrl,
@@ -208,7 +208,7 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
           ),
 
           const SizedBox(height: 20),
-          const Text('STEPS (in order)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.appSecondaryText)),
+          Text('STEPS (in order)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.appSecondaryText)),
           const SizedBox(height: 8),
 
           ..._steps.asMap().entries.map((entry) {
@@ -234,7 +234,7 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
                       ],
                     ),
                     const SizedBox(height: 6),
-                    const Text('Match if screen contains (comma-separated, ALL must match)', style: TextStyle(fontSize: 9.5, color: context.appSecondaryText)),
+                    Text('Match if screen contains (comma-separated, ALL must match)', style: TextStyle(fontSize: 9.5, color: context.appSecondaryText)),
                     const SizedBox(height: 4),
                     TextField(
                       controller: step.matchAllCtrl,
@@ -242,7 +242,7 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
                       decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), hintText: 'enter phone no'),
                     ),
                     const SizedBox(height: 8),
-                    const Text('Action', style: TextStyle(fontSize: 9.5, color: context.appSecondaryText)),
+                    Text('Action', style: TextStyle(fontSize: 9.5, color: context.appSecondaryText)),
                     const SizedBox(height: 4),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -259,7 +259,7 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
                     ),
                     if (step.needsActionValue) ...[
                       const SizedBox(height: 8),
-                      const Text('Value to send', style: TextStyle(fontSize: 9.5, color: context.appSecondaryText)),
+                      Text('Value to send', style: TextStyle(fontSize: 9.5, color: context.appSecondaryText)),
                       const SizedBox(height: 4),
                       TextField(
                         controller: step.actionValueCtrl,

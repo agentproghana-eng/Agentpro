@@ -163,7 +163,7 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
           const SizedBox(height: 16),
           const Text("Telecel Operator ID", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
           const SizedBox(height: 4),
-          const Text("Fixed per agent - the same value is used for every Telecel transaction.",
+          Text("Fixed per agent - the same value is used for every Telecel transaction.",
             style: TextStyle(fontSize: 9.5, color: context.appSecondaryText)),
           const SizedBox(height: 8),
           TextField(
@@ -202,8 +202,8 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
           style: const TextStyle(fontFamily: "monospace"),
           decoration: const InputDecoration(hintText: "*170*1*2*{customer_phone}*{amount}#", border: OutlineInputBorder()),
         ),
-        const Padding(
-          padding: EdgeInsets.only(top: 4),
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
           child: Text("Placeholders: {customer_phone}, {amount}, {reference}", style: TextStyle(fontSize: 9.5, color: context.appSecondaryText)),
         ),
         const SizedBox(height: 12),
