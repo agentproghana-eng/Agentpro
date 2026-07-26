@@ -3,6 +3,7 @@ import "package:go_router/go_router.dart";
 import "package:intl/intl.dart";
 import "../../core/api/api_client.dart";
 import "../../shared/theme/app_theme.dart";
+import "../../shared/theme/app_colors.dart";
 import "../../core/services/sim_card_service.dart";
 import "../../shared/utils/transaction_labels.dart";
 
@@ -64,7 +65,7 @@ class _HomeTabState extends State<HomeTab> {
       margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isOpen ? const Color(0xFFE6F4F1) : Colors.white,
+        color: isOpen ? context.appTileColor(const Color(0xFFE6F4F1)) : context.appSurface,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 3)],
       ),
@@ -77,7 +78,7 @@ class _HomeTabState extends State<HomeTab> {
             isOpen
                 ? "Shift open since ${openedAt != null ? DateFormat('h:mm a').format(openedAt.toLocal()) : '—'}"
                 : "No active shift",
-            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: isOpen ? AppTheme.primaryColor : Colors.grey[700]),
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: isOpen ? AppTheme.primaryColor : context.appSecondaryText),
           ),
         ),
         ElevatedButton(
@@ -119,7 +120,7 @@ class _HomeTabState extends State<HomeTab> {
     return _QuickAction(
       icon: icon,
       label: label,
-      bgColor: disabled ? Colors.grey[200]! : bgColor,
+      bgColor: context.appTileColor(disabled ? Colors.grey[200]! : bgColor),
       iconColor: disabled ? Colors.grey : iconColor,
       onTap: disabled
           ? () => ScaffoldMessenger.of(context).showSnackBar(
@@ -242,7 +243,7 @@ class _HomeTabState extends State<HomeTab> {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                 child: Container(
                   padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 3)]),
+                  decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 3)]),
                   child: Row(children: _buildProviderTabRow()),
                 ),
               ),
@@ -343,7 +344,7 @@ class _HomeTabState extends State<HomeTab> {
         _tile(icon: Icons.phone_android, label: "Airtime", bgColor: const Color(0xFFFFF7D6), iconColor: const Color(0xFFA6821A), type: "airtime", onTap: () => context.push("/transactions?type=airtime&provider=$_provider")),
         _tile(icon: Icons.wifi, label: "Data Bundle", bgColor: const Color(0xFFE0F7F5), iconColor: const Color(0xFF14847A), type: "data_bundle", onTap: () => context.push("/transactions?type=data_bundle&provider=$_provider")),
         _tile(icon: Icons.account_balance_wallet, label: "Check Balance", bgColor: const Color(0xFFDFF3EE), iconColor: const Color(0xFF1F8A6F), type: "balance_enquiry", onTap: () => context.push("/transactions?type=balance_enquiry&provider=$_provider")),
-        _QuickAction(icon: Icons.pie_chart, label: "Check Commission", bgColor: const Color(0xFFFBE6EC), iconColor: const Color(0xFFB33F6B), onTap: () => _showCommissionCheckPicker(context)),
+        _QuickAction(icon: Icons.pie_chart, label: "Check Commission", bgColor: context.appTileColor(const Color(0xFFFBE6EC)), iconColor: const Color(0xFFB33F6B), onTap: () => _showCommissionCheckPicker(context)),
       ];
     }
 
@@ -354,9 +355,9 @@ class _HomeTabState extends State<HomeTab> {
       _tile(icon: Icons.call_received, label: "Deposit", bgColor: const Color(0xFFE6F4F1), iconColor: AppTheme.primaryColor, type: "cash_in", onTap: () => context.push("/transactions?type=cash_in&provider=telecel")),
       _tile(icon: Icons.call_made, label: "Withdrawal", bgColor: const Color(0xFFFDF3DC), iconColor: const Color(0xFFB87E00), type: "cash_out", onTap: () => context.push("/transactions?type=cash_out&provider=telecel")),
       _tile(icon: Icons.phone_android, label: "Airtime", bgColor: const Color(0xFFFFF7D6), iconColor: const Color(0xFFA6821A), type: "airtime", onTap: () => context.push("/transactions?type=airtime&provider=telecel")),
-      _QuickAction(icon: Icons.wifi, label: "Internet Data", bgColor: Colors.grey[200]!, iconColor: Colors.grey, onTap: () => comingSoon("Internet Data")),
-      _QuickAction(icon: Icons.account_balance_wallet, label: "Balance", bgColor: Colors.grey[200]!, iconColor: Colors.grey, onTap: () => comingSoon("Balance")),
-      _QuickAction(icon: Icons.pie_chart, label: "Commission", bgColor: Colors.grey[200]!, iconColor: Colors.grey, onTap: () => comingSoon("Commission")),
+      _QuickAction(icon: Icons.wifi, label: "Internet Data", bgColor: context.appTileColor(Colors.grey[200]!), iconColor: Colors.grey, onTap: () => comingSoon("Internet Data")),
+      _QuickAction(icon: Icons.account_balance_wallet, label: "Balance", bgColor: context.appTileColor(Colors.grey[200]!), iconColor: Colors.grey, onTap: () => comingSoon("Balance")),
+      _QuickAction(icon: Icons.pie_chart, label: "Commission", bgColor: context.appTileColor(Colors.grey[200]!), iconColor: Colors.grey, onTap: () => comingSoon("Commission")),
     ];
   }
 }
@@ -378,7 +379,7 @@ class _ProviderTab extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 9),
         decoration: BoxDecoration(color: selected ? color : Colors.transparent, borderRadius: BorderRadius.circular(9)),
-        child: Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: selected ? (color == const Color(0xFFFFCC00) ? Colors.black : Colors.white) : Colors.grey)),
+        child: Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: selected ? (color == const Color(0xFFFFCC00) ? Colors.black : Colors.white) : context.appSecondaryText)),
       ),
     );
   }
@@ -399,7 +400,7 @@ class _QuickAction extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(10),
       child: Container(
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 3)]),
+        decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(10), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 3)]),
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
           Container(
             width: 39, height: 39,
@@ -430,11 +431,11 @@ class _RecentTxItem extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(11),
       margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 3)]),
+      decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 3)]),
       child: Row(children: [
         Container(
           width: 34, height: 34,
-          decoration: BoxDecoration(color: isCashIn ? const Color(0xFFE6F4F1) : const Color(0xFFFDF3DC), borderRadius: BorderRadius.circular(9)),
+          decoration: BoxDecoration(color: isCashIn ? context.appTileColor(const Color(0xFFE6F4F1)) : context.appTileColor(const Color(0xFFFDF3DC)), borderRadius: BorderRadius.circular(9)),
           child: Icon(isCashIn ? Icons.call_received : Icons.call_made, size: 16, color: isCashIn ? AppTheme.primaryColor : const Color(0xFFB87E00)),
         ),
         const SizedBox(width: 10),
