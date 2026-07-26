@@ -131,7 +131,20 @@ class _HomeTabState extends State<HomeTab> {
 
   Future<void> _loadSimMap() async {
     try {
-      final map = await SimCardService.getNetworkSimMap();
+      var map = await SimCardService.getNetworkSimMap();
+      // Android's telephony state can briefly report "no SIMs" right at
+      // cold app launch or just after a permission grant, before the
+      // OS has fully settled - getSimCards() also swallows some
+      // non-permission platform errors into an empty list rather than
+      // throwing. If every provider comes back null, treat that as
+      // suspicious rather than final: retry once after a short delay.
+      // _simMap stays null the whole time (UI shows all 3 tabs, never
+      // "Insert SIM") until we're confident the result is real.
+      if (map.values.every((v) => v == null)) {
+        await Future.delayed(const Duration(milliseconds: 1200));
+        if (!mounted) return;
+        map = await SimCardService.getNetworkSimMap();
+      }
       if (!mounted) return;
       setState(() {
         _simMap = map;
