@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../core/auth/auth_bloc.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 import 'home_tab.dart';
 import '../community/community_feed_screen.dart';
@@ -440,7 +441,7 @@ class _Row extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(children: [
-        Text(label, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+        Text(label, style: TextStyle(color: context.appSecondaryText, fontSize: 12)),
         const Spacer(),
         Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
       ]),
@@ -509,7 +510,7 @@ class _MoreGroupLabel extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
     child: Text(label.toUpperCase(),
-        style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 1)),
+        style: TextStyle(fontSize: 11, color: context.appSecondaryText, fontWeight: FontWeight.bold, letterSpacing: 1)),
   );
 }
 
@@ -535,7 +536,7 @@ class _T extends StatelessWidget {
         ),
       ],
     ),
-    trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+    trailing: Icon(Icons.chevron_right, color: context.appSecondaryText),
     onTap: onTap,
   );
 }
