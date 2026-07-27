@@ -18,9 +18,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   final _commentCtrl = TextEditingController();
   bool _sending = false;
 
-  // One level of threading only, matching the backend's design (a
-  // reply itself never gets its own Reply button). null means the
-  // composer is posting a top-level comment.
+  // Replies can go to any depth - every comment, including replies
+  // themselves, gets its own Reply button. null means the composer
+  // is posting a top-level comment.
   String? _replyingToId;
   String? _replyingToName;
 
@@ -59,6 +59,17 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       .cast<Map<String, dynamic>>()
       .toList();
 
+  String _relativeTime(String? dateStr) {
+    if (dateStr == null) return '';
+    final date = DateTime.tryParse(dateStr);
+    if (date == null) return '';
+    final diff = DateTime.now().difference(date.toLocal());
+    if (diff.inDays > 0) return '${diff.inDays}d ago';
+    if (diff.inHours > 0) return '${diff.inHours}h ago';
+    if (diff.inMinutes > 0) return '${diff.inMinutes}m ago';
+    return 'just now';
+  }
+
   void _startReply(String commentId, String name) {
     setState(() {
       _replyingToId = commentId;
@@ -93,28 +104,42 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     }
   }
 
-  Widget _commentTile(Map<String, dynamic> c, {bool isReply = false}) {
+  // Recursive by design - a reply can itself have replies, to any
+  // depth the backend's self-referencing parent_comment_id allows.
+  // Visual indent is capped at 2 levels so a long thread doesn't
+  // squeeze content off a phone screen; deeper replies still render,
+  // just at the same indent as level 2 rather than creeping further.
+  Widget _commentTile(Map<String, dynamic> c, {int depth = 0}) {
     final name = "${c["first_name"] ?? ""} ${c["last_name"] ?? ""}".trim();
-    return Container(
-      padding: const EdgeInsets.all(10),
-      margin: EdgeInsets.only(bottom: 8, left: isReply ? 24 : 0),
-      decoration: BoxDecoration(
-        color: isReply ? context.appDivider : context.appSurface,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(name.isEmpty ? "—" : name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5)),
-        const SizedBox(height: 3),
-        Text(c["content"] ?? "", style: const TextStyle(fontSize: 12)),
-        if (!isReply) ...[
+    final indent = depth.clamp(0, 2) * 20.0;
+    final time = _relativeTime(c["created_at"] as String?);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Container(
+        padding: const EdgeInsets.all(10),
+        margin: EdgeInsets.only(bottom: 8, left: indent),
+        decoration: BoxDecoration(
+          color: depth > 0 ? context.appDivider : context.appSurface,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Text(name.isEmpty ? "—" : name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5)),
+            if (time.isNotEmpty) ...[
+              const SizedBox(width: 6),
+              Text(time, style: TextStyle(fontSize: 10, color: context.appSecondaryText)),
+            ],
+          ]),
+          const SizedBox(height: 3),
+          Text(c["content"] ?? "", style: const TextStyle(fontSize: 12)),
           const SizedBox(height: 4),
           GestureDetector(
             onTap: () => _startReply(c["id"] as String, name.isEmpty ? "them" : name),
             child: const Text("Reply", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
           ),
-        ],
-      ]),
-    );
+        ]),
+      ),
+      for (final r in _repliesFor(c["id"] as String)) _commentTile(r, depth: depth + 1),
+    ]);
   }
 
   @override
@@ -143,10 +168,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                         const SizedBox(height: 16),
                         const Text("Comments", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                         const SizedBox(height: 8),
-                        for (final c in _topLevelComments) ...[
-                          _commentTile(c),
-                          for (final r in _repliesFor(c["id"] as String)) _commentTile(r, isReply: true),
-                        ],
+                        for (final c in _topLevelComments) _commentTile(c),
                       ],
                     ),
                   ),
