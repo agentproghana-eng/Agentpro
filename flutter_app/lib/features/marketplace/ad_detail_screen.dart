@@ -92,12 +92,15 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
               child: PageView(
                 children: (ad['image_urls'] as List).map((url) => ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: Image.network(
-                    url as String,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      color: AppTheme.primaryColor.withOpacity(0.1),
-                      child: Center(child: Icon(Icons.broken_image_outlined, size: 40, color: Colors.grey[500])),
+                  child: Container(
+                    color: AppTheme.primaryColor.withOpacity(0.1),
+                    child: Image.network(
+                      url as String,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => Container(
+                        color: AppTheme.primaryColor.withOpacity(0.1),
+                        child: Center(child: Icon(Icons.broken_image_outlined, size: 40, color: Colors.grey[500])),
+                      ),
                     ),
                   ),
                 )).toList(),
@@ -153,6 +156,17 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
                       Text(
                         'Published ${DateFormat('MMM d, y \'at\' h:mm a').format(DateTime.parse(ad['published_at']).toLocal())}',
                         style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                      ),
+                    ]),
+                  ],
+                  if (ad['contact_phone'] != null) ...[
+                    const SizedBox(height: 8),
+                    Row(children: [
+                      Icon(Icons.phone_outlined, size: 15, color: Colors.grey[500]),
+                      const SizedBox(width: 4),
+                      Text(
+                        ad['contact_phone'],
+                        style: TextStyle(color: Colors.grey[600], fontSize: 13, fontWeight: FontWeight.w600),
                       ),
                     ]),
                   ],

@@ -87,47 +87,90 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 class _AdCard extends StatelessWidget {
   final Map<String, dynamic> ad;
   const _AdCard({required this.ad});
+
+  // Relative time since publish (e.g. "2d ago") - simple local
+  // calculation rather than pulling in a new package for this alone.
+  String _relativeTime(String? dateStr) {
+    if (dateStr == null) return '';
+    final date = DateTime.tryParse(dateStr);
+    if (date == null) return '';
+    final diff = DateTime.now().difference(date.toLocal());
+    if (diff.inDays > 0) return '${diff.inDays}d ago';
+    if (diff.inHours > 0) return '${diff.inHours}h ago';
+    if (diff.inMinutes > 0) return '${diff.inMinutes}m ago';
+    return 'just now';
+  }
+
   @override
   Widget build(BuildContext context) {
     final price = double.tryParse(ad['price']?.toString() ?? '0') ?? 0;
+    final hasRating = (int.tryParse(ad['rating_count']?.toString() ?? '0') ?? 0) > 0;
+    final time = _relativeTime(ad['published_at'] as String?);
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => context.push('/marketplace/ads/${ad['id']}'),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Container(
-            height: 100,
-            color: AppTheme.primaryColor.withOpacity(0.1),
-            child: (ad['image_urls'] != null && (ad['image_urls'] as List).isNotEmpty)
-                ? Image.network(
-                    (ad['image_urls'] as List).first as String,
-                    height: 100, width: double.infinity, fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Center(child: Icon(Icons.image_outlined, size: 40, color: context.appSecondaryText)),
-                  )
-                : Center(child: Icon(Icons.image_outlined, size: 40, color: context.appSecondaryText)),
+          // 2/3 of the card - full uncropped photo (letterboxed if the
+          // aspect ratio doesn't match, rather than cropping content
+          // out of the seller's photo).
+          Expanded(
+            flex: 2,
+            child: Container(
+              width: double.infinity,
+              color: AppTheme.primaryColor.withOpacity(0.1),
+              child: (ad['image_urls'] != null && (ad['image_urls'] as List).isNotEmpty)
+                  ? Image.network(
+                      (ad['image_urls'] as List).first as String,
+                      width: double.infinity, fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => Center(child: Icon(Icons.image_outlined, size: 40, color: context.appSecondaryText)),
+                    )
+                  : Center(child: Icon(Icons.image_outlined, size: 40, color: context.appSecondaryText)),
+            ),
           ),
-          Padding(padding: const EdgeInsets.all(8), child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(ad['title'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-              const SizedBox(height: 4),
-              if (price > 0) Text('GH₵ ${price.toStringAsFixed(2)}',
-                style: const TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.bold, fontSize: 13)),
-              if ((int.tryParse(ad['rating_count']?.toString() ?? '0') ?? 0) > 0) ...[
-                const SizedBox(height: 2),
-                Row(children: [
-                  const Icon(Icons.star, size: 12, color: Color(0xFFFFB300)),
-                  const SizedBox(width: 2),
-                  Text(
-                    '${double.parse(ad['avg_rating'].toString()).toStringAsFixed(1)} (${ad['rating_count']})',
-                    style: TextStyle(color: context.appSecondaryText, fontSize: 10),
-                  ),
-                ]),
-              ],
-              if (ad['location'] != null) Text(ad['location'],
-                style: TextStyle(color: context.appSecondaryText, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
-            ],
-          )),
+          // 1/3 of the card - title, price, location, rating+date.
+          Expanded(
+            flex: 1,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  Text(ad['title'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                  if (price > 0) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'GH₵ ${price.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        color: context.isDarkMode ? AppTheme.primaryLight : AppTheme.primaryColor,
+                        fontWeight: FontWeight.bold, fontSize: 13,
+                      ),
+                    ),
+                  ],
+                  if (ad['location'] != null) ...[
+                    const SizedBox(height: 2),
+                    Text(ad['location'], style: TextStyle(color: context.appSecondaryText, fontSize: 10),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ],
+                  if (hasRating || time.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Row(children: [
+                      if (hasRating) ...[
+                        const Icon(Icons.star, size: 10, color: Color(0xFFFFB300)),
+                        const SizedBox(width: 2),
+                        Text(double.parse(ad['avg_rating'].toString()).toStringAsFixed(1),
+                          style: TextStyle(color: context.appSecondaryText, fontSize: 9)),
+                        if (time.isNotEmpty) Text(' · ', style: TextStyle(color: context.appSecondaryText, fontSize: 9)),
+                      ],
+                      if (time.isNotEmpty) Text(time, style: TextStyle(color: context.appSecondaryText, fontSize: 9)),
+                    ]),
+                  ],
+                ],
+              ),
+            ),
+          ),
         ]),
       ),
     );
