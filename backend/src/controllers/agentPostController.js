@@ -82,9 +82,12 @@ exports.listFeed = async (req, res) => {
   try {
     const result = await query(
       `SELECT p.*, u.first_name, u.last_name, u.role,
-              (SELECT COUNT(*) FROM agent_post_likes l WHERE l.post_id = p.id) as like_count,
+              (SELECT json_object_agg(reaction_type, cnt) FROM (
+                SELECT reaction_type, COUNT(*) as cnt FROM agent_post_likes
+                WHERE post_id = p.id GROUP BY reaction_type
+              ) sub) as reaction_counts,
               (SELECT COUNT(*) FROM agent_post_comments c WHERE c.post_id = p.id) as comment_count,
-              EXISTS(SELECT 1 FROM agent_post_likes l WHERE l.post_id = p.id AND l.user_id = $1) as liked_by_me
+              (SELECT reaction_type FROM agent_post_likes l WHERE l.post_id = p.id AND l.user_id = $1) as my_reaction
        FROM agent_posts p
        JOIN users u ON u.id = p.author_id
        WHERE p.status = $2 OR p.status = $4 OR (p.status = $3 AND p.author_id = $1)
@@ -99,25 +102,35 @@ exports.listFeed = async (req, res) => {
   }
 };
 
+const VALID_REACTIONS = ["like", "love", "laugh", "wow", "sad", "pray", "dislike"];
+
 exports.toggleLike = async (req, res) => {
   const { post_id } = req.params;
+  const { reaction_type = "like" } = req.body;
+  if (!VALID_REACTIONS.includes(reaction_type)) {
+    return res.status(400).json({ success: false, message: "Invalid reaction type" });
+  }
   try {
     const existing = await query(
-      "SELECT id FROM agent_post_likes WHERE post_id = $1 AND user_id = $2",
+      "SELECT id, reaction_type FROM agent_post_likes WHERE post_id = $1 AND user_id = $2",
       [post_id, req.user.id]
     );
     if (existing.rows.length > 0) {
-      await query("DELETE FROM agent_post_likes WHERE id = $1", [existing.rows[0].id]);
-      return res.json({ success: true, data: { liked: false } });
+      if (existing.rows[0].reaction_type === reaction_type) {
+        await query("DELETE FROM agent_post_likes WHERE id = $1", [existing.rows[0].id]);
+        return res.json({ success: true, data: { reaction: null } });
+      }
+      await query("UPDATE agent_post_likes SET reaction_type = $1 WHERE id = $2", [reaction_type, existing.rows[0].id]);
+      return res.json({ success: true, data: { reaction: reaction_type } });
     }
     await query(
-      "INSERT INTO agent_post_likes (post_id, user_id) VALUES ($1, $2)",
-      [post_id, req.user.id]
+      "INSERT INTO agent_post_likes (post_id, user_id, reaction_type) VALUES ($1, $2, $3)",
+      [post_id, req.user.id, reaction_type]
     );
-    res.json({ success: true, data: { liked: true } });
+    res.json({ success: true, data: { reaction: reaction_type } });
   } catch (error) {
-    logger.error("Toggle like error:", error);
-    res.status(500).json({ success: false, message: "Failed to update like" });
+    logger.error("Toggle reaction error:", error);
+    res.status(500).json({ success: false, message: "Failed to update reaction" });
   }
 };
 
