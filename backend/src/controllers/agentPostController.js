@@ -202,8 +202,10 @@ exports.addComment = async (req, res) => {
   const { post_id } = req.params;
   const { content, parent_comment_id } = req.body;
   const trimmed = (content || "").trim();
-  if (!trimmed) {
-    return res.status(422).json({ success: false, message: "Comment content is required" });
+  const audioFile = req.file;
+
+  if (!trimmed && !audioFile) {
+    return res.status(422).json({ success: false, message: "Comment content or a voice note is required" });
   }
 
   try {
@@ -217,9 +219,15 @@ exports.addComment = async (req, res) => {
       }
     }
 
+    let audioUrl = null;
+    if (audioFile) {
+      const filename = `${req.user.id}_comment_${Date.now()}`;
+      audioUrl = await uploadAudio(audioFile.buffer, filename);
+    }
+
     const result = await query(
-      "INSERT INTO agent_post_comments (post_id, author_id, content, parent_comment_id) VALUES ($1, $2, $3, $4) RETURNING *",
-      [post_id, req.user.id, trimmed, parent_comment_id || null]
+      "INSERT INTO agent_post_comments (post_id, author_id, content, audio_url, parent_comment_id) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+      [post_id, req.user.id, trimmed || null, audioUrl, parent_comment_id || null]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
   } catch (error) {

@@ -26,7 +26,7 @@ router.post("/", requireActiveSubscription, upload.single("audio"), agentPostCon
 router.delete("/:post_id", agentPostController.deletePost);
 router.post("/:post_id/like", requireActiveSubscription, agentPostController.toggleLike);
 router.get("/:post_id/comments", agentPostController.listComments);
-router.post("/:post_id/comments", requireActiveSubscription, agentPostController.addComment);
+router.post("/:post_id/comments", requireActiveSubscription, upload.single("audio"), agentPostController.addComment);
 router.post("/comments/:comment_id/react", requireActiveSubscription, agentPostController.toggleCommentReaction);
 
 router.get("/moderation/pending", authorize("superuser"), agentPostController.listPending);
