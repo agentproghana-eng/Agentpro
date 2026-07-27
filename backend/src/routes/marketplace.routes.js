@@ -1,10 +1,28 @@
 // marketplace.routes.js
 const express = require('express');
 const mpRouter = express.Router();
+const multer = require('multer');
 const { authenticate, authorize } = require('../middleware/auth');
 const { query } = require('../config/database');
+const { uploadFile } = require('../config/cloudinary');
 
 mpRouter.use(authenticate);
+
+// Ad photos: memoryStorage (buffer piped straight to Cloudinary, no
+// local disk writes), image MIME types only, capped at 5MB each and
+// 3 images max per ad - matches the "1–3 photos" design confirmed
+// earlier for this feature.
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'));
+    }
+  },
+});
 
 // List active ads (free tier can browse)
 mpRouter.get('/', async (req, res) => {
@@ -78,18 +96,34 @@ mpRouter.get('/:ad_id', async (req, res) => {
   } catch (e) { res.status(500).json({ success: false, message: 'Failed to fetch ad' }); }
 });
 
-// Submit an ad
-mpRouter.post('/', async (req, res) => {
+// Submit an ad. Photos are optional (upload.array tolerates zero
+// files fine) but capped at 3 - anything beyond that is silently
+// ignored by multer's array limit rather than erroring, which is the
+// right behavior here (better to accept the first 3 than reject the
+// whole submission over an agent picking a 4th photo).
+mpRouter.post('/', upload.array('images', 3), async (req, res) => {
   const { title, description, price, category_id, location, contact_phone } = req.body;
   try {
     const feeConfig = await query("SELECT value FROM system_config WHERE key = 'ad_fee_percent'");
     const feePercent = parseFloat(feeConfig.rows[0]?.value || 0.01);
     const publishingFee = price ? Math.round(parseFloat(price) * feePercent * 100) / 100 : 0;
 
+    let imageUrls = [];
+    if (req.files && req.files.length > 0) {
+      imageUrls = await Promise.all(
+        req.files.map(file =>
+          uploadFile(`data:${file.mimetype};base64,${file.buffer.toString('base64')}`, {
+            folder: 'ads',
+            resource_type: 'image',
+          })
+        )
+      );
+    }
+
     const result = await query(
-      `INSERT INTO advertisements (posted_by, company_id, category_id, title, description, price, location, contact_phone, publishing_fee, fee_percent, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending_review') RETURNING *`,
-      [req.user.id, req.user.company_id || null, category_id, title, description, price, location, contact_phone, publishingFee, feePercent]
+      `INSERT INTO advertisements (posted_by, company_id, category_id, title, description, price, location, contact_phone, publishing_fee, fee_percent, status, image_urls)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending_review', $11) RETURNING *`,
+      [req.user.id, req.user.company_id || null, category_id, title, description, price, location, contact_phone, publishingFee, feePercent, imageUrls]
     );
     res.status(201).json({ success: true, data: result.rows[0], message: 'Ad submitted for review.' });
   } catch (e) { res.status(500).json({ success: false, message: 'Failed to submit ad' }); }
