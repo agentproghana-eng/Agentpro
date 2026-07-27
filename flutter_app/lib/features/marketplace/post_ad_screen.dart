@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
@@ -34,6 +36,19 @@ class _PostAdScreenState extends State<PostAdScreen> {
   bool _submitting = false;
   double? _feePercent;
 
+  final _picker = ImagePicker();
+  final List<XFile> _selectedImages = [];
+
+  Future<void> _pickImage() async {
+    if (_selectedImages.length >= 3) return;
+    final image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    if (image != null && mounted) setState(() => _selectedImages.add(image));
+  }
+
+  void _removeImage(int index) {
+    setState(() => _selectedImages.removeAt(index));
+  }
+
   @override
   void initState() {
     super.initState();
@@ -63,10 +78,16 @@ class _PostAdScreenState extends State<PostAdScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_selectedImages.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please add at least one photo of what you\'re offering')),
+      );
+      return;
+    }
 
     setState(() => _submitting = true);
     try {
-      final res = await ApiClient.instance.post('/marketplace', data: {
+      final formData = FormData.fromMap({
         'title': _titleCtrl.text.trim(),
         'description': _descriptionCtrl.text.trim(),
         if (_priceCtrl.text.isNotEmpty)
@@ -74,7 +95,11 @@ class _PostAdScreenState extends State<PostAdScreen> {
         'category_id': _categoryId,
         'location': _locationCtrl.text.trim(),
         'contact_phone': _phoneCtrl.text.trim(),
+        'images': await Future.wait(_selectedImages.map(
+          (img) async => await MultipartFile.fromFile(img.path, filename: img.name),
+        )),
       });
+      final res = await ApiClient.instance.post('/marketplace', data: formData);
 
       if (!mounted) return;
       final ad = res.data['data'];
@@ -146,6 +171,50 @@ class _PostAdScreenState extends State<PostAdScreen> {
                     hint: 'Describe what you\'re offering...',
                     maxLines: 5,
                     validator: (v) => (v == null || v.trim().isEmpty) ? 'Description is required' : null,
+                  ),
+                  const SizedBox(height: 14),
+
+                  const Text('Photos (1–3 required)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 90,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        ..._selectedImages.asMap().entries.map((entry) => Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Stack(children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.file(File(entry.value.path), width: 80, height: 80, fit: BoxFit.cover),
+                            ),
+                            Positioned(
+                              top: 2, right: 2,
+                              child: GestureDetector(
+                                onTap: () => _removeImage(entry.key),
+                                child: Container(
+                                  decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                                  padding: const EdgeInsets.all(2),
+                                  child: const Icon(Icons.close, size: 14, color: Colors.white),
+                                ),
+                              ),
+                            ),
+                          ]),
+                        )),
+                        if (_selectedImages.length < 3)
+                          GestureDetector(
+                            onTap: _pickImage,
+                            child: Container(
+                              width: 80, height: 80,
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey[300]!),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(Icons.add_a_photo_outlined, color: Colors.grey[500]),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 14),
 
