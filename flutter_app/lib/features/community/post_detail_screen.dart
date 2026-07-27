@@ -1,8 +1,13 @@
+import "dart:async";
 import "package:flutter/material.dart";
+import "package:dio/dio.dart";
+import "package:record/record.dart";
+import "package:path_provider/path_provider.dart";
 import "../../core/api/api_client.dart";
 import "../../shared/theme/app_theme.dart";
 import "../../shared/theme/app_colors.dart";
 import "../../shared/widgets/reaction_button.dart";
+import "../../shared/widgets/audio_player_bubble.dart";
 
 class PostDetailScreen extends StatefulWidget {
   final String postId;
@@ -24,6 +29,13 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   // is posting a top-level comment.
   String? _replyingToId;
   String? _replyingToName;
+
+  final _recorder = AudioRecorder();
+  bool _isRecording = false;
+  bool _hasRecording = false;
+  String? _recordedPath;
+  int _recordSeconds = 0;
+  Timer? _recordTimer;
 
   @override
   void initState() {
@@ -95,16 +107,59 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     });
   }
 
+  Future<void> _startRecording() async {
+    if (!await _recorder.hasPermission()) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Microphone permission is required to record a voice note")));
+      return;
+    }
+    final dir = await getTemporaryDirectory();
+    final path = "${dir.path}/comment_voice_note_${DateTime.now().millisecondsSinceEpoch}.m4a";
+    await _recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc), path: path);
+    setState(() {
+      _isRecording = true;
+      _hasRecording = false;
+      _recordSeconds = 0;
+    });
+    _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _recordSeconds++);
+    });
+  }
+
+  Future<void> _stopRecording() async {
+    final path = await _recorder.stop();
+    _recordTimer?.cancel();
+    setState(() {
+      _isRecording = false;
+      _hasRecording = path != null;
+      _recordedPath = path;
+    });
+  }
+
+  void _discardRecording() {
+    setState(() {
+      _hasRecording = false;
+      _recordedPath = null;
+      _recordSeconds = 0;
+    });
+  }
+
+  String _formatSeconds(int s) => "${(s ~/ 60).toString().padLeft(2, '0')}:${(s % 60).toString().padLeft(2, '0')}";
+
   Future<void> _sendComment() async {
     final text = _commentCtrl.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty && !_hasRecording) return;
     setState(() => _sending = true);
     try {
-      await ApiClient.instance.post("/agent-posts/${widget.postId}/comments", data: {
-        "content": text,
+      final formData = FormData.fromMap({
+        if (text.isNotEmpty) "content": text,
         if (_replyingToId != null) "parent_comment_id": _replyingToId,
+        if (_hasRecording && _recordedPath != null)
+          "audio": await MultipartFile.fromFile(_recordedPath!, filename: "comment_voice_note.m4a"),
       });
+      await ApiClient.instance.post("/agent-posts/${widget.postId}/comments", data: formData);
       _commentCtrl.clear();
+      _discardRecording();
       _cancelReply();
       _load();
     } catch (e) {
@@ -141,7 +196,12 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             ],
           ]),
           const SizedBox(height: 3),
-          Text(c["content"] ?? "", style: const TextStyle(fontSize: 12)),
+          if (c["content"] != null && (c["content"] as String).isNotEmpty)
+            Text(c["content"], style: const TextStyle(fontSize: 12)),
+          if (c["audio_url"] != null) ...[
+            const SizedBox(height: 4),
+            AudioPlayerBubble(url: c["audio_url"] as String),
+          ],
           const SizedBox(height: 4),
           Row(children: [
             ReactionButton(
@@ -165,6 +225,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   }
 
   @override
+  void dispose() {
+    _commentCtrl.dispose();
+    _recordTimer?.cancel();
+    _recorder.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Post")),
@@ -185,6 +253,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                             const SizedBox(height: 6),
                             if (_post!["content"] != null && (_post!["content"] as String).isNotEmpty)
                               Text(_post!["content"], style: const TextStyle(fontSize: 13)),
+                            if (_post!["audio_url"] != null) ...[
+                              const SizedBox(height: 8),
+                              AudioPlayerBubble(url: _post!["audio_url"] as String),
+                            ],
                           ]),
                         ),
                         const SizedBox(height: 16),
@@ -206,13 +278,35 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                             GestureDetector(onTap: _cancelReply, child: Icon(Icons.close, size: 16, color: context.appSecondaryText)),
                           ]),
                         ),
-                      Row(children: [
-                        Expanded(child: TextField(controller: _commentCtrl, decoration: InputDecoration(hintText: _replyingToId != null ? "Write a reply..." : "Write a comment...", border: const OutlineInputBorder()))),
-                        IconButton(
-                          icon: _sending ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send, color: AppTheme.primaryColor),
-                          onPressed: _sending ? null : _sendComment,
-                        ),
-                      ]),
+                      if (_isRecording)
+                  Row(children: [
+                    const Icon(Icons.fiber_manual_record, color: Colors.red, size: 14),
+                    const SizedBox(width: 8),
+                    Text("Recording... ${_formatSeconds(_recordSeconds)}", style: const TextStyle(fontSize: 12)),
+                    const Spacer(),
+                    IconButton(icon: const Icon(Icons.stop_circle, color: AppTheme.errorColor), onPressed: _stopRecording),
+                  ])
+                else if (_hasRecording)
+                  Row(children: [
+                    const Icon(Icons.mic, color: AppTheme.primaryColor, size: 18),
+                    const SizedBox(width: 8),
+                    Text("Voice note ready (${_formatSeconds(_recordSeconds)})", style: const TextStyle(fontSize: 12)),
+                    const Spacer(),
+                    IconButton(icon: Icon(Icons.close, color: context.appSecondaryText), onPressed: _discardRecording),
+                    IconButton(
+                      icon: _sending ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send, color: AppTheme.primaryColor),
+                      onPressed: _sending ? null : _sendComment,
+                    ),
+                  ])
+                else
+                  Row(children: [
+                    Expanded(child: TextField(controller: _commentCtrl, decoration: InputDecoration(hintText: _replyingToId != null ? "Write a reply..." : "Write a comment...", border: const OutlineInputBorder()))),
+                    IconButton(icon: const Icon(Icons.mic_none, color: AppTheme.primaryColor), onPressed: _startRecording),
+                    IconButton(
+                      icon: _sending ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send, color: AppTheme.primaryColor),
+                      onPressed: _sending ? null : _sendComment,
+                    ),
+                  ]),
                     ]),
                   ),
                 ]),

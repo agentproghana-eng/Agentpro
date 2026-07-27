@@ -10,6 +10,7 @@ import "../../core/api/api_client.dart";
 import "../../shared/theme/app_theme.dart";
 import "../../shared/theme/app_colors.dart";
 import "../../shared/widgets/reaction_button.dart";
+import "../../shared/widgets/audio_player_bubble.dart";
 
 // NOTE: record/audioplayers are new dependencies added specifically for
 // this feature - unlike everything else touched tonight, there is no
@@ -263,7 +264,7 @@ class _PostCard extends StatelessWidget {
             Text(post["content"], style: const TextStyle(fontSize: 12.5)),
           if (audioUrl != null) ...[
             if (post["content"] != null && (post["content"] as String).isNotEmpty) const SizedBox(height: 8),
-            _AudioPlayerBubble(url: audioUrl),
+            AudioPlayerBubble(url: audioUrl),
           ],
           Text(_formatPostTime(post["created_at"] as String?), style: TextStyle(fontSize: 10.5, color: context.appSecondaryText)),
           const SizedBox(height: 10),
