@@ -9,6 +9,7 @@ import "package:path_provider/path_provider.dart";
 import "../../core/api/api_client.dart";
 import "../../shared/theme/app_theme.dart";
 import "../../shared/theme/app_colors.dart";
+import "../../shared/widgets/reaction_button.dart";
 
 // NOTE: record/audioplayers are new dependencies added specifically for
 // this feature - unlike everything else touched tonight, there is no
@@ -61,13 +62,13 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
     }
   }
 
-  Future<void> _toggleLike(String postId) async {
+  Future<void> _toggleLike(String postId, String reactionType) async {
     try {
-      await ApiClient.instance.post("/agent-posts/$postId/like");
+      await ApiClient.instance.post("/agent-posts/$postId/like", data: {"reaction_type": reactionType});
       _load();
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Subscription required to like posts"), backgroundColor: AppTheme.errorColor));
+        const SnackBar(content: Text("Subscription required to react to posts"), backgroundColor: AppTheme.errorColor));
     }
   }
 
@@ -198,7 +199,7 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
                   for (final p in _posts)
                     _PostCard(
                       post: p,
-                      onLike: () => _toggleLike(p["id"]),
+                      onLike: (type) => _toggleLike(p["id"], type),
                       onOpen: () => context.push("/community/post/${p["id"]}").then((_) => _load()),
                     ),
                 ],
@@ -210,7 +211,7 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
 
 class _PostCard extends StatelessWidget {
   final Map<String, dynamic> post;
-  final VoidCallback onLike;
+  final void Function(String reactionType) onLike;
   final VoidCallback onOpen;
 
   const _PostCard({required this.post, required this.onLike, required this.onOpen});
@@ -267,21 +268,24 @@ class _PostCard extends StatelessWidget {
           Text(_formatPostTime(post["created_at"] as String?), style: TextStyle(fontSize: 10.5, color: context.appSecondaryText)),
           const SizedBox(height: 10),
           Row(children: [
-            InkWell(onTap: onLike, child: Row(children: [
-              Icon((post["liked_by_me"] == true) ? Icons.thumb_up : Icons.thumb_up_outlined, size: 15, color: AppTheme.primaryColor),
-              const SizedBox(width: 4),
-              Text("${post["like_count"] ?? 0}", style: const TextStyle(fontSize: 11.5)),
-            ])),
-            const SizedBox(width: 16),
+            ReactionButton(
+              myReaction: post["my_reaction"] as String?,
+              totalCount: post["reaction_counts"] is Map
+                  ? (post["reaction_counts"] as Map).values.fold<int>(0, (sum, v) => sum + (int.tryParse(v.toString()) ?? 0))
+                  : 0,
+              onReact: onLike,
+              iconSize: 20,
+            ),
+            const SizedBox(width: 18),
             Row(children: [
-              Icon(Icons.chat_bubble_outline, size: 15, color: context.appSecondaryText),
+              Icon(Icons.chat_bubble_outline, size: 20, color: context.appSecondaryText),
               const SizedBox(width: 4),
-              Text("${post["comment_count"] ?? 0}", style: const TextStyle(fontSize: 11.5)),
+              Text("${post["comment_count"] ?? 0}", style: const TextStyle(fontSize: 13)),
             ]),
-            const SizedBox(width: 16),
+            const SizedBox(width: 18),
             InkWell(
               onTap: () => Share.share("${post["content"] ?? "Voice note"}"),
-              child: Icon(Icons.share_outlined, size: 15, color: context.appSecondaryText),
+              child: Icon(Icons.share_outlined, size: 20, color: context.appSecondaryText),
             ),
           ]),
         ]),
