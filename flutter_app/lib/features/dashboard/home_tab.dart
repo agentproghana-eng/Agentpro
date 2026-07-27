@@ -200,7 +200,10 @@ class _HomeTabState extends State<HomeTab> {
         value: p,
         selected: _provider == p,
         color: colors[p]!,
-        onTap: (v) => setState(() => _provider = v),
+        onTap: (v) {
+          setState(() => _provider = v);
+          _load();
+        },
       )));
       if (i < providers.length - 1) widgets.add(const SizedBox(width: 4));
     }
@@ -210,7 +213,7 @@ class _HomeTabState extends State<HomeTab> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final res = await ApiClient.instance.get("/transactions", queryParameters: {"limit": 5});
+      final res = await ApiClient.instance.get("/transactions", queryParameters: {"limit": 5, "provider": _provider});
       setState(() {
         _recent = res.data["data"] ?? [];
         _loading = false;
@@ -441,11 +444,13 @@ class _RecentTxItem extends StatelessWidget {
     try { created = DateTime.parse(tx["created_at"].toString()); } catch (e) {}
     final timeStr = created != null ? DateFormat("HH:mm").format(created.toLocal()) : "";
 
-    return Container(
-      padding: const EdgeInsets.all(11),
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 3)]),
-      child: Row(children: [
+    return GestureDetector(
+      onTap: () => context.push('/transactions/${tx["id"]}'),
+      child: Container(
+        padding: const EdgeInsets.all(11),
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 3)]),
+        child: Row(children: [
         Container(
           width: 34, height: 34,
           decoration: BoxDecoration(color: isCashIn ? context.appTileColor(const Color(0xFFE6F4F1)) : context.appTileColor(const Color(0xFFFDF3DC)), borderRadius: BorderRadius.circular(9)),
@@ -457,7 +462,8 @@ class _RecentTxItem extends StatelessWidget {
           Text("${tx["customer_phone"] ?? ""} · $timeStr", style: const TextStyle(fontSize: 10.5, color: Colors.grey, fontWeight: FontWeight.w700)),
         ])),
         Text("${isCashIn ? "+" : "-"}GH₵${amount.toStringAsFixed(2)}", style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: isCashIn ? AppTheme.primaryColor : const Color(0xFFB33F3F))),
-      ]),
+        ]),
+      ),
     );
   }
 }
