@@ -134,6 +134,39 @@ exports.toggleLike = async (req, res) => {
   }
 };
 
+// Mirrors toggleLike exactly, just against agent_post_comment_reactions
+// instead of agent_post_likes - comments get the same 7-reaction
+// capability posts have.
+exports.toggleCommentReaction = async (req, res) => {
+  const { comment_id } = req.params;
+  const { reaction_type = "like" } = req.body;
+  if (!VALID_REACTIONS.includes(reaction_type)) {
+    return res.status(400).json({ success: false, message: "Invalid reaction type" });
+  }
+  try {
+    const existing = await query(
+      "SELECT id, reaction_type FROM agent_post_comment_reactions WHERE comment_id = $1 AND user_id = $2",
+      [comment_id, req.user.id]
+    );
+    if (existing.rows.length > 0) {
+      if (existing.rows[0].reaction_type === reaction_type) {
+        await query("DELETE FROM agent_post_comment_reactions WHERE id = $1", [existing.rows[0].id]);
+        return res.json({ success: true, data: { reaction: null } });
+      }
+      await query("UPDATE agent_post_comment_reactions SET reaction_type = $1 WHERE id = $2", [reaction_type, existing.rows[0].id]);
+      return res.json({ success: true, data: { reaction: reaction_type } });
+    }
+    await query(
+      "INSERT INTO agent_post_comment_reactions (comment_id, user_id, reaction_type) VALUES ($1, $2, $3)",
+      [comment_id, req.user.id, reaction_type]
+    );
+    res.json({ success: true, data: { reaction: reaction_type } });
+  } catch (error) {
+    logger.error("Toggle comment reaction error:", error);
+    res.status(500).json({ success: false, message: "Failed to update reaction" });
+  }
+};
+
 // Returns a flat list ordered oldest-first, with parent_comment_id
 // (NULL for a top-level comment) included via c.* - the frontend
 // builds the reply tree from this flat list rather than the backend
@@ -142,12 +175,17 @@ exports.listComments = async (req, res) => {
   const { post_id } = req.params;
   try {
     const result = await query(
-      `SELECT c.*, u.first_name, u.last_name, u.role
+      `SELECT c.*, u.first_name, u.last_name, u.role,
+              (SELECT json_object_agg(reaction_type, cnt) FROM (
+                SELECT reaction_type, COUNT(*) as cnt FROM agent_post_comment_reactions
+                WHERE comment_id = c.id GROUP BY reaction_type
+              ) sub) as reaction_counts,
+              (SELECT reaction_type FROM agent_post_comment_reactions WHERE comment_id = c.id AND user_id = $2) as my_reaction
        FROM agent_post_comments c
        JOIN users u ON u.id = c.author_id
        WHERE c.post_id = $1
        ORDER BY c.created_at ASC`,
-      [post_id]
+      [post_id, req.user.id]
     );
     res.json({ success: true, data: result.rows });
   } catch (error) {
@@ -157,12 +195,9 @@ exports.listComments = async (req, res) => {
 };
 
 // parent_comment_id is optional - present means this is a reply.
-// Deliberately only one level of threading is enforced here: if the
-// referenced parent comment is itself a reply (has its own
-// parent_comment_id), this still attaches the new comment directly to
-// it rather than rejecting - the frontend is expected to flatten
-// display to one reply level, matching most social apps' UX, but nothing
-// here prevents deeper nesting at the data level.
+// Replies can go to any depth - a reply to a reply attaches to that
+// reply's id directly, and the frontend renders the resulting chain
+// recursively rather than flattening to one level.
 exports.addComment = async (req, res) => {
   const { post_id } = req.params;
   const { content, parent_comment_id } = req.body;
