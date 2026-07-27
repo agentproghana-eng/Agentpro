@@ -115,6 +115,17 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
                       Text(ad['location'], style: TextStyle(color: Colors.grey[600], fontSize: 13)),
                     ]),
                   ],
+                  if (ad['published_at'] != null) ...[
+                    const SizedBox(height: 8),
+                    Row(children: [
+                      Icon(Icons.calendar_today_outlined, size: 15, color: Colors.grey[500]),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Published ${DateFormat('MMM d, y \'at\' h:mm a').format(DateTime.parse(ad['published_at']).toLocal())}',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                      ),
+                    ]),
+                  ],
                 ],
               ),
             ),

@@ -534,7 +534,17 @@ function ConfigPage() {
 
 function MarketplacePage() {
   const [ads, setAds] = useState([]);
-  const load = () => API.get('/admin/ads/pending').then(r => setAds(r.data.data || []));
+  const load = () => API.get('/admin/ads/pending').then(r => {
+    // Ads awaiting payment verification are the ones most likely to
+    // get silently forgotten - a "publish" step someone still needs
+    // to take, sitting on top of an already-approved ad. Surface them
+    // first rather than mixed in chronologically with newer submissions.
+    const sorted = (r.data.data || []).sort((a, b) => {
+      if (a.status === b.status) return 0;
+      return a.status === 'pending_payment' ? -1 : 1;
+    });
+    setAds(sorted);
+  });
   useEffect(() => { load(); }, []);
 
   const moderate = async (adId, action) => {
@@ -545,9 +555,19 @@ function MarketplacePage() {
     } catch (_) { toast.error('Action failed'); }
   };
 
+  const pendingReviewCount = ads.filter(a => a.status === 'pending_review').length;
+  const pendingPaymentCount = ads.filter(a => a.status === 'pending_payment').length;
+
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-6">Ad Moderation ({ads.length})</h2>
+      <h2 className="text-xl font-bold text-gray-900 mb-2">Ad Moderation ({ads.length})</h2>
+      {pendingPaymentCount > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 mb-4 text-sm text-amber-800 flex items-center gap-2">
+          <span>⚠️</span>
+          <span>{pendingPaymentCount} ad{pendingPaymentCount === 1 ? '' : 's'} already approved, waiting on you to verify payment and publish</span>
+        </div>
+      )}
+      <p className="text-sm text-gray-500 mb-6">{pendingReviewCount} awaiting first review · {pendingPaymentCount} awaiting payment verification</p>
       {ads.length === 0 ? (
         <div className="text-center py-16 text-gray-400"><p className="text-4xl mb-4">✅</p><p>No pending ads</p></div>
       ) : (
