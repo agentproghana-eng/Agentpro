@@ -135,10 +135,7 @@ mpRouter.post('/', upload.array('images', 3), async (req, res) => {
     res.status(201).json({ success: true, data: result.rows[0], message: 'Ad submitted for review.' });
   } catch (e) {
     console.error('POST /marketplace error:', e);
-    // TEMPORARY: surfacing e.message directly to diagnose the current
-    // "Failed to submit ad" bug report - revert to a generic message
-    // once the root cause is found and fixed.
-    res.status(500).json({ success: false, message: `Failed to submit ad: ${e.message}` });
+    res.status(500).json({ success: false, message: 'Failed to submit ad' });
   }
 });
 
