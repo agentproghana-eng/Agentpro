@@ -92,6 +92,13 @@ mpRouter.get('/:ad_id', async (req, res) => {
     if (ad.posted_by !== req.user.id && ad.status !== 'active') {
       return res.status(403).json({ success: false, message: 'Access denied' });
     }
+    // Only count third-party views, not the owner checking their own
+    // listing - otherwise a seller refreshing their own ad would
+    // inflate the number they're using to judge its performance.
+    if (ad.posted_by !== req.user.id) {
+      query('UPDATE advertisements SET views_count = views_count + 1 WHERE id = $1', [req.params.ad_id])
+        .catch(() => {}); // non-blocking, view count is not critical enough to fail the request over
+    }
     res.json({ success: true, data: ad });
   } catch (e) { res.status(500).json({ success: false, message: 'Failed to fetch ad' }); }
 });

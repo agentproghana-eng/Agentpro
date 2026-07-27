@@ -99,6 +99,17 @@ class _MyAdsScreenState extends State<MyAdsScreen> {
                                   else
                                     Text('Contact for price',
                                         style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                                  if (status == 'active') ...[
+                                    const SizedBox(height: 2),
+                                    Row(children: [
+                                      Icon(Icons.visibility_outlined, size: 12, color: Colors.grey[500]),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        '${ad['views_count'] ?? 0} view${(ad['views_count'] ?? 0) == 1 ? '' : 's'}',
+                                        style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                                      ),
+                                    ]),
+                                  ],
                                   if (needsAction)
                                     const Text('Action needed: submit payment',
                                         style: TextStyle(
