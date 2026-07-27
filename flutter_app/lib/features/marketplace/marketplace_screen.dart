@@ -113,6 +113,17 @@ class _AdCard extends StatelessWidget {
               const SizedBox(height: 4),
               if (price > 0) Text('GH₵ ${price.toStringAsFixed(2)}',
                 style: const TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.bold, fontSize: 13)),
+              if ((int.tryParse(ad['rating_count']?.toString() ?? '0') ?? 0) > 0) ...[
+                const SizedBox(height: 2),
+                Row(children: [
+                  const Icon(Icons.star, size: 12, color: Color(0xFFFFB300)),
+                  const SizedBox(width: 2),
+                  Text(
+                    '${double.parse(ad['avg_rating'].toString()).toStringAsFixed(1)} (${ad['rating_count']})',
+                    style: TextStyle(color: context.appSecondaryText, fontSize: 10),
+                  ),
+                ]),
+              ],
               if (ad['location'] != null) Text(ad['location'],
                 style: TextStyle(color: context.appSecondaryText, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
             ],

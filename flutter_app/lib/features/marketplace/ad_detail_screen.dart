@@ -124,6 +124,17 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
                     const SizedBox(height: 8),
                     GhsAmount(amount: price, fontSize: 20),
                   ],
+                  if ((int.tryParse(ad['rating_count']?.toString() ?? '0') ?? 0) > 0) ...[
+                    const SizedBox(height: 6),
+                    Row(children: [
+                      const Icon(Icons.star, size: 15, color: Color(0xFFFFB300)),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${double.parse(ad['avg_rating'].toString()).toStringAsFixed(1)} · ${ad['rating_count']} rating${ad['rating_count'].toString() == '1' ? '' : 's'}',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                      ),
+                    ]),
+                  ],
                   const SizedBox(height: 12),
                   Text(ad['description'] ?? '', style: TextStyle(color: Colors.grey[700])),
                   if (ad['location'] != null) ...[
