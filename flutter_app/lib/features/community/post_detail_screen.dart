@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "../../core/api/api_client.dart";
 import "../../shared/theme/app_theme.dart";
 import "../../shared/theme/app_colors.dart";
+import "../../shared/widgets/reaction_button.dart";
 
 class PostDetailScreen extends StatefulWidget {
   final String postId;
@@ -70,6 +71,16 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     return 'just now';
   }
 
+  Future<void> _toggleCommentReaction(String commentId, String reactionType) async {
+    try {
+      await ApiClient.instance.post("/agent-posts/comments/$commentId/react", data: {"reaction_type": reactionType});
+      _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Subscription required to react"), backgroundColor: AppTheme.errorColor));
+    }
+  }
+
   void _startReply(String commentId, String name) {
     setState(() {
       _replyingToId = commentId;
@@ -132,10 +143,21 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           const SizedBox(height: 3),
           Text(c["content"] ?? "", style: const TextStyle(fontSize: 12)),
           const SizedBox(height: 4),
-          GestureDetector(
-            onTap: () => _startReply(c["id"] as String, name.isEmpty ? "them" : name),
-            child: const Text("Reply", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
-          ),
+          Row(children: [
+            ReactionButton(
+              myReaction: c["my_reaction"] as String?,
+              totalCount: c["reaction_counts"] is Map
+                  ? (c["reaction_counts"] as Map).values.fold<int>(0, (sum, v) => sum + (int.tryParse(v.toString()) ?? 0))
+                  : 0,
+              onReact: (type) => _toggleCommentReaction(c["id"] as String, type),
+              iconSize: 15,
+            ),
+            const SizedBox(width: 14),
+            GestureDetector(
+              onTap: () => _startReply(c["id"] as String, name.isEmpty ? "them" : name),
+              child: const Text("Reply", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
+            ),
+          ]),
         ]),
       ),
       for (final r in _repliesFor(c["id"] as String)) _commentTile(r, depth: depth + 1),
