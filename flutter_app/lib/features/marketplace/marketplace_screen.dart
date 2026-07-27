@@ -95,8 +95,17 @@ class _AdCard extends StatelessWidget {
       child: InkWell(
         onTap: () => context.push('/marketplace/ads/${ad['id']}'),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Container(height: 100, color: AppTheme.primaryColor.withOpacity(0.1),
-            child: Center(child: Icon(Icons.image_outlined, size: 40, color: context.appSecondaryText))),
+          Container(
+            height: 100,
+            color: AppTheme.primaryColor.withOpacity(0.1),
+            child: (ad['image_urls'] != null && (ad['image_urls'] as List).isNotEmpty)
+                ? Image.network(
+                    (ad['image_urls'] as List).first as String,
+                    height: 100, width: double.infinity, fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Center(child: Icon(Icons.image_outlined, size: 40, color: context.appSecondaryText)),
+                  )
+                : Center(child: Icon(Icons.image_outlined, size: 40, color: context.appSecondaryText)),
+          ),
           Padding(padding: const EdgeInsets.all(8), child: Column(
             crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(ad['title'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis,

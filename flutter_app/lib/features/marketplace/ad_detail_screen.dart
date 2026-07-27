@@ -86,6 +86,25 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (ad['image_urls'] != null && (ad['image_urls'] as List).isNotEmpty) ...[
+            SizedBox(
+              height: 220,
+              child: PageView(
+                children: (ad['image_urls'] as List).map((url) => ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    url as String,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      color: AppTheme.primaryColor.withOpacity(0.1),
+                      child: Center(child: Icon(Icons.broken_image_outlined, size: 40, color: Colors.grey[500])),
+                    ),
+                  ),
+                )).toList(),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
           Card(
             child: Padding(
               padding: const EdgeInsets.all(20),
