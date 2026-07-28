@@ -30,10 +30,24 @@ async function fetchTransactions(filters, userContext) {
   if (filters.provider) { conditions.push(`t.provider = $${idx++}`); params.push(filters.provider); }
   if (filters.transaction_type) { conditions.push(`t.transaction_type = $${idx++}`); params.push(filters.transaction_type); }
   if (filters.status) { conditions.push(`t.status = $${idx++}`); params.push(filters.status); }
+  if (filters.sim_iccid) { conditions.push(`t.sim_iccid = $${idx++}`); params.push(filters.sim_iccid); }
   if (filters.from_date) { conditions.push(`t.created_at >= $${idx++}`); params.push(filters.from_date); }
   if (filters.to_date) { conditions.push(`t.created_at <= $${idx++}`); params.push(filters.to_date); }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  // Strict allowlist mapping a client-facing sort key to a safe SQL
+  // column expression - never interpolate filters.sort_by directly
+  // into ORDER BY, which would be a SQL injection surface. Mirrors
+  // the same pattern already used in transactionController.listTransactions.
+  const SORT_COLUMNS = {
+    date: 't.created_at',
+    amount: 't.amount',
+    commission: 'cm.net_commission',
+    fee: 't.fee',
+  };
+  const sortColumn = SORT_COLUMNS[filters.sort_by] || SORT_COLUMNS.date;
+  const sortDirection = filters.sort_order === 'asc' ? 'ASC' : 'DESC';
 
   const [txResult, summaryResult] = await Promise.all([
     query(
@@ -46,7 +60,7 @@ async function fetchTransactions(filters, userContext) {
        LEFT JOIN branches b ON t.branch_id = b.id
        LEFT JOIN commissions cm ON cm.transaction_id = t.id
        ${where}
-       ORDER BY t.created_at DESC
+       ORDER BY ${sortColumn} ${sortDirection}
        LIMIT 5000`, // Safety cap
       params
     ),
@@ -94,6 +108,9 @@ exports.transactionReport = async (req, res) => {
     provider,
     transaction_type,
     status,
+    sim_iccid,
+    sort_by,
+    sort_order,
     period, // 'today', 'week', 'month', 'year'
   } = req.query;
 
@@ -110,7 +127,7 @@ exports.transactionReport = async (req, res) => {
     }
 
     const { transactions, summary } = await fetchTransactions(
-      { from_date: resolvedFrom, to_date: resolvedTo, branch_id, agent_id, provider, transaction_type, status },
+      { from_date: resolvedFrom, to_date: resolvedTo, branch_id, agent_id, provider, transaction_type, status, sim_iccid, sort_by, sort_order },
       req.user
     );
 
