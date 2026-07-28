@@ -7,6 +7,7 @@ import '../../core/auth/auth_bloc.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
+import '../../core/services/sim_card_service.dart';
 
 // Full transaction history: Type and Provider are standalone filters
 // (each independently narrows the list), Branch is an additional
@@ -33,6 +34,10 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
   int _page = 1;
   String? _error;
   bool _showBranchFilter = false;
+  bool _isAgent = false;
+  Map<String, SimCard?>? _simMap;
+  List<SimCard> _simCards = [];
+  String? _simIccidFilter;
 
   String _typeFilter = 'all';
   String _providerFilter = 'all';
@@ -66,6 +71,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     super.initState();
     _checkRoleForBranchFilter();
     _load();
+    _loadSims();
     _scrollController.addListener(_onScroll);
   }
 
@@ -84,6 +90,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
         _showBranchFilter = true;
         _loadBranches();
       }
+      _isAgent = role == 'agent';
     }
   }
 
@@ -97,6 +104,45 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     }
   }
 
+  // Mirrors the Home tab's SIM-detection pattern: retry once if every
+  // provider comes back null (Android can briefly report "no SIMs" at
+  // cold launch), and never block the screen on detection failure -
+  // _simMap stays null and the UI falls back to showing all provider
+  // pills. _simCards holds the raw per-slot list (used for the SIM
+  // filter, which distinguishes two physical SIMs on the same network -
+  // something the provider-level map can't do).
+  Future<void> _loadSims() async {
+    try {
+      var map = await SimCardService.getNetworkSimMap();
+      if (map.values.every((v) => v == null)) {
+        await Future.delayed(const Duration(milliseconds: 1200));
+        if (!mounted) return;
+        map = await SimCardService.getNetworkSimMap();
+      }
+      final cards = await SimCardService.getSimCards();
+      if (!mounted) return;
+      setState(() {
+        _simMap = map;
+        _simCards = cards.where((c) => c.iccid.isNotEmpty).toList();
+        if (_providerFilter != 'all' && map[_providerFilter] == null) {
+          _providerFilter = 'all';
+        }
+      });
+    } catch (_) {
+      // Permission denied or detection failed - leave _simMap null and
+      // _simCards empty so both filters gracefully fall back / hide.
+    }
+  }
+
+  String _simNetworkLabel(String network) {
+    switch (network) {
+      case 'mtn': return 'MTN';
+      case 'telecel': return 'Telecel';
+      case 'at_money': return 'AT Money';
+      default: return 'SIM';
+    }
+  }
+
   Map<String, dynamic> _buildQueryParams({required int page}) {
     return {
       'page': page,
@@ -105,6 +151,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
       'sort_order': _sortOrder,
       if (_typeFilter != 'all') 'transaction_type': _typeFilter,
       if (_providerFilter != 'all') 'provider': _providerFilter,
+      if (_simIccidFilter != null) 'sim_iccid': _simIccidFilter,
       if (_branchFilter != null) 'branch_id': _branchFilter,
     };
   }
@@ -263,10 +310,39 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
         ),
 
         _filterSectionLabel('PROVIDER'),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: _filterPillRow(_providers, _providerFilter, (v) { setState(() => _providerFilter = v); _load(); }),
-        ),
+        if (_simMap != null && _simMap!.values.every((v) => v == null))
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: Text('No SIM card detected. Insert a SIM to filter by provider.',
+              style: TextStyle(fontSize: 11, color: context.appSecondaryText)),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: _filterPillRow(
+              _simMap == null
+                  ? _providers
+                  : _providers.where((p) => p['value'] == 'all' || _simMap![p['value']] != null).toList(),
+              _providerFilter,
+              (v) { setState(() => _providerFilter = v); _load(); },
+            ),
+          ),
+
+        if (_isAgent && _simCards.length >= 2) ...[
+          _filterSectionLabel('SIM'),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: _filterPillRow(
+              [
+                {'value': 'all', 'label': 'All'},
+                for (final c in _simCards)
+                  {'value': c.iccid, 'label': 'SIM ${c.slot + 1} · ${_simNetworkLabel(c.network)}'},
+              ],
+              _simIccidFilter ?? 'all',
+              (v) { setState(() => _simIccidFilter = v == 'all' ? null : v); _load(); },
+            ),
+          ),
+        ],
 
         if (_showBranchFilter && _branches.isNotEmpty) ...[
           _filterSectionLabel('BRANCH'),
