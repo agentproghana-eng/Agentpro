@@ -383,7 +383,7 @@ class GhsAmount extends StatelessWidget {
             text: amount.toStringAsFixed(2),
             style: TextStyle(
               fontSize: fontSize,
-              color: color ?? Colors.black,
+              color: color ?? AppTheme.primaryColor,
               fontWeight: bold ? FontWeight.bold : FontWeight.normal,
             ),
           ),
