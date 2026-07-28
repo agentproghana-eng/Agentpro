@@ -218,14 +218,15 @@ async function generateTransactionReportPDF({ transactions, filters, summary, ti
     // the page - full ICCID doesn't fit here, shown as last 6 digits
     // only (full value is in the Excel report and Audit Logs).
     const cols = [
-      { label: 'Date', width: 55 },
-      { label: 'Reference', width: 65 },
-      { label: 'Type', width: 50 },
-      { label: 'Provider', width: 45 },
-      { label: 'Customer', width: 60 },
-      { label: 'Agent', width: 60 },
-      { label: 'Amount', width: 60 },
-      { label: 'Status', width: 85 },
+      { label: 'Date', width: 50 },
+      { label: 'Reference', width: 60 },
+      { label: 'Type', width: 45 },
+      { label: 'Provider', width: 40 },
+      { label: 'Customer', width: 55 },
+      { label: 'Agent', width: 55 },
+      { label: 'Amount', width: 55 },
+      { label: 'Charge', width: 40 },
+      { label: 'Status', width: 80 },
       { label: 'SIM', width: 35 },
     ];
 
@@ -261,13 +262,14 @@ async function generateTransactionReportPDF({ transactions, filters, summary, ti
         tx.customer_phone || '—',
         tx.agent_name || '—',
         GHS(tx.amount),
+        parseFloat(tx.fee || 0) > 0 ? GHS(tx.fee) : '—',
         (tx.status || '').toUpperCase(),
         simLabel(tx),
       ];
 
       x = 40;
       rowData.forEach((val, i) => {
-        const color = i === 7 ? statusColor(tx.status) : COLORS.text;
+        const color = i === 8 ? statusColor(tx.status) : COLORS.text;
         doc.fontSize(7).fillColor(color).font('Helvetica')
           .text(val, x + 4, rowY + 4, { width: cols[i].width - 4 });
         x += cols[i].width;
@@ -313,7 +315,7 @@ async function generateTransactionReportExcel({ transactions, filters, summary, 
   const headerRow = sheet.addRow([
     'Date', 'Reference', 'Network Ref', 'Transaction Type',
     'Provider', 'Customer Phone', 'Customer Name', 'Amount (GHS)',
-    'Commission (GHS)', 'Status', 'Agent', 'Branch', 'SIM (ICCID)',
+    'Transfer Charge (GHS)', 'Commission (GHS)', 'Status', 'Agent', 'Branch', 'SIM (ICCID)',
   ]);
   headerRow.eachCell(cell => {
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF006B5E' } };
@@ -332,6 +334,7 @@ async function generateTransactionReportExcel({ transactions, filters, summary, 
       tx.customer_phone || '',
       tx.customer_name || '',
       parseFloat(tx.amount || 0),
+      parseFloat(tx.fee || 0),
       parseFloat(tx.net_commission || 0),
       (tx.status || '').toUpperCase(),
       tx.agent_name || '',
