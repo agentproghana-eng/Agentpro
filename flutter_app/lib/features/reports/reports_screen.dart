@@ -64,7 +64,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         options: Options(responseType: ResponseType.bytes),
       );
       final dir = await getTemporaryDirectory();
-      final ext = _format;
+      final ext = _format == 'excel' ? 'xlsx' : _format;
       final file = File('${dir.path}/${type}_${DateTime.now().millisecondsSinceEpoch}.$ext');
       await file.writeAsBytes(res.data);
       await OpenFile.open(file.path);
