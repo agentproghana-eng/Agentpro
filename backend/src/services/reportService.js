@@ -430,6 +430,69 @@ async function generateCommissionReportPDF({ commissions, summary, title, groupB
   return Buffer.concat(buffers);
 }
 
+// ── Commission Report Excel ─────────────────────────────────────
+
+async function generateCommissionReportExcel({ commissions, summary, title, groupBy }) {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Agent Pro Ghana';
+  workbook.created = new Date();
+
+  const sheet = workbook.addWorksheet('Commissions', {
+    pageSetup: { paperSize: 9, orientation: 'landscape' },
+  });
+
+  sheet.mergeCells('A1:E1');
+  sheet.getCell('A1').value = title || 'Agent Pro Ghana — Commission Report';
+  sheet.getCell('A1').font = { size: 14, bold: true, color: { argb: 'FF006B5E' } };
+  sheet.getCell('A1').alignment = { horizontal: 'center' };
+  sheet.mergeCells('A2:E2');
+  sheet.getCell('A2').value = `Generated: ${dateTimeStr(new Date())}`;
+  sheet.getCell('A2').font = { size: 9, color: { argb: 'FF666666' } };
+  sheet.getCell('A2').alignment = { horizontal: 'center' };
+
+  sheet.addRow([]);
+  sheet.addRow(['Summary']);
+  sheet.addRow([
+    'Transactions', summary.transaction_count || 0,
+    '', 'Gross Commission', `GHS ${parseFloat(summary.total_gross || 0).toFixed(2)}`,
+  ]);
+  sheet.addRow([
+    'Provider Share', `GHS ${parseFloat(summary.total_provider_share || 0).toFixed(2)}`,
+    '', 'Net Commission', `GHS ${parseFloat(summary.total_net || 0).toFixed(2)}`,
+  ]);
+  sheet.addRow([]);
+
+  // Same label logic as the PDF version's table header - keep in sync.
+  const periodLabel = groupBy === 'agent' ? 'Agent' : groupBy === 'branch' ? 'Branch' : 'Period';
+  const headerRow = sheet.addRow([
+    periodLabel, 'Transactions', 'Gross Commission (GHS)', 'Provider Share (GHS)', 'Net Commission (GHS)',
+  ]);
+  headerRow.eachCell(cell => {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF006B5E' } };
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.border = { bottom: { style: 'thin' } };
+  });
+
+  commissions.forEach((row, i) => {
+    const dataRow = sheet.addRow([
+      row.label || row.period || '—',
+      parseInt(row.transaction_count || 0),
+      parseFloat(row.total_gross || 0),
+      parseFloat(row.total_provider_share || 0),
+      parseFloat(row.total_net || 0),
+    ]);
+    if (i % 2 === 0) {
+      dataRow.eachCell(cell => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F5F5' } };
+      });
+    }
+  });
+
+  sheet.columns.forEach(col => { col.width = 20; });
+
+  return await workbook.xlsx.writeBuffer();
+}
+
 // ── CSV Generator ─────────────────────────────────────────────
 
 function generateCSV(data, columns) {
@@ -446,5 +509,6 @@ module.exports = {
   generateTransactionReportPDF,
   generateTransactionReportExcel,
   generateCommissionReportPDF,
+  generateCommissionReportExcel,
   generateCSV,
 };

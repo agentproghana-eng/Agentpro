@@ -4,6 +4,7 @@ const {
   generateTransactionReportPDF,
   generateTransactionReportExcel,
   generateCommissionReportPDF,
+  generateCommissionReportExcel,
   generateCSV,
 } = require('../services/reportService');
 const { getCommissionSummary } = require('../services/commissionService');
@@ -213,6 +214,13 @@ exports.commissionReport = async (req, res) => {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', `attachment; filename="commissions_${Date.now()}.csv"`);
       return res.send(csv);
+    }
+
+    if (format === 'excel') {
+      const buffer = await generateCommissionReportExcel({ commissions: data, summary, title, groupBy: group_by });
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="commissions_${Date.now()}.xlsx"`);
+      return res.send(buffer);
     }
 
     const buffer = await generateCommissionReportPDF({ commissions: data, summary, title, groupBy: group_by });
