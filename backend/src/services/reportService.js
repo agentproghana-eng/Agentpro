@@ -7,7 +7,7 @@ const path = require('path');
 const LOGO_PATH = path.join(__dirname, '..', 'agentpro-logo-transparent.png');
 const WATERMARK_PATH = path.join(__dirname, '..', 'agentpro-watermark.png');
 
-const GHS = (n) => `GH₵ ${parseFloat(n || 0).toFixed(2)}`;
+const GHS = (n) => `GHS ${parseFloat(n || 0).toFixed(2)}`;
 const dateStr = (d) => d ? new Date(d).toLocaleDateString('en-GH') : '—';
 const dateTimeStr = (d) => d ? new Date(d).toLocaleString('en-GH') : '—';
 
@@ -294,14 +294,14 @@ async function generateTransactionReportExcel({ transactions, filters, summary, 
   // Summary row
   sheet.addRow([]);
   sheet.addRow(['Summary']);
-  sheet.addRow(['Total Transactions', summary.count, '', 'Total Amount', `GH₵ ${parseFloat(summary.total_amount||0).toFixed(2)}`, '', 'Net Commission', `GH₵ ${parseFloat(summary.total_commission||0).toFixed(2)}`]);
+  sheet.addRow(['Total Transactions', summary.count, '', 'Total Amount', `GHS ${parseFloat(summary.total_amount||0).toFixed(2)}`, '', 'Net Commission', `GHS ${parseFloat(summary.total_commission||0).toFixed(2)}`]);
   sheet.addRow([]);
 
   // Headers
   const headerRow = sheet.addRow([
     'Date', 'Reference', 'Network Ref', 'Transaction Type',
-    'Provider', 'Customer Phone', 'Customer Name', 'Amount (GH₵)',
-    'Commission (GH₵)', 'Status', 'Agent', 'Branch', 'SIM (ICCID)',
+    'Provider', 'Customer Phone', 'Customer Name', 'Amount (GHS)',
+    'Commission (GHS)', 'Status', 'Agent', 'Branch', 'SIM (ICCID)',
   ]);
   headerRow.eachCell(cell => {
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF006B5E' } };
