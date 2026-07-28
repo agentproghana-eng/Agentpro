@@ -414,6 +414,7 @@ exports.listTransactions = async (req, res) => {
     to_date,
     customer_phone,
     search,
+    sim_iccid,
     sort_by = 'date',
     sort_order = 'desc',
   } = req.query;
@@ -461,6 +462,7 @@ exports.listTransactions = async (req, res) => {
       params.push(agent_id);
     }
     if (customer_phone) { conditions.push(`t.customer_phone = $${paramIdx++}`); params.push(customer_phone); }
+    if (sim_iccid) { conditions.push(`t.sim_iccid = $${paramIdx++}`); params.push(sim_iccid); }
     if (from_date) { conditions.push(`t.created_at >= $${paramIdx++}`); params.push(from_date); }
     if (to_date) { conditions.push(`t.created_at <= $${paramIdx++}`); params.push(to_date); }
     if (search) {
@@ -475,6 +477,7 @@ exports.listTransactions = async (req, res) => {
       query(
         `SELECT t.id, t.reference, t.provider, t.transaction_type, t.status,
                 t.amount, t.fee, t.customer_phone, t.customer_name,
+                t.sim_iccid,
                 t.network_reference, t.receipt_url, t.created_at, t.completed_at,
                 u.first_name || ' ' || u.last_name as agent_name,
                 b.name as branch_name,
