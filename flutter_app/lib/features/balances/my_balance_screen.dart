@@ -4,6 +4,7 @@ import "../../core/api/api_client.dart";
 import "../../shared/theme/app_theme.dart";
 import "../../shared/theme/app_colors.dart";
 import "../../shared/widgets/app_widgets.dart";
+import "../../core/services/sim_card_service.dart";
 
 class MyBalanceScreen extends StatefulWidget {
   const MyBalanceScreen({super.key});
@@ -16,11 +17,13 @@ class _MyBalanceScreenState extends State<MyBalanceScreen> {
   List<dynamic> _balances = [];
   bool _loading = true;
   String? _error;
+  Map<String, SimCard?>? _simMap;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _loadSimMap();
   }
 
   Future<void> _load() async {
@@ -33,6 +36,26 @@ class _MyBalanceScreenState extends State<MyBalanceScreen> {
       });
     } catch (e) {
       setState(() { _error = "Could not load balances"; _loading = false; });
+    }
+  }
+
+  // Mirrors the Home tab's SIM-detection pattern: retry once if every
+  // provider comes back null (brief cold-launch blip), and never block
+  // the screen on detection failure - _simMap stays null so every
+  // balance is shown rather than risk hiding real data.
+  Future<void> _loadSimMap() async {
+    try {
+      var map = await SimCardService.getNetworkSimMap();
+      if (map.values.every((v) => v == null)) {
+        await Future.delayed(const Duration(milliseconds: 1200));
+        if (!mounted) return;
+        map = await SimCardService.getNetworkSimMap();
+      }
+      if (!mounted) return;
+      setState(() => _simMap = map);
+    } catch (_) {
+      // Permission denied or detection failed - leave _simMap null so
+      // every balance is shown rather than none.
     }
   }
 
@@ -49,19 +72,29 @@ class _MyBalanceScreenState extends State<MyBalanceScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final noSimsDetected = _simMap != null && _simMap!.values.every((v) => v == null);
+    final visibleBalances = _simMap == null
+        ? _balances
+        : _balances.where((b) => _simMap![b["provider"]] != null).toList();
     return Scaffold(
       appBar: AppBar(title: const Text("My Balance")),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? Center(child: Text(_error!))
-              : RefreshIndicator(
+              : noSimsDetected
+                  ? const EmptyState(
+                      icon: Icons.sim_card_alert,
+                      title: "No SIM Card Detected",
+                      subtitle: "Insert a SIM card to view your float balances.",
+                    )
+                  : RefreshIndicator(
                   onRefresh: _load,
                   child: ListView.builder(
                     padding: const EdgeInsets.all(16),
-                    itemCount: _balances.length,
+                    itemCount: visibleBalances.length,
                     itemBuilder: (_, i) {
-                      final b = _balances[i] as Map<String, dynamic>;
+                      final b = visibleBalances[i] as Map<String, dynamic>;
                       return _ProviderBalanceCard(
                         providerLabel: _providerLabel(b["provider"]),
                         provider: b["provider"],
