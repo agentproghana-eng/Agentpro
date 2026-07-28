@@ -11,6 +11,18 @@ const GHS = (n) => `GHS ${parseFloat(n || 0).toFixed(2)}`;
 const dateStr = (d) => d ? new Date(d).toLocaleDateString('en-GH') : '—';
 const dateTimeStr = (d) => d ? new Date(d).toLocaleString('en-GH') : '—';
 
+// Best available SIM identifier for a transaction: full/last-6 ICCID
+// when present, else the SIM slot number as a weaker fallback (no
+// special permission needed, available on virtually every device -
+// unlike ICCID, which many modern Android versions restrict). Can't
+// retroactively fill in slot data for transactions recorded before
+// migration 028 added the column - those just fall through to '—'.
+function simLabel(tx, { full = false } = {}) {
+  if (tx.sim_iccid) return full ? tx.sim_iccid : tx.sim_iccid.slice(-6);
+  if (tx.sim_slot !== null && tx.sim_slot !== undefined) return `Slot ${tx.sim_slot + 1}`;
+  return full ? '' : '—';
+}
+
 // ── Brand Colors ──────────────────────────────────────────────
 const COLORS = {
   primary: '#006B5E',
@@ -250,7 +262,7 @@ async function generateTransactionReportPDF({ transactions, filters, summary, ti
         tx.agent_name || '—',
         GHS(tx.amount),
         (tx.status || '').toUpperCase(),
-        tx.sim_iccid ? tx.sim_iccid.slice(-6) : '—',
+        simLabel(tx),
       ];
 
       x = 40;
@@ -324,7 +336,7 @@ async function generateTransactionReportExcel({ transactions, filters, summary, 
       (tx.status || '').toUpperCase(),
       tx.agent_name || '',
       tx.branch_name || '',
-      tx.sim_iccid || '',
+      simLabel(tx, { full: true }),
     ]);
 
     if (i % 2 === 0) {

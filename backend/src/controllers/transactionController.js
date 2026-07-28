@@ -25,6 +25,7 @@ exports.initiateTransaction = async (req, res) => {
   payment_reference,
   merchant_id,
   sim_iccid,
+  sim_slot,
   } = req.body;
 
   const agentId = req.user.id;
@@ -120,14 +121,14 @@ exports.initiateTransaction = async (req, res) => {
         reference, agent_id, branch_id, company_id, provider,
         transaction_type, status, amount, customer_phone, customer_name,
         recipient_phone, recipient_name, biller_code, biller_name,
-        account_number, notes, fee, payment_reference, merchant_id, sim_iccid
-      ) VALUES ($1, $2, $3, $4, $5, $6, 'initiated', $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+        account_number, notes, fee, payment_reference, merchant_id, sim_iccid, sim_slot
+      ) VALUES ($1, $2, $3, $4, $5, $6, 'initiated', $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
       RETURNING id, reference, status, created_at`,
       [
         reference, agentId, branch_id, companyId, provider,
         transaction_type, amount, customer_phone, customer_name,
         recipient_phone, recipient_name, biller_code, biller_name,
-        account_number, notes, feeValue, payment_reference || '', merchant_id || '', sim_iccid || null
+        account_number, notes, feeValue, payment_reference || '', merchant_id || '', sim_iccid || null, sim_slot ?? null
       ]
     );
 

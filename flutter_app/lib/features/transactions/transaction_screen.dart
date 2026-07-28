@@ -161,6 +161,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         "fee": _isSendMoney ? (double.tryParse(_feeCtrl.text.replaceAll(",", "")) ?? 0) : 0,
         "notes": "",
         "sim_iccid": _simMap?[_selectedProvider]?.iccid ?? "",
+        "sim_slot": _simMap?[_selectedProvider]?.slot,
       };
 
       if (!mounted) return;
@@ -199,6 +200,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'fee': _isSendMoney ? (double.tryParse(_feeCtrl.text.replaceAll(',', '')) ?? 0) : 0,
         'notes': '',
         'sim_iccid': _simMap?[_selectedProvider]?.iccid ?? '',
+        'sim_slot': _simMap?[_selectedProvider]?.slot,
       });
 
       final template = res.data["data"]["ussd_template"] as Map<String, dynamic>?;
