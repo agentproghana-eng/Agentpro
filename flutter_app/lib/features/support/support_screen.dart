@@ -47,6 +47,28 @@ class SupportScreen extends StatelessWidget {
             ]),
           ),
         ),
+        const SizedBox(height: 12),
+        InkWell(
+          onTap: () => context.push("/help-guide"),
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: context.appSurface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppTheme.primaryColor.withOpacity(0.3)),
+            ),
+            child: Row(children: [
+              const Icon(Icons.menu_book_outlined, color: AppTheme.primaryColor, size: 26),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text("How to Use the App", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                Text("Step-by-step help for every feature - works offline, always free", style: TextStyle(fontSize: 11.5, color: context.appSecondaryText)),
+              ])),
+              const Icon(Icons.chevron_right, color: AppTheme.primaryColor),
+            ]),
+          ),
+        ),
         const SizedBox(height: 16),
         Container(
           padding: const EdgeInsets.all(14),
