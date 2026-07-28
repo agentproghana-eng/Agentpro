@@ -55,7 +55,7 @@ class SupportScreen extends StatelessWidget {
             const Text("Call Your Network", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             Text("For PIN issues and account problems", style: TextStyle(fontSize: 11, color: context.appSecondaryText)),
             const SizedBox(height: 10),
-            _CallRow(label: "MTN", number: "100", onTap: _call),
+            _CallRow(label: "MTN", number: "114", onTap: _call),
             const Divider(height: 20),
             _CallRow(label: "Telecel", number: "100", onTap: _call),
             const Divider(height: 20),
