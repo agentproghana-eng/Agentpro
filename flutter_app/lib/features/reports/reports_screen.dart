@@ -58,7 +58,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     {'value': 'cash_out', 'label': 'Cash Out'},
     {'value': 'send_money', 'label': 'Send Money'},
     {'value': 'merchant_payment', 'label': 'Merchant Payment'},
-    {'value': 'bill_payment', 'label': 'Bill Payment'},
+    {'value': 'bill_payment', 'label': 'Pay to Agent'},
     {'value': 'airtime', 'label': 'Airtime'},
     {'value': 'data_bundle', 'label': 'Data Bundle'},
     {'value': 'balance_enquiry', 'label': 'Balance Enquiry'},
