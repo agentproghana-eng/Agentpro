@@ -1,8 +1,13 @@
-const Anthropic = require('@anthropic-ai/sdk');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { query, withTransaction } = require('../config/database');
 const { logger } = require('../utils/logger');
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+// Swapped from Anthropic to Google's free-tier Gemini API for this
+// specific assistant - the paid Anthropic key (still used elsewhere,
+// e.g. agentPostController's ad detection) hit a billing issue, and
+// this feature (helping users learn the app) doesn't need a paid
+// model to do that well.
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // CRITICAL: AI must NEVER ask for or mention MoMo PIN
 const SYSTEM_PROMPT = `You are the Agent Pro Ghana AI Assistant - a helpful, knowledgeable, and friendly assistant built into the Agent Pro Ghana mobile app for Mobile Money agents, managers, and business owners in Ghana.
@@ -111,22 +116,24 @@ exports.chat = async (req, res) => {
       conversationId = convResult.rows[0].id;
     }
 
-    // Build messages for Claude API
-    const messages = [
-      ...history.map(m => ({ role: m.role, content: m.content })),
-      { role: 'user', content: message }
-    ];
-
-    // Call Anthropic API
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-5',
-      max_tokens: 1000,
-      system: SYSTEM_PROMPT,
-      messages
+    // Gemini's chat format differs from Anthropic's: history entries
+    // use role 'model' instead of 'assistant', and each turn's text
+    // goes under parts[].text rather than a flat content string.
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-flash-latest',
+      systemInstruction: SYSTEM_PROMPT,
     });
 
-    const assistantMessage = response.content[0].text;
-    const tokensUsed = response.usage?.input_tokens + response.usage?.output_tokens || 0;
+    const chat = model.startChat({
+      history: history.map(m => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      })),
+    });
+
+    const result = await chat.sendMessage(message);
+    const assistantMessage = result.response.text();
+    const tokensUsed = result.response.usageMetadata?.totalTokenCount || 0;
 
     // Save messages to DB
     await withTransaction(async (client) => {
@@ -156,10 +163,13 @@ exports.chat = async (req, res) => {
   } catch (error) {
     logger.error('AI chat error:', error);
 
-    if (error.status === 401) {
+    // Gemini's SDK doesn't consistently expose a numeric .status the
+    // way Anthropic's did, so also match on known error text.
+    const errMsg = (error.message || '').toLowerCase();
+    if (error.status === 401 || errMsg.includes('api key not valid') || errMsg.includes('api_key_invalid')) {
       return res.status(500).json({ success: false, message: 'AI service configuration error' });
     }
-    if (error.status === 429) {
+    if (error.status === 429 || errMsg.includes('quota') || errMsg.includes('rate limit') || errMsg.includes('resource_exhausted')) {
       return res.status(429).json({ success: false, message: 'AI service is busy. Please try again shortly.' });
     }
 
