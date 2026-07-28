@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -15,31 +16,32 @@ import 'core/services/offline_queue_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Lock orientation to portrait
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
+  // These don't depend on each other, so run them concurrently instead
+  // of one after another - total startup time becomes whichever one is
+  // slowest, not the sum of all of them. Jailbreak detection stays in
+  // this blocking group (unlike notifications below) since it decides
+  // which widget tree to even show - nothing should render until that's
+  // known.
+  final results = await Future.wait<dynamic>([
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]),
+    Firebase.initializeApp(),
+    StorageService.init(),
+    OfflineQueueService.init(),
+    FlutterJailbreakDetection.jailbroken.catchError((_) => false),
   ]);
 
-  // Initialize Firebase
-  await Firebase.initializeApp();
-
-
-  // Initialize encrypted storage
-  await StorageService.init();
-
-  // Initialize offline transaction queue
-  await OfflineQueueService.init();
-  // Initialize notifications
-  await NotificationService.init();
-
-  // Security: Detect rooted/tampered device
-  bool isJailbroken = false;
-  try {
-    isJailbroken = await FlutterJailbreakDetection.jailbroken;
-  } catch (_) {}
+  final isJailbroken = results[4] as bool;
 
   runApp(AgentProApp(isJailbroken: isJailbroken));
+
+  // Notification permission (a native OS prompt) and FCM setup don't
+  // need to block the very first frame - deferred until after the app
+  // is already visible, so a permission dialog is never the first
+  // thing a user sees on cold launch.
+  unawaited(NotificationService.init());
 }
 
 class AgentProApp extends StatelessWidget {
