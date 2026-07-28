@@ -1,22 +1,25 @@
-const Anthropic = require("@anthropic-ai/sdk");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { query, withTransaction } = require("../config/database");
 const { logger } = require("../utils/logger");
 const { uploadAudio } = require("../config/cloudinary");
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+// Swapped from Anthropic to Google's free-tier Gemini API - same
+// reason as aiController.js's chat assistant (billing issue on the
+// Anthropic key). This is a single-shot YES/NO classification, so no
+// conversation history is needed - just systemInstruction + one prompt.
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // Checks whether a post reads like an advertisement. Fails safe: if
 // the AI check itself fails, the post is treated as NOT flagged
 // (goes live normally) rather than silently blocking every post.
 async function detectAdvertisement(content) {
   try {
-    const response = await anthropic.messages.create({
-      model: "claude-sonnet-5",
-      max_tokens: 20,
-      system: "You moderate a community feed for mobile money agents in Ghana. Reply with only YES or NO: does the following post read like an advertisement or promotion for a product, service, or business (as opposed to a genuine question, tip, or discussion)?",
-      messages: [{ role: "user", content }],
+    const model = genAI.getGenerativeModel({
+      model: "gemini-flash-latest",
+      systemInstruction: "You moderate a community feed for mobile money agents in Ghana. Reply with only YES or NO: does the following post read like an advertisement or promotion for a product, service, or business (as opposed to a genuine question, tip, or discussion)?",
     });
-    const answer = (response.content[0]?.text || "").trim().toUpperCase();
+    const result = await model.generateContent(content);
+    const answer = (result.response.text() || "").trim().toUpperCase();
     return answer.startsWith("YES");
   } catch (error) {
     logger.error("Ad detection error:", error);
