@@ -63,6 +63,20 @@ function drawWatermark(doc) {
   doc.opacity(1);
 }
 
+// Draws the watermark plus a page-number footer on whichever page is
+// currently active. Called once for the first page, and again every
+// time doc.addPage() fires, so multi-page reports never lose either
+// past page 1 (the bug that shipped originally). Captures and restores
+// doc.y around the footer text so this never disturbs the caller's own
+// layout flow, regardless of when it's called.
+function decoratePage(doc, pageNum) {
+  drawWatermark(doc);
+  const y = doc.y;
+  doc.fontSize(8).fillColor(COLORS.muted).font('Helvetica')
+    .text(`Page ${pageNum}`, 40, doc.page.height - 30, { width: doc.page.width - 80, align: 'center' });
+  doc.y = y;
+}
+
 // ── Transaction Receipt PDF ───────────────────────────────────
 
 async function generateTransactionReceipt(transaction) {
@@ -150,7 +164,8 @@ async function generateTransactionReportPDF({ transactions, filters, summary, ti
   await new Promise((resolve) => {
     doc.on('end', resolve);
 
-    drawWatermark(doc);
+    let pageNum = 1;
+    decoratePage(doc, pageNum);
 
     // Header
     doc.rect(0, 0, doc.page.width, 70).fill(COLORS.primary);
@@ -202,19 +217,22 @@ async function generateTransactionReportPDF({ transactions, filters, summary, ti
       { label: 'SIM', width: 35 },
     ];
 
-    doc.rect(40, doc.y, doc.page.width - 80, 18).fill(COLORS.primary);
+    const headerY = doc.y;
+    doc.rect(40, headerY, doc.page.width - 80, 18).fill(COLORS.primary);
     let x = 40;
     cols.forEach(col => {
       doc.fontSize(7.5).fillColor('white').font('Helvetica-Bold')
-        .text(col.label, x + 4, doc.y - 14, { width: col.width - 4 });
+        .text(col.label, x + 4, headerY + 5, { width: col.width - 4, lineBreak: false });
       x += col.width;
     });
-    doc.moveDown(0.2);
+    doc.y = headerY + 18;
 
     // Table rows
     transactions.forEach((tx, idx) => {
       if (doc.y > doc.page.height - 80) {
         doc.addPage();
+        pageNum++;
+        decoratePage(doc, pageNum);
         doc.moveDown(1);
       }
 
@@ -331,7 +349,8 @@ async function generateCommissionReportPDF({ commissions, summary, title, groupB
   await new Promise((resolve) => {
     doc.on('end', resolve);
 
-    drawWatermark(doc);
+    let pageNum = 1;
+    decoratePage(doc, pageNum);
 
     doc.rect(0, 0, doc.page.width, 70).fill(COLORS.primary);
     try { doc.image(LOGO_PATH, 15, 15, { height: 40 }); } catch (e) { logger.warn('Logo image not found, skipping:', e.message); }
@@ -369,17 +388,22 @@ async function generateCommissionReportPDF({ commissions, summary, title, groupB
       { label: 'Net Commission', width: 100 },
     ];
 
-    doc.rect(40, doc.y, doc.page.width - 80, 18).fill(COLORS.primary);
+    const headerY = doc.y;
+    doc.rect(40, headerY, doc.page.width - 80, 18).fill(COLORS.primary);
     let x = 40;
     cols.forEach(col => {
       doc.fontSize(7.5).fillColor('white').font('Helvetica-Bold')
-        .text(col.label, x + 4, doc.y - 14, { width: col.width - 4 });
+        .text(col.label, x + 4, headerY + 5, { width: col.width - 4, lineBreak: false });
       x += col.width;
     });
-    doc.moveDown(0.2);
+    doc.y = headerY + 18;
 
     commissions.forEach((row, idx) => {
-      if (doc.y > doc.page.height - 60) doc.addPage();
+      if (doc.y > doc.page.height - 60) {
+        doc.addPage();
+        pageNum++;
+        decoratePage(doc, pageNum);
+      }
       const rowY = doc.y;
       if (idx % 2 === 0) doc.rect(40, rowY, doc.page.width - 80, 16).fill('#FAFAFA');
 
