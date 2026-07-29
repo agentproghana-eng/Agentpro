@@ -63,6 +63,11 @@ class _MoreTab extends StatelessWidget {
           _MoreTile(Icons.bar_chart_outlined, 'My Reports', () => context.push('/reports')),
           _MoreTile(Icons.wifi_tethering, 'USSD Automation', () => context.push('/ussd-settings'), isNew: true),
 
+          // Only shown to someone holding both Business and Personal
+          // capability at once - a pure Agent has no other mode.
+          if (user['personal_subscription_plan'] != null)
+            _MoreTile(Icons.person_outline, 'Switch to Personal Mode', () => context.go('/personal-home'), isNew: true),
+
           const _MoreGroupLabel('Support'),
           _MoreTile(Icons.support_agent_outlined, 'Support', () => context.push('/support'), isNew: true),
           _MoreTile(Icons.settings_outlined, 'Settings', () => context.push('/settings')),
