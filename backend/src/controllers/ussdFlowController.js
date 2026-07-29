@@ -29,6 +29,10 @@ function validateSteps(steps) {
   return null;
 }
 
+// Exported so the Personal USSD Flow controller can reuse the same
+// validation rules rather than duplicate them.
+exports.validateSteps = validateSteps;
+
 // ── List flows ────────────────────────────────────────────────
 // Superuser sees every flow. Business owners see every global flow
 // (company_id IS NULL - read-only to them) plus their own company's
