@@ -31,6 +31,23 @@ router.post('/register', authLimiter, [
     .matches(/[0-9]/).withMessage('Password must contain a number'),
 ], handleValidation, authController.register);
 
+// POST /api/v1/auth/register-personal
+router.post('/register-personal', authLimiter, [
+  body('first_name').trim().notEmpty().withMessage('First name is required'),
+  body('last_name').trim().notEmpty().withMessage('Last name is required'),
+  body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
+  body('phone').trim().notEmpty().withMessage('Phone number is required'),
+  body('password')
+    .isLength({ min: 8 }).withMessage('Password must be at least 8 characters')
+    .matches(/[A-Z]/).withMessage('Password must contain an uppercase letter')
+    .matches(/[0-9]/).withMessage('Password must contain a number'),
+], handleValidation, authController.registerPersonal);
+
+// POST /api/v1/auth/add-personal-capability (requires auth) - lets an
+// existing Business-side user also gain Personal capability without a
+// second account.
+router.post('/add-personal-capability', authenticate, authController.addPersonalCapability);
+
 // POST /api/v1/auth/login
 router.post('/login', authLimiter, [
   body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),

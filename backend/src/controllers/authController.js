@@ -121,6 +121,153 @@ exports.register = async (req, res) => {
   }
 };
 
+// ─── Personal Subscriber Registration ────────────────────────
+// Lightweight, no company involved and no superuser approval gate -
+// unlike the Business Owner path above, a Personal account activates
+// immediately. Auto-logs the new user in on success (same token/response
+// shape as login()) since there's no pending-approval wait to justify a
+// separate login step right after.
+
+exports.registerPersonal = async (req, res) => {
+  const { first_name, last_name, phone, email, password } = req.body;
+
+  try {
+    const existing = await query(
+      'SELECT id FROM users WHERE email = $1',
+      [email.toLowerCase()]
+    );
+    if (existing.rows.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: 'An account with this email already exists'
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(password, parseInt(process.env.BCRYPT_ROUNDS) || 12);
+
+    const user = await withTransaction(async (client) => {
+      const userResult = await client.query(
+        `INSERT INTO users (
+          role, first_name, last_name, email, phone, password_hash, status
+        ) VALUES ('customer', $1, $2, $3, $4, $5, 'active')
+        RETURNING id, role, first_name, last_name, email, phone, company_id, profile_image_url, must_change_password`,
+        [first_name, last_name, email.toLowerCase(), phone, passwordHash]
+      );
+      const newUser = userResult.rows[0];
+
+      await client.query(
+        `INSERT INTO personal_subscriptions (user_id, plan) VALUES ($1, 'free')`,
+        [newUser.id]
+      );
+
+      await auditLog({
+        userId: newUser.id,
+        companyId: null,
+        action: 'PERSONAL_USER_REGISTERED',
+        entityType: 'user',
+        entityId: newUser.id,
+        newValues: { email, role: 'customer' },
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        requestId: req.requestId
+      });
+
+      return newUser;
+    });
+
+    // Auto-login: no approval gate to wait on, so hand back working
+    // tokens immediately rather than making the user log in again.
+    const accessToken = generateAccessToken(user);
+    const refreshToken = generateRefreshToken(user);
+    const tokenHash = await bcrypt.hash(refreshToken, 8);
+    await query(
+      `INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+      [user.id, tokenHash, getRefreshTokenExpiry()]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Registration successful',
+      data: {
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        user: {
+          id: user.id,
+          role: user.role,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          email: user.email,
+          phone: user.phone,
+          company_id: user.company_id,
+          personal_subscription_plan: 'free',
+          personal_subscription_expires_at: null,
+          profile_image_url: user.profile_image_url,
+          must_change_password: user.must_change_password,
+        }
+      }
+    });
+
+  } catch (error) {
+    logger.error('Personal registration error:', error);
+    res.status(500).json({ success: false, message: 'Registration failed. Please try again.' });
+  }
+};
+
+// ─── Add Personal Capability to an Existing Account ───────────
+// Lets an existing Business-side user (agent/manager/owner/auditor) also
+// gain Personal capability without creating a second account - Option A
+// from the account-structure design. Idempotent: calling this again for
+// someone who already has it just returns their existing subscription
+// rather than erroring.
+
+exports.addPersonalCapability = async (req, res) => {
+  try {
+    const existing = await query(
+      'SELECT plan, expires_at FROM personal_subscriptions WHERE user_id = $1',
+      [req.user.id]
+    );
+    if (existing.rows.length > 0) {
+      return res.json({
+        success: true,
+        message: 'Personal capability is already enabled on this account.',
+        data: {
+          personal_subscription_plan: existing.rows[0].plan,
+          personal_subscription_expires_at: existing.rows[0].expires_at,
+        }
+      });
+    }
+
+    await query(
+      `INSERT INTO personal_subscriptions (user_id, plan) VALUES ($1, 'free')`,
+      [req.user.id]
+    );
+
+    await auditLog({
+      userId: req.user.id,
+      companyId: req.user.company_id,
+      action: 'PERSONAL_CAPABILITY_ADDED',
+      entityType: 'user',
+      entityId: req.user.id,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+      requestId: req.requestId
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Personal capability enabled — you can now switch to Personal Mode.',
+      data: {
+        personal_subscription_plan: 'free',
+        personal_subscription_expires_at: null,
+      }
+    });
+
+  } catch (error) {
+    logger.error('Add personal capability error:', error);
+    res.status(500).json({ success: false, message: 'Failed to enable Personal capability. Please try again.' });
+  }
+};
+
 // ─── Login ────────────────────────────────────────────────────
 
 exports.login = async (req, res) => {
@@ -131,10 +278,13 @@ exports.login = async (req, res) => {
     const result = await query(
       `SELECT u.*, c.name as company_name, c.status as company_status,
               s.plan as subscription_plan, s.status as subscription_status,
-              s.expires_at as subscription_expires_at
+              s.expires_at as subscription_expires_at,
+              ps.plan as personal_subscription_plan,
+              ps.expires_at as personal_subscription_expires_at
        FROM users u
        LEFT JOIN companies c ON u.company_id = c.id
        LEFT JOIN subscriptions s ON c.id = s.company_id
+       LEFT JOIN personal_subscriptions ps ON ps.user_id = u.id
        WHERE u.email = $1
        ORDER BY s.created_at DESC LIMIT 1`,
       [email.toLowerCase()]
@@ -247,6 +397,8 @@ exports.login = async (req, res) => {
           subscription_plan: user.subscription_plan,
           subscription_status: user.subscription_status,
           subscription_expires_at: user.subscription_expires_at,
+          personal_subscription_plan: user.personal_subscription_plan,
+          personal_subscription_expires_at: user.personal_subscription_expires_at,
           profile_image_url: user.profile_image_url,
           telecel_operator_id: user.telecel_operator_id,
           must_change_password: user.must_change_password
