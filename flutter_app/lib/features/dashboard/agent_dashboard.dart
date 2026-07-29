@@ -53,6 +53,14 @@ class _MoreTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // _MoreTab is a separate StatelessWidget from _AgentDashboardState,
+    // and is const-constructed, so 'user' can't be passed through the
+    // constructor (const constructors can't take runtime values) - it
+    // needs its own lookup here instead.
+    final user = context.read<AuthBloc>().state is AuthAuthenticated
+        ? (context.read<AuthBloc>().state as AuthAuthenticated).user
+        : <String, dynamic>{};
+
     return Scaffold(
       appBar: AppBar(title: const Text('More')),
       body: ListView(
