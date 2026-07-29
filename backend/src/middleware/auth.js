@@ -163,6 +163,36 @@ const requireActiveSubscription = async (req, res, next) => {
 };
 
 /**
+ * Ensure the authenticated user has Personal Subscriber capability
+ * enabled (a personal_subscriptions row exists) - independent of their
+ * business role, if any. Attaches req.personalSubscription = { plan,
+ * expires_at } for downstream use. This only gates "has Personal
+ * capability at all" - Free vs Paid plan gating for specific premium
+ * features (Reports, USSD Automation, Custom Flows) is a separate,
+ * stricter check layered on top where it's actually needed.
+ */
+const requirePersonalAccount = async (req, res, next) => {
+  try {
+    const result = await query(
+      'SELECT plan, expires_at FROM personal_subscriptions WHERE user_id = $1',
+      [req.user.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(403).json({
+        success: false,
+        message: 'Personal account capability is not enabled for this user.',
+        code: 'PERSONAL_ACCOUNT_REQUIRED'
+      });
+    }
+    req.personalSubscription = result.rows[0];
+    next();
+  } catch (error) {
+    logger.error('Personal account check error:', error);
+    res.status(500).json({ success: false, message: 'Failed to verify personal account status' });
+  }
+};
+
+/**
  * Ensure auditor only reads (no write access)
  */
 const blockAuditor = (req, res, next) => {
@@ -180,5 +210,6 @@ module.exports = {
   authorize,
   requireSameCompany,
   requireActiveSubscription,
+  requirePersonalAccount,
   blockAuditor
 };
