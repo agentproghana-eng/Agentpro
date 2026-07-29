@@ -39,6 +39,7 @@ async function runDailyJobs() {
     sendSubscriptionReminders(),
     suspendExpiredSubscriptions(),
     expireOldAds(),
+    expirePersonalSubscriptions(),
   ]);
   logger.info('Daily jobs complete');
 }
@@ -49,6 +50,28 @@ async function runHourlyJobs() {
   await Promise.allSettled([
     checkLowFloatAlerts(),
   ]);
+}
+
+// ── Expire Personal Subscriptions ────────────────────────────
+// Auto-reverts a Personal subscriber back to the free plan once their
+// paid period ends - per spec, this must happen automatically, with no
+// grace period concept the way Business subscriptions have.
+
+async function expirePersonalSubscriptions() {
+  try {
+    const result = await query(
+      `UPDATE personal_subscriptions
+       SET plan = 'free', expires_at = NULL, updated_at = NOW()
+       WHERE plan = 'paid' AND expires_at < NOW()
+       RETURNING user_id`
+    );
+
+    if (result.rows.length > 0) {
+      logger.info(`Reverted ${result.rows.length} expired Personal subscription(s) to free`);
+    }
+  } catch (error) {
+    logger.error('Personal subscription expiry job error:', error);
+  }
 }
 
 // ── Subscription Renewal Reminders ───────────────────────────
