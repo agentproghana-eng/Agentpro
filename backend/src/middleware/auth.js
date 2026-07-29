@@ -193,6 +193,26 @@ const requirePersonalAccount = async (req, res, next) => {
 };
 
 /**
+ * Ensure the authenticated Personal Subscriber is on the paid plan (not
+ * free) and it hasn't expired. Must be used after requirePersonalAccount,
+ * which already attaches req.personalSubscription - this just checks
+ * its plan/expiry rather than re-querying. Reusable anywhere a feature
+ * is Paid-Personal-only (Community posting/commenting now, Reports/
+ * USSD Automation/Custom Flows for Personal users later).
+ */
+const requirePaidPersonalPlan = (req, res, next) => {
+  const sub = req.personalSubscription;
+  if (!sub || sub.plan !== 'paid' || (sub.expires_at && new Date(sub.expires_at) < new Date())) {
+    return res.status(403).json({
+      success: false,
+      message: 'This feature requires an active Personal subscription (GH₵5/month).',
+      code: 'PERSONAL_SUBSCRIPTION_REQUIRED'
+    });
+  }
+  next();
+};
+
+/**
  * Ensure auditor only reads (no write access)
  */
 const blockAuditor = (req, res, next) => {
@@ -211,5 +231,6 @@ module.exports = {
   requireSameCompany,
   requireActiveSubscription,
   requirePersonalAccount,
+  requirePaidPersonalPlan,
   blockAuditor
 };

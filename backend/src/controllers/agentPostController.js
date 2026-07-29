@@ -27,6 +27,10 @@ async function detectAdvertisement(content) {
   }
 }
 
+// Exported so the Personal Community controller can reuse the same
+// check rather than duplicate the moderation prompt/logic.
+exports.detectAdvertisement = detectAdvertisement;
+
 // Posts can be text, a voice note, or both - never neither. Voice-only
 // posts (no text at all) deliberately skip the AI ad-detection check
 // below: there is no transcription pipeline to run that check against,
