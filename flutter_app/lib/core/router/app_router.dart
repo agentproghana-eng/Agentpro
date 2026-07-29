@@ -39,6 +39,7 @@ import '../../features/marketplace/post_ad_screen.dart';
 import '../../features/marketplace/my_ads_screen.dart';
 import '../../features/marketplace/ad_detail_screen.dart';
 import '../../features/settings/settings_screen.dart';
+import '../../features/settings/sim_purpose_settings_screen.dart';
 import '../../features/notifications/notifications_screen.dart';
 import '../../features/branches/branches_screen.dart';
 import '../../features/staff/staff_management_screen.dart';
@@ -155,6 +156,7 @@ class AppRouter {
 
         // Settings
         GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
+        GoRoute(path: '/settings/sim-purpose', builder: (_, __) => const SimPurposeSettingsScreen()),
 
         // Root redirect
         GoRoute(path: '/', redirect: (context, state) {

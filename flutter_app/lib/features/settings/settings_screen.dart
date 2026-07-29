@@ -213,6 +213,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onTap: () => context.push("/sync"),
         ),
 
+        // Only relevant for someone holding both Business and Personal
+        // capability at once - a one-sided user has nothing to
+        // distinguish between SIMs for.
+        if (user['company_id'] != null && user['personal_subscription_plan'] != null)
+          ListTile(
+            leading: const Icon(Icons.sim_card_outlined, color: AppTheme.primaryColor),
+            title: const Text('SIM Purpose'),
+            subtitle: const Text('Which SIM is for Business vs Personal use'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/settings/sim-purpose'),
+          ),
+
         const Divider(),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
