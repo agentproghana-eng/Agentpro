@@ -397,8 +397,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       children: [
                         Text("Don't have an account?", style: TextStyle(color: context.appSecondaryText)),
                         TextButton(
-                          onPressed: () => context.push('/auth/register'),
-                          child: const Text('Register Business'),
+                          onPressed: () => context.push('/auth/account-type'),
+                          child: const Text('Create Account'),
                         ),
                       ],
                     ),

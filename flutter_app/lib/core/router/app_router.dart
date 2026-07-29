@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import '../auth/auth_bloc.dart';
 import '../../features/auth/login_screen.dart';
 import '../../features/auth/register_screen.dart';
+import '../../features/auth/account_type_selection_screen.dart';
+import '../../features/auth/personal_register_screen.dart';
 import '../../features/auth/forgot_password_screen.dart';
 import '../../features/auth/force_password_change_screen.dart';
 import '../../features/dashboard/agent_dashboard.dart';
@@ -61,6 +63,8 @@ class AppRouter {
         // Auth routes
         GoRoute(path: '/auth/login', builder: (_, __) => const LoginScreen()),
         GoRoute(path: '/auth/register', builder: (_, __) => const RegisterScreen()),
+        GoRoute(path: '/auth/account-type', builder: (_, __) => const AccountTypeSelectionScreen()),
+        GoRoute(path: '/auth/register-personal', builder: (_, __) => const PersonalRegisterScreen()),
         GoRoute(path: '/auth/change-password-required', builder: (_, __) => const ForcePasswordChangeScreen()),
         GoRoute(path: '/auth/forgot-password', builder: (_, __) => const ForgotPasswordScreen()),
 
