@@ -28,6 +28,7 @@ const personalTransactionRoutes = require('./src/routes/personalTransaction.rout
 const personalSubscriptionRoutes = require('./src/routes/personalSubscription.routes');
 const personalCommunityRoutes = require('./src/routes/personalCommunity.routes');
 const personalUssdFlowRoutes = require('./src/routes/personalUssdFlow.routes');
+const personalReportRoutes = require('./src/routes/personalReport.routes');
 const reportRoutes = require('./src/routes/report.routes');
 const aiRoutes = require('./src/routes/ai.routes');
 const notificationRoutes = require('./src/routes/notification.routes');
@@ -140,6 +141,7 @@ app.use(`${API}/personal-transactions`, personalTransactionRoutes);
 app.use(`${API}/personal-subscription`, personalSubscriptionRoutes);
 app.use(`${API}/personal-community`, personalCommunityRoutes);
 app.use(`${API}/personal-ussd-flows`, personalUssdFlowRoutes);
+app.use(`${API}/personal-reports`, personalReportRoutes);
 app.use(`${API}/reports`, reportRoutes);
 app.use(`${API}/ai`, aiRoutes);
 app.use(`${API}/notifications`, notificationRoutes);

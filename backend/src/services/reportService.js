@@ -508,6 +508,115 @@ async function generateCommissionReportExcel({ commissions, summary, title, grou
   return await workbook.xlsx.writeBuffer();
 }
 
+// ── Personal Transaction Report PDF ─────────────────────────────
+// Simpler than the Agent version: no branch/agent/commission/fee
+// columns, since Personal transactions genuinely don't have those.
+// Reuses the same cross-cutting helpers (watermark, page numbers,
+// status colors, currency formatting) as the Agent report.
+
+async function generatePersonalTransactionReportPDF({ transactions, summary, title }) {
+  const doc = new PDFDocument({ size: 'A4', margin: 40 });
+  const buffers = [];
+  doc.on('data', b => buffers.push(b));
+
+  await new Promise((resolve) => {
+    doc.on('end', resolve);
+
+    let pageNum = 1;
+    decoratePage(doc, pageNum);
+
+    // Header
+    doc.rect(0, 0, doc.page.width, 70).fill(COLORS.primary);
+    try { doc.image(LOGO_PATH, 15, 15, { height: 40 }); } catch (e) { logger.warn('Logo image not found, skipping:', e.message); }
+    doc.fillColor(COLORS.secondary).fontSize(18).font('Helvetica-Bold')
+      .text('Agent Pro Ghana', 40, 15);
+    doc.fillColor('white').fontSize(11).font('Helvetica')
+      .text(title || 'My Transaction Report', 40, 35);
+    doc.fontSize(9).text(`Generated: ${dateTimeStr(new Date())}`, 40, 52);
+    doc.fillColor(COLORS.text);
+    doc.moveDown(2.5);
+
+    // Summary Cards
+    const summaries = [
+      ['Total Transactions', summary.count || 0],
+      ['Total Amount', GHS(summary.total_amount)],
+      ['Success Rate', `${summary.success_rate || 0}%`],
+    ];
+    const cardWidth = (doc.page.width - 80 - 20) / 3;
+    summaries.forEach(([label, value], i) => {
+      const x = 40 + i * (cardWidth + 10);
+      const y = doc.y;
+      doc.rect(x, y, cardWidth, 48).fill(COLORS.light);
+      doc.fontSize(7).fillColor(COLORS.muted).font('Helvetica')
+        .text(label, x + 6, y + 8, { width: cardWidth - 12 });
+      doc.fontSize(12).fillColor(COLORS.primary).font('Helvetica-Bold')
+        .text(String(value), x + 6, y + 20, { width: cardWidth - 12 });
+    });
+    doc.moveDown(3.5);
+
+    // Table Header - widths sum to 515pt (A4 width minus margins),
+    // matching the same constraint used on the Agent report.
+    const cols = [
+      { label: 'Date', width: 65 },
+      { label: 'Reference', width: 90 },
+      { label: 'Type', width: 90 },
+      { label: 'Provider', width: 55 },
+      { label: 'Recipient', width: 85 },
+      { label: 'Amount', width: 65 },
+      { label: 'Status', width: 65 },
+    ];
+
+    const headerY = doc.y;
+    doc.rect(40, headerY, doc.page.width - 80, 18).fill(COLORS.primary);
+    let x = 40;
+    cols.forEach(col => {
+      doc.fontSize(7.5).fillColor('white').font('Helvetica-Bold')
+        .text(col.label, x + 4, headerY + 5, { width: col.width - 4, lineBreak: false });
+      x += col.width;
+    });
+    doc.y = headerY + 18;
+
+    // Table rows
+    transactions.forEach((tx, idx) => {
+      if (doc.y > doc.page.height - 80) {
+        doc.addPage();
+        pageNum++;
+        decoratePage(doc, pageNum);
+        doc.moveDown(1);
+      }
+
+      const rowY = doc.y;
+      if (idx % 2 === 0) {
+        doc.rect(40, rowY, doc.page.width - 80, 16).fill('#FAFAFA');
+      }
+
+      const rowData = [
+        dateStr(tx.created_at),
+        tx.reference,
+        (tx.transaction_type || '').replace(/_/g, ' '),
+        (tx.provider || '').toUpperCase(),
+        tx.recipient_phone || '—',
+        tx.amount != null ? GHS(tx.amount) : '—',
+        (tx.status || '').toUpperCase(),
+      ];
+
+      x = 40;
+      rowData.forEach((val, i) => {
+        const color = i === 6 ? statusColor(tx.status) : COLORS.text;
+        doc.fontSize(7).fillColor(color).font('Helvetica')
+          .text(val, x + 4, rowY + 4, { width: cols[i].width - 4 });
+        x += cols[i].width;
+      });
+
+      doc.y = rowY + 18;
+    });
+
+    doc.end();
+  });
+
+  return Buffer.concat(buffers);
+}
+
 // ── CSV Generator ─────────────────────────────────────────────
 
 function generateCSV(data, columns) {
@@ -525,5 +634,6 @@ module.exports = {
   generateTransactionReportExcel,
   generateCommissionReportPDF,
   generateCommissionReportExcel,
+  generatePersonalTransactionReportPDF,
   generateCSV,
 };
