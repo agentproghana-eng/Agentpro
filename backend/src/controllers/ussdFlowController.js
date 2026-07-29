@@ -288,7 +288,19 @@ exports.resolveFlow = async (req, res) => {
   try {
     let flow = null;
 
-    if (req.user.company_id) {
+    // Personal-owned flow takes priority - a Personal subscriber's own
+    // custom flow (owner_user_id) overrides both the company default
+    // and the global default for that individual.
+    const personalResult = await query(
+      `SELECT * FROM ussd_flows
+       WHERE owner_user_id = $1 AND provider = $2 AND transaction_type = $3 AND is_active = true`,
+      [req.user.id, provider, transaction_type]
+    );
+    if (personalResult.rows.length > 0) {
+      flow = personalResult.rows[0];
+    }
+
+    if (!flow && req.user.company_id) {
       const companyResult = await query(
         `SELECT * FROM ussd_flows
          WHERE company_id = $1 AND provider = $2 AND transaction_type = $3 AND is_active = true`,
@@ -300,9 +312,12 @@ exports.resolveFlow = async (req, res) => {
     }
 
     if (!flow) {
+      // owner_user_id IS NULL is required too, not just company_id -
+      // a personal-owned flow also has company_id NULL, and without
+      // this it could be mistaken for someone else's global default.
       const globalResult = await query(
         `SELECT * FROM ussd_flows
-         WHERE company_id IS NULL AND provider = $1 AND transaction_type = $2 AND is_active = true`,
+         WHERE company_id IS NULL AND owner_user_id IS NULL AND provider = $1 AND transaction_type = $2 AND is_active = true`,
         [provider, transaction_type]
       );
       if (globalResult.rows.length > 0) {
