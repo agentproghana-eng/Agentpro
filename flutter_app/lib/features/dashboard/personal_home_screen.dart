@@ -217,6 +217,13 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/marketplace'),
           )),
+          Card(child: ListTile(
+            leading: const Icon(Icons.workspace_premium_outlined, color: AppTheme.primaryColor),
+            title: const Text('My Subscription'),
+            subtitle: const Text('Manage your Personal plan'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/personal-subscription'),
+          )),
         ],
       ),
     );

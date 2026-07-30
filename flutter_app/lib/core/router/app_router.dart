@@ -26,6 +26,7 @@ import '../../features/support/support_screen.dart';
 import '../../features/support/help_guide_screen.dart';
 import '../../features/dashboard/personal_home_screen.dart';
 import '../../features/transactions/personal_transaction_screen.dart';
+import '../../features/subscription/personal_subscription_screen.dart';
 import '../../features/ussd_settings/ussd_settings_screen.dart';
 import '../../features/ussd_flows/ussd_flow_list_screen.dart';
 import '../../features/community/community_feed_screen.dart';
@@ -136,6 +137,7 @@ class AppRouter {
         GoRoute(path: '/support', builder: (_, __) => const SupportScreen()),
         GoRoute(path: '/help-guide', builder: (_, __) => const HelpGuideScreen()),
         GoRoute(path: '/personal-home', builder: (_, __) => const PersonalHomeScreen()),
+        GoRoute(path: '/personal-subscription', builder: (_, __) => const PersonalSubscriptionScreen()),
         GoRoute(path: '/ussd-settings', builder: (_, __) => const UssdSettingsScreen()),
         GoRoute(path: '/ussd-flows', builder: (_, __) => const UssdFlowListScreen()),
         GoRoute(path: '/community', builder: (_, __) => const CommunityFeedScreen()),
