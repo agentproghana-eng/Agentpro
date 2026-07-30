@@ -13,7 +13,27 @@ exports.getSubscription = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Personal capability is not enabled for this account.' });
     }
-    res.json({ success: true, data: result.rows[0] });
+
+    // Same merchant MoMo number Business subscriptions already pay
+    // into (system_config key 'agent_pro_momo_number') - one merchant
+    // account for the whole app, not a separate one per plan type.
+    const config = await query(
+      "SELECT value FROM system_config WHERE key = 'agent_pro_momo_number'",
+    );
+
+    res.json({
+      success: true,
+      data: {
+        subscription: result.rows[0],
+        payment_instructions: {
+          merchant_number: config.rows[0]?.value || '',
+          merchant_name: 'Agent Pro Ghana',
+          amount: 5.00,
+          currency: 'GHS',
+          note: 'Pay GH₵5.00 via MTN MoMo, then submit your transaction reference below.',
+        },
+      },
+    });
   } catch (error) {
     logger.error('Get personal subscription error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch subscription status' });
