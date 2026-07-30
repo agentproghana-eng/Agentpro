@@ -14,7 +14,14 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/auth/auth_bloc.dart';
 class TransactionProgressScreen extends StatefulWidget {
   final Map<String, dynamic> data;
-  const TransactionProgressScreen({super.key, required this.data});
+  // Personal transactions reuse this entire screen (USSD dialing, step
+  // matching, native accessibility bridge are all identical) - this
+  // flag only changes the small Agent-specific surface: which
+  // "complete" endpoint gets called, and where the post-completion
+  // buttons navigate (Personal doesn't have its own history/detail
+  // screens yet, so those fall back to Personal Home for now).
+  final bool isPersonal;
+  const TransactionProgressScreen({super.key, required this.data, this.isPersonal = false});
 
   @override
   State<TransactionProgressScreen> createState() => _TransactionProgressScreenState();
@@ -391,7 +398,7 @@ Future<void> _startAccessibilityAutomation(
 
     try {
       final res = await ApiClient.instance.patch(
-        '/transactions/$transactionId/complete',
+        '${widget.isPersonal ? '/personal-transactions' : '/transactions'}/$transactionId/complete',
         data: {
           'status': statusString,
           'network_reference': result.networkReference,
@@ -718,7 +725,7 @@ Future<void> _startAccessibilityAutomation(
             AppButton(
               label: 'Check Transaction History',
               icon: Icons.history,
-              onPressed: () => context.push('/transactions'),
+              onPressed: () => context.push(widget.isPersonal ? '/personal-home' : '/transactions'),
               outlined: true,
             ),
 
@@ -727,15 +734,16 @@ Future<void> _startAccessibilityAutomation(
           AppButton(
             label: 'New Transaction',
             icon: Icons.add,
-            onPressed: () => context.go('/agent'),
+            onPressed: () => context.go(widget.isPersonal ? '/personal-home' : '/agent'),
           ),
 
           const SizedBox(height: 12),
 
-          TextButton(
-            onPressed: () => context.push('/transactions/${_completedTransaction?['id']}'),
-            child: const Text('View Transaction Details'),
-          ),
+          if (!widget.isPersonal)
+            TextButton(
+              onPressed: () => context.push('/transactions/${_completedTransaction?['id']}'),
+              child: const Text('View Transaction Details'),
+            ),
         ],
       ),
     );
