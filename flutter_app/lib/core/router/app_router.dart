@@ -25,6 +25,7 @@ import '../../features/balances/pending_approvals_screen.dart';
 import '../../features/support/support_screen.dart';
 import '../../features/support/help_guide_screen.dart';
 import '../../features/dashboard/personal_home_screen.dart';
+import '../../features/transactions/personal_transaction_screen.dart';
 import '../../features/ussd_settings/ussd_settings_screen.dart';
 import '../../features/ussd_flows/ussd_flow_list_screen.dart';
 import '../../features/community/community_feed_screen.dart';
@@ -81,6 +82,21 @@ class AppRouter {
             final type = state.uri.queryParameters['type'] ?? 'cash_in';
             final provider = state.uri.queryParameters['provider'];
             return TransactionScreen(transactionType: type, initialProvider: provider);
+          },
+        ),
+        GoRoute(
+          path: '/personal-transactions/new',
+          builder: (_, state) {
+            final type = state.uri.queryParameters['type'] ?? 'send_money_same_network';
+            final provider = state.uri.queryParameters['provider'] ?? 'mtn';
+            final simSlotStr = state.uri.queryParameters['sim_slot'];
+            final simIccid = state.uri.queryParameters['sim_iccid'];
+            return PersonalTransactionScreen(
+              transactionType: type,
+              provider: provider,
+              simSlot: simSlotStr != null ? int.tryParse(simSlotStr) : null,
+              simIccid: simIccid,
+            );
           },
         ),
         GoRoute(
