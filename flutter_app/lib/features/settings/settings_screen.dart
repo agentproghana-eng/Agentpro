@@ -106,6 +106,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) setState(() => _pinEnabled = value);
   }
 
+  // Idempotent on the backend (safe even if already added), and only
+  // ever reachable from a tile that's already hidden once this
+  // succeeds - AuthUpdateUserEvent merges the two returned fields into
+  // the cached user without a full re-login, same mechanism already
+  // used for self-service settings changes elsewhere in the app.
+  Future<void> _addPersonalCapability(BuildContext context) async {
+    try {
+      final res = await ApiClient.instance.post('/auth/add-personal-capability');
+      final data = res.data['data'];
+      if (context.mounted) {
+        context.read<AuthBloc>().add(AuthUpdateUserEvent({
+          'personal_subscription_plan': data['personal_subscription_plan'],
+          'personal_subscription_expires_at': data['personal_subscription_expires_at'],
+        }));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Personal account added! Find it under Switch to Personal Mode.')));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to add Personal account'), backgroundColor: AppTheme.errorColor));
+      }
+    }
+  }
+
   Future<String?> _showPinEntryDialog(String title) {
     String digits = '';
     return showDialog<String>(
@@ -212,6 +237,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
           trailing: const Icon(Icons.chevron_right),
           onTap: () => context.push("/sync"),
         ),
+
+        // The missing piece that made the Mode Switcher/SIM Purpose
+        // tiles below invisible for every existing Business account:
+        // there was no way to actually add Personal capability in the
+        // first place. Idempotent on the backend, but only shown here
+        // when not already present, to avoid a pointless duplicate tap.
+        if (user['personal_subscription_plan'] == null)
+          ListTile(
+            leading: const Icon(Icons.person_add_outlined, color: AppTheme.primaryColor),
+            title: const Text('Add Personal Account'),
+            subtitle: const Text('Use Agent Pro Ghana for your own transactions too'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _addPersonalCapability(context),
+          ),
 
         // Only relevant for someone holding both Business and Personal
         // capability at once - a one-sided user has nothing to
