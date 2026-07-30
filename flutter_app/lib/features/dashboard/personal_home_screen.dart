@@ -211,6 +211,13 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
           const SectionHeader(title: 'MORE'),
           const SizedBox(height: 8),
           Card(child: ListTile(
+            leading: const Icon(Icons.people_outline, color: AppTheme.primaryColor),
+            title: const Text('Personal Community'),
+            subtitle: const Text('Connect with other Personal users'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/personal-community'),
+          )),
+          Card(child: ListTile(
             leading: const Icon(Icons.storefront_outlined, color: AppTheme.primaryColor),
             title: const Text('Business Hub'),
             subtitle: const Text('Browse or post in the marketplace'),

@@ -27,6 +27,8 @@ import '../../features/support/help_guide_screen.dart';
 import '../../features/dashboard/personal_home_screen.dart';
 import '../../features/transactions/personal_transaction_screen.dart';
 import '../../features/subscription/personal_subscription_screen.dart';
+import '../../features/personal_community/personal_community_feed_screen.dart';
+import '../../features/personal_community/personal_post_detail_screen.dart';
 import '../../features/ussd_settings/ussd_settings_screen.dart';
 import '../../features/ussd_flows/ussd_flow_list_screen.dart';
 import '../../features/community/community_feed_screen.dart';
@@ -145,6 +147,11 @@ class AppRouter {
         GoRoute(
           path: '/community/post/:post_id',
           builder: (_, state) => PostDetailScreen(postId: state.pathParameters['post_id']!),
+        ),
+        GoRoute(path: '/personal-community', builder: (_, __) => const PersonalCommunityFeedScreen()),
+        GoRoute(
+          path: '/personal-community/post/:post_id',
+          builder: (_, state) => PersonalPostDetailScreen(postId: state.pathParameters['post_id']!),
         ),
         GoRoute(path: '/community/moderation', builder: (_, __) => const PostModerationScreen()),
 
