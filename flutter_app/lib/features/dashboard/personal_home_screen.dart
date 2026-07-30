@@ -113,9 +113,16 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
     }
   }
 
-  void _showComingSoon(String label) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$label is coming soon.')));
+  void _startTransaction(String type) {
+    final sim = _simMap?[_provider];
+    final query = <String, String>{
+      'type': type,
+      'provider': _provider,
+      if (sim != null) 'sim_slot': sim.slot.toString(),
+      if (sim != null) 'sim_iccid': sim.iccid,
+    };
+    final uri = Uri(path: '/personal-transactions/new', queryParameters: query);
+    context.push(uri.toString());
   }
 
   @override
@@ -196,7 +203,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
             children: _quickActions.map((a) => _QuickActionTile(
               icon: a['icon'] as IconData,
               label: a['label'] as String,
-              onTap: () => _showComingSoon(a['label'] as String),
+              onTap: () => _startTransaction(a['type'] as String),
             )).toList(),
           ),
 
