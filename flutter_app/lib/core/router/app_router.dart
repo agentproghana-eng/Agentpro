@@ -87,7 +87,10 @@ class AppRouter {
           path: '/transactions/progress',
           builder: (_, state) {
             final extra = state.extra as Map<String, dynamic>;
-            return TransactionProgressScreen(data: extra);
+            // Missing 'is_personal' key (the Agent path never sets it)
+            // evaluates to false here, so existing Agent behavior is
+            // completely unaffected.
+            return TransactionProgressScreen(data: extra, isPersonal: extra['is_personal'] == true);
           },
         ),
         GoRoute(path: '/transactions/history', builder: (_, __) => const TransactionHistoryScreen()),
