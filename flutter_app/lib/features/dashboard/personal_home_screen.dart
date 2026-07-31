@@ -201,6 +201,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                         decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 3)]),
                         child: Row(children: visibleProviders.map((p) {
                           final selected = _provider == p['value'];
+                          final color = AppTheme.providerColor(p['value']!);
                           return Expanded(
                             child: GestureDetector(
                               onTap: () {
@@ -211,12 +212,12 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                                 margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
                                 padding: const EdgeInsets.symmetric(vertical: 9),
                                 decoration: BoxDecoration(
-                                  color: selected ? AppTheme.primaryColor : Colors.transparent,
+                                  color: selected ? color : Colors.transparent,
                                   borderRadius: BorderRadius.circular(9),
                                 ),
                                 child: Text(p['label']!, textAlign: TextAlign.center,
                                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12,
-                                    color: selected ? Colors.white : context.appSecondaryText)),
+                                    color: selected ? (p['value'] == 'mtn' ? Colors.black : Colors.white) : context.appSecondaryText)),
                               ),
                             ),
                           );

@@ -161,11 +161,11 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
         const Text("Provider", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
         const SizedBox(height: 8),
         Row(children: [
-          _ProviderPill(label: "MTN", value: "mtn", selected: _provider == "mtn", onTap: (v) => setState(() { _provider = v; _syncPatternField(); })),
+          _ProviderPill(label: "MTN", value: "mtn", selected: _provider == "mtn", color: AppTheme.providerColor("mtn"), onTap: (v) => setState(() { _provider = v; _syncPatternField(); })),
           const SizedBox(width: 6),
-          _ProviderPill(label: "Telecel", value: "telecel", selected: _provider == "telecel", onTap: (v) => setState(() { _provider = v; _syncPatternField(); })),
+          _ProviderPill(label: "Telecel", value: "telecel", selected: _provider == "telecel", color: AppTheme.providerColor("telecel"), onTap: (v) => setState(() { _provider = v; _syncPatternField(); })),
           const SizedBox(width: 6),
-          _ProviderPill(label: "AirtelTigo", value: "at_money", selected: _provider == "at_money", onTap: (v) => setState(() { _provider = v; _syncPatternField(); })),
+          _ProviderPill(label: "AirtelTigo", value: "at_money", selected: _provider == "at_money", color: AppTheme.providerColor("at_money"), onTap: (v) => setState(() { _provider = v; _syncPatternField(); })),
         ]),
         if (_provider == "telecel") ...[
           const SizedBox(height: 16),
@@ -239,9 +239,10 @@ class _ProviderPill extends StatelessWidget {
   final String label;
   final String value;
   final bool selected;
+  final Color color;
   final void Function(String) onTap;
 
-  const _ProviderPill({required this.label, required this.value, required this.selected, required this.onTap});
+  const _ProviderPill({required this.label, required this.value, required this.selected, required this.color, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -252,10 +253,10 @@ class _ProviderPill extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 9),
           decoration: BoxDecoration(
-            color: selected ? AppTheme.primaryColor : context.appSurface,
+            color: selected ? color : context.appSurface,
             borderRadius: BorderRadius.circular(9),
           ),
-          child: Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: selected ? Colors.white : context.appSecondaryText)),
+          child: Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: selected ? (value == "mtn" ? Colors.black : Colors.white) : context.appSecondaryText)),
         ),
       ),
     );

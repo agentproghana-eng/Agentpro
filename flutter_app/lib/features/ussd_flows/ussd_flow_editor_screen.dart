@@ -160,6 +160,7 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
           const SizedBox(height: 8),
           Row(children: ['mtn', 'telecel', 'at_money'].map((p) {
             final selected = _provider == p;
+            final color = AppTheme.providerColor(p);
             return Expanded(
               child: GestureDetector(
                 onTap: () => setState(() => _provider = p),
@@ -167,13 +168,13 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
                   margin: const EdgeInsets.only(right: 6),
                   padding: const EdgeInsets.symmetric(vertical: 9),
                   decoration: BoxDecoration(
-                    color: selected ? AppTheme.primaryColor : context.appSurface,
+                    color: selected ? color : context.appSurface,
                     borderRadius: BorderRadius.circular(9),
                   ),
                   child: Text(
                     {'mtn': 'MTN', 'telecel': 'Telecel', 'at_money': 'AT Money'}[p]!,
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: selected ? Colors.white : context.appSecondaryText),
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: selected ? (p == 'mtn' ? Colors.black : Colors.white) : context.appSecondaryText),
                   ),
                 ),
               ),
