@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 
 /// Create a new Business Hub advertisement.
@@ -131,29 +132,29 @@ class _PostAdScreenState extends State<PostAdScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  Container(
+                  Builder(builder: (context) => Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.blue[50],
+                      color: context.isDarkMode ? const Color(0xFF1A2B45) : Colors.blue[50],
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.blue[200]!),
+                      border: Border.all(color: context.isDarkMode ? const Color(0xFF3A5B8F) : Colors.blue[200]!),
                     ),
-                    child: const Row(
+                    child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.info_outline, color: Colors.blue, size: 18),
-                        SizedBox(width: 8),
+                        Icon(Icons.info_outline, color: context.isDarkMode ? const Color(0xFF8FB8E8) : Colors.blue, size: 18),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             'Ads are reviewed before going live. Once approved, '
                             'you\'ll pay a small publishing fee via MTN MoMo to '
                             'publish for 30 days.',
-                            style: TextStyle(fontSize: 12, color: Colors.blue),
+                            style: TextStyle(fontSize: 12, color: context.isDarkMode ? const Color(0xFF8FB8E8) : Colors.blue),
                           ),
                         ),
                       ],
                     ),
-                  ),
+                  )),
                   const SizedBox(height: 20),
 
                   AppTextField(

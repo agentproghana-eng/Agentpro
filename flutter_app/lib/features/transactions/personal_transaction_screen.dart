@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_bloc.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 
 const Map<String, String> kPersonalTransactionLabels = {
@@ -150,10 +151,10 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
               if (!_needsAmount)
                 Container(
                   padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(8)),
+                  decoration: BoxDecoration(color: context.isDarkMode ? const Color(0xFF1A2B45) : Colors.blue[50], borderRadius: BorderRadius.circular(8)),
                   child: Text(
                     'This will dial your $label enquiry - no amount or recipient needed.',
-                    style: const TextStyle(fontSize: 12),
+                    style: TextStyle(fontSize: 12, color: context.isDarkMode ? const Color(0xFF8FB8E8) : const Color(0xFF1A4D8F)),
                   ),
                 ),
               const SizedBox(height: 24),

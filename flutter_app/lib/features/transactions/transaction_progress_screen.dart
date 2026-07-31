@@ -511,33 +511,36 @@ Future<void> _startAccessibilityAutomation(
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.amber[50],
+                color: context.isDarkMode ? const Color(0xFF332B15) : Colors.amber[50],
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.amber[300]!),
+                border: Border.all(color: context.isDarkMode ? const Color(0xFF7A6A2E) : Colors.amber[300]!),
               ),
-              child: Column(
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.security, color: Colors.amber),
-                      SizedBox(width: 8),
-                      Expanded(child: Text('Enter PIN on Network Screen',
-                        style: TextStyle(fontWeight: FontWeight.bold))),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'A network screen may appear asking for your MoMo PIN. '
-                    'Please enter it there.\n\n'
-                    '⚠️ Never share your PIN with anyone, including this app.',
-                    style: TextStyle(fontSize: 13),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'This may take up to a minute — please wait.',
-                    style: TextStyle(fontSize: 12, color: Colors.amber[800]),
-                  ),
-                ],
+              child: DefaultTextStyle.merge(
+                style: TextStyle(color: context.isDarkMode ? AppTheme.secondaryColor : const Color(0xFF7A5B00)),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.security, color: context.isDarkMode ? AppTheme.secondaryColor : Colors.amber[800]),
+                        const SizedBox(width: 8),
+                        const Expanded(child: Text('Enter PIN on Network Screen',
+                          style: TextStyle(fontWeight: FontWeight.bold))),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'A network screen may appear asking for your MoMo PIN. '
+                      'Please enter it there.\n\n'
+                      '⚠️ Never share your PIN with anyone, including this app.',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'This may take up to a minute — please wait.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -560,9 +563,9 @@ Future<void> _startAccessibilityAutomation(
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.blue[50],
+                color: context.isDarkMode ? const Color(0xFF1A2B45) : Colors.blue[50],
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue[200]!),
+                border: Border.all(color: context.isDarkMode ? const Color(0xFF3A5B8F) : Colors.blue[200]!),
               ),
               child: Column(
                 children: [
@@ -570,7 +573,7 @@ Future<void> _startAccessibilityAutomation(
                     "Nothing back from the network yet. If you've already "
                     "seen a result on your phone, you can confirm it here.",
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 13, color: Colors.blue[900]),
+                    style: TextStyle(fontSize: 13, color: context.isDarkMode ? const Color(0xFF8FB8E8) : Colors.blue[900]),
                   ),
                   const SizedBox(height: 12),
                   ElevatedButton(

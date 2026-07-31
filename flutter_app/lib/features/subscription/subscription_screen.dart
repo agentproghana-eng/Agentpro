@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:dio/dio.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 
 class SubscriptionScreen extends StatefulWidget {
@@ -110,20 +111,23 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
               // Payment Instructions
               if (instructions != null)
-                Card(
-                  color: Colors.amber[50],
-                  child: Padding(padding: const EdgeInsets.all(16), child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('How to Pay', style: TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      Text('1. Send GH₵${instructions['amount']} via MTN MoMo'),
-                      Text('2. To: ${instructions['merchant_number']} (${instructions['merchant_name']})'),
-                      const Text('3. Copy the transaction reference'),
-                      const Text('4. Submit the reference below'),
-                    ],
+                Builder(builder: (context) => Card(
+                  color: context.isDarkMode ? const Color(0xFF332B15) : Colors.amber[50],
+                  child: Padding(padding: const EdgeInsets.all(16), child: DefaultTextStyle.merge(
+                    style: TextStyle(color: context.isDarkMode ? AppTheme.secondaryColor : const Color(0xFF7A5B00)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('How to Pay', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        Text('1. Send GH₵${instructions['amount']} via MTN MoMo'),
+                        Text('2. To: ${instructions['merchant_number']} (${instructions['merchant_name']})'),
+                        const Text('3. Copy the transaction reference'),
+                        const Text('4. Submit the reference below'),
+                      ],
+                    ),
                   )),
-                ),
+                )),
               const SizedBox(height: 16),
 
               AppButton(

@@ -443,18 +443,18 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.orange[50],
+                    color: context.isDarkMode ? const Color(0xFF3D2E1A) : Colors.orange[50],
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange[200]!),
+                    border: Border.all(color: context.isDarkMode ? const Color(0xFF8F6A3A) : Colors.orange[200]!),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
-                      Icon(Icons.info_outline, color: Colors.orange, size: 18),
-                      SizedBox(width: 8),
+                      Icon(Icons.info_outline, color: context.isDarkMode ? Colors.orange[200] : Colors.orange, size: 18),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'No dialing needed. The customer already sent this amount directly to your line. Confirm the details, then hand over the equivalent cash.',
-                          style: TextStyle(fontSize: 12, color: Colors.orange),
+                          style: TextStyle(fontSize: 12, color: context.isDarkMode ? Colors.orange[200] : Colors.orange[900]),
                         ),
                       ),
                     ],
@@ -468,15 +468,15 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: context.isDarkMode ? Colors.blue[700]! : Colors.blue[200]!),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
-                      Icon(Icons.security, color: Colors.blue, size: 18),
-                      SizedBox(width: 8),
+                      Icon(Icons.security, color: context.isDarkMode ? Colors.blue[200] : Colors.blue, size: 18),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'You will enter your MoMo PIN only on the official network USSD screen. '
                           'Agent Pro Ghana never asks for your PIN.',
-                          style: TextStyle(fontSize: 12, color: Colors.blue),
+                          style: TextStyle(fontSize: 12, color: context.isDarkMode ? Colors.blue[200] : Colors.blue[900]),
                         ),
                       ),
                     ],

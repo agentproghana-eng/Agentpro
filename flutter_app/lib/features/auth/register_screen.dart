@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -200,28 +201,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   validator: (v) => v != _passwordCtrl.text ? 'Passwords do not match' : null,
                 ),
                 const SizedBox(height: 16),
-                Container(
+                Builder(builder: (context) => Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.amber[50],
+                    color: context.isDarkMode ? const Color(0xFF332B15) : Colors.amber[50],
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.amber[200]!),
+                    border: Border.all(color: context.isDarkMode ? const Color(0xFF7A6A2E) : Colors.amber[200]!),
                   ),
-                  child: const Row(
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.info_outline, color: Colors.amber, size: 18),
-                      SizedBox(width: 8),
+                      Icon(Icons.info_outline, color: context.isDarkMode ? AppTheme.secondaryColor : Colors.amber[800], size: 18),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'After registration, pay GH₵10 via MTN MoMo to activate your '
                           'Business Plan. Our team will verify and activate your account within 24 hours.',
-                          style: TextStyle(fontSize: 12),
+                          style: TextStyle(fontSize: 12, color: context.isDarkMode ? AppTheme.secondaryColor : const Color(0xFF7A5B00)),
                         ),
                       ),
                     ],
                   ),
-                ),
+                )),
               ]),
             ),
           ],

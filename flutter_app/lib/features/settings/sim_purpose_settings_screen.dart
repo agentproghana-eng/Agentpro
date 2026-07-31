@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/services/sim_card_service.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 
 /// Lets a user holding both Business and Personal capability tag which
@@ -98,19 +99,19 @@ class _SimPurposeSettingsScreenState extends State<SimPurposeSettingsScreen> {
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.blue[50],
+                            color: context.isDarkMode ? const Color(0xFF1A2B45) : Colors.blue[50],
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.blue[200]!),
+                            border: Border.all(color: context.isDarkMode ? const Color(0xFF3A5B8F) : Colors.blue[200]!),
                           ),
-                          child: const Row(
+                          child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Icon(Icons.info_outline, color: Colors.blue, size: 18),
-                              SizedBox(width: 8),
+                              Icon(Icons.info_outline, color: context.isDarkMode ? const Color(0xFF8FB8E8) : Colors.blue, size: 18),
+                              const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
                                   'Tell the app which SIM is for your Business (Agent) work and which is for your own Personal use.',
-                                  style: TextStyle(fontSize: 12, color: Colors.blue),
+                                  style: TextStyle(fontSize: 12, color: context.isDarkMode ? const Color(0xFF8FB8E8) : Colors.blue),
                                 ),
                               ),
                             ],

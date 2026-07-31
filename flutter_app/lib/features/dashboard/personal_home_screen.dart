@@ -192,9 +192,9 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                 child: noSimsDetected
                     ? Container(
                         padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(10)),
-                        child: const Text('No SIM card detected. Insert a SIM to use transaction features.',
-                          style: TextStyle(fontSize: 12)),
+                        decoration: BoxDecoration(color: context.isDarkMode ? const Color(0xFF3D2E1A) : Colors.orange[50], borderRadius: BorderRadius.circular(10)),
+                        child: Text('No SIM card detected. Insert a SIM to use transaction features.',
+                          style: TextStyle(fontSize: 12, color: context.isDarkMode ? Colors.orange[200] : Colors.orange[900])),
                       )
                     : Container(
                         padding: const EdgeInsets.all(4),
