@@ -130,6 +130,14 @@ exports.register = async (req, res) => {
 
 exports.registerPersonal = async (req, res) => {
   const { first_name, last_name, phone, email, password } = req.body;
+  // New Personal Subscribers get 7 days of full Paid access to try
+  // everything before deciding whether to pay - reuses the existing
+  // plan/expires_at mechanism exactly as a real subscription would, so
+  // the daily expirePersonalSubscriptions job auto-reverts this trial
+  // to Free with zero new logic needed. Computed once here (rather
+  // than via SQL's NOW()) so the exact same value can be used in both
+  // the INSERT below and the response JSON without a second query.
+  const trialExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
   try {
     const existing = await query(
@@ -156,8 +164,8 @@ exports.registerPersonal = async (req, res) => {
       const newUser = userResult.rows[0];
 
       await client.query(
-        `INSERT INTO personal_subscriptions (user_id, plan) VALUES ($1, 'free')`,
-        [newUser.id]
+        `INSERT INTO personal_subscriptions (user_id, plan, expires_at) VALUES ($1, 'paid', $2)`,
+        [newUser.id, trialExpiresAt]
       );
 
       await auditLog({
@@ -199,8 +207,8 @@ exports.registerPersonal = async (req, res) => {
           email: user.email,
           phone: user.phone,
           company_id: user.company_id,
-          personal_subscription_plan: 'free',
-          personal_subscription_expires_at: null,
+          personal_subscription_plan: 'paid',
+          personal_subscription_expires_at: trialExpiresAt,
           profile_image_url: user.profile_image_url,
           must_change_password: user.must_change_password,
         }
@@ -237,8 +245,12 @@ exports.addPersonalCapability = async (req, res) => {
       });
     }
 
-    await query(
-      `INSERT INTO personal_subscriptions (user_id, plan) VALUES ($1, 'free')`,
+    // Same 7-day trial as new registrations - reuses the existing
+    // plan/expires_at mechanism, no new logic needed.
+    const inserted = await query(
+      `INSERT INTO personal_subscriptions (user_id, plan, expires_at)
+       VALUES ($1, 'paid', NOW() + INTERVAL '7 days')
+       RETURNING plan, expires_at`,
       [req.user.id]
     );
 
@@ -255,10 +267,10 @@ exports.addPersonalCapability = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: 'Personal capability enabled — you can now switch to Personal Mode.',
+      message: 'Personal capability enabled — you get 7 days of full Paid access to try everything, then it reverts to Free unless you subscribe.',
       data: {
-        personal_subscription_plan: 'free',
-        personal_subscription_expires_at: null,
+        personal_subscription_plan: inserted.rows[0].plan,
+        personal_subscription_expires_at: inserted.rows[0].expires_at,
       }
     });
 
