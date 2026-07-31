@@ -31,6 +31,7 @@ import '../../features/personal_community/personal_community_feed_screen.dart';
 import '../../features/personal_community/personal_post_detail_screen.dart';
 import '../../features/reports/personal_reports_screen.dart';
 import '../../features/transactions/personal_transaction_screen.dart' show kPersonalTransactionLabels;
+import '../../features/transactions/personal_transaction_history_screen.dart';
 import '../../features/ussd_settings/ussd_settings_screen.dart';
 import '../../features/ussd_flows/ussd_flow_list_screen.dart';
 import '../../features/community/community_feed_screen.dart';
@@ -156,6 +157,7 @@ class AppRouter {
           builder: (_, state) => PostDetailScreen(postId: state.pathParameters['post_id']!),
         ),
         GoRoute(path: '/personal-reports', builder: (_, __) => const PersonalReportsScreen()),
+        GoRoute(path: '/personal-transactions/history', builder: (_, __) => const PersonalTransactionHistoryScreen()),
         GoRoute(path: '/personal-community', builder: (_, __) => const PersonalCommunityFeedScreen()),
         GoRoute(
           path: '/personal-community/post/:post_id',
