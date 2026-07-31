@@ -58,6 +58,7 @@ class _ManagerMoreTab extends StatelessWidget {
           _Tile(Icons.receipt_long_outlined, 'Transactions', () => context.push('/transactions/history')),
           _Tile(Icons.account_balance_wallet_outlined, 'Float Overview', () => context.push('/float-overview')),
           _Tile(Icons.bar_chart_outlined, 'Reports', () => context.push('/reports')),
+          _Tile(Icons.fact_check_outlined, 'Shift Reconciliation', () => context.push('/shifts/history'), isNew: true),
           _Tile(Icons.wifi_tethering, 'USSD Automation', () => context.push('/ussd-settings'), isNew: true),
 
           const _MoreGroupLabel('Business'),

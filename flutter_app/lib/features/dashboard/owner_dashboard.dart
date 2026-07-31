@@ -482,6 +482,7 @@ class _OwnerMoreTab extends StatelessWidget {
           _T(Icons.receipt_long_outlined, 'Transactions', () => context.push('/transactions/history')),
           _T(Icons.account_balance_wallet_outlined, 'Float Balances', () => context.push('/my-balance')),
           _T(Icons.bar_chart_outlined, 'Reports', () => context.push('/reports')),
+          _T(Icons.fact_check_outlined, 'Shift Reconciliation', () => context.push('/shifts/history'), isNew: true),
           _T(Icons.wifi_tethering, 'USSD Automation', () => context.push('/ussd-settings'), isNew: true),
           _T(Icons.build_circle_outlined, 'Custom USSD Flows', () => context.push('/ussd-flows'), isNew: true),
 
