@@ -8,6 +8,7 @@ import '../../core/services/sim_card_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
+import '../../shared/widgets/personal_ad_banner.dart';
 
 /// Real Personal Home - provider-aware Quick Actions per spec. The
 /// actual Personal transaction screens don't exist yet (a later build
@@ -131,6 +132,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
     final user = authState is AuthAuthenticated ? authState.user : <String, dynamic>{};
     final firstName = user['first_name'] ?? '';
     final hasBusinessRole = user['company_id'] != null;
+    final isPaid = user['personal_subscription_plan'] == 'paid';
 
     final noSimsDetected = _simMap != null && _simMap!.values.every((v) => v == null);
     final visibleProviders = _simMap == null
@@ -156,7 +158,8 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
           ),
         ],
       ),
-      body: ListView(
+      body: Column(children: [
+        Expanded(child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Text('Welcome, $firstName!', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
@@ -239,7 +242,11 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
             onTap: () => context.push('/personal-subscription'),
           )),
         ],
-      ),
+        )),
+        // Free-tier-only per spec - pinned below the scrollable content
+        // rather than inside it, so it never scrolls away.
+        if (!isPaid) const PersonalAdBanner(),
+      ]),
     );
   }
 }
