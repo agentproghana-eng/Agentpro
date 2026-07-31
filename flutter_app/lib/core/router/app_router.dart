@@ -24,7 +24,7 @@ import '../../features/balances/cash_adjustment_screen.dart';
 import '../../features/balances/pending_approvals_screen.dart';
 import '../../features/support/support_screen.dart';
 import '../../features/support/help_guide_screen.dart';
-import '../../features/dashboard/personal_home_screen.dart';
+import '../../features/dashboard/personal_dashboard.dart';
 import '../../features/transactions/personal_transaction_screen.dart';
 import '../../features/subscription/personal_subscription_screen.dart';
 import '../../features/personal_community/personal_community_feed_screen.dart';
@@ -141,7 +141,7 @@ class AppRouter {
         GoRoute(path: '/balances/pending-approvals', builder: (_, __) => const PendingApprovalsScreen()),
         GoRoute(path: '/support', builder: (_, __) => const SupportScreen()),
         GoRoute(path: '/help-guide', builder: (_, __) => const HelpGuideScreen()),
-        GoRoute(path: '/personal-home', builder: (_, __) => const PersonalHomeScreen()),
+        GoRoute(path: '/personal-home', builder: (_, __) => const PersonalDashboard()),
         GoRoute(path: '/personal-subscription', builder: (_, __) => const PersonalSubscriptionScreen()),
         GoRoute(path: '/ussd-settings', builder: (_, __) => const UssdSettingsScreen()),
         GoRoute(

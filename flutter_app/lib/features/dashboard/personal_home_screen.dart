@@ -12,15 +12,17 @@ import '../../shared/widgets/app_widgets.dart';
 import '../../shared/widgets/personal_ad_banner.dart';
 import '../../shared/widgets/personal_transaction_item.dart';
 
-/// Real Personal Home - matches the same fixed-header/CustomScrollView
-/// structure already shared by Owner/Manager/Agent's HomeTab (frozen
-/// gradient header outside the scrollable area, provider tabs, quick
-/// actions, recent transactions). Identity block content deliberately
-/// differs from HomeTab's: Personal has no company or company role, so
-/// those two lines show "Welcome" (white) / first name (gold) / plan
-/// status (white70) instead of name/company/role. No AppBar, matching
-/// HomeTab exactly - Sign Out and the mode switch live in the MORE
-/// section below instead, same as Agent's own Sign Out does.
+/// The Home tab of PersonalDashboard - matches the same fixed-header/
+/// CustomScrollView structure already shared by Owner/Manager/Agent's
+/// HomeTab (frozen gradient header outside the scrollable area,
+/// provider tabs, quick actions, recent transactions). Identity block
+/// content deliberately differs from HomeTab's: Personal has no
+/// company or company role, so those two lines show "Welcome" (white)
+/// / first name (gold) / plan status (white70) instead of name/
+/// company/role. No AppBar, matching HomeTab exactly. Community,
+/// Business Hub, and everything else (Reports, USSD settings,
+/// Subscription, Switch to Business Mode, Sign Out) live in
+/// PersonalDashboard's other tabs, not here - this file is Home only.
 class PersonalHomeScreen extends StatefulWidget {
   const PersonalHomeScreen({super.key});
   @override
@@ -121,19 +123,6 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
     }
   }
 
-  // Business role field ('agent'/'manager'/'business_owner'/'auditor')
-  // mirrors AppRouter._homeForRole's own mapping exactly - duplicated
-  // here rather than exposed from AppRouter, since it's a tiny switch
-  // and not worth changing that method's visibility for.
-  String _businessHomeRoute(String? role) {
-    switch (role) {
-      case 'agent': return '/agent';
-      case 'manager': return '/manager';
-      case 'business_owner': return '/owner';
-      case 'auditor': return '/owner';
-      default: return '/agent';
-    }
-  }
 
   void _startTransaction(String type) {
     final sim = _simMap?[_provider];
@@ -152,7 +141,6 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
     final authState = context.watch<AuthBloc>().state;
     final user = authState is AuthAuthenticated ? authState.user : <String, dynamic>{};
     final firstName = user['first_name'] ?? '';
-    final hasBusinessRole = user['company_id'] != null;
     final isPaid = user['personal_subscription_plan'] == 'paid';
 
     final noSimsDetected = _simMap != null && _simMap!.values.every((v) => v == null);
@@ -285,74 +273,6 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                   childCount: _recent.length,
                 )),
               ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-              sliver: SliverToBoxAdapter(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const SectionHeader(title: 'MORE'),
-                  const SizedBox(height: 8),
-                  Card(child: ListTile(
-                    leading: const Icon(Icons.people_outline, color: AppTheme.primaryColor),
-                    title: const Text('Personal Community'),
-                    subtitle: const Text('Connect with other Personal users'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/personal-community'),
-                  )),
-                  Card(child: ListTile(
-                    leading: const Icon(Icons.storefront_outlined, color: AppTheme.primaryColor),
-                    title: const Text('Business Hub'),
-                    subtitle: const Text('Browse or post in the marketplace'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/marketplace'),
-                  )),
-                  Card(child: ListTile(
-                    leading: const Icon(Icons.bar_chart_outlined, color: AppTheme.primaryColor),
-                    title: const Text('My Reports'),
-                    subtitle: const Text('Download your transaction history'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/personal-reports'),
-                  )),
-                  if (isPaid)
-                    Card(child: ListTile(
-                      leading: const Icon(Icons.wifi_tethering, color: AppTheme.primaryColor),
-                      title: const Text('USSD Automation'),
-                      subtitle: const Text('Auto-dial your transactions'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => context.push('/personal-ussd-settings'),
-                    )),
-                  if (isPaid)
-                    Card(child: ListTile(
-                      leading: const Icon(Icons.route_outlined, color: AppTheme.primaryColor),
-                      title: const Text('Custom USSD Flows'),
-                      subtitle: const Text('Build your own transaction flows'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => context.push('/personal-ussd-flows'),
-                    )),
-                  Card(child: ListTile(
-                    leading: const Icon(Icons.workspace_premium_outlined, color: AppTheme.primaryColor),
-                    title: const Text('My Subscription'),
-                    subtitle: const Text('Manage your Personal plan'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/personal-subscription'),
-                  )),
-                  // Only shown to someone holding both Business and
-                  // Personal capability at once - a one-sided Personal
-                  // user has no other mode to switch to.
-                  if (hasBusinessRole)
-                    Card(child: ListTile(
-                      leading: const Icon(Icons.swap_horiz, color: AppTheme.primaryColor),
-                      title: const Text('Switch to Business Mode'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => context.go(_businessHomeRoute(user['role'])),
-                    )),
-                  Card(child: ListTile(
-                    leading: const Icon(Icons.logout, color: AppTheme.primaryColor),
-                    title: const Text('Sign Out'),
-                    onTap: () => context.read<AuthBloc>().add(AuthLogoutEvent()),
-                  )),
-                ]),
-              ),
-            ),
           ]),
         )),
         // Free-tier-only per spec - pinned below the scrollable content
