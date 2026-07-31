@@ -121,5 +121,20 @@ class StorageService {
     await _storage.delete(key: _keyAccessToken);
   }
 
+  // ── "New" feature badges ───────────────────────────────────
+  // Tracks which one-time "NEW" badges (in the More tabs) have already
+  // been shown on this device, so a badge appears once and then
+  // disappears for good - rather than the old approach of a hardcoded
+  // isNew: true that never turned off no matter how many times it had
+  // already been seen.
+
+  static Future<bool> hasSeenFeature(String key) async {
+    final val = await _storage.read(key: 'seen_feature_$key');
+    return val == 'true';
+  }
+
+  static Future<void> markFeatureSeen(String key) =>
+      _storage.write(key: 'seen_feature_$key', value: 'true');
+
   static Future<void> clearAll() async => _storage.deleteAll();
 }
