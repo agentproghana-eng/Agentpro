@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import 'core/api/api_client.dart';
 import 'core/auth/auth_bloc.dart';
@@ -42,6 +43,10 @@ void main() async {
   // is already visible, so a permission dialog is never the first
   // thing a user sees on cold launch.
   unawaited(NotificationService.init());
+
+  // Same reasoning - the AdMob SDK only matters once a Free Personal
+  // user actually reaches Personal Home, nowhere near the first frame.
+  unawaited(MobileAds.instance.initialize());
 }
 
 class AgentProApp extends StatelessWidget {
