@@ -6,7 +6,13 @@ import "../../shared/theme/app_theme.dart";
 import "../../shared/theme/app_colors.dart";
 
 class UssdSettingsScreen extends StatefulWidget {
-  const UssdSettingsScreen({super.key});
+  // Reused for Personal (Paid subscribers) too - the backend endpoint
+  // (agent_ussd_overrides) is already generic per-user, so the only
+  // real difference is which transaction types are offered. Defaults
+  // to the Agent list when not provided, so nothing changes for the
+  // existing Agent route.
+  final List<String>? transactionTypes;
+  const UssdSettingsScreen({super.key, this.transactionTypes});
 
   @override
   State<UssdSettingsScreen> createState() => _UssdSettingsScreenState();
@@ -14,7 +20,7 @@ class UssdSettingsScreen extends StatefulWidget {
 
 class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
   String _provider = "mtn";
-  String _transactionType = "cash_out";
+  late String _transactionType;
   final _patternCtrl = TextEditingController();
   final _operatorIdCtrl = TextEditingController();
   List<dynamic> _overrides = [];
@@ -23,11 +29,13 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
   bool _savingOperatorId = false;
   String? _error;
 
-  final _types = ["cash_in", "cash_out", "send_money", "airtime", "data_bundle"];
+  static const _agentTypes = ["cash_in", "cash_out", "send_money", "airtime", "data_bundle"];
+  late final List<String> _types = widget.transactionTypes ?? _agentTypes;
 
   @override
   void initState() {
     super.initState();
+    _transactionType = _types.first;
     _loadOperatorId();
     _load();
   }
@@ -163,7 +171,7 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
           const SizedBox(height: 16),
           const Text("Telecel Operator ID", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
           const SizedBox(height: 4),
-          Text("Fixed per agent - the same value is used for every Telecel transaction.",
+          Text("The same value is used for every Telecel transaction.",
             style: TextStyle(fontSize: 9.5, color: context.appSecondaryText)),
           const SizedBox(height: 8),
           TextField(
