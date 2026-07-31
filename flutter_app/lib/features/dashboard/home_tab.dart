@@ -242,8 +242,20 @@ class _HomeTabState extends State<HomeTab> {
             gradient: LinearGradient(colors: [AppTheme.primaryColor, Color(0xFF004D43)], begin: Alignment.topLeft, end: Alignment.bottomRight),
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            Center(child: Image.asset("assets/images/agentpro-logo-lockup.png", height: 132)),
-            const SizedBox(height: 6),
+            Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset("assets/images/agentpro-icon.png", height: 26),
+                  const SizedBox(width: 8),
+                  const Text.rich(TextSpan(children: [
+                    TextSpan(text: "Agent", style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800)),
+                    TextSpan(text: "Pro", style: TextStyle(color: AppTheme.secondaryColor, fontSize: 17, fontWeight: FontWeight.w800)),
+                  ])),
+                ],
+              ),
+            ),
+            const SizedBox(height: 2),
             Text("${widget.user["first_name"] ?? ""} ${widget.user["last_name"] ?? ""}", style: const TextStyle(color: AppTheme.secondaryColor, fontSize: 15, fontWeight: FontWeight.w800)),
             Text(widget.user["company_name"] ?? "", style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600)),
             Text((widget.user["role"] ?? "").toString().replaceAll("_", " ").toUpperCase(), style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.6)),
