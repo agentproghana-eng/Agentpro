@@ -42,6 +42,27 @@ class PersonalMoreTab extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // Fully reused from the Agent side as-is - both routes are
+          // completely generic (no role gating, no agent-specific
+          // content) and the tiles inside SettingsScreen that DO need
+          // to differ by account type (Add Personal Account, SIM
+          // Purpose) already condition correctly on company_id/
+          // personal_subscription_plan, so they behave right for a
+          // Personal-only user with zero changes needed there.
+          Card(child: ListTile(
+            leading: const Icon(Icons.settings_outlined, color: AppTheme.primaryColor),
+            title: const Text('Settings'),
+            subtitle: const Text('Security, sync, and account options'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/settings'),
+          )),
+          Card(child: ListTile(
+            leading: const Icon(Icons.support_agent_outlined, color: AppTheme.primaryColor),
+            title: const Text('Support'),
+            subtitle: const Text('Get help or contact us'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/support'),
+          )),
           Card(child: ListTile(
             leading: const Icon(Icons.bar_chart_outlined, color: AppTheme.primaryColor),
             title: const Text('My Reports'),
