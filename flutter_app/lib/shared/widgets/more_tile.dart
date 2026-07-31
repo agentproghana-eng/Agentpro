@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import '../../core/services/storage_service.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_colors.dart';
 
 /// Section header for a More/Settings-style grouped list.
 class MoreGroupLabel extends StatelessWidget {
@@ -12,7 +13,7 @@ class MoreGroupLabel extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
     child: Text(label.toUpperCase(),
-        style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 1)),
+        style: TextStyle(fontSize: 11, color: context.appSecondaryText, fontWeight: FontWeight.bold, letterSpacing: 1)),
   );
 }
 
@@ -70,7 +71,7 @@ class _MoreTileState extends State<MoreTile> {
         ),
       ],
     ),
-    trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+    trailing: Icon(Icons.chevron_right, color: context.appSecondaryText),
     onTap: widget.onTap,
   );
 }
