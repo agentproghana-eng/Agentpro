@@ -30,6 +30,7 @@ import '../../features/subscription/personal_subscription_screen.dart';
 import '../../features/personal_community/personal_community_feed_screen.dart';
 import '../../features/personal_community/personal_post_detail_screen.dart';
 import '../../features/reports/personal_reports_screen.dart';
+import '../../features/transactions/personal_transaction_screen.dart' show kPersonalTransactionLabels;
 import '../../features/ussd_settings/ussd_settings_screen.dart';
 import '../../features/ussd_flows/ussd_flow_list_screen.dart';
 import '../../features/community/community_feed_screen.dart';
@@ -142,6 +143,10 @@ class AppRouter {
         GoRoute(path: '/personal-home', builder: (_, __) => const PersonalHomeScreen()),
         GoRoute(path: '/personal-subscription', builder: (_, __) => const PersonalSubscriptionScreen()),
         GoRoute(path: '/ussd-settings', builder: (_, __) => const UssdSettingsScreen()),
+        GoRoute(
+          path: '/personal-ussd-settings',
+          builder: (_, __) => UssdSettingsScreen(transactionTypes: kPersonalTransactionLabels.keys.toList()),
+        ),
         GoRoute(path: '/ussd-flows', builder: (_, __) => const UssdFlowListScreen()),
         GoRoute(path: '/community', builder: (_, __) => const CommunityFeedScreen()),
         GoRoute(path: '/shifts/close/:shiftId', builder: (_, state) => CloseShiftScreen(shiftId: state.pathParameters['shiftId']!)),

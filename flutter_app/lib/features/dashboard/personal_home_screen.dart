@@ -234,6 +234,17 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/personal-reports'),
           )),
+          // Paid-only per spec, matching the backend's requirePaidPersonalPlan
+          // enforcement - shown here rather than always visible and then
+          // 403ing, same convention as the Reports tile.
+          if (isPaid)
+            Card(child: ListTile(
+              leading: const Icon(Icons.wifi_tethering, color: AppTheme.primaryColor),
+              title: const Text('USSD Automation'),
+              subtitle: const Text('Auto-dial your transactions'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/personal-ussd-settings'),
+            )),
           Card(child: ListTile(
             leading: const Icon(Icons.workspace_premium_outlined, color: AppTheme.primaryColor),
             title: const Text('My Subscription'),
