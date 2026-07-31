@@ -78,6 +78,14 @@
         android:hardwareAccelerated="true"
         android:windowSoftInputMode="adjustResize">
 
+        <!-- AdMob App ID - THIS IS GOOGLE'S PUBLIC TEST APP ID, safe to
+             ship during development but shows test ads only. Replace
+             with the real App ID from your own AdMob console before
+             any real launch, or ad serving will never generate revenue. -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-3940256099942544~3347511713"/>
+
         <!-- Flutter activity -->
         <activity
             android:name=".MainActivity"
