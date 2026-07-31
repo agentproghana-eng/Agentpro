@@ -11,6 +11,7 @@ import '../../shared/widgets/app_widgets.dart';
 import 'home_tab.dart';
 import '../community/community_feed_screen.dart';
 import '../marketplace/marketplace_screen.dart';
+import '../../shared/widgets/more_tile.dart';
 
 class OwnerDashboard extends StatefulWidget {
   const OwnerDashboard({super.key});
@@ -478,66 +479,28 @@ class _OwnerMoreTab extends StatelessWidget {
       appBar: AppBar(title: const Text('More')),
       body: ListView(
         children: [
-          const _MoreGroupLabel('MoMo'),
-          _T(Icons.receipt_long_outlined, 'Transactions', () => context.push('/transactions/history')),
-          _T(Icons.account_balance_wallet_outlined, 'Float Balances', () => context.push('/my-balance')),
-          _T(Icons.bar_chart_outlined, 'Reports', () => context.push('/reports')),
-          _T(Icons.fact_check_outlined, 'Shift Reconciliation', () => context.push('/shifts/history'), isNew: true),
-          _T(Icons.wifi_tethering, 'USSD Automation', () => context.push('/ussd-settings'), isNew: true),
-          _T(Icons.build_circle_outlined, 'Custom USSD Flows', () => context.push('/ussd-flows'), isNew: true),
+          const MoreGroupLabel('MoMo'),
+          MoreTile(Icons.receipt_long_outlined, 'Transactions', () => context.push('/transactions/history')),
+          MoreTile(Icons.account_balance_wallet_outlined, 'Float Balances', () => context.push('/my-balance')),
+          MoreTile(Icons.bar_chart_outlined, 'Reports', () => context.push('/reports')),
+          MoreTile(Icons.fact_check_outlined, 'Shift Reconciliation', () => context.push('/shifts/history')),
+          MoreTile(Icons.wifi_tethering, 'USSD Automation', () => context.push('/ussd-settings')),
+          MoreTile(Icons.build_circle_outlined, 'Custom USSD Flows', () => context.push('/ussd-flows')),
 
-          const _MoreGroupLabel('Business'),
-          _T(Icons.people_outlined, 'Staff Management', () => context.push('/users')),
-          _T(Icons.store_outlined, 'Branches', () => context.push('/branches')),
-          _T(Icons.card_membership_outlined, 'Subscription', () => context.push('/subscription')),
+          const MoreGroupLabel('Business'),
+          MoreTile(Icons.people_outlined, 'Staff Management', () => context.push('/users')),
+          MoreTile(Icons.store_outlined, 'Branches', () => context.push('/branches')),
+          MoreTile(Icons.card_membership_outlined, 'Subscription', () => context.push('/subscription')),
 
-          const _MoreGroupLabel('Support'),
-          _T(Icons.support_agent_outlined, 'Support', () => context.push('/support'), isNew: true),
-          _T(Icons.settings_outlined, 'Settings', () => context.push('/settings')),
+          const MoreGroupLabel('Help'),
+          MoreTile(Icons.support_agent_outlined, 'Help', () => context.push('/support')),
+          MoreTile(Icons.settings_outlined, 'Settings', () => context.push('/settings')),
           const Divider(),
-          _T(Icons.logout, 'Sign Out',
+          MoreTile(Icons.logout, 'Sign Out',
               () => context.read<AuthBloc>().add(AuthLogoutEvent()),
               color: AppTheme.errorColor),
         ],
       ),
     );
   }
-}
-
-class _MoreGroupLabel extends StatelessWidget {
-  final String label;
-  const _MoreGroupLabel(this.label);
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
-    child: Text(label.toUpperCase(),
-        style: TextStyle(fontSize: 11, color: context.appSecondaryText, fontWeight: FontWeight.bold, letterSpacing: 1)),
-  );
-}
-
-class _T extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final Color? color;
-  final bool isNew;
-  const _T(this.icon, this.label, this.onTap, {this.color, this.isNew = false});
-  @override
-  Widget build(BuildContext context) => ListTile(
-    leading: Icon(icon, color: color ?? AppTheme.primaryColor),
-    title: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(label, style: TextStyle(color: color)),
-        if (isNew) Container(
-          margin: const EdgeInsets.only(left: 6),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(color: AppTheme.secondaryColor, borderRadius: BorderRadius.circular(6)),
-          child: const Text('NEW', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.black)),
-        ),
-      ],
-    ),
-    trailing: Icon(Icons.chevron_right, color: context.appSecondaryText),
-    onTap: onTap,
-  );
 }
