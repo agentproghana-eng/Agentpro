@@ -38,7 +38,19 @@ class _StepDraft {
 // in edit mode for a flow the current company already owns.
 class UssdFlowEditorScreen extends StatefulWidget {
   final Map<String, dynamic>? existingFlow; // null = create mode
-  const UssdFlowEditorScreen({super.key, this.existingFlow});
+  // Reused for Personal (Paid subscribers) too - the backend request/
+  // response shape is identical (provider, transaction_type, dial_code,
+  // success_markers, failure_markers, steps), just a different base
+  // path with no company_id concept at all. Both default to the Agent
+  // values, so the existing Agent route is untouched.
+  final String apiBasePath;
+  final List<String>? transactionTypes;
+  const UssdFlowEditorScreen({
+    super.key,
+    this.existingFlow,
+    this.apiBasePath = '/ussd-flows',
+    this.transactionTypes,
+  });
 
   @override
   State<UssdFlowEditorScreen> createState() => _UssdFlowEditorScreenState();
@@ -46,14 +58,15 @@ class UssdFlowEditorScreen extends StatefulWidget {
 
 class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
   String _provider = 'mtn';
-  String _transactionType = 'cash_in';
+  late String _transactionType;
   final _dialCodeCtrl = TextEditingController();
   final _successMarkersCtrl = TextEditingController();
   final _failureMarkersCtrl = TextEditingController();
   final List<_StepDraft> _steps = [];
   bool _saving = false;
 
-  final _types = ['cash_in', 'cash_out', 'send_money', 'airtime', 'data_bundle', 'balance_enquiry', 'commission'];
+  static const _agentTypes = ['cash_in', 'cash_out', 'send_money', 'airtime', 'data_bundle', 'balance_enquiry', 'commission'];
+  late final List<String> _types = widget.transactionTypes ?? _agentTypes;
   final _actions = const [
     {'value': 'send_digit', 'label': 'Send Digit'},
     {'value': 'send_customer_phone', 'label': 'Send Customer Phone'},
@@ -69,10 +82,11 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
   @override
   void initState() {
     super.initState();
+    _transactionType = _types.first;
     if (widget.existingFlow != null) {
       final flow = widget.existingFlow!;
       _provider = flow['provider'] ?? 'mtn';
-      _transactionType = flow['transaction_type'] ?? 'cash_in';
+      _transactionType = flow['transaction_type'] ?? _types.first;
       _dialCodeCtrl.text = flow['dial_code'] ?? '';
       _successMarkersCtrl.text = (flow['success_markers'] as List?)?.join(', ') ?? '';
       _failureMarkersCtrl.text = (flow['failure_markers'] as List?)?.join(', ') ?? '';
@@ -117,9 +131,9 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
 
     try {
       if (_isEditing) {
-        await ApiClient.instance.patch('/ussd-flows/${widget.existingFlow!['id']}', data: payload);
+        await ApiClient.instance.patch('${widget.apiBasePath}/${widget.existingFlow!['id']}', data: payload);
       } else {
-        await ApiClient.instance.post('/ussd-flows', data: payload);
+        await ApiClient.instance.post(widget.apiBasePath, data: payload);
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
