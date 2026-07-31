@@ -3,13 +3,19 @@ import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
 import 'ussd_flow_editor_screen.dart';
+import '../transactions/personal_transaction_screen.dart' show kPersonalTransactionLabels;
 
 // Lists USSD flows: global (superuser-owned, shared by every company,
 // read-only here) and this company's own flows (editable). Business
 // owners create/edit flows here for any provider/transaction_type
 // MTN/Telecel's built-in automation doesn't already cover.
 class UssdFlowListScreen extends StatefulWidget {
-  const UssdFlowListScreen({super.key});
+  // Reused for Personal (Paid subscribers) too - unlike the Agent side,
+  // every flow this endpoint returns is always this user's own (no
+  // global-vs-mine distinction exists on the Personal side at all), so
+  // the isGlobal read-only logic below is skipped entirely when true.
+  final bool isPersonal;
+  const UssdFlowListScreen({super.key, this.isPersonal = false});
 
   @override
   State<UssdFlowListScreen> createState() => _UssdFlowListScreenState();
@@ -29,7 +35,7 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final res = await ApiClient.instance.get('/ussd-flows');
+      final res = await ApiClient.instance.get(widget.isPersonal ? '/personal-ussd-flows' : '/ussd-flows');
       setState(() {
         _flows = res.data['data'] ?? [];
         _loading = false;
@@ -50,7 +56,7 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
   };
 
   Future<void> _openFlow(Map<String, dynamic> flow) async {
-    final isGlobal = flow['company_id'] == null;
+    final isGlobal = !widget.isPersonal && flow['company_id'] == null;
     if (isGlobal) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Global flows are managed centrally and are read-only here.')));
@@ -58,7 +64,11 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
     }
     final result = await Navigator.push<bool>(
       context,
-      MaterialPageRoute(builder: (_) => UssdFlowEditorScreen(existingFlow: flow)),
+      MaterialPageRoute(builder: (_) => UssdFlowEditorScreen(
+        existingFlow: flow,
+        apiBasePath: widget.isPersonal ? '/personal-ussd-flows' : '/ussd-flows',
+        transactionTypes: widget.isPersonal ? kPersonalTransactionLabels.keys.toList() : null,
+      )),
     );
     if (result == true) _load();
   }
@@ -66,7 +76,10 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
   Future<void> _createFlow() async {
     final result = await Navigator.push<bool>(
       context,
-      MaterialPageRoute(builder: (_) => const UssdFlowEditorScreen()),
+      MaterialPageRoute(builder: (_) => UssdFlowEditorScreen(
+        apiBasePath: widget.isPersonal ? '/personal-ussd-flows' : '/ussd-flows',
+        transactionTypes: widget.isPersonal ? kPersonalTransactionLabels.keys.toList() : null,
+      )),
     );
     if (result == true) _load();
   }
@@ -88,7 +101,7 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
                         itemCount: _flows.length,
                         itemBuilder: (_, i) {
                           final flow = _flows[i] as Map<String, dynamic>;
-                          final isGlobal = flow['company_id'] == null;
+                          final isGlobal = !widget.isPersonal && flow['company_id'] == null;
                           return Card(
                             margin: const EdgeInsets.only(bottom: 8),
                             child: ListTile(
