@@ -262,9 +262,14 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     super.dispose();
   }
 
-  Widget _filterPillRow(List<Map<String, String>> options, String current, void Function(String) onSelect) {
+  // colorFor is optional so only the Provider filter (the one call
+  // site that passes it) gets brand-color highlighting - Type and SIM
+  // filters keep the generic teal, since their option values aren't
+  // provider codes.
+  Widget _filterPillRow(List<Map<String, String>> options, String current, void Function(String) onSelect, {Color Function(String)? colorFor}) {
     return Row(children: options.map((opt) {
       final selected = current == opt['value'];
+      final color = colorFor != null ? colorFor(opt['value']!) : AppTheme.primaryColor;
       return Expanded(
         child: GestureDetector(
           onTap: () => onSelect(opt['value']!),
@@ -272,12 +277,12 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
             margin: const EdgeInsets.only(right: 6),
             padding: const EdgeInsets.symmetric(vertical: 7),
             decoration: BoxDecoration(
-              color: selected ? AppTheme.primaryColor : context.appSurface,
+              color: selected ? color : context.appSurface,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(opt['label']!, textAlign: TextAlign.center,
               style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold,
-                color: selected ? Colors.white : context.appSecondaryText)),
+                color: selected ? (color == AppTheme.mtnColor ? Colors.black : Colors.white) : context.appSecondaryText)),
           ),
         ),
       );
@@ -325,6 +330,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                   : _providers.where((p) => p['value'] == 'all' || _simMap![p['value']] != null).toList(),
               _providerFilter,
               (v) { setState(() => _providerFilter = v); _load(); },
+              colorFor: AppTheme.providerColor,
             ),
           ),
 
