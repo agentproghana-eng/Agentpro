@@ -148,6 +148,7 @@ class AppRouter {
           builder: (_, __) => UssdSettingsScreen(transactionTypes: kPersonalTransactionLabels.keys.toList()),
         ),
         GoRoute(path: '/ussd-flows', builder: (_, __) => const UssdFlowListScreen()),
+        GoRoute(path: '/personal-ussd-flows', builder: (_, __) => const UssdFlowListScreen(isPersonal: true)),
         GoRoute(path: '/community', builder: (_, __) => const CommunityFeedScreen()),
         GoRoute(path: '/shifts/close/:shiftId', builder: (_, state) => CloseShiftScreen(shiftId: state.pathParameters['shiftId']!)),
         GoRoute(

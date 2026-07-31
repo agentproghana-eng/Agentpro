@@ -245,6 +245,14 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push('/personal-ussd-settings'),
             )),
+          if (isPaid)
+            Card(child: ListTile(
+              leading: const Icon(Icons.route_outlined, color: AppTheme.primaryColor),
+              title: const Text('Custom USSD Flows'),
+              subtitle: const Text('Build your own transaction flows'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/personal-ussd-flows'),
+            )),
           Card(child: ListTile(
             leading: const Icon(Icons.workspace_premium_outlined, color: AppTheme.primaryColor),
             title: const Text('My Subscription'),
