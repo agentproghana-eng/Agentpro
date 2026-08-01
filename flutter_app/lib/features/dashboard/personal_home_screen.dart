@@ -32,7 +32,6 @@ class PersonalHomeScreen extends StatefulWidget {
 class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
   String _provider = 'mtn';
   Map<String, SimCard?>? _simMap;
-  Map<int, String> _simPurposes = {};
   List<dynamic> _recent = [];
   bool _loadingRecent = true;
 
@@ -50,25 +49,6 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
     {'icon': Icons.card_giftcard_outlined, 'label': 'Mash Up', 'type': 'buy_mashup'},
     {'icon': Icons.account_balance_wallet_outlined, 'label': 'Check MoMo\nBalance', 'type': 'check_momo_balance'},
     {'icon': Icons.sim_card_outlined, 'label': 'Check Airtime\nBalance', 'type': 'check_airtime_balance'},
-  ];
-
-  // Shown instead of _quickActions when the selected provider's SIM is
-  // tagged 'agent' - the reciprocal of Agent Home's own switch to
-  // Personal's actions. Deliberately the non-Telecel 8-tile set only
-  // (skips Agent Home's Telecel-specific Deposit/Withdrawal renaming
-  // and its "Check Commission" picker, which depends on Agent Home's
-  // own internal picker logic) - functionally correct and routes into
-  // the real Agent transaction flow either way, just without that one
-  // narrower Telecel-specific nuance replicated here too.
-  final _agentQuickActions = const [
-    {'icon': Icons.call_received, 'label': 'Cash In', 'type': 'cash_in'},
-    {'icon': Icons.call_made, 'label': 'Cash Out', 'type': 'cash_out'},
-    {'icon': Icons.send, 'label': 'Send Money', 'type': 'send_money'},
-    {'icon': Icons.storefront, 'label': 'Pay to Merchant', 'type': 'merchant_payment'},
-    {'icon': Icons.receipt_long, 'label': 'Pay to Agent', 'type': 'bill_payment'},
-    {'icon': Icons.phone_android, 'label': 'Airtime', 'type': 'airtime'},
-    {'icon': Icons.wifi, 'label': 'Data Bundle', 'type': 'data_bundle'},
-    {'icon': Icons.account_balance_wallet, 'label': 'Check Balance', 'type': 'balance_enquiry'},
   ];
 
   @override
@@ -92,12 +72,12 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
 
   // Mirrors the Agent Home tab's SIM-detection pattern exactly (retry
   // once if every provider comes back null, fall back to showing all
-  // three tabs on any detection failure). Every detected SIM is shown
-  // as a tab here regardless of its tagged purpose - purposes are
-  // stored for the Quick Actions grid to react to instead (an
-  // 'agent'-tagged SIM shows Agent's own actions when selected), not
-  // used to hide tabs. A one-sided Personal user simply never has any
-  // purposes saved, so this never triggers for them.
+  // three tabs on any detection failure), plus one extra step: if this
+  // user holds both Business and Personal capability and has tagged
+  // their SIMs via Settings > SIM Purpose, exclude whichever SIM is
+  // tagged 'agent' - that one is reserved for Business use, not shown
+  // here. Falls back to showing every detected SIM as Personal-
+  // available if no purposes have been saved yet.
   Future<void> _loadSimMap() async {
     try {
       var map = await SimCardService.getNetworkSimMap();
@@ -115,14 +95,23 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
           purposes[p['sim_slot'] as int] = p['purpose'] as String;
         }
       } catch (_) {
-        // No saved purposes yet, or fetch failed - Quick Actions just
-        // stay Personal's own for every tab.
+        // No saved purposes yet, or fetch failed - every detected SIM
+        // stays available for Personal use.
+      }
+
+      if (purposes.isNotEmpty) {
+        map = Map.fromEntries(map.entries.map((e) {
+          final sim = e.value;
+          if (sim != null && purposes[sim.slot] == 'agent') {
+            return MapEntry(e.key, null);
+          }
+          return e;
+        }));
       }
 
       if (!mounted) return;
       setState(() {
         _simMap = map;
-        _simPurposes = purposes;
         if (map[_provider] == null) {
           final firstAvailable = map.entries.firstWhere((e) => e.value != null, orElse: () => map.entries.first).key;
           _provider = firstAvailable;
@@ -132,12 +121,6 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
       // Permission denied or detection failed - leave _simMap null so
       // the UI falls back to showing all three tabs.
     }
-  }
-
-  bool get _isAgentSim {
-    final sim = _simMap?[_provider];
-    if (sim == null) return false;
-    return _simPurposes[sim.slot] == 'agent';
   }
 
 
@@ -151,13 +134,6 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
     };
     final uri = Uri(path: '/personal-transactions/new', queryParameters: query);
     context.push(uri.toString());
-  }
-
-  // Same route Agent Home itself uses (/transactions?type=X&provider=Y,
-  // no sim_slot/sim_iccid - Agent's flow resolves the SIM from
-  // provider alone, unlike Personal's).
-  void _startAgentTransaction(String type) {
-    context.push('/transactions?type=$type&provider=$_provider');
   }
 
   @override
@@ -259,12 +235,10 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                   crossAxisSpacing: 10,
                   mainAxisSpacing: 10,
                   childAspectRatio: 0.85,
-                  children: (_isAgentSim ? _agentQuickActions : _quickActions).map((a) => _QuickActionTile(
+                  children: _quickActions.map((a) => _QuickActionTile(
                     icon: a['icon'] as IconData,
                     label: a['label'] as String,
-                    onTap: () => _isAgentSim
-                        ? _startAgentTransaction(a['type'] as String)
-                        : _startTransaction(a['type'] as String),
+                    onTap: () => _startTransaction(a['type'] as String),
                   )).toList(),
                 ),
               ),
