@@ -80,10 +80,24 @@ exports.initiateTransaction = async (req, res) => {
     // pre-filled values the app fills into that flow's steps
     // (send_amount, send_customer_phone, etc.) - without this, even a
     // successfully resolved flow would have nothing to dial with.
+    // transaction_id (not transaction.id/id) matches exactly what
+    // Agent's own initiateTransaction response uses, and what the
+    // shared TransactionProgressScreen on the Flutter side expects
+    // regardless of isPersonal - this was previously spreading the
+    // raw transaction object instead, which kept the database row's
+    // original "id" key and never actually had a "transaction_id"
+    // key at all. That caused transaction['transaction_id'] as String
+    // to throw immediately and synchronously on the null value, right
+    // at the top of _startUSSD() before even the permission check -
+    // explaining why every Personal automation attempt today appeared
+    // to hang instantly with no error and no progress at all.
     res.status(201).json({
       success: true,
       data: {
-        ...transaction,
+        transaction_id: transaction.id,
+        reference: transaction.reference,
+        status: transaction.status,
+        created_at: transaction.created_at,
         automation_params: {
           amount: amount != null ? amount.toString() : '',
           customer_phone: recipient_phone || '',
