@@ -62,7 +62,25 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
     // USSD automation requires CALL_PHONE and READ_PHONE_STATE granted at
     // runtime (Android 6+) — request before touching SIM detection or dialing.
-    final permissionResult = await PermissionService.requestTelephonyPermissions();
+    // Bounded with a timeout - if the underlying permission_handler
+    // plugin's native call itself hangs (seen on some device/OEM
+    // combos even when the permission is genuinely already granted),
+    // this turns a silent, indefinite stall into a clear, reportable
+    // failure instead of leaving the screen frozen forever with no
+    // way to tell whether it's still working or truly stuck.
+    PermissionResult permissionResult;
+    try {
+      permissionResult = await PermissionService.requestTelephonyPermissions()
+          .timeout(const Duration(seconds: 10));
+    } on Exception {
+      const reason = 'Timed out checking phone permissions. Please try again.';
+      if (mounted) setState(() => _simWarning = reason);
+      await _reportResult(
+        transactionId,
+        USSDResult(outcome: USSDStatus.failed, failureReason: reason, sessionLog: const []),
+      );
+      return;
+    }
     if (permissionResult != PermissionResult.granted) {
       final reason = permissionResult == PermissionResult.permanentlyDenied
           ? 'Phone permission was denied. Enable it in Settings to process transactions.'
