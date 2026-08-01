@@ -138,7 +138,22 @@ class UssdAccessibilityChannel(
             return
         }
 
-        if (provider == "telecel" && operatorId.isNullOrBlank()) {
+        // Operator ID is only actually used by flows whose own steps
+        // include a send_operator_id action (Telecel Airtime, which
+        // sends it to a specific USSD prompt) - it was previously
+        // required for every Telecel transaction regardless, which
+        // incorrectly blocked flows that never reference it at all
+        // (e.g. Send Money Same Network) and have no reason to expect
+        // a Personal account to have ever set this Agent-only value.
+        // steps == null means the legacy hardcoded path is in use
+        // (see parseSteps below), which still needs the old blanket
+        // check since that path's own logic assumes it's set.
+        val needsOperatorId = if (steps != null) {
+            steps.any { it["action"] == "send_operator_id" }
+        } else {
+            provider == "telecel"
+        }
+        if (needsOperatorId && operatorId.isNullOrBlank()) {
             result.error("MISSING_OPERATOR_ID", "Telecel Operator ID is required - set it in USSD Automation settings", null)
             return
         }
