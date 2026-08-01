@@ -1,6 +1,7 @@
 const { query } = require('../config/database');
 const { logger } = require('../utils/logger');
 const { detectAdvertisement } = require('./agentPostController');
+const { uploadAudio } = require('../config/cloudinary');
 
 // Fully separate from the Agent Community per spec - own tables
 // (personal_posts, personal_post_likes, personal_post_comments,
@@ -18,18 +19,28 @@ const VALID_REACTIONS = ["like", "love", "laugh", "wow", "sad", "pray", "dislike
 exports.createPost = async (req, res) => {
   const { content } = req.body;
   const trimmed = (content || "").trim();
+  const audioFile = req.file;
 
-  if (!trimmed) {
-    return res.status(422).json({ success: false, message: "Post content is required" });
+  if (!trimmed && !audioFile) {
+    return res.status(422).json({ success: false, message: "Post content or a voice note is required" });
   }
 
   try {
-    const isAd = await detectAdvertisement(trimmed);
+    let audioUrl = null;
+    if (audioFile) {
+      const filename = `personal_${req.user.id}_${Date.now()}`;
+      audioUrl = await uploadAudio(audioFile.buffer, filename);
+    }
+
+    let isAd = false;
+    if (trimmed) {
+      isAd = await detectAdvertisement(trimmed);
+    }
     const status = isAd ? "pending_review" : "active";
 
     const result = await query(
-      "INSERT INTO personal_posts (author_id, content, status, flagged_reason) VALUES ($1, $2, $3, $4) RETURNING *",
-      [req.user.id, trimmed, status, isAd ? "AI flagged as advertisement" : null]
+      "INSERT INTO personal_posts (author_id, content, audio_url, status, flagged_reason) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+      [req.user.id, trimmed || null, audioUrl, status, isAd ? "AI flagged as advertisement" : null]
     );
 
     res.status(201).json({
