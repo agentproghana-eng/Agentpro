@@ -21,6 +21,7 @@ class _HomeTabState extends State<HomeTab> {
   bool _loading = true;
   Map<String, SimCard?>? _simMap;
   Set<String> _disabledTypes = {};
+  Map<int, String> _simPurposes = {};
   Map<String, dynamic>? _currentShift;
   bool _shiftLoading = true;
 
@@ -30,6 +31,7 @@ class _HomeTabState extends State<HomeTab> {
     _load();
     _loadSimMap();
     _loadFeatureFlags();
+    _loadSimPurposes();
     _loadCurrentShift();
   }
 
@@ -101,6 +103,33 @@ class _HomeTabState extends State<HomeTab> {
   // feature-flag fetch failure should never block the home screen or
   // make tiles look disabled when they're actually fine; the same
   // check is enforced server-side regardless as the real safety net.
+  // Lets Home dynamically switch its Quick Actions to Personal's own
+  // set when the currently-selected provider's SIM has been tagged
+  // 'personal' in Settings > SIM Purpose - someone holding both
+  // capabilities can use their personal SIM's actions right from
+  // Agent Home, without navigating away to the separate Personal
+  // dashboard. Fails silently, same as feature flags - a pure Agent
+  // account (no purposes ever saved) simply never triggers this.
+  Future<void> _loadSimPurposes() async {
+    try {
+      final res = await ApiClient.instance.get('/user-sim-purposes');
+      final saved = (res.data['data'] as List?) ?? [];
+      final map = <int, String>{};
+      for (final p in saved) {
+        map[p['sim_slot'] as int] = p['purpose'] as String;
+      }
+      if (mounted) setState(() => _simPurposes = map);
+    } catch (_) {
+      // Leave _simPurposes empty - Quick Actions just stay Agent's own.
+    }
+  }
+
+  bool get _isPersonalSim {
+    final sim = _simMap?[_provider];
+    if (sim == null) return false;
+    return _simPurposes[sim.slot] == 'personal';
+  }
+
   Future<void> _loadFeatureFlags() async {
     try {
       final res = await ApiClient.instance.get("/users/me/feature-flags");
@@ -362,6 +391,8 @@ class _HomeTabState extends State<HomeTab> {
   }
 
   List<Widget> _quickActionTiles(BuildContext context) {
+    if (_isPersonalSim) return _personalQuickActionTiles(context);
+
     if (_provider != "telecel") {
       return [
         _tile(icon: Icons.call_received, label: "Cash In", bgColor: const Color(0xFFE6F4F1), iconColor: AppTheme.primaryColor, type: "cash_in", onTap: () => context.push("/transactions?type=cash_in&provider=$_provider")),
@@ -386,6 +417,35 @@ class _HomeTabState extends State<HomeTab> {
       _QuickAction(icon: Icons.wifi, label: "Internet Data", bgColor: context.appTileColor(Colors.grey[200]!), iconColor: Colors.grey, onTap: () => comingSoon("Internet Data")),
       _QuickAction(icon: Icons.account_balance_wallet, label: "Balance", bgColor: context.appTileColor(Colors.grey[200]!), iconColor: Colors.grey, onTap: () => comingSoon("Balance")),
       _QuickAction(icon: Icons.pie_chart, label: "Commission", bgColor: context.appTileColor(Colors.grey[200]!), iconColor: Colors.grey, onTap: () => comingSoon("Commission")),
+    ];
+  }
+
+  // Same 7 actions and dial behavior as PersonalHomeScreen's own quick
+  // actions - routes into the exact same /personal-transactions/new
+  // flow (Personal's own dialing/USSD logic, not Agent's), just
+  // reached from within Agent Home instead of the separate Personal
+  // dashboard. Labels match PersonalHomeScreen's grid exactly (short,
+  // \n-split for the 3x grid), not kPersonalTransactionLabels' longer
+  // single-line versions used elsewhere (e.g. screen titles).
+  List<Widget> _personalQuickActionTiles(BuildContext context) {
+    final sim = _simMap?[_provider];
+    void go(String type) {
+      final query = <String, String>{
+        'type': type,
+        'provider': _provider,
+        if (sim != null) 'sim_slot': sim.slot.toString(),
+        if (sim != null) 'sim_iccid': sim.iccid,
+      };
+      context.push(Uri(path: '/personal-transactions/new', queryParameters: query).toString());
+    }
+    return [
+      _tile(icon: Icons.send_outlined, label: "Send Money\n(Same Network)", bgColor: const Color(0xFFE6F4F1), iconColor: AppTheme.primaryColor, type: 'send_money_same_network', onTap: () => go('send_money_same_network')),
+      _tile(icon: Icons.compare_arrows, label: "Send Money\n(Other Network)", bgColor: const Color(0xFFE3EEFC), iconColor: const Color(0xFF2E6FD9), type: 'send_money_cross_network', onTap: () => go('send_money_cross_network')),
+      _tile(icon: Icons.phone_android_outlined, label: "Buy Airtime", bgColor: const Color(0xFFFFF7D6), iconColor: const Color(0xFFA6821A), type: 'buy_airtime', onTap: () => go('buy_airtime')),
+      _tile(icon: Icons.wifi_outlined, label: "Buy Data", bgColor: const Color(0xFFE0F7F5), iconColor: const Color(0xFF14847A), type: 'buy_data', onTap: () => go('buy_data')),
+      _tile(icon: Icons.card_giftcard_outlined, label: "Mash Up", bgColor: const Color(0xFFF0E6FA), iconColor: const Color(0xFF8B5FBF), type: 'buy_mashup', onTap: () => go('buy_mashup')),
+      _tile(icon: Icons.account_balance_wallet_outlined, label: "Check MoMo\nBalance", bgColor: const Color(0xFFDFF3EE), iconColor: const Color(0xFF1F8A6F), type: 'check_momo_balance', onTap: () => go('check_momo_balance')),
+      _tile(icon: Icons.sim_card_outlined, label: "Check Airtime\nBalance", bgColor: const Color(0xFFFDF3DC), iconColor: const Color(0xFFB87E00), type: 'check_airtime_balance', onTap: () => go('check_airtime_balance')),
     ];
   }
 }
