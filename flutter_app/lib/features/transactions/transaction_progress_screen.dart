@@ -130,25 +130,22 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
   final isMtnAccessibilityFlow = provider == "mtn" && (transactionType == "cash_in" || transactionType == "cash_out" || transactionType == "send_money");
   final isTelecelDepositFlow = provider == "telecel" && transactionType == "cash_in";
 
-  // Telecel Operator ID is needed by more than just the hardcoded
-  // Deposit flow - the Flow Builder path (Airtime, etc.) needs it too,
-  // via the send_operator_id step action. Resolved once here, ahead of
-  // both the hardcoded and custom-flow branches below, so neither has
-  // to fetch it separately or risk silently sending null.
+  // Telecel Operator ID is only actually needed by flows whose steps
+  // include a send_operator_id action (Telecel Airtime, and the
+  // hardcoded Deposit flow) - fetched here unconditionally so it's
+  // available to pass along either way, but NOT blanket-required for
+  // every Telecel transaction the way this used to work. That
+  // blanket requirement blocked any other Telecel flow (e.g. Send
+  // Money Same Network) for any account that never set this
+  // Agent-only value, which a Personal account has no reason to have
+  // done. The actual requirement is enforced natively in
+  // UssdAccessibilityChannel.kt's needsOperatorId check, which knows
+  // the resolved flow's real steps at the point it matters - this
+  // layer doesn't need to duplicate that logic or guess in advance.
   String? telecelOperatorId;
   if (provider == "telecel") {
     final authState = context.read<AuthBloc>().state;
     telecelOperatorId = authState is AuthAuthenticated ? authState.user['telecel_operator_id'] as String? : null;
-    if (telecelOperatorId == null || telecelOperatorId.isEmpty) {
-      const reason = "Telecel Operator ID is not set. Go to Settings > "
-          "USSD Automation and save your Operator ID, then try again.";
-      if (mounted) setState(() => _simWarning = reason);
-      await _reportResult(
-        transactionId,
-        USSDResult(outcome: USSDStatus.failed, failureReason: reason, sessionLog: const []),
-      );
-      return;
-    }
   }
 
   if (isMtnAccessibilityFlow || isTelecelDepositFlow) {
