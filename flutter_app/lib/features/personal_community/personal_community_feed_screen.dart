@@ -1,20 +1,27 @@
 // personal_community_feed_screen.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:dio/dio.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:record/record.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_bloc.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/reaction_button.dart';
+import '../../shared/widgets/audio_player_bubble.dart';
 
 /// Fully separate from the Agent Community per spec - own backend
-/// tables/endpoints, own screen. Text-only (the Agent Community's
-/// voice-note recording is a real dependency-risk surface this doesn't
-/// need to touch at all). Viewing and reacting work on the Free plan;
-/// only posting requires Paid, gated using the cached
-/// personal_subscription_plan from AuthBloc rather than an extra
-/// network call.
+/// tables/endpoints, own screen. Now at full feature parity with
+/// Agent's Community (voice notes + share), reusing the exact same
+/// record/audioplayers/share_plus packages and the same shared
+/// AudioPlayerBubble widget rather than duplicating that logic.
+/// Viewing and reacting work on the Free plan; only posting requires
+/// Paid, gated using the cached personal_subscription_plan from
+/// AuthBloc rather than an extra network call.
 class PersonalCommunityFeedScreen extends StatefulWidget {
   const PersonalCommunityFeedScreen({super.key});
   @override
@@ -27,6 +34,13 @@ class _PersonalCommunityFeedScreenState extends State<PersonalCommunityFeedScree
   final _composerCtrl = TextEditingController();
   bool _posting = false;
 
+  final _recorder = AudioRecorder();
+  bool _isRecording = false;
+  bool _hasRecording = false;
+  String? _recordedPath;
+  Timer? _recordTimer;
+  int _recordSeconds = 0;
+
   @override
   void initState() {
     super.initState();
@@ -35,6 +49,8 @@ class _PersonalCommunityFeedScreenState extends State<PersonalCommunityFeedScree
 
   @override
   void dispose() {
+    _recordTimer?.cancel();
+    _recorder.dispose();
     _composerCtrl.dispose();
     super.dispose();
   }
@@ -69,14 +85,59 @@ class _PersonalCommunityFeedScreenState extends State<PersonalCommunityFeedScree
     }
   }
 
+  Future<void> _startRecording() async {
+    if (!await _recorder.hasPermission()) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Microphone permission is required to record a voice note')));
+      return;
+    }
+    final dir = await getTemporaryDirectory();
+    final path = '${dir.path}/personal_voice_note_${DateTime.now().millisecondsSinceEpoch}.m4a';
+    await _recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc), path: path);
+    setState(() {
+      _isRecording = true;
+      _hasRecording = false;
+      _recordSeconds = 0;
+    });
+    _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _recordSeconds++);
+    });
+  }
+
+  Future<void> _stopRecording() async {
+    final path = await _recorder.stop();
+    _recordTimer?.cancel();
+    setState(() {
+      _isRecording = false;
+      _hasRecording = path != null;
+      _recordedPath = path;
+    });
+  }
+
+  void _discardRecording() {
+    setState(() {
+      _hasRecording = false;
+      _recordedPath = null;
+      _recordSeconds = 0;
+    });
+  }
+
+  String _formatSeconds(int s) => '${(s ~/ 60).toString().padLeft(2, '0')}:${(s % 60).toString().padLeft(2, '0')}';
+
   Future<void> _submitPost() async {
     final text = _composerCtrl.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty && !_hasRecording) return;
 
     setState(() => _posting = true);
     try {
-      final res = await ApiClient.instance.post('/personal-community/posts', data: {'content': text});
+      final formData = FormData.fromMap({
+        if (text.isNotEmpty) 'content': text,
+        if (_hasRecording && _recordedPath != null)
+          'audio': await MultipartFile.fromFile(_recordedPath!, filename: 'voice_note.m4a'),
+      });
+      final res = await ApiClient.instance.post('/personal-community/posts', data: formData);
       _composerCtrl.clear();
+      _discardRecording();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(res.data['message'] ?? 'Posted')));
@@ -110,6 +171,38 @@ class _PersonalCommunityFeedScreenState extends State<PersonalCommunityFeedScree
       );
     }
 
+    if (_isRecording) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)]),
+        child: Row(children: [
+          const Icon(Icons.fiber_manual_record, color: Colors.red, size: 14),
+          const SizedBox(width: 8),
+          Text('Recording... ${_formatSeconds(_recordSeconds)}', style: const TextStyle(fontSize: 12)),
+          const Spacer(),
+          IconButton(icon: const Icon(Icons.stop_circle, color: AppTheme.errorColor), onPressed: _stopRecording),
+        ]),
+      );
+    }
+
+    if (_hasRecording) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)]),
+        child: Row(children: [
+          const Icon(Icons.mic, color: AppTheme.primaryColor, size: 18),
+          const SizedBox(width: 8),
+          Text('Voice note ready (${_formatSeconds(_recordSeconds)})', style: const TextStyle(fontSize: 12)),
+          const Spacer(),
+          IconButton(icon: Icon(Icons.close, color: context.appSecondaryText), onPressed: _discardRecording),
+          IconButton(
+            icon: _posting ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send, color: AppTheme.primaryColor),
+            onPressed: _posting ? null : _submitPost,
+          ),
+        ]),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
       decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(14),
@@ -117,6 +210,7 @@ class _PersonalCommunityFeedScreenState extends State<PersonalCommunityFeedScree
       child: Row(children: [
         Expanded(child: TextField(controller: _composerCtrl,
           decoration: const InputDecoration(hintText: 'Share something...', border: InputBorder.none))),
+        IconButton(icon: const Icon(Icons.mic_none, color: AppTheme.primaryColor), onPressed: _startRecording),
         IconButton(
           icon: _posting ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send, color: AppTheme.primaryColor),
           onPressed: _posting ? null : _submitPost,
@@ -174,6 +268,7 @@ class _PersonalPostCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isPending = post['status'] == 'pending_review';
+    final audioUrl = post['audio_url'] as String?;
 
     return GestureDetector(
       onTap: onOpen,
@@ -205,6 +300,10 @@ class _PersonalPostCard extends StatelessWidget {
             ),
           if (post['content'] != null && (post['content'] as String).isNotEmpty)
             Text(post['content'], style: const TextStyle(fontSize: 12.5)),
+          if (audioUrl != null) ...[
+            if (post['content'] != null && (post['content'] as String).isNotEmpty) const SizedBox(height: 8),
+            AudioPlayerBubble(url: audioUrl),
+          ],
           const SizedBox(height: 6),
           Text(_formatPostTime(post['created_at'] as String?),
             style: TextStyle(fontSize: 10.5, color: context.appSecondaryText)),
@@ -224,6 +323,11 @@ class _PersonalPostCard extends StatelessWidget {
               const SizedBox(width: 4),
               Text('${post['comment_count'] ?? 0}', style: const TextStyle(fontSize: 13)),
             ]),
+            const SizedBox(width: 18),
+            InkWell(
+              onTap: () => Share.share('${post['content'] ?? 'Voice note'}'),
+              child: Icon(Icons.share_outlined, size: 20, color: context.appSecondaryText),
+            ),
           ]),
         ]),
       ),
