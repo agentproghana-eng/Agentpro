@@ -31,7 +31,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     with TickerProviderStateMixin {
   late AnimationController _pulseCtrl;
   USSDStatus _status = USSDStatus.idle;
-  String _statusMessage = 'Preparing transaction...';
+  String _statusMessage = 'Checking permissions...';
   bool _completed = false;
   bool _wasManuallyConfirmed = false;
   bool _showConfirmButton = false;
@@ -84,6 +84,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     // If the device has no SIM for the chosen provider, fail fast with a
     // clear message rather than dialing on the wrong network and burning
     // a confusing failed USSD session.
+    if (mounted) setState(() => _statusMessage = 'Detecting SIM card...');
     int simSlot;
     try {
       final hasSim = await SimCardService.hasProviderSim(provider);
@@ -152,6 +153,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     await _startAccessibilityAutomation(transactionId, automationParams, transactionType!, provider, telecelOperatorId, simSlot: simSlot);
     return;
   }
+
+  if (mounted) setState(() => _statusMessage = 'Looking up automation...');
 
   // Offline transactions carry their Flow Builder data pre-cached
   // (from the last successful online run), since /ussd-flows/resolve
@@ -516,6 +519,19 @@ Future<void> _startAccessibilityAutomation(
           Text(
             isAwaitingPIN ? 'PIN Entry Required' : 'Processing...',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+          ),
+
+          const SizedBox(height: 8),
+
+          // Surfaces _statusMessage on screen - this was already being
+          // set at every stage (permission check, SIM detection, flow
+          // resolution, native dial progress) but never actually shown
+          // anywhere, so a stalled transaction gave zero indication of
+          // how far it had actually gotten.
+          Text(
+            _statusMessage,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: context.appSecondaryText),
           ),
 
           // PIN Warning
