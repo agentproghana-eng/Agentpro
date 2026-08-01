@@ -72,7 +72,25 @@ exports.initiateTransaction = async (req, res) => {
       requestId: req.requestId
     });
 
-    res.status(201).json({ success: true, data: transaction });
+    // Personal transactions are entirely Flow Builder-based (no
+    // legacy ussd_templates equivalent), so there's no ussd_template
+    // field here - the app resolves the actual flow steps separately
+    // via GET /ussd-flows/resolve after this call succeeds, same as
+    // Agent. What WAS missing until now: automation_params, the
+    // pre-filled values the app fills into that flow's steps
+    // (send_amount, send_customer_phone, etc.) - without this, even a
+    // successfully resolved flow would have nothing to dial with.
+    res.status(201).json({
+      success: true,
+      data: {
+        ...transaction,
+        automation_params: {
+          amount: amount != null ? amount.toString() : '',
+          customer_phone: recipient_phone || '',
+          recipient_phone: recipient_phone || '',
+        },
+      },
+    });
 
   } catch (error) {
     logger.error('Initiate personal transaction error:', error);
