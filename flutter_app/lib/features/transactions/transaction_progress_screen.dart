@@ -207,7 +207,23 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     // Ignore and fall through to single-dial below.
   }
 
-  final ussdTemplate = USSDTemplate.fromMap(template!);
+  // No cached flow, no online Flow Builder flow, and no legacy
+  // single-dial template either - there is genuinely nothing to
+  // automate with. Report a clear failure instead of force-unwrapping
+  // template into a null-check crash, which used to fail silently
+  // inside this async function with no error shown at all, leaving
+  // the screen frozen on "Processing..." forever.
+  if (template == null) {
+    const reason = 'No USSD automation is configured for this transaction type yet.';
+    if (mounted) setState(() => _simWarning = reason);
+    await _reportResult(
+      transactionId,
+      USSDResult(outcome: USSDStatus.failed, failureReason: reason, sessionLog: const []),
+    );
+    return;
+  }
+
+  final ussdTemplate = USSDTemplate.fromMap(template);
   _engine = USSDEngine(
     template: ussdTemplate,
     automationParams: automationParams,
