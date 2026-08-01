@@ -149,7 +149,7 @@ class UssdAccessibilityChannel(
         // (see parseSteps below), which still needs the old blanket
         // check since that path's own logic assumes it's set.
         val needsOperatorId = if (steps != null) {
-            steps.any { it["action"] == "send_operator_id" }
+            steps.any { it.action == "send_operator_id" }
         } else {
             provider == "telecel"
         }
