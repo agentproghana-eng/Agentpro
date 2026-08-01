@@ -44,6 +44,7 @@ class PersonalMoreTab extends StatelessWidget {
       body: ListView(
         children: [
           const MoreGroupLabel('MoMo'),
+          MoreTile(Icons.receipt_long_outlined, 'Transaction History', () => context.push(isPaid ? '/personal-transactions/history' : '/personal-subscription')),
           MoreTile(Icons.bar_chart_outlined, 'My Reports', () => context.push('/personal-reports')),
           if (isPaid)
             MoreTile(Icons.wifi_tethering, 'USSD Automation', () => context.push('/personal-ussd-settings')),
