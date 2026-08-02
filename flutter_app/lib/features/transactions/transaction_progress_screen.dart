@@ -146,6 +146,9 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
   // (money already moved peer-to-peer to the agent's SIM), never a
   // USSD dial at all.
   final transactionType = widget.data["transaction_type"] as String?;
+  final bundleCategory = widget.data["bundle_category"] as String?;
+  final recipientMode = widget.data["recipient_mode"] as String?;
+  final selectionsInOrder = (widget.data["selections_in_order"] as List?)?.cast<String>() ?? const [];
   final isMtnAccessibilityFlow = provider == "mtn" && (transactionType == "cash_in" || transactionType == "cash_out" || transactionType == "send_money");
   final isTelecelDepositFlow = provider == "telecel" && transactionType == "cash_in";
 
@@ -202,18 +205,34 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
   try {
     final resolveRes = await ApiClient.instance.get(
       '/ussd-flows/resolve',
-      queryParameters: {'provider': provider, 'transaction_type': transactionType},
+      queryParameters: {
+          'provider': provider,
+          'transaction_type': transactionType,
+          if (bundleCategory != null) 'bundle_category': bundleCategory,
+          if (recipientMode != null) 'recipient_mode': recipientMode,
+        },
     );
     final flowData = resolveRes.data['data'] as Map<String, dynamic>;
     final steps = (flowData['steps'] as List).cast<Map<String, dynamic>>();
     final successMarkers = (flowData['success_markers'] as List?)?.cast<String>();
     final failureMarkers = (flowData['failure_markers'] as List?)?.cast<String>();
     final dialCode = flowData['dial_code'] as String;
+      final selectionsMap = <String, String>{};
+      if (selectionsInOrder.isNotEmpty) {
+        int si = 0;
+        for (int i = 0; i < steps.length; i++) {
+          if (steps[i]['action'] == 'send_selection' && si < selectionsInOrder.length) {
+            selectionsMap[i.toString()] = selectionsInOrder[si];
+            si++;
+          }
+        }
+      }
 
     await _startAccessibilityAutomation(
       transactionId, automationParams, transactionType!, provider, telecelOperatorId,
       simSlot: simSlot,
       dialCode: dialCode, steps: steps, successMarkers: successMarkers, failureMarkers: failureMarkers,
+        selections: selectionsMap.isEmpty ? null : selectionsMap,
     );
     return;
   } on DioException catch (e) {
@@ -280,6 +299,7 @@ Future<void> _startAccessibilityAutomation(
   List<Map<String, dynamic>>? steps,
   List<String>? successMarkers,
   List<String>? failureMarkers,
+  Map<String, String>? selections,
 }) async {
   // MTN Send Money uses the exact same Cash In USSD menu action as
   // Cash In itself (confirmed via live device testing - same menu
