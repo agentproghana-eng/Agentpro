@@ -10,6 +10,8 @@ import 'core/api/api_client.dart';
 import 'core/auth/auth_bloc.dart';
 import 'core/services/storage_service.dart';
 import 'core/services/notification_service.dart';
+import 'core/services/permission_service.dart';
+import 'core/services/ussd_service.dart';
 import 'core/services/inactivity_service.dart';
 import 'core/router/app_router.dart';
 import 'shared/theme/app_theme.dart';
@@ -43,6 +45,17 @@ void main() async {
   // is already visible, so a permission dialog is never the first
   // thing a user sees on cold launch.
   unawaited(NotificationService.init());
+
+  // Same reasoning - READ_PHONE_STATE/CALL_PHONE (Permission.phone covers
+  // both together, Android doesn't allow requesting them separately) is
+  // asked for right after install rather than at the moment of the first
+  // USSD dial, so the agent isn't hit with a system permission dialog
+  // mid-transaction. transaction_progress_screen.dart still calls
+  // requestTelephonyPermissions() again before dialing as a safety net -
+  // this call is purely to surface the prompt earlier, not a replacement
+  // for that check (a user could still deny it here, or revoke it later
+  // in system settings).
+  unawaited(PermissionService.requestTelephonyPermissions());
 
   // Same reasoning - the AdMob SDK only matters once a Free Personal
   // user actually reaches Personal Home, nowhere near the first frame.
@@ -113,7 +126,7 @@ class AgentProApp extends StatelessWidget {
               // timeout fires and needs to show a SnackBar.
               return InactivityDetector(
                 timeout: const Duration(minutes: 5),
-                child: child ?? const SizedBox.shrink(),
+                child: _AccessibilityGate(child: child ?? const SizedBox.shrink()),
               );
             },
           );
@@ -121,4 +134,59 @@ class AgentProApp extends StatelessWidget {
       ),
     );
   }
+}
+
+
+// Checked once per cold launch, after the first frame - Accessibility
+// Service can't be requested via a system permission dialog the way
+// READ_PHONE_STATE/notifications can (Android only allows enabling it
+// through Settings), so this shows an in-app explainer with a button
+// the user taps, which THEN opens Settings - never an unprompted
+// redirect into system settings on cold start.
+class _AccessibilityGate extends StatefulWidget {
+  final Widget child;
+  const _AccessibilityGate({required this.child});
+
+  @override
+  State<_AccessibilityGate> createState() => _AccessibilityGateState();
+}
+
+class _AccessibilityGateState extends State<_AccessibilityGate> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkAccessibility());
+  }
+
+  Future<void> _checkAccessibility() async {
+    final enabled = await UssdAccessibilityEngine().isServiceEnabled();
+    if (!enabled && mounted) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Enable Automated Transactions'),
+          content: const Text(
+            'Agent Pro Ghana uses Accessibility Service to automatically complete USSD transactions for you. '
+            'Without it, every transaction has to be completed manually on the dial screen.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Not Now'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                UssdAccessibilityEngine().openAccessibilitySettings();
+              },
+              child: const Text('Open Settings'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
