@@ -45,10 +45,16 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   final _formKey = GlobalKey<FormState>();
   final _amountCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
+  final _referenceCtrl = TextEditingController();
   bool _loading = false;
 
   bool get _needsAmount => !kNoAmountPersonalTypes.contains(widget.transactionType);
   bool get _needsPhone => !kNoAmountPersonalTypes.contains(widget.transactionType);
+  // Optional, unlike Agent's bill_payment/merchant_payment equivalent
+  // (which requires it) - a real device test confirmed Telecel's Send
+  // Money flow works fine with this left blank, so it's offered here
+  // rather than demanded.
+  bool get _needsReference => ['send_money_same_network', 'send_money_cross_network'].contains(widget.transactionType);
 
   @override
   void initState() {
@@ -69,6 +75,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   void dispose() {
     _amountCtrl.dispose();
     _phoneCtrl.dispose();
+    _referenceCtrl.dispose();
     super.dispose();
   }
 
@@ -82,6 +89,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         'transaction_type': widget.transactionType,
         if (_needsAmount) 'amount': double.tryParse(_amountCtrl.text.trim()),
         if (_needsPhone) 'recipient_phone': _phoneCtrl.text.trim(),
+        if (_needsReference && _referenceCtrl.text.trim().isNotEmpty) 'notes': _referenceCtrl.text.trim(),
         if (widget.simIccid != null) 'sim_iccid': widget.simIccid,
         if (widget.simSlot != null) 'sim_slot': widget.simSlot,
       });
@@ -145,6 +153,14 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
                   keyboardType: TextInputType.phone,
                   prefixIcon: Icons.phone_outlined,
                   validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null,
+                ),
+                const SizedBox(height: 14),
+              ],
+              if (_needsReference) ...[
+                AppTextField(
+                  controller: _referenceCtrl,
+                  label: 'Reference (optional)',
+                  prefixIcon: Icons.notes_outlined,
                 ),
                 const SizedBox(height: 14),
               ],
