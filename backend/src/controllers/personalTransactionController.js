@@ -20,7 +20,7 @@ const PERSONAL_TRANSACTION_TYPES = [
 // those concepts.
 
 exports.initiateTransaction = async (req, res) => {
-  const { provider, transaction_type, amount, recipient_phone, merchant_id, sim_iccid, sim_slot, notes } = req.body;
+  const { provider, transaction_type, amount, recipient_phone, merchant_id, sim_iccid, sim_slot, notes, bundle_category, recipient_mode } = req.body;
   const userId = req.user.id;
 
   if (!PERSONAL_TRANSACTION_TYPES.includes(transaction_type)) {
@@ -34,12 +34,16 @@ exports.initiateTransaction = async (req, res) => {
     // order: this user's own personal-owned flow, else the global
     // default.
     const personalFlow = await query(
-      `SELECT 1 FROM ussd_flows WHERE owner_user_id = $1 AND provider = $2 AND transaction_type = $3 AND is_active = true`,
-      [userId, provider, transaction_type]
+      `SELECT 1 FROM ussd_flows WHERE owner_user_id = $1 AND provider = $2 AND transaction_type = $3 AND is_active = true
+       AND COALESCE(bundle_category,'') = COALESCE($4,'')
+       AND COALESCE(recipient_mode,'') = COALESCE($5,'')`,
+      [userId, provider, transaction_type, bundle_category || null, recipient_mode || null]
     );
     const globalFlow = await query(
-      `SELECT 1 FROM ussd_flows WHERE company_id IS NULL AND owner_user_id IS NULL AND provider = $1 AND transaction_type = $2 AND is_active = true`,
-      [provider, transaction_type]
+      `SELECT 1 FROM ussd_flows WHERE company_id IS NULL AND owner_user_id IS NULL AND provider = $1 AND transaction_type = $2 AND is_active = true
+       AND COALESCE(bundle_category,'') = COALESCE($3,'')
+       AND COALESCE(recipient_mode,'') = COALESCE($4,'')`,
+      [provider, transaction_type, bundle_category || null, recipient_mode || null]
     );
     if (personalFlow.rows.length === 0 && globalFlow.rows.length === 0) {
       return res.status(400).json({
