@@ -297,12 +297,12 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       appBar: AppBar(title: Text(label)),
       body: Padding(
         padding: const EdgeInsets.all(20),
-        child: _isDataBundle ? _buildDataBundleFlow(context) : _buildGenericForm(context),
+        child: _isDataBundle ? _buildDataBundleFlow(context) : _buildGenericForm(context, label),
       ),
     );
   }
 
-  Widget _buildGenericForm(BuildContext context) {
+  Widget _buildGenericForm(BuildContext context, String label) {
     return Form(
       key: _formKey,
       child: ListView(
