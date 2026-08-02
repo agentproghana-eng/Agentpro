@@ -283,7 +283,7 @@ exports.deleteFlow = async (req, res) => {
 // otherwise 404 (nothing configured, caller should fall back to
 // whatever non-automated path it already has).
 exports.resolveFlow = async (req, res) => {
-  const { provider, transaction_type } = req.query;
+  const { provider, transaction_type, bundle_category, recipient_mode } = req.query;
 
   if (!provider || !transaction_type) {
     return res.status(422).json({ success: false, message: 'provider and transaction_type are required' });
@@ -297,8 +297,10 @@ exports.resolveFlow = async (req, res) => {
     // and the global default for that individual.
     const personalResult = await query(
       `SELECT * FROM ussd_flows
-       WHERE owner_user_id = $1 AND provider = $2 AND transaction_type = $3 AND is_active = true`,
-      [req.user.id, provider, transaction_type]
+       WHERE owner_user_id = $1 AND provider = $2 AND transaction_type = $3 AND is_active = true
+       AND COALESCE(bundle_category,'') = COALESCE($4,'')
+       AND COALESCE(recipient_mode,'') = COALESCE($5,'')`,
+      [req.user.id, provider, transaction_type, bundle_category || null, recipient_mode || null]
     );
     if (personalResult.rows.length > 0) {
       flow = personalResult.rows[0];
@@ -307,8 +309,10 @@ exports.resolveFlow = async (req, res) => {
     if (!flow && req.user.company_id) {
       const companyResult = await query(
         `SELECT * FROM ussd_flows
-         WHERE company_id = $1 AND provider = $2 AND transaction_type = $3 AND is_active = true`,
-        [req.user.company_id, provider, transaction_type]
+         WHERE company_id = $1 AND provider = $2 AND transaction_type = $3 AND is_active = true
+         AND COALESCE(bundle_category,'') = COALESCE($4,'')
+         AND COALESCE(recipient_mode,'') = COALESCE($5,'')`,
+        [req.user.company_id, provider, transaction_type, bundle_category || null, recipient_mode || null]
       );
       if (companyResult.rows.length > 0) {
         flow = companyResult.rows[0];
@@ -321,8 +325,10 @@ exports.resolveFlow = async (req, res) => {
       // this it could be mistaken for someone else's global default.
       const globalResult = await query(
         `SELECT * FROM ussd_flows
-         WHERE company_id IS NULL AND owner_user_id IS NULL AND provider = $1 AND transaction_type = $2 AND is_active = true`,
-        [provider, transaction_type]
+         WHERE company_id IS NULL AND owner_user_id IS NULL AND provider = $1 AND transaction_type = $2 AND is_active = true
+         AND COALESCE(bundle_category,'') = COALESCE($3,'')
+         AND COALESCE(recipient_mode,'') = COALESCE($4,'')`,
+        [provider, transaction_type, bundle_category || null, recipient_mode || null]
       );
       if (globalResult.rows.length > 0) {
         flow = globalResult.rows[0];
