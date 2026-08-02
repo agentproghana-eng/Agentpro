@@ -98,10 +98,15 @@ exports.initiateTransaction = async (req, res) => {
         reference: transaction.reference,
         status: transaction.status,
         created_at: transaction.created_at,
+        // notes doubles as the reference value here rather than adding
+        // a dedicated column - Send Money's flow has a send_reference
+        // step (confirmed via a real device test), and notes was
+        // already an accepted, unused field on this endpoint.
         automation_params: {
           amount: amount != null ? amount.toString() : '',
           customer_phone: recipient_phone || '',
           recipient_phone: recipient_phone || '',
+          payment_reference: notes || '',
         },
       },
     });
