@@ -130,6 +130,7 @@ class UssdAccessibilityChannel(
         val explicitDialCode = call.argument<String>("dial_code")
         val simSlot = call.argument<Int>("sim_slot")
         val steps = parseSteps(call)
+        val selections = call.argument<Map<String, Any>>("selections")?.mapValues { it.value.toString() }
         val successMarkers = call.argument<List<String>>("success_markers")
         val failureMarkers = call.argument<List<String>>("failure_markers")
 
@@ -172,7 +173,7 @@ class UssdAccessibilityChannel(
 
         UssdAccessibilityService.startSession(
             customerPhone, amount, transactionType, provider, operatorId, reference, merchantId,
-            steps, successMarkers, failureMarkers
+            steps, selections, successMarkers, failureMarkers
         )
         UssdForegroundService.start(context)
 

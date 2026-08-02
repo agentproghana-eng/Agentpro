@@ -84,6 +84,7 @@ class UssdAccessibilityService : AccessibilityService() {
         @Volatile var pendingSteps: List<FlowStep>? = null
         @Volatile var pendingSuccessMarkers: List<String>? = null
         @Volatile var pendingFailureMarkers: List<String>? = null
+        @Volatile var pendingSelections: Map<String, String>? = null
 
         // Registered by UssdAccessibilityChannel so this OS-instantiated
         // service can report progress back to Flutter.
@@ -98,6 +99,7 @@ class UssdAccessibilityService : AccessibilityService() {
             reference: String? = null,
             merchantId: String? = null,
             steps: List<FlowStep>? = null,
+            selections: Map<String, String>? = null,
             successMarkers: List<String>? = null,
             failureMarkers: List<String>? = null
         ) {
@@ -109,6 +111,7 @@ class UssdAccessibilityService : AccessibilityService() {
             pendingReference = reference
             pendingMerchantId = merchantId
             pendingSteps = steps
+            pendingSelections = selections
             currentStepIndex = 0
             pendingSuccessMarkers = successMarkers
             pendingFailureMarkers = failureMarkers
@@ -128,6 +131,7 @@ class UssdAccessibilityService : AccessibilityService() {
             pendingOperatorId = null
             pendingReference = null
             pendingMerchantId = null
+            pendingSelections = null
             pendingSteps = null
             currentStepIndex = 0
             pendingSuccessMarkers = null
@@ -302,6 +306,14 @@ class UssdAccessibilityService : AccessibilityService() {
                     "send_operator_id" -> pendingOperatorId?.let { respond(root, it) }
                     "send_reference" -> pendingReference?.let { respond(root, it) }
                     "send_merchant_id" -> pendingMerchantId?.let { respond(root, it) }
+                    "send_selection" -> {
+                        val digit = pendingSelections?.get(index.toString())
+                        if (digit != null) {
+                            respond(root, digit)
+                        } else {
+                            Log.w(TAG, "send_selection at step index $index has no selection provided — session will stall")
+                        }
+                    }
                     "pin_prompt" -> {
                         reachedPinPrompt = true
                         listener?.onPinPromptReached()
