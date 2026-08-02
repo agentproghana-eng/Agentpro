@@ -11,6 +11,7 @@ const PERSONAL_TRANSACTION_TYPES = [
   'buy_mashup',
   'check_momo_balance',
   'check_airtime_balance',
+  'withdraw_cash',
 ];
 
 // ─── Initiate Personal Transaction ─────────────────────────────
@@ -19,7 +20,7 @@ const PERSONAL_TRANSACTION_TYPES = [
 // those concepts.
 
 exports.initiateTransaction = async (req, res) => {
-  const { provider, transaction_type, amount, recipient_phone, sim_iccid, sim_slot, notes } = req.body;
+  const { provider, transaction_type, amount, recipient_phone, merchant_id, sim_iccid, sim_slot, notes } = req.body;
   const userId = req.user.id;
 
   if (!PERSONAL_TRANSACTION_TYPES.includes(transaction_type)) {
@@ -107,6 +108,11 @@ exports.initiateTransaction = async (req, res) => {
           customer_phone: recipient_phone || '',
           recipient_phone: recipient_phone || '',
           payment_reference: notes || '',
+          // Withdraw Cash's "Till Number" is the same underlying
+          // concept as Agent's merchant_id (an agent/merchant
+          // identifier code) - reuses the existing send_merchant_id
+          // action rather than inventing a parallel mechanism.
+          merchant_id: merchant_id || '',
         },
       },
     });
