@@ -44,6 +44,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
   final _quickActions = const [
     {'icon': Icons.send_outlined, 'label': 'Send Money\n(Same Network)', 'type': 'send_money_same_network'},
     {'icon': Icons.compare_arrows, 'label': 'Send Money\n(Other Network)', 'type': 'send_money_cross_network'},
+    {'icon': Icons.call_made, 'label': 'Withdraw Cash', 'type': 'withdraw_cash'},
     {'icon': Icons.phone_android_outlined, 'label': 'Buy Airtime', 'type': 'buy_airtime'},
     {'icon': Icons.wifi_outlined, 'label': 'Buy Data', 'type': 'buy_data'},
     {'icon': Icons.card_giftcard_outlined, 'label': 'Mash Up', 'type': 'buy_mashup'},
