@@ -17,6 +17,7 @@ const Map<String, String> kPersonalTransactionLabels = {
   'buy_mashup': 'Mash Up',
   'check_momo_balance': 'Check MoMo Balance',
   'check_airtime_balance': 'Check Airtime Balance',
+  'withdraw_cash': 'Withdraw Cash',
 };
 
 // Balance-check types dial and get PIN-prompted with no amount or
@@ -46,15 +47,23 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   final _amountCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _referenceCtrl = TextEditingController();
+  final _tillNumberCtrl = TextEditingController();
   bool _loading = false;
 
   bool get _needsAmount => !kNoAmountPersonalTypes.contains(widget.transactionType);
-  bool get _needsPhone => !kNoAmountPersonalTypes.contains(widget.transactionType);
+  // Withdraw Cash needs an amount but not a recipient phone at all -
+  // it asks for a Till Number instead (see _needsTillNumber below).
+  bool get _needsPhone => !kNoAmountPersonalTypes.contains(widget.transactionType) && widget.transactionType != 'withdraw_cash';
   // Optional, unlike Agent's bill_payment/merchant_payment equivalent
   // (which requires it) - a real device test confirmed Telecel's Send
   // Money flow works fine with this left blank, so it's offered here
   // rather than demanded.
   bool get _needsReference => ['send_money_same_network', 'send_money_cross_network'].contains(widget.transactionType);
+  // "Till Number" on Telecel's own Withdraw Cash > From Agent menu -
+  // the same underlying concept as Agent's merchant_id (an
+  // agent/merchant identifier code), sent as merchant_id in the
+  // request and reusing the existing send_merchant_id native action.
+  bool get _needsTillNumber => widget.transactionType == 'withdraw_cash';
 
   @override
   void initState() {
@@ -76,6 +85,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     _amountCtrl.dispose();
     _phoneCtrl.dispose();
     _referenceCtrl.dispose();
+    _tillNumberCtrl.dispose();
     super.dispose();
   }
 
@@ -90,6 +100,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         if (_needsAmount) 'amount': double.tryParse(_amountCtrl.text.trim()),
         if (_needsPhone) 'recipient_phone': _phoneCtrl.text.trim(),
         if (_needsReference && _referenceCtrl.text.trim().isNotEmpty) 'notes': _referenceCtrl.text.trim(),
+        if (_needsTillNumber) 'merchant_id': _tillNumberCtrl.text.trim(),
         if (widget.simIccid != null) 'sim_iccid': widget.simIccid,
         if (widget.simSlot != null) 'sim_slot': widget.simSlot,
       });
@@ -161,6 +172,16 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
                   controller: _referenceCtrl,
                   label: 'Reference (optional)',
                   prefixIcon: Icons.notes_outlined,
+                ),
+                const SizedBox(height: 14),
+              ],
+              if (_needsTillNumber) ...[
+                AppTextField(
+                  controller: _tillNumberCtrl,
+                  label: 'Till Number',
+                  keyboardType: TextInputType.number,
+                  prefixIcon: Icons.storefront_outlined,
+                  validator: (v) => (v ?? '').trim().isEmpty ? 'Till number is required' : null,
                 ),
                 const SizedBox(height: 14),
               ],
