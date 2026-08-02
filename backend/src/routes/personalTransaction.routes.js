@@ -28,7 +28,7 @@ router.post('/', [
   body('transaction_type').isIn([
     'send_money_same_network', 'send_money_cross_network',
     'buy_airtime', 'buy_data', 'buy_mashup',
-    'check_momo_balance', 'check_airtime_balance'
+    'check_momo_balance', 'check_airtime_balance', 'withdraw_cash'
   ]).withMessage('Invalid transaction type'),
 ], handleValidation, personalTransactionController.initiateTransaction);
 
