@@ -6,6 +6,7 @@ import "../../shared/theme/app_theme.dart";
 import "../../shared/theme/app_colors.dart";
 import "../../core/services/sim_card_service.dart";
 import "../../shared/utils/transaction_labels.dart";
+import "../../core/router/app_router.dart";
 
 class HomeTab extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -15,7 +16,7 @@ class HomeTab extends StatefulWidget {
   State<HomeTab> createState() => _HomeTabState();
 }
 
-class _HomeTabState extends State<HomeTab> {
+class _HomeTabState extends State<HomeTab> with RouteAware {
   String _provider = "mtn";
   List<dynamic> _recent = [];
   bool _loading = true;
@@ -24,6 +25,26 @@ class _HomeTabState extends State<HomeTab> {
   Map<int, String> _simPurposes = {};
   Map<String, dynamic>? _currentShift;
   bool _shiftLoading = true;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    routeObserver.subscribe(this, ModalRoute.of(context) as PageRoute);
+  }
+
+  @override
+  void dispose() {
+    routeObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  // Fires when a screen pushed on top of this one (e.g. Settings >
+  // SIM Purpose) gets popped, so a saved purpose change is reflected
+  // immediately instead of requiring an app restart to take effect.
+  @override
+  void didPopNext() {
+    _loadSimPurposes();
+  }
 
   @override
   void initState() {
