@@ -1,10 +1,4 @@
 import 'package:flutter/material.dart';
-
-// Shared with HomeTab (via RouteAware) so it can detect returning from
-// a pushed screen like Settings > SIM Purpose, and refresh accordingly -
-// HomeTab lives inside an IndexedStack that never rebuilds on tab
-// switches, so this is the only reliable 'you're visible again' signal.
-final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 import 'package:go_router/go_router.dart';
 import '../auth/auth_bloc.dart';
 import '../../features/auth/login_screen.dart';
@@ -57,6 +51,12 @@ import '../../features/settings/sim_purpose_settings_screen.dart';
 import '../../features/notifications/notifications_screen.dart';
 import '../../features/branches/branches_screen.dart';
 import '../../features/staff/staff_management_screen.dart';
+
+// Shared with HomeTab (via RouteAware) so it can detect returning from
+// a pushed screen like Settings > SIM Purpose, and refresh accordingly -
+// HomeTab lives inside an IndexedStack that never rebuilds on tab
+// switches, so this is the only reliable 'you're visible again' signal.
+final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 
 class AppRouter {
   static GoRouter createRouter(AuthState authState) {
