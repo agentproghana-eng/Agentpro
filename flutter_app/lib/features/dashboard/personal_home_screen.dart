@@ -11,6 +11,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 import '../../shared/widgets/personal_ad_banner.dart';
 import '../../shared/widgets/personal_transaction_item.dart';
+import '../ussd_settings/quick_action_customization_screen.dart';
 
 /// The Home tab of PersonalDashboard - matches the same fixed-header/
 /// CustomScrollView structure already shared by Owner/Manager/Agent's
@@ -34,6 +35,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
   Map<String, SimCard?>? _simMap;
   List<dynamic> _recent = [];
   bool _loadingRecent = true;
+  Map<String, List<String>> _personalQuickActions = {};
 
   final _providers = const [
     {'value': 'mtn', 'label': 'MTN'},
@@ -41,26 +43,73 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
     {'value': 'at_money', 'label': 'AT Money'},
   ];
 
-  final _quickActions = const [
-    {'icon': Icons.send_outlined, 'label': 'Send Money\n(Same Network)', 'type': 'send_money_same_network'},
-    {'icon': Icons.compare_arrows, 'label': 'Send Money\n(Other Network)', 'type': 'send_money_cross_network'},
-    {'icon': Icons.call_made, 'label': 'Withdraw Cash', 'type': 'withdraw_cash'},
-    {'icon': Icons.phone_android_outlined, 'label': 'Buy Airtime', 'type': 'buy_airtime'},
-    {'icon': Icons.wifi_outlined, 'label': 'Buy Data', 'type': 'buy_data'},
-    {'icon': Icons.card_giftcard_outlined, 'label': 'Mash Up', 'type': 'buy_mashup'},
-    {'icon': Icons.account_balance_wallet_outlined, 'label': 'Check MoMo\nBalance', 'type': 'check_momo_balance'},
-    {'icon': Icons.sim_card_outlined, 'label': 'Check Airtime\nBalance', 'type': 'check_airtime_balance'},
-  ];
-
   @override
   void initState() {
     super.initState();
     _loadSimMap();
     _loadRecent();
+    _loadQuickActions();
   }
 
   // Same shape as the Agent HomeTab's _load() (limit=5, filtered by the
   // selected provider tab) - just pointed at /personal-transactions.
+  Future<void> _loadQuickActions() async {
+    try {
+      final response = await ApiClient.instance.get(
+        '/users/me/quick-actions',
+      );
+
+      final data =
+          response.data['data'] as Map<String, dynamic>? ??
+          <String, dynamic>{};
+
+      final personal = data['personal'];
+
+      if (!mounted || personal is! Map) return;
+
+      final parsed = <String, List<String>>{};
+
+      for (final provider in ['mtn', 'telecel', 'at_money']) {
+        final value = personal[provider];
+
+        if (value is List) {
+          parsed[provider] = value
+              .whereType<String>()
+              .take(9)
+              .toList();
+        }
+      }
+
+      setState(() => _personalQuickActions = parsed);
+    } catch (_) {
+      // Continue using defaults.
+    }
+  }
+
+  List<QuickActionDefinition> get _visibleQuickActions {
+    final saved = _personalQuickActions[_provider];
+
+    final types = saved != null
+        ? saved
+        : List<String>.from(
+            kPersonalQuickActionDefaults[_provider] ??
+                const <String>[],
+          );
+
+    final result = <QuickActionDefinition>[];
+
+    for (final type in types.take(9)) {
+      for (final definition in kPersonalQuickActionDefinitions) {
+        if (definition.type == type) {
+          result.add(definition);
+          break;
+        }
+      }
+    }
+
+    return result;
+  }
+
   Future<void> _loadRecent() async {
     setState(() => _loadingRecent = true);
     try {
@@ -185,7 +234,11 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
           ),
         ),
         Expanded(child: RefreshIndicator(
-          onRefresh: () => Future.wait([_loadSimMap(), _loadRecent()]),
+          onRefresh: () => Future.wait([
+            _loadSimMap(),
+            _loadRecent(),
+            _loadQuickActions(),
+          ]),
           child: CustomScrollView(slivers: [
             SliverToBoxAdapter(
               child: Padding(
@@ -236,11 +289,15 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                   crossAxisSpacing: 10,
                   mainAxisSpacing: 10,
                   childAspectRatio: 0.85,
-                  children: _quickActions.map((a) => _QuickActionTile(
-                    icon: a['icon'] as IconData,
-                    label: a['label'] as String,
-                    onTap: () => _startTransaction(a['type'] as String),
-                  )).toList(),
+                  children: _visibleQuickActions
+                      .map(
+                        (action) => _QuickActionTile(
+                          icon: action.icon,
+                          label: action.label,
+                          onTap: () => _startTransaction(action.type),
+                        ),
+                      )
+                      .toList(),
                 ),
               ),
             ),

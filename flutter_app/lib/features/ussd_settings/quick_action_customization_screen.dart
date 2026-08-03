@@ -268,7 +268,7 @@ class _QuickActionCustomizationScreenState
       for (final provider in ['mtn', 'telecel', 'at_money']) {
         final providerValue = saved[provider];
 
-        if (providerValue is List && providerValue.isNotEmpty) {
+        if (providerValue is List) {
           parsed[provider] = providerValue
               .whereType<String>()
               .where((type) => _definitionFor(type) != null)

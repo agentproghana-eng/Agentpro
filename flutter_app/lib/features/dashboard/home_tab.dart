@@ -7,6 +7,7 @@ import "../../shared/theme/app_colors.dart";
 import "../../core/services/sim_card_service.dart";
 import "../../shared/utils/transaction_labels.dart";
 import "../../core/router/app_router.dart";
+import "../ussd_settings/quick_action_customization_screen.dart";
 
 class HomeTab extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -25,6 +26,8 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   Map<int, String> _simPurposes = {};
   Map<String, dynamic>? _currentShift;
   bool _shiftLoading = true;
+  Map<String, List<String>> _agentQuickActions = {};
+  Map<String, List<String>> _personalQuickActions = {};
 
   @override
   void didChangeDependencies() {
@@ -44,6 +47,7 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   @override
   void didPopNext() {
     _loadSimPurposes();
+    _loadQuickActions();
   }
 
   @override
@@ -54,6 +58,75 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
     _loadFeatureFlags();
     _loadSimPurposes();
     _loadCurrentShift();
+    _loadQuickActions();
+  }
+
+  Future<void> _loadQuickActions() async {
+    try {
+      final response = await ApiClient.instance.get("/users/me/quick-actions");
+      final data =
+          response.data["data"] as Map<String, dynamic>? ??
+          <String, dynamic>{};
+
+      Map<String, List<String>> parseProfile(dynamic raw) {
+        final result = <String, List<String>>{};
+        if (raw is! Map) return result;
+
+        for (final provider in ["mtn", "telecel", "at_money"]) {
+          final value = raw[provider];
+          if (value is List) {
+            result[provider] = value
+                .whereType<String>()
+                .take(9)
+                .toList();
+          }
+        }
+
+        return result;
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _agentQuickActions = parseProfile(data["agent"]);
+        _personalQuickActions = parseProfile(data["personal"]);
+      });
+    } catch (_) {
+      // Keep provider-specific defaults when preferences cannot be loaded.
+    }
+  }
+
+  List<String> _quickActionTypes({required bool personal}) {
+    final saved = personal
+        ? _personalQuickActions[_provider]
+        : _agentQuickActions[_provider];
+
+    if (saved != null) {
+      return saved.take(9).toList();
+    }
+
+    final defaults = personal
+        ? kPersonalQuickActionDefaults[_provider]
+        : kAgentQuickActionDefaults[_provider];
+
+    return List<String>.from(defaults ?? const <String>[])
+        .take(9)
+        .toList();
+  }
+
+  QuickActionDefinition? _quickActionDefinition(
+    String type, {
+    required bool personal,
+  }) {
+    final definitions = personal
+        ? kPersonalQuickActionDefinitions
+        : kAgentQuickActionDefinitions;
+
+    for (final definition in definitions) {
+      if (definition.type == type) return definition;
+    }
+
+    return null;
   }
 
   Future<void> _loadCurrentShift() async {
@@ -412,66 +485,142 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   }
 
   List<Widget> _quickActionTiles(BuildContext context) {
-    if (_isPersonalSim) return _personalQuickActionTiles(context);
-
-    if (_provider != "telecel") {
-      return [
-        _tile(icon: Icons.call_received, label: "Cash In", bgColor: const Color(0xFFE6F4F1), iconColor: AppTheme.primaryColor, type: "cash_in", onTap: () => context.push("/transactions?type=cash_in&provider=$_provider")),
-        _tile(icon: Icons.call_made, label: "Cash Out", bgColor: const Color(0xFFFDF3DC), iconColor: const Color(0xFFB87E00), type: "cash_out", onTap: () => context.push("/transactions?type=cash_out&provider=$_provider")),
-        _tile(icon: Icons.send, label: "Send Money", bgColor: const Color(0xFFE3EEFC), iconColor: const Color(0xFF2E6FD9), type: "send_money", onTap: () => context.push("/transactions?type=send_money&provider=$_provider")),
-        _tile(icon: Icons.storefront, label: "Pay to Merchant", bgColor: const Color(0xFFF0E6FA), iconColor: const Color(0xFF8B5FBF), type: "merchant_payment", onTap: () => context.push("/transactions?type=merchant_payment&provider=$_provider")),
-        _tile(icon: Icons.receipt_long, label: "Pay to Agent", bgColor: const Color(0xFFFCE8E3), iconColor: const Color(0xFFC1503D), type: "bill_payment", onTap: () => context.push("/transactions?type=bill_payment&provider=$_provider")),
-        _tile(icon: Icons.phone_android, label: "Airtime", bgColor: const Color(0xFFFFF7D6), iconColor: const Color(0xFFA6821A), type: "airtime", onTap: () => context.push("/transactions?type=airtime&provider=$_provider")),
-        _tile(icon: Icons.wifi, label: "Data Bundle", bgColor: const Color(0xFFE0F7F5), iconColor: const Color(0xFF14847A), type: "data_bundle", onTap: () => context.push("/transactions?type=data_bundle&provider=$_provider")),
-        _tile(icon: Icons.account_balance_wallet, label: "Check Balance", bgColor: const Color(0xFFDFF3EE), iconColor: const Color(0xFF1F8A6F), type: "balance_enquiry", onTap: () => context.push("/transactions?type=balance_enquiry&provider=$_provider")),
-        _QuickAction(icon: Icons.pie_chart, label: "Check Commission", bgColor: context.appTileColor(const Color(0xFFFBE6EC)), iconColor: const Color(0xFFB33F6B), onTap: () => _showCommissionCheckPicker(context)),
-      ];
+    if (_isPersonalSim) {
+      return _personalQuickActionTiles(context);
     }
 
-    void comingSoon(String feature) => ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("$feature automation is coming soon for Telecel")));
+    final types = _quickActionTypes(personal: false);
+    final tiles = <Widget>[];
 
-    return [
-      _tile(icon: Icons.call_received, label: "Deposit", bgColor: const Color(0xFFE6F4F1), iconColor: AppTheme.primaryColor, type: "cash_in", onTap: () => context.push("/transactions?type=cash_in&provider=telecel")),
-      _tile(icon: Icons.call_made, label: "Withdrawal", bgColor: const Color(0xFFFDF3DC), iconColor: const Color(0xFFB87E00), type: "cash_out", onTap: () => context.push("/transactions?type=cash_out&provider=telecel")),
-      _tile(icon: Icons.business, label: "Business Deposit", bgColor: const Color(0xFFE6F4F1), iconColor: AppTheme.primaryColor, type: "business_deposit", onTap: () => context.push("/transactions?type=business_deposit&provider=telecel")),
-      _tile(icon: Icons.phone_android, label: "Airtime", bgColor: const Color(0xFFFFF7D6), iconColor: const Color(0xFFA6821A), type: "airtime", onTap: () => context.push("/transactions?type=airtime&provider=telecel")),
-      _tile(icon: Icons.wifi, label: "Internet Data", bgColor: const Color(0xFFE0F7F5), iconColor: const Color(0xFF14847A), type: "data_bundle", onTap: () => context.push("/transactions?type=data_bundle&provider=telecel")),
-      _tile(icon: Icons.account_balance_wallet, label: "Balance", bgColor: const Color(0xFFDFF3EE), iconColor: const Color(0xFF1F8A6F), type: "balance_enquiry", onTap: () => context.push("/transactions?type=balance_enquiry&provider=telecel")),
-      _tile(icon: Icons.move_to_inbox, label: "M-PESA to Float", bgColor: const Color(0xFFE3EEFC), iconColor: const Color(0xFF2E6FD9), type: "working_to_float", onTap: () => context.push("/transactions?type=working_to_float&provider=telecel")),
-      _tile(icon: Icons.outbox, label: "Float to M-PESA", bgColor: const Color(0xFFF0E6FA), iconColor: const Color(0xFF8B5FBF), type: "float_to_working", onTap: () => context.push("/transactions?type=float_to_working&provider=telecel")),
-      _tile(icon: Icons.pie_chart, label: "Commission to Float", bgColor: const Color(0xFFFBE6EC), iconColor: const Color(0xFFB33F6B), type: "commission_transfer", onTap: () => context.push("/transactions?type=commission_transfer&provider=telecel")),
-    ];
+    for (var index = 0; index < types.length; index++) {
+      final type = types[index];
+      final definition = _quickActionDefinition(
+        type,
+        personal: false,
+      );
+
+      if (definition == null) continue;
+
+      var label = definition.label;
+
+      if (_provider == "telecel") {
+        if (type == "cash_in") label = "Deposit";
+        if (type == "cash_out") label = "Withdrawal";
+        if (type == "data_bundle") label = "Internet Data";
+        if (type == "balance_enquiry") label = "Balance";
+      }
+
+      final backgrounds = <Color>[
+        const Color(0xFFE6F4F1),
+        const Color(0xFFFDF3DC),
+        const Color(0xFFE3EEFC),
+        const Color(0xFFF0E6FA),
+        const Color(0xFFFCE8E3),
+        const Color(0xFFFFF7D6),
+        const Color(0xFFE0F7F5),
+        const Color(0xFFDFF3EE),
+        const Color(0xFFFBE6EC),
+      ];
+
+      final iconColors = <Color>[
+        AppTheme.primaryColor,
+        const Color(0xFFB87E00),
+        const Color(0xFF2E6FD9),
+        const Color(0xFF8B5FBF),
+        const Color(0xFFC1503D),
+        const Color(0xFFA6821A),
+        const Color(0xFF14847A),
+        const Color(0xFF1F8A6F),
+        const Color(0xFFB33F6B),
+      ];
+
+      tiles.add(
+        _tile(
+          icon: definition.icon,
+          label: label,
+          bgColor: backgrounds[index % backgrounds.length],
+          iconColor: iconColors[index % iconColors.length],
+          type: type,
+          onTap: () => context.push(
+            "/transactions?type=$type&provider=$_provider",
+          ),
+        ),
+      );
+    }
+
+    return tiles;
   }
 
-  // Same 7 actions and dial behavior as PersonalHomeScreen's own quick
-  // actions - routes into the exact same /personal-transactions/new
-  // flow (Personal's own dialing/USSD logic, not Agent's), just
-  // reached from within Agent Home instead of the separate Personal
-  // dashboard. Labels match PersonalHomeScreen's grid exactly (short,
-  // \n-split for the 3x grid), not kPersonalTransactionLabels' longer
-  // single-line versions used elsewhere (e.g. screen titles).
   List<Widget> _personalQuickActionTiles(BuildContext context) {
     final sim = _simMap?[_provider];
+
     void go(String type) {
       final query = <String, String>{
-        'type': type,
-        'provider': _provider,
-        if (sim != null) 'sim_slot': sim.slot.toString(),
-        if (sim != null) 'sim_iccid': sim.iccid,
+        "type": type,
+        "provider": _provider,
+        if (sim != null) "sim_slot": sim.slot.toString(),
+        if (sim != null) "sim_iccid": sim.iccid,
       };
-      context.push(Uri(path: '/personal-transactions/new', queryParameters: query).toString());
+
+      context.push(
+        Uri(
+          path: "/personal-transactions/new",
+          queryParameters: query,
+        ).toString(),
+      );
     }
-    return [
-      _tile(icon: Icons.send_outlined, label: "Send Money\n(Same Network)", bgColor: const Color(0xFFE6F4F1), iconColor: AppTheme.primaryColor, type: 'send_money_same_network', onTap: () => go('send_money_same_network')),
-      _tile(icon: Icons.compare_arrows, label: "Send Money\n(Other Network)", bgColor: const Color(0xFFE3EEFC), iconColor: const Color(0xFF2E6FD9), type: 'send_money_cross_network', onTap: () => go('send_money_cross_network')),
-      _tile(icon: Icons.phone_android_outlined, label: "Buy Airtime", bgColor: const Color(0xFFFFF7D6), iconColor: const Color(0xFFA6821A), type: 'buy_airtime', onTap: () => go('buy_airtime')),
-      _tile(icon: Icons.wifi_outlined, label: "Buy Data", bgColor: const Color(0xFFE0F7F5), iconColor: const Color(0xFF14847A), type: 'buy_data', onTap: () => go('buy_data')),
-      _tile(icon: Icons.card_giftcard_outlined, label: "Mash Up", bgColor: const Color(0xFFF0E6FA), iconColor: const Color(0xFF8B5FBF), type: 'buy_mashup', onTap: () => go('buy_mashup')),
-      _tile(icon: Icons.account_balance_wallet_outlined, label: "Check MoMo\nBalance", bgColor: const Color(0xFFDFF3EE), iconColor: const Color(0xFF1F8A6F), type: 'check_momo_balance', onTap: () => go('check_momo_balance')),
-      _tile(icon: Icons.sim_card_outlined, label: "Check Airtime\nBalance", bgColor: const Color(0xFFFDF3DC), iconColor: const Color(0xFFB87E00), type: 'check_airtime_balance', onTap: () => go('check_airtime_balance')),
-    ];
+
+    final types = _quickActionTypes(personal: true);
+    final tiles = <Widget>[];
+
+    for (var index = 0; index < types.length; index++) {
+      final type = types[index];
+      final definition = _quickActionDefinition(
+        type,
+        personal: true,
+      );
+
+      if (definition == null) continue;
+
+      final backgrounds = <Color>[
+        const Color(0xFFE6F4F1),
+        const Color(0xFFE3EEFC),
+        const Color(0xFFFDF3DC),
+        const Color(0xFFFFF7D6),
+        const Color(0xFFE0F7F5),
+        const Color(0xFFF0E6FA),
+        const Color(0xFFDFF3EE),
+        const Color(0xFFFCE8E3),
+        const Color(0xFFFBE6EC),
+      ];
+
+      final iconColors = <Color>[
+        AppTheme.primaryColor,
+        const Color(0xFF2E6FD9),
+        const Color(0xFFB87E00),
+        const Color(0xFFA6821A),
+        const Color(0xFF14847A),
+        const Color(0xFF8B5FBF),
+        const Color(0xFF1F8A6F),
+        const Color(0xFFC1503D),
+        const Color(0xFFB33F6B),
+      ];
+
+      tiles.add(
+        _tile(
+          icon: definition.icon,
+          label: definition.label,
+          bgColor: backgrounds[index % backgrounds.length],
+          iconColor: iconColors[index % iconColors.length],
+          type: type,
+          onTap: () => go(type),
+        ),
+      );
+    }
+
+    return tiles;
   }
+
 }
 
 class _ProviderTab extends StatelessWidget {
