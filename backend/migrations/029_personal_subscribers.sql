@@ -9,9 +9,15 @@
 -- type and subscription plan are meant to be independent per spec.
 -- 'customer' was already sitting unused in user_role for this purpose.
 
-CREATE TYPE personal_subscription_plan AS ENUM ('free', 'paid');
+DO $$
+BEGIN
+  CREATE TYPE personal_subscription_plan AS ENUM ('free', 'paid');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END
+$$;
 
-CREATE TABLE personal_subscriptions (
+CREATE TABLE IF NOT EXISTS personal_subscriptions (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id       UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
   plan          personal_subscription_plan NOT NULL DEFAULT 'free',
@@ -25,9 +31,15 @@ CREATE TABLE personal_subscriptions (
 -- network a SIM is on, not which "hat" it's for - an agent line and a
 -- personal number can easily share the same network, so this needs its
 -- own explicit tagging rather than being inferred.
-CREATE TYPE sim_purpose AS ENUM ('agent', 'personal');
+DO $$
+BEGIN
+  CREATE TYPE sim_purpose AS ENUM ('agent', 'personal');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END
+$$;
 
-CREATE TABLE user_sim_purposes (
+CREATE TABLE IF NOT EXISTS user_sim_purposes (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   sim_slot    INTEGER NOT NULL,
@@ -56,7 +68,7 @@ ALTER TYPE transaction_type ADD VALUE IF NOT EXISTS 'check_airtime_balance';
 -- table: no branch_id/company_id (Personal users have neither), no fee,
 -- no commission - genuinely simpler, matching what Personal transactions
 -- actually are.
-CREATE TABLE personal_transactions (
+CREATE TABLE IF NOT EXISTS personal_transactions (
   id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id           UUID NOT NULL REFERENCES users(id),
   reference         VARCHAR(100) NOT NULL UNIQUE,
@@ -73,7 +85,7 @@ CREATE TABLE personal_transactions (
   completed_at      TIMESTAMPTZ
 );
 
-CREATE INDEX idx_personal_transactions_user ON personal_transactions(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_personal_transactions_user ON personal_transactions(user_id, created_at DESC);
 
 -- Personal Community: fully separate from agent_posts (never shared,
 -- per spec) but structurally mirrors it for consistency, with one real
@@ -81,7 +93,7 @@ CREATE INDEX idx_personal_transactions_user ON personal_transactions(user_id, cr
 -- threading, which the existing Agent community has never had. Added
 -- deliberately because the spec calls out "comment on a post" and
 -- "reply to a comment" as two distinct capabilities, not the same thing.
-CREATE TABLE personal_posts (
+CREATE TABLE IF NOT EXISTS personal_posts (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   author_id       UUID NOT NULL REFERENCES users(id),
   content         TEXT NOT NULL,
@@ -93,7 +105,7 @@ CREATE TABLE personal_posts (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE personal_post_likes (
+CREATE TABLE IF NOT EXISTS personal_post_likes (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   post_id     UUID NOT NULL REFERENCES personal_posts(id) ON DELETE CASCADE,
   user_id     UUID NOT NULL REFERENCES users(id),
@@ -101,7 +113,7 @@ CREATE TABLE personal_post_likes (
   UNIQUE(post_id, user_id)
 );
 
-CREATE TABLE personal_post_comments (
+CREATE TABLE IF NOT EXISTS personal_post_comments (
   id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   post_id           UUID NOT NULL REFERENCES personal_posts(id) ON DELETE CASCADE,
   parent_comment_id UUID REFERENCES personal_post_comments(id) ON DELETE CASCADE,
@@ -110,7 +122,7 @@ CREATE TABLE personal_post_comments (
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE personal_post_comment_reactions (
+CREATE TABLE IF NOT EXISTS personal_post_comment_reactions (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   comment_id    UUID NOT NULL REFERENCES personal_post_comments(id) ON DELETE CASCADE,
   user_id       UUID NOT NULL REFERENCES users(id),
@@ -119,12 +131,12 @@ CREATE TABLE personal_post_comment_reactions (
   UNIQUE(comment_id, user_id)
 );
 
-CREATE INDEX idx_personal_posts_created ON personal_posts(created_at DESC) WHERE status = 'active';
-CREATE INDEX idx_personal_posts_pending ON personal_posts(created_at) WHERE status = 'pending_review';
-CREATE INDEX idx_personal_post_likes_post ON personal_post_likes(post_id);
-CREATE INDEX idx_personal_post_comments_post ON personal_post_comments(post_id);
-CREATE INDEX idx_personal_post_comments_parent ON personal_post_comments(parent_comment_id);
-CREATE INDEX idx_personal_post_comment_reactions_comment ON personal_post_comment_reactions(comment_id);
+CREATE INDEX IF NOT EXISTS idx_personal_posts_created ON personal_posts(created_at DESC) WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_personal_posts_pending ON personal_posts(created_at) WHERE status = 'pending_review';
+CREATE INDEX IF NOT EXISTS idx_personal_post_likes_post ON personal_post_likes(post_id);
+CREATE INDEX IF NOT EXISTS idx_personal_post_comments_post ON personal_post_comments(post_id);
+CREATE INDEX IF NOT EXISTS idx_personal_post_comments_parent ON personal_post_comments(parent_comment_id);
+CREATE INDEX IF NOT EXISTS idx_personal_post_comment_reactions_comment ON personal_post_comment_reactions(comment_id);
 
 -- Adds a third ownership tier to ussd_flows alongside the existing
 -- global (company_id IS NULL) and company-owned tiers: a Personal
@@ -132,13 +144,25 @@ CREATE INDEX idx_personal_post_comment_reactions_comment ON personal_post_commen
 -- individual the same way a company's own flow already overrides the
 -- global default for its agents. A flow is never both company-owned
 -- and personally-owned at once.
-ALTER TABLE ussd_flows ADD COLUMN owner_user_id UUID REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE ussd_flows ADD COLUMN IF NOT EXISTS owner_user_id UUID REFERENCES users(id) ON DELETE CASCADE;
 
-ALTER TABLE ussd_flows ADD CONSTRAINT chk_ussd_flows_single_owner
-  CHECK (company_id IS NULL OR owner_user_id IS NULL);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'chk_ussd_flows_single_owner'
+      AND conrelid = 'ussd_flows'::regclass
+  ) THEN
+    ALTER TABLE ussd_flows
+      ADD CONSTRAINT chk_ussd_flows_single_owner
+      CHECK (company_id IS NULL OR owner_user_id IS NULL);
+  END IF;
+END
+$$;
 
 -- Only one active personal flow per user per provider+type, mirroring
 -- the existing per-company uniqueness rule.
-CREATE UNIQUE INDEX idx_ussd_flows_personal_unique
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ussd_flows_personal_unique
   ON ussd_flows(owner_user_id, provider, transaction_type)
   WHERE owner_user_id IS NOT NULL AND is_active = true;
