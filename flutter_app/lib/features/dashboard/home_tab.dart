@@ -434,6 +434,7 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
     return [
       _tile(icon: Icons.call_received, label: "Deposit", bgColor: const Color(0xFFE6F4F1), iconColor: AppTheme.primaryColor, type: "cash_in", onTap: () => context.push("/transactions?type=cash_in&provider=telecel")),
       _tile(icon: Icons.call_made, label: "Withdrawal", bgColor: const Color(0xFFFDF3DC), iconColor: const Color(0xFFB87E00), type: "cash_out", onTap: () => context.push("/transactions?type=cash_out&provider=telecel")),
+      _tile(icon: Icons.business, label: "Business Deposit", bgColor: const Color(0xFFE6F4F1), iconColor: AppTheme.primaryColor, type: "business_deposit", onTap: () => context.push("/transactions?type=business_deposit&provider=telecel")),
       _tile(icon: Icons.phone_android, label: "Airtime", bgColor: const Color(0xFFFFF7D6), iconColor: const Color(0xFFA6821A), type: "airtime", onTap: () => context.push("/transactions?type=airtime&provider=telecel")),
       _tile(icon: Icons.wifi, label: "Internet Data", bgColor: const Color(0xFFE0F7F5), iconColor: const Color(0xFF14847A), type: "data_bundle", onTap: () => context.push("/transactions?type=data_bundle&provider=telecel")),
       _tile(icon: Icons.account_balance_wallet, label: "Balance", bgColor: const Color(0xFFDFF3EE), iconColor: const Color(0xFF1F8A6F), type: "balance_enquiry", onTap: () => context.push("/transactions?type=balance_enquiry&provider=telecel")),

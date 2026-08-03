@@ -529,10 +529,14 @@ class _TransactionScreenState extends State<TransactionScreen> {
               if (_needsCustomer) ...[
                 AppTextField(
                   controller: _customerPhoneCtrl,
-                  label: _needsReference
-                      ? 'Enter Number'
-                      : 'Customer Phone Number',
-                  hint: '024XXXXXXX',
+                  label: widget.transactionType == 'business_deposit'
+                      ? 'Agent Short Code'
+                      : (_needsReference
+                            ? 'Enter Number'
+                            : 'Customer Phone Number'),
+                  hint: widget.transactionType == 'business_deposit'
+                      ? 'Enter agent short code'
+                      : '024XXXXXXX',
                   keyboardType: TextInputType.phone,
                   prefixIcon: Icons.phone_outlined,
                   validator: (v) =>
