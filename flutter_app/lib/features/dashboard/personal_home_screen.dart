@@ -1,5 +1,6 @@
 // personal_home_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -515,10 +516,11 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
   }
 }
 
-class _QuickActionTile extends StatelessWidget {
+class _QuickActionTile extends StatefulWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+
   const _QuickActionTile({
     required this.icon,
     required this.label,
@@ -526,45 +528,94 @@ class _QuickActionTile extends StatelessWidget {
   });
 
   @override
+  State<_QuickActionTile> createState() => _QuickActionTileState();
+}
+
+class _QuickActionTileState extends State<_QuickActionTile> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (_pressed == value || !mounted) return;
+    setState(() => _pressed = value);
+  }
+
+  void _activate() {
+    HapticFeedback.selectionClick();
+    widget.onTap();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        decoration: BoxDecoration(
-          color: context.appSurface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: context.appSecondaryText.withOpacity(0.07)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.055),
-              blurRadius: 9,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.all(10),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: AppTheme.primaryColor.withOpacity(
-                  context.isDarkMode ? 0.20 : 0.10,
-                ),
-                borderRadius: BorderRadius.circular(11),
+    return Semantics(
+      button: true,
+      label: widget.label,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => _setPressed(true),
+        onTapUp: (_) => _setPressed(false),
+        onTapCancel: () => _setPressed(false),
+        onTap: _activate,
+        child: AnimatedScale(
+          scale: _pressed ? 0.965 : 1,
+          duration: const Duration(milliseconds: 110),
+          curve: Curves.easeOutCubic,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 110),
+            curve: Curves.easeOutCubic,
+            decoration: BoxDecoration(
+              color: context.appSurface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: _pressed
+                    ? AppTheme.primaryColor.withOpacity(0.24)
+                    : context.appSecondaryText.withOpacity(0.07),
               ),
-              child: Icon(icon, color: AppTheme.primaryColor, size: 23),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(_pressed ? 0.025 : 0.055),
+                  blurRadius: _pressed ? 4 : 9,
+                  offset: Offset(0, _pressed ? 1 : 3),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+            padding: const EdgeInsets.all(10),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                AnimatedScale(
+                  scale: _pressed ? 0.94 : 1,
+                  duration: const Duration(milliseconds: 110),
+                  curve: Curves.easeOutCubic,
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withOpacity(
+                        context.isDarkMode ? 0.20 : 0.10,
+                      ),
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: Icon(
+                      widget.icon,
+                      color: AppTheme.primaryColor,
+                      size: 23,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  widget.label,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

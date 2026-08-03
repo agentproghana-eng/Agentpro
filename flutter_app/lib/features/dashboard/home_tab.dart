@@ -1,4 +1,5 @@
 import "package:flutter/material.dart";
+import "package:flutter/services.dart";
 import "package:go_router/go_router.dart";
 import "package:intl/intl.dart";
 import "../../core/api/api_client.dart";
@@ -867,7 +868,7 @@ class _ProviderTab extends StatelessWidget {
   }
 }
 
-class _QuickAction extends StatelessWidget {
+class _QuickAction extends StatefulWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
@@ -883,42 +884,90 @@ class _QuickAction extends StatelessWidget {
   });
 
   @override
+  State<_QuickAction> createState() => _QuickActionState();
+}
+
+class _QuickActionState extends State<_QuickAction> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (_pressed == value || !mounted) return;
+    setState(() => _pressed = value);
+  }
+
+  void _activate() {
+    HapticFeedback.selectionClick();
+    widget.onTap();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        decoration: BoxDecoration(
-          color: context.appSurface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: context.appSecondaryText.withOpacity(0.07)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.055),
-              blurRadius: 9,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: bgColor,
-                borderRadius: BorderRadius.circular(11),
+    return Semantics(
+      button: true,
+      label: widget.label,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => _setPressed(true),
+        onTapUp: (_) => _setPressed(false),
+        onTapCancel: () => _setPressed(false),
+        onTap: _activate,
+        child: AnimatedScale(
+          scale: _pressed ? 0.965 : 1,
+          duration: const Duration(milliseconds: 110),
+          curve: Curves.easeOutCubic,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 110),
+            curve: Curves.easeOutCubic,
+            decoration: BoxDecoration(
+              color: context.appSurface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: _pressed
+                    ? widget.iconColor.withOpacity(0.24)
+                    : context.appSecondaryText.withOpacity(0.07),
               ),
-              child: Icon(icon, size: 23, color: iconColor),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(_pressed ? 0.025 : 0.055),
+                  blurRadius: _pressed ? 4 : 9,
+                  offset: Offset(0, _pressed ? 1 : 3),
+                ),
+              ],
             ),
-            const SizedBox(height: 7),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                AnimatedScale(
+                  scale: _pressed ? 0.94 : 1,
+                  duration: const Duration(milliseconds: 110),
+                  curve: Curves.easeOutCubic,
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: widget.bgColor,
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: Icon(widget.icon, size: 23, color: widget.iconColor),
+                  ),
+                ),
+                const SizedBox(height: 7),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    widget.label,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
