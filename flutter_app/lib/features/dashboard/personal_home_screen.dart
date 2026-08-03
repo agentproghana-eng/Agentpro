@@ -265,7 +265,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 8),
                   const Text(
                     'Welcome',
                     style: TextStyle(
@@ -285,10 +285,10 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                   Text(
                     isPaid ? 'PAID' : 'FREE',
                     style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.6,
+                      color: Colors.white60,
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.8,
                     ),
                   ),
                 ],
@@ -353,21 +353,36 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                                         });
                                         _loadRecent();
                                       },
-                                      child: Container(
+                                      child: AnimatedContainer(
+                                        duration: const Duration(
+                                          milliseconds: 220,
+                                        ),
+                                        curve: Curves.easeOutCubic,
                                         margin: const EdgeInsets.symmetric(
                                           horizontal: 2,
                                           vertical: 2,
                                         ),
                                         padding: const EdgeInsets.symmetric(
-                                          vertical: 9,
+                                          vertical: 10,
                                         ),
                                         decoration: BoxDecoration(
                                           color: selected
                                               ? color
                                               : Colors.transparent,
                                           borderRadius: BorderRadius.circular(
-                                            9,
+                                            11,
                                           ),
+                                          boxShadow: selected
+                                              ? [
+                                                  BoxShadow(
+                                                    color: color.withOpacity(
+                                                      0.20,
+                                                    ),
+                                                    blurRadius: 7,
+                                                    offset: const Offset(0, 2),
+                                                  ),
+                                                ]
+                                              : null,
                                         ),
                                         child: Text(
                                           p['label']!,
@@ -413,7 +428,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                     ),
                   ),
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 7),
                     sliver: SliverToBoxAdapter(
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -514,21 +529,36 @@ class _QuickActionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       child: Container(
         decoration: BoxDecoration(
           color: context.appSurface,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: context.appSecondaryText.withOpacity(0.07)),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 3),
+            BoxShadow(
+              color: Colors.black.withOpacity(0.055),
+              blurRadius: 9,
+              offset: const Offset(0, 3),
+            ),
           ],
         ),
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(10),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: AppTheme.primaryColor, size: 26),
-            const SizedBox(height: 6),
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor.withOpacity(
+                  context.isDarkMode ? 0.20 : 0.10,
+                ),
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Icon(icon, color: AppTheme.primaryColor, size: 23),
+            ),
+            const SizedBox(height: 8),
             Text(
               label,
               textAlign: TextAlign.center,

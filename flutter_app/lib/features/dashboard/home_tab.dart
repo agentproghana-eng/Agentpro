@@ -162,24 +162,43 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
       decoration: BoxDecoration(
         color: isOpen
-            ? context.appTileColor(const Color(0xFFE6F4F1))
+            ? context.appTileColor(const Color(0xFFDDF3EE))
             : context.appSurface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isOpen
+              ? AppTheme.primaryColor.withOpacity(0.18)
+              : context.appSecondaryText.withOpacity(0.10),
+        ),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 3),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.055),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
         ],
       ),
       child: Row(
         children: [
-          Icon(
-            isOpen ? Icons.timer : Icons.timer_off_outlined,
-            color: isOpen ? AppTheme.primaryColor : Colors.grey,
-            size: 22,
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: isOpen
+                  ? AppTheme.primaryColor.withOpacity(0.12)
+                  : context.appSecondaryText.withOpacity(0.08),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              isOpen ? Icons.timer_outlined : Icons.timer_off_outlined,
+              color: isOpen ? AppTheme.primaryColor : context.appSecondaryText,
+              size: 20,
+            ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
               isOpen
@@ -204,8 +223,12 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
               backgroundColor: isOpen
                   ? AppTheme.errorColor
                   : AppTheme.primaryColor,
-              minimumSize: const Size(0, 34),
-              padding: const EdgeInsets.symmetric(horizontal: 14),
+              minimumSize: const Size(0, 38),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              elevation: 1,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
             child: Text(
               isOpen ? "Close Shift" : "Open Shift",
@@ -480,7 +503,7 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
                     ],
                   ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 8),
                 Text(
                   "${widget.user["first_name"] ?? ""} ${widget.user["last_name"] ?? ""}",
                   style: const TextStyle(
@@ -503,10 +526,10 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
                       .replaceAll("_", " ")
                       .toUpperCase(),
                   style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.6,
+                    color: Colors.white60,
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.8,
                   ),
                 ),
               ],
@@ -554,7 +577,7 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
                   ),
                 ),
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 7),
                   sliver: SliverToBoxAdapter(
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -809,11 +832,22 @@ class _ProviderTab extends StatelessWidget {
     return InkWell(
       onTap: () => onTap(value),
       borderRadius: BorderRadius.circular(9),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 9),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
           color: selected ? color : Colors.transparent,
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: BorderRadius.circular(11),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: color.withOpacity(0.20),
+                    blurRadius: 7,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
         ),
         child: Text(
           label,
@@ -852,28 +886,33 @@ class _QuickAction extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(14),
       child: Container(
         decoration: BoxDecoration(
           color: context.appSurface,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: context.appSecondaryText.withOpacity(0.07)),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 3),
+            BoxShadow(
+              color: Colors.black.withOpacity(0.055),
+              blurRadius: 9,
+              offset: const Offset(0, 3),
+            ),
           ],
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 39,
-              height: 39,
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
                 color: bgColor,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(11),
               ),
-              child: Icon(icon, size: 20, color: iconColor),
+              child: Icon(icon, size: 23, color: iconColor),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 7),
             Text(
               label,
               textAlign: TextAlign.center,
