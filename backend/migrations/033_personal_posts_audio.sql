@@ -3,5 +3,5 @@
 -- helper, same multer config on the route). content was NOT NULL,
 -- which blocked a voice-note-only post with no text at all - same as
 -- Agent Community allows.
-ALTER TABLE personal_posts ADD COLUMN audio_url TEXT;
+ALTER TABLE personal_posts ADD COLUMN IF NOT EXISTS audio_url TEXT;
 ALTER TABLE personal_posts ALTER COLUMN content DROP NOT NULL;
