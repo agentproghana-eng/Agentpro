@@ -13,6 +13,139 @@ import '../../core/services/offline_queue_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/auth/auth_bloc.dart';
 
+class _ProgressTimelineItem {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+
+  const _ProgressTimelineItem({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+  });
+}
+
+class _ProgressTimelineRow extends StatelessWidget {
+  final _ProgressTimelineItem item;
+  final bool completed;
+  final bool active;
+  final bool pending;
+  final bool isLast;
+  final bool highlightPIN;
+
+  const _ProgressTimelineRow({
+    required this.item,
+    required this.completed,
+    required this.active,
+    required this.pending,
+    required this.isLast,
+    required this.highlightPIN,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final activeColor = highlightPIN
+        ? AppTheme.secondaryColor
+        : AppTheme.primaryColor;
+
+    final circleColor = completed
+        ? AppTheme.successColor
+        : active
+        ? activeColor
+        : context.appSecondaryText.withOpacity(0.18);
+
+    final textColor = pending
+        ? context.appSecondaryText.withOpacity(0.68)
+        : null;
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 38,
+            child: Column(
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: circleColor,
+                    shape: BoxShape.circle,
+                    boxShadow: active
+                        ? [
+                            BoxShadow(
+                              color: activeColor.withOpacity(0.25),
+                              blurRadius: 8,
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Icon(
+                    completed
+                        ? Icons.check
+                        : highlightPIN && active
+                        ? Icons.lock_outline
+                        : item.icon,
+                    size: 16,
+                    color: completed || active
+                        ? Colors.white
+                        : context.appSecondaryText,
+                  ),
+                ),
+                if (!isLast)
+                  Expanded(
+                    child: Container(
+                      width: 2,
+                      margin: const EdgeInsets.symmetric(vertical: 3),
+                      color: completed
+                          ? AppTheme.successColor.withOpacity(0.55)
+                          : context.appSecondaryText.withOpacity(0.14),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(top: 4, bottom: isLast ? 11 : 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.title,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                      color: active ? activeColor : textColor,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    completed
+                        ? 'Completed'
+                        : active
+                        ? item.subtitle
+                        : item.subtitle,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: completed
+                          ? AppTheme.successColor
+                          : context.appSecondaryText,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class TransactionProgressScreen extends StatefulWidget {
   final Map<String, dynamic> data;
   // Personal transactions reuse this entire screen (USSD dialing, step
@@ -620,183 +753,338 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     );
   }
 
+  int get _activeProgressStep {
+    if (_status == USSDStatus.awaitingPIN) return 4;
+
+    final message = _statusMessage.toLowerCase();
+
+    if (message.contains('permission')) return 0;
+    if (message.contains('sim')) return 1;
+    if (message.contains('flow') ||
+        message.contains('automation') ||
+        message.contains('looking up')) {
+      return 2;
+    }
+
+    if (_status == USSDStatus.dialing ||
+        message.contains('dial') ||
+        message.contains('opening')) {
+      return 3;
+    }
+
+    if (_status == USSDStatus.processing) return 3;
+
+    return 0;
+  }
+
+  List<_ProgressTimelineItem> get _progressItems => const [
+    _ProgressTimelineItem(
+      title: 'Preparing transaction',
+      subtitle: 'Checking permissions and transaction details',
+      icon: Icons.verified_user_outlined,
+    ),
+    _ProgressTimelineItem(
+      title: 'Detecting network SIM',
+      subtitle: 'Selecting the correct SIM card',
+      icon: Icons.sim_card_outlined,
+    ),
+    _ProgressTimelineItem(
+      title: 'Loading automation',
+      subtitle: 'Preparing the provider USSD flow',
+      icon: Icons.account_tree_outlined,
+    ),
+    _ProgressTimelineItem(
+      title: 'Running USSD',
+      subtitle: 'Navigating the network menu securely',
+      icon: Icons.dialpad_outlined,
+    ),
+    _ProgressTimelineItem(
+      title: 'Waiting for PIN',
+      subtitle: 'Manual authorization on the network screen',
+      icon: Icons.lock_outline,
+    ),
+    _ProgressTimelineItem(
+      title: 'Confirming result',
+      subtitle: 'Waiting for the provider response',
+      icon: Icons.receipt_long_outlined,
+    ),
+  ];
+
   Widget _buildProgress() {
     final isAwaitingPIN = _status == USSDStatus.awaitingPIN;
+    final activeStep = _activeProgressStep;
+    final provider = widget.data['provider']?.toString() ?? '';
+    final type =
+        widget.data['transaction_type']?.toString().replaceAll('_', ' ') ?? '';
 
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
+    return SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
         children: [
-          const Spacer(),
-
-          // Animated status icon
-          AnimatedBuilder(
-            animation: _pulseCtrl,
-            builder: (_, __) => Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isAwaitingPIN
-                    ? AppTheme.secondaryColor.withOpacity(
-                        0.1 + _pulseCtrl.value * 0.2,
-                      )
-                    : AppTheme.primaryColor.withOpacity(
-                        0.1 + _pulseCtrl.value * 0.15,
-                      ),
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: isAwaitingPIN
+                    ? [
+                        AppTheme.secondaryColor.withOpacity(0.18),
+                        AppTheme.secondaryColor.withOpacity(0.06),
+                      ]
+                    : [
+                        AppTheme.primaryColor.withOpacity(0.16),
+                        AppTheme.primaryColor.withOpacity(0.05),
+                      ],
               ),
-              child: Icon(
-                isAwaitingPIN ? Icons.lock_outline : Icons.swap_horiz,
-                size: 44,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
                 color: isAwaitingPIN
-                    ? AppTheme.secondaryColor
-                    : AppTheme.primaryColor,
+                    ? AppTheme.secondaryColor.withOpacity(0.35)
+                    : AppTheme.primaryColor.withOpacity(0.25),
               ),
             ),
-          ),
-
-          const SizedBox(height: 24),
-
-          Text(
-            isAwaitingPIN ? 'PIN Entry Required' : 'Processing...',
-            style: Theme.of(
-              context,
-            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-          ),
-
-          const SizedBox(height: 8),
-
-          // Surfaces _statusMessage on screen - this was already being
-          // set at every stage (permission check, SIM detection, flow
-          // resolution, native dial progress) but never actually shown
-          // anywhere, so a stalled transaction gave zero indication of
-          // how far it had actually gotten.
-          Text(
-            _statusMessage,
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: context.appSecondaryText),
-          ),
-
-          // PIN Warning
-          if (isAwaitingPIN) ...[
-            const SizedBox(height: 20),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: context.isDarkMode
-                    ? const Color(0xFF332B15)
-                    : Colors.amber[50],
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: context.isDarkMode
-                      ? const Color(0xFF7A6A2E)
-                      : Colors.amber[300]!,
+            child: Row(
+              children: [
+                AnimatedBuilder(
+                  animation: _pulseCtrl,
+                  builder: (_, __) => Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isAwaitingPIN
+                          ? AppTheme.secondaryColor.withOpacity(
+                              0.12 + (_pulseCtrl.value * 0.13),
+                            )
+                          : AppTheme.primaryColor.withOpacity(
+                              0.10 + (_pulseCtrl.value * 0.12),
+                            ),
+                    ),
+                    child: Icon(
+                      isAwaitingPIN ? Icons.lock_outline : Icons.sync_rounded,
+                      size: 30,
+                      color: isAwaitingPIN
+                          ? AppTheme.secondaryColor
+                          : AppTheme.primaryColor,
+                    ),
+                  ),
                 ),
-              ),
-              child: DefaultTextStyle.merge(
-                style: TextStyle(
-                  color: context.isDarkMode
-                      ? AppTheme.secondaryColor
-                      : const Color(0xFF7A5B00),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.security,
-                          color: context.isDarkMode
-                              ? AppTheme.secondaryColor
-                              : Colors.amber[800],
-                        ),
-                        const SizedBox(width: 8),
-                        const Expanded(
-                          child: Text(
-                            'Enter PIN on Network Screen',
-                            style: TextStyle(fontWeight: FontWeight.bold),
+                const SizedBox(width: 15),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 250),
+                        child: Text(
+                          isAwaitingPIN
+                              ? 'Waiting for your PIN'
+                              : 'Transaction in progress',
+                          key: ValueKey(isAwaitingPIN),
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'A network screen may appear asking for your MoMo PIN. '
-                      'Please enter it there.\n\n'
-                      '⚠️ Never share your PIN with anyone, including this app.',
-                      style: TextStyle(fontSize: 13),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'This may take up to a minute — please wait.',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                  ],
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        '${_providerLabel(provider)} · '
+                        '${type.isEmpty ? 'Mobile Money transaction' : type}',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: context.appSecondaryText,
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+                      Text(
+                        _statusMessage,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.appSecondaryText,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ),
-          ],
-
-          const SizedBox(height: 32),
-
-          // Single-dial flow: one indeterminate spinner rather than a
-          // step-by-step progress list, since there's no longer a fixed
-          // sequence of app-driven steps to visualize (see ussd_service.dart).
-          SizedBox(
-            width: 32,
-            height: 32,
-            child: CircularProgressIndicator(
-              strokeWidth: 3,
-              color: isAwaitingPIN
-                  ? AppTheme.secondaryColor
-                  : AppTheme.primaryColor,
+              ],
             ),
           ),
 
-          if (_showConfirmButton) ...[
-            const SizedBox(height: 24),
+          const SizedBox(height: 22),
+
+          const Text(
+            'Transaction progress',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 12),
+
+          Container(
+            padding: const EdgeInsets.fromLTRB(15, 16, 15, 8),
+            decoration: BoxDecoration(
+              color: context.appSurface,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              children: List.generate(_progressItems.length, (index) {
+                final item = _progressItems[index];
+                final completed = index < activeStep;
+                final active = index == activeStep;
+                final pending = index > activeStep;
+
+                return _ProgressTimelineRow(
+                  item: item,
+                  completed: completed,
+                  active: active,
+                  pending: pending,
+                  isLast: index == _progressItems.length - 1,
+                  highlightPIN: index == 4 && isAwaitingPIN,
+                );
+              }),
+            ),
+          ),
+
+          if (isAwaitingPIN) ...[
+            const SizedBox(height: 18),
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: context.isDarkMode
-                    ? const Color(0xFF1A2B45)
-                    : Colors.blue[50],
-                borderRadius: BorderRadius.circular(12),
+                    ? const Color(0xFF302A18)
+                    : const Color(0xFFFFF7DA),
+                borderRadius: BorderRadius.circular(15),
                 border: Border.all(
-                  color: context.isDarkMode
-                      ? const Color(0xFF3A5B8F)
-                      : Colors.blue[200]!,
+                  color: AppTheme.secondaryColor.withOpacity(0.55),
                 ),
               ),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.shield_outlined,
+                        color: AppTheme.secondaryColor,
+                      ),
+                      const SizedBox(width: 9),
+                      const Expanded(
+                        child: Text(
+                          'Your PIN stays private',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 9),
                   Text(
-                    "Nothing back from the network yet. If you've already "
-                    "seen a result on your phone, you can confirm it here.",
-                    textAlign: TextAlign.center,
+                    'Enter your PIN only on the network USSD screen. '
+                    'AgentPro never reads, stores, or enters your PIN.',
                     style: TextStyle(
-                      fontSize: 13,
-                      color: context.isDarkMode
-                          ? const Color(0xFF8FB8E8)
-                          : Colors.blue[900],
+                      fontSize: 12.5,
+                      height: 1.45,
+                      color: context.appSecondaryText,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  ElevatedButton(
-                    onPressed: _confirmManually,
-                    child: const Text('Confirm Transaction'),
+                  const SizedBox(height: 10),
+                  const Row(
+                    children: [
+                      Icon(
+                        Icons.touch_app_outlined,
+                        size: 17,
+                        color: AppTheme.secondaryColor,
+                      ),
+                      SizedBox(width: 7),
+                      Expanded(
+                        child: Text(
+                          'After entering the PIN, keep this screen open '
+                          'while the network completes the transaction.',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
           ],
 
-          const Spacer(),
+          if (_showConfirmButton) ...[
+            const SizedBox(height: 18),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: context.isDarkMode
+                    ? const Color(0xFF172943)
+                    : const Color(0xFFEAF3FF),
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(
+                  color: const Color(0xFF6FA5E6).withOpacity(0.55),
+                ),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    'No final response has returned from the network yet. '
+                    'Confirm only after checking the result shown on your phone.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: context.appSecondaryText,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _confirmManually,
+                      icon: const Icon(Icons.fact_check_outlined),
+                      label: const Text('Confirm Transaction Result'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
 
-          Text(
-            'Do not close this screen',
-            style: TextStyle(color: context.appSecondaryText, fontSize: 12),
+          const SizedBox(height: 20),
+
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 17,
+                height: 17,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.4,
+                  color: isAwaitingPIN
+                      ? AppTheme.secondaryColor
+                      : AppTheme.primaryColor,
+                ),
+              ),
+              const SizedBox(width: 9),
+              Text(
+                'Keep AgentPro open until this finishes',
+                style: TextStyle(
+                  color: context.appSecondaryText,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
         ],
       ),
     );
