@@ -33,6 +33,7 @@ import '../../features/reports/personal_reports_screen.dart';
 import '../../features/transactions/personal_transaction_screen.dart' show kPersonalTransactionLabels;
 import '../../features/transactions/personal_transaction_history_screen.dart';
 import '../../features/ussd_settings/ussd_settings_screen.dart';
+import '../../features/ussd_settings/quick_action_customization_screen.dart';
 import '../../features/ussd_flows/ussd_flow_list_screen.dart';
 import '../../features/community/community_feed_screen.dart';
 import '../../features/shifts/close_shift_screen.dart';
@@ -151,10 +152,28 @@ class AppRouter {
         GoRoute(path: '/help-guide', builder: (_, __) => const HelpGuideScreen()),
         GoRoute(path: '/personal-home', builder: (_, __) => const PersonalDashboard()),
         GoRoute(path: '/personal-subscription', builder: (_, __) => const PersonalSubscriptionScreen()),
-        GoRoute(path: '/ussd-settings', builder: (_, __) => const UssdSettingsScreen()),
+        GoRoute(
+          path: '/ussd-settings',
+          builder: (_, __) => const UssdSettingsScreen(),
+        ),
         GoRoute(
           path: '/personal-ussd-settings',
-          builder: (_, __) => UssdSettingsScreen(transactionTypes: kPersonalTransactionLabels.keys.toList()),
+          builder: (_, __) => UssdSettingsScreen(
+            transactionTypes: kPersonalTransactionLabels.keys.toList(),
+            isPersonal: true,
+          ),
+        ),
+        GoRoute(
+          path: '/agent-quick-actions',
+          builder: (_, __) => const QuickActionCustomizationScreen(
+            isPersonal: false,
+          ),
+        ),
+        GoRoute(
+          path: '/personal-quick-actions',
+          builder: (_, __) => const QuickActionCustomizationScreen(
+            isPersonal: true,
+          ),
         ),
         GoRoute(path: '/ussd-flows', builder: (_, __) => const UssdFlowListScreen()),
         GoRoute(path: '/personal-ussd-flows', builder: (_, __) => const UssdFlowListScreen(isPersonal: true)),

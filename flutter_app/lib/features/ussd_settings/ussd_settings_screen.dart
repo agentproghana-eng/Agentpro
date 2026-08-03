@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 import "package:flutter_bloc/flutter_bloc.dart";
+import "package:go_router/go_router.dart";
 import "../../core/api/api_client.dart";
 import "../../core/auth/auth_bloc.dart";
 import "../../shared/theme/app_theme.dart";
@@ -12,7 +13,13 @@ class UssdSettingsScreen extends StatefulWidget {
   // to the Agent list when not provided, so nothing changes for the
   // existing Agent route.
   final List<String>? transactionTypes;
-  const UssdSettingsScreen({super.key, this.transactionTypes});
+  final bool isPersonal;
+
+  const UssdSettingsScreen({
+    super.key,
+    this.transactionTypes,
+    this.isPersonal = false,
+  });
 
   @override
   State<UssdSettingsScreen> createState() => _UssdSettingsScreenState();
@@ -187,6 +194,44 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
                 : const Text("Save Operator ID"),
           ),
         ],
+        const SizedBox(height: 18),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: context.appSurface,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "${widget.isPersonal ? "Personal" : "Agent"} Quick Actions",
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                "Choose and reorder up to 9 dashboard actions in a 3×3 grid.",
+                style: TextStyle(
+                  fontSize: 10.5,
+                  color: context.appSecondaryText,
+                ),
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: () => context.push(
+                  widget.isPersonal
+                      ? "/personal-quick-actions"
+                      : "/agent-quick-actions",
+                ),
+                icon: const Icon(Icons.grid_view_outlined),
+                label: const Text("Customize Quick Actions"),
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: 16),
         const Text("Transaction Type", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
         const SizedBox(height: 8),
