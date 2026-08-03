@@ -11,10 +11,49 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../core/services/offline_queue_service.dart';
 import '../../core/services/sim_card_service.dart';
 
+class AgentTelecelBundleOption {
+  final String label;
+  final String digit;
+  final double amount;
+
+  const AgentTelecelBundleOption({
+    required this.label,
+    required this.digit,
+    required this.amount,
+  });
+}
+
+const List<AgentTelecelBundleOption> kAgentTelecelBundles = [
+  AgentTelecelBundleOption(
+    label: '1GB + 200 All-Net mins — GHS 10 — 15 days',
+    digit: '1',
+    amount: 10,
+  ),
+  AgentTelecelBundleOption(
+    label: '200 All-Net Minutes — GHS 5 — 7 days',
+    digit: '2',
+    amount: 5,
+  ),
+  AgentTelecelBundleOption(
+    label: '1.5GB — GHS 5 — 3 days',
+    digit: '3',
+    amount: 5,
+  ),
+  AgentTelecelBundleOption(
+    label: '3.5GB — GHS 13 — 3 days',
+    digit: '4',
+    amount: 13,
+  ),
+];
+
 class TransactionScreen extends StatefulWidget {
   final String transactionType;
   final String? initialProvider;
-  const TransactionScreen({super.key, required this.transactionType, this.initialProvider});
+  const TransactionScreen({
+    super.key,
+    required this.transactionType,
+    this.initialProvider,
+  });
 
   @override
   State<TransactionScreen> createState() => _TransactionScreenState();
@@ -29,10 +68,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
   final _merchantIdCtrl = TextEditingController();
   final _feeCtrl = TextEditingController();
 
-  String _selectedProvider = 'mtn';  // overridden in initState if initialProvider is passed
+  String _selectedProvider =
+      'mtn'; // overridden in initState if initialProvider is passed
   bool _loading = false;
   bool _feeAutoCalculated = true;
   Map<String, SimCard?>? _simMap;
+  AgentTelecelBundleOption? _selectedTelecelBundle;
 
   @override
   void initState() {
@@ -57,7 +98,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
     });
   }
 
-  String get _title => transactionTypeLabel(widget.transactionType, _selectedProvider);
+  String get _title =>
+      transactionTypeLabel(widget.transactionType, _selectedProvider);
 
   bool get _needsRecipient => ['send_money'].contains(widget.transactionType);
   // Pay to Agent and Pay to Merchant (MTN's "Pay To" menu, both
@@ -67,14 +109,33 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // instead (_needsMerchantId). Neither uses a biller code or account
   // number - this fully replaces what used to be a biller-code-style
   // Bill Payment form. MTN-only for both.
-  bool get _needsReference => ['bill_payment', 'merchant_payment'].contains(widget.transactionType);
+  bool get _needsReference =>
+      ['bill_payment', 'merchant_payment'].contains(widget.transactionType);
   bool get _needsMerchantId => widget.transactionType == 'merchant_payment';
-  bool get _needsAmount => !['balance_enquiry', 'mini_statement', 'commission_balance', 'cash_in_commission'].contains(widget.transactionType);
+
+  bool get _isTelecelDataBundle =>
+      widget.transactionType == 'data_bundle' && _selectedProvider == 'telecel';
+
+  bool get _needsAmount =>
+      ![
+        'balance_enquiry',
+        'mini_statement',
+        'commission_balance',
+        'cash_in_commission',
+      ].contains(widget.transactionType) &&
+      !_isTelecelDataBundle;
   // Send Money only needs the recipient's number, and Pay to Merchant
   // only needs a Merchant ID - neither has a separate walk-in customer
   // phone field, unlike Cash In/Cash Out/Pay to Agent, where the agent
   // is entering a real person's phone in front of them.
-  bool get _needsCustomer => !['balance_enquiry', 'mini_statement', 'send_money', 'merchant_payment', 'commission_balance', 'cash_in_commission'].contains(widget.transactionType);
+  bool get _needsCustomer => ![
+    'balance_enquiry',
+    'mini_statement',
+    'send_money',
+    'merchant_payment',
+    'commission_balance',
+    'cash_in_commission',
+  ].contains(widget.transactionType);
   bool get _isSendMoney => widget.transactionType == 'send_money';
 
   // Telecel/AirtelTigo Cash Out: e-cash moves directly SIM-to-SIM,
@@ -83,7 +144,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // just a local var in _proceed()) so the UI can also reflect this -
   // showing the actual PIN/USSD security notice here would be actively
   // wrong, since no PIN entry or dialing ever happens in this flow.
-  bool get _isManualCashOut => widget.transactionType == "cash_out" &&
+  bool get _isManualCashOut =>
+      widget.transactionType == "cash_out" &&
       (_selectedProvider == "telecel" || _selectedProvider == "at_money");
 
   // Only shows provider tabs for SIMs actually present on the device.
@@ -91,8 +153,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // failed, so agents are never blocked. Never overrides the forced
   // MTN provider for Pay to Agent/Merchant, which hide the selector
   // entirely regardless of SIM presence.
-  List<String> get _availableProviders =>
-      _simMap == null ? ["mtn", "telecel", "at_money"] : _simMap!.entries.where((e) => e.value != null).map((e) => e.key).toList();
+  List<String> get _availableProviders => _simMap == null
+      ? ["mtn", "telecel", "at_money"]
+      : _simMap!.entries
+            .where((e) => e.value != null)
+            .map((e) => e.key)
+            .toList();
 
   Future<void> _loadSimMap() async {
     try {
@@ -114,6 +180,13 @@ class _TransactionScreenState extends State<TransactionScreen> {
   Future<void> _proceed() async {
     if (!_formKey.currentState!.validate()) return;
 
+    if (_isTelecelDataBundle && _selectedTelecelBundle == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select a Telecel data bundle')),
+      );
+      return;
+    }
+
     if (_isManualCashOut) {
       await _submitManualCashOut();
       return;
@@ -129,8 +202,14 @@ class _TransactionScreenState extends State<TransactionScreen> {
     // work offline.
     final connectivity = await Connectivity().checkConnectivity();
     final isOffline = connectivity.every((r) => r == ConnectivityResult.none);
-    final cachedTemplate = OfflineQueueService.getCachedTemplate(_selectedProvider, widget.transactionType);
-    final cachedFlow = OfflineQueueService.getCachedFlow(_selectedProvider, widget.transactionType);
+    final cachedTemplate = OfflineQueueService.getCachedTemplate(
+      _selectedProvider,
+      widget.transactionType,
+    );
+    final cachedFlow = OfflineQueueService.getCachedFlow(
+      _selectedProvider,
+      widget.transactionType,
+    );
 
     // MTN Cash In/Out/Send Money and Telecel Deposit never need a
     // cached template - their dial code and menu steps are hardcoded
@@ -139,13 +218,17 @@ class _TransactionScreenState extends State<TransactionScreen> {
     // run. Gating these on cachedTemplate != null would mean they can
     // never go offline at all. Only the custom Flow Builder path
     // genuinely needs a prior online run to learn its dial code.
-    final isAccessibilityHardcodedFlow = (_selectedProvider == "mtn" &&
+    final isAccessibilityHardcodedFlow =
+        (_selectedProvider == "mtn" &&
             (widget.transactionType == "cash_in" ||
                 widget.transactionType == "cash_out" ||
                 widget.transactionType == "send_money")) ||
         (_selectedProvider == "telecel" && widget.transactionType == "cash_in");
 
-    if (isOffline && (isAccessibilityHardcodedFlow || cachedTemplate != null || cachedFlow != null)) {
+    if (isOffline &&
+        (isAccessibilityHardcodedFlow ||
+            cachedTemplate != null ||
+            cachedFlow != null)) {
       final localId = "local_${DateTime.now().millisecondsSinceEpoch}";
       final requestFields = {
         "provider": _selectedProvider,
@@ -158,54 +241,73 @@ class _TransactionScreenState extends State<TransactionScreen> {
         "account_number": "",
         "payment_reference": _referenceCtrl.text.trim(),
         "merchant_id": _merchantIdCtrl.text.trim(),
-        "fee": _isSendMoney ? (double.tryParse(_feeCtrl.text.replaceAll(",", "")) ?? 0) : 0,
+        "fee": _isSendMoney
+            ? (double.tryParse(_feeCtrl.text.replaceAll(",", "")) ?? 0)
+            : 0,
         "notes": "",
         "sim_iccid": _simMap?[_selectedProvider]?.iccid ?? "",
         "sim_slot": _simMap?[_selectedProvider]?.slot,
       };
 
       if (!mounted) return;
-      context.push("/transactions/progress", extra: {
-        "transaction": {
-          "transaction_id": localId,
-          "reference": "OFFLINE-$localId",
-          "status": "initiated",
-          "ussd_template": cachedTemplate,
-          "automation_params": requestFields,
-          "cached_flow": cachedFlow,
+      context.push(
+        "/transactions/progress",
+        extra: {
+          "transaction": {
+            "transaction_id": localId,
+            "reference": "OFFLINE-$localId",
+            "status": "initiated",
+            "ussd_template": cachedTemplate,
+            "automation_params": requestFields,
+            "cached_flow": cachedFlow,
+          },
+          "provider": _selectedProvider,
+          "transaction_type": widget.transactionType,
+          "amount": _amountCtrl.text,
+          "customer_phone": _customerPhoneCtrl.text.trim(),
+          "customer_name": "",
+          "selections_in_order":
+              _isTelecelDataBundle && _selectedTelecelBundle != null
+              ? <String>[_selectedTelecelBundle!.digit]
+              : const <String>[],
+          "request_fields": requestFields,
         },
-        "provider": _selectedProvider,
-        "transaction_type": widget.transactionType,
-        "amount": _amountCtrl.text,
-        "customer_phone": _customerPhoneCtrl.text.trim(),
-        "customer_name": "",
-        "request_fields": requestFields,
-      });
+      );
       if (mounted) setState(() => _loading = false);
       return;
     }
 
     try {
-      final res = await ApiClient.instance.post('/transactions', data: {
-        'provider': _selectedProvider,
-        'transaction_type': widget.transactionType,
-        'amount': double.tryParse(_amountCtrl.text.replaceAll(',', '')) ?? 0,
-        'customer_phone': _customerPhoneCtrl.text.trim(),
-        'customer_name': '',
-        'recipient_phone': _recipientPhoneCtrl.text.trim(),
-        'biller_code': '',
-        'account_number': '',
-        'payment_reference': _referenceCtrl.text.trim(),
-        'merchant_id': _merchantIdCtrl.text.trim(),
-        'fee': _isSendMoney ? (double.tryParse(_feeCtrl.text.replaceAll(',', '')) ?? 0) : 0,
-        'notes': '',
-        'sim_iccid': _simMap?[_selectedProvider]?.iccid ?? '',
-        'sim_slot': _simMap?[_selectedProvider]?.slot,
-      });
+      final res = await ApiClient.instance.post(
+        '/transactions',
+        data: {
+          'provider': _selectedProvider,
+          'transaction_type': widget.transactionType,
+          'amount': double.tryParse(_amountCtrl.text.replaceAll(',', '')) ?? 0,
+          'customer_phone': _customerPhoneCtrl.text.trim(),
+          'customer_name': '',
+          'recipient_phone': _recipientPhoneCtrl.text.trim(),
+          'biller_code': '',
+          'account_number': '',
+          'payment_reference': _referenceCtrl.text.trim(),
+          'merchant_id': _merchantIdCtrl.text.trim(),
+          'fee': _isSendMoney
+              ? (double.tryParse(_feeCtrl.text.replaceAll(',', '')) ?? 0)
+              : 0,
+          'notes': '',
+          'sim_iccid': _simMap?[_selectedProvider]?.iccid ?? '',
+          'sim_slot': _simMap?[_selectedProvider]?.slot,
+        },
+      );
 
-      final template = res.data["data"]["ussd_template"] as Map<String, dynamic>?;
+      final template =
+          res.data["data"]["ussd_template"] as Map<String, dynamic>?;
       if (template != null) {
-        await OfflineQueueService.cacheTemplate(_selectedProvider, widget.transactionType, template);
+        await OfflineQueueService.cacheTemplate(
+          _selectedProvider,
+          widget.transactionType,
+          template,
+        );
       }
 
       // Also try to cache the Flow Builder resolve data - the create
@@ -216,28 +318,45 @@ class _TransactionScreenState extends State<TransactionScreen> {
       try {
         final flowRes = await ApiClient.instance.get(
           '/ussd-flows/resolve',
-          queryParameters: {'provider': _selectedProvider, 'transaction_type': widget.transactionType},
+          queryParameters: {
+            'provider': _selectedProvider,
+            'transaction_type': widget.transactionType,
+          },
         );
         final flowData = flowRes.data['data'] as Map<String, dynamic>;
-        await OfflineQueueService.cacheFlow(_selectedProvider, widget.transactionType, flowData);
+        await OfflineQueueService.cacheFlow(
+          _selectedProvider,
+          widget.transactionType,
+          flowData,
+        );
       } catch (_) {}
 
       if (!mounted) return;
-      context.push('/transactions/progress', extra: {
-        'transaction': res.data['data'],
-        'provider': _selectedProvider,
-        'transaction_type': widget.transactionType,
-        'amount': _amountCtrl.text,
-        'customer_phone': _customerPhoneCtrl.text.trim(),
-        'customer_name': '',
-      });
+      context.push(
+        '/transactions/progress',
+        extra: {
+          'transaction': res.data['data'],
+          'provider': _selectedProvider,
+          'transaction_type': widget.transactionType,
+          'amount': _amountCtrl.text,
+          'customer_phone': _customerPhoneCtrl.text.trim(),
+          'customer_name': '',
+          'selections_in_order':
+              _isTelecelDataBundle && _selectedTelecelBundle != null
+              ? <String>[_selectedTelecelBundle!.digit]
+              : const <String>[],
+        },
+      );
     } on DioException catch (e) {
-      final msg = e.response?.data?['message'] ??
+      final msg =
+          e.response?.data?['message'] ??
           (e.response == null && cachedTemplate == null
               ? "No internet, and this transaction type hasn't been completed online before, so offline mode isn't available for it yet. Connect to the internet, complete this transaction once, then it will work offline too."
               : 'Failed to initiate transaction');
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor),
+        );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -247,26 +366,35 @@ class _TransactionScreenState extends State<TransactionScreen> {
     final amount = double.tryParse(_amountCtrl.text.replaceAll(",", ""));
     if (amount == null || amount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Enter the cash amount given to the customer")));
+        const SnackBar(
+          content: Text("Enter the cash amount given to the customer"),
+        ),
+      );
       return;
     }
     setState(() => _loading = true);
     try {
-      await ApiClient.instance.post("/balances/cash-out-manual", data: {
-        "provider": _selectedProvider,
-        "amount": amount,
-        "reference": _customerPhoneCtrl.text.trim(),
-        "notes": "Manual Cash Out",
-      });
+      await ApiClient.instance.post(
+        "/balances/cash-out-manual",
+        data: {
+          "provider": _selectedProvider,
+          "amount": amount,
+          "reference": _customerPhoneCtrl.text.trim(),
+          "notes": "Manual Cash Out",
+        },
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Cash Out recorded successfully")));
+          const SnackBar(content: Text("Cash Out recorded successfully")),
+        );
         context.pop();
       }
     } on DioException catch (e) {
       final msg = e.response?.data?["message"] ?? "Failed to record Cash Out";
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor),
+        );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -286,13 +414,20 @@ class _TransactionScreenState extends State<TransactionScreen> {
               // Provider Selector - hidden for Pay to Agent and Pay to
               // Merchant, both confirmed MTN-only.
               if (!_needsReference) ...[
-                const Text('Select Network', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                const Text(
+                  'Select Network',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                ),
                 const SizedBox(height: 8),
                 Row(
                   children: _availableProviders.map((p) {
                     final selected = _selectedProvider == p;
                     final color = AppTheme.providerColor(p);
-                    final label = {'mtn': 'MTN MoMo', 'telecel': 'Telecel Cash', 'at_money': 'AT Money'}[p]!;
+                    final label = {
+                      'mtn': 'MTN MoMo',
+                      'telecel': 'Telecel Cash',
+                      'at_money': 'AT Money',
+                    }[p]!;
                     return Expanded(
                       child: GestureDetector(
                         onTap: () => setState(() => _selectedProvider = p),
@@ -301,21 +436,34 @@ class _TransactionScreenState extends State<TransactionScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 10),
                           decoration: BoxDecoration(
                             color: selected ? color : context.appSurface,
-                            border: Border.all(color: selected ? color : context.appDivider),
+                            border: Border.all(
+                              color: selected ? color : context.appDivider,
+                            ),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Column(
                             children: [
-                              Icon(Icons.phone_android,
-                                color: selected ? (p == 'mtn' ? Colors.black : Colors.white) : color,
-                                size: 20),
+                              Icon(
+                                Icons.phone_android,
+                                color: selected
+                                    ? (p == 'mtn' ? Colors.black : Colors.white)
+                                    : color,
+                                size: 20,
+                              ),
                               const SizedBox(height: 4),
-                              Text(label,
+                              Text(
+                                label,
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
-                                  fontSize: 10, fontWeight: FontWeight.w600,
-                                  color: selected ? (p == 'mtn' ? Colors.black : Colors.white) : context.appSecondaryText,
-                                )),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: selected
+                                      ? (p == 'mtn'
+                                            ? Colors.black
+                                            : Colors.white)
+                                      : context.appSecondaryText,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -332,7 +480,41 @@ class _TransactionScreenState extends State<TransactionScreen> {
                   controller: _merchantIdCtrl,
                   label: 'Merchant ID',
                   prefixIcon: Icons.storefront_outlined,
-                  validator: (v) => v!.isEmpty ? 'Merchant ID is required' : null,
+                  validator: (v) =>
+                      v!.isEmpty ? 'Merchant ID is required' : null,
+                ),
+                const SizedBox(height: 14),
+              ],
+
+              if (_isTelecelDataBundle) ...[
+                DropdownButtonFormField<AgentTelecelBundleOption>(
+                  value: _selectedTelecelBundle,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Select Data Bundle',
+                    prefixIcon: Icon(Icons.data_usage_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                  items: kAgentTelecelBundles
+                      .map(
+                        (bundle) => DropdownMenuItem(
+                          value: bundle,
+                          child: Text(
+                            bundle.label,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (bundle) {
+                    setState(() {
+                      _selectedTelecelBundle = bundle;
+                      _amountCtrl.text =
+                          bundle?.amount.toStringAsFixed(2) ?? '';
+                    });
+                  },
+                  validator: (bundle) =>
+                      bundle == null ? 'Select a data bundle' : null,
                 ),
                 const SizedBox(height: 14),
               ],
@@ -344,11 +526,14 @@ class _TransactionScreenState extends State<TransactionScreen> {
               if (_needsCustomer) ...[
                 AppTextField(
                   controller: _customerPhoneCtrl,
-                  label: _needsReference ? 'Enter Number' : 'Customer Phone Number',
+                  label: _needsReference
+                      ? 'Enter Number'
+                      : 'Customer Phone Number',
                   hint: '024XXXXXXX',
                   keyboardType: TextInputType.phone,
                   prefixIcon: Icons.phone_outlined,
-                  validator: (v) => v!.isEmpty ? 'Phone number is required' : null,
+                  validator: (v) =>
+                      v!.isEmpty ? 'Phone number is required' : null,
                 ),
                 const SizedBox(height: 14),
               ],
@@ -361,7 +546,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
                   hint: '024XXXXXXX',
                   keyboardType: TextInputType.phone,
                   prefixIcon: Icons.person_add_outlined,
-                  validator: (v) => v!.isEmpty ? 'Recipient phone is required' : null,
+                  validator: (v) =>
+                      v!.isEmpty ? 'Recipient phone is required' : null,
                 ),
                 const SizedBox(height: 14),
               ],
@@ -381,18 +567,27 @@ class _TransactionScreenState extends State<TransactionScreen> {
               if (_needsAmount) ...[
                 TextFormField(
                   controller: _amountCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  ],
                   decoration: InputDecoration(
                     labelText: 'Amount (GH₵)',
                     hintText: '0.00',
                     prefixIcon: const Icon(Icons.monetization_on_outlined),
                     prefixText: 'GH₵  ',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     filled: true,
                     fillColor: context.appSurface,
                   ),
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
                   validator: (v) {
                     if (v!.isEmpty) return 'Amount is required';
                     final n = double.tryParse(v);
@@ -410,14 +605,20 @@ class _TransactionScreenState extends State<TransactionScreen> {
               if (_isSendMoney) ...[
                 TextFormField(
                   controller: _feeCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  ],
                   decoration: InputDecoration(
                     labelText: 'Transfer Charge (GH₵)',
                     hintText: '0.00',
                     prefixIcon: const Icon(Icons.receipt_long_outlined),
                     prefixText: 'GH₵  ',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     filled: true,
                     fillColor: context.appSurface,
                     helperText: 'Auto-calculated at 1% - editable',
@@ -443,18 +644,35 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: context.isDarkMode ? const Color(0xFF3D2E1A) : Colors.orange[50],
+                    color: context.isDarkMode
+                        ? const Color(0xFF3D2E1A)
+                        : Colors.orange[50],
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: context.isDarkMode ? const Color(0xFF8F6A3A) : Colors.orange[200]!),
+                    border: Border.all(
+                      color: context.isDarkMode
+                          ? const Color(0xFF8F6A3A)
+                          : Colors.orange[200]!,
+                    ),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.info_outline, color: context.isDarkMode ? Colors.orange[200] : Colors.orange, size: 18),
+                      Icon(
+                        Icons.info_outline,
+                        color: context.isDarkMode
+                            ? Colors.orange[200]
+                            : Colors.orange,
+                        size: 18,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'No dialing needed. The customer already sent this amount directly to your line. Confirm the details, then hand over the equivalent cash.',
-                          style: TextStyle(fontSize: 12, color: context.isDarkMode ? Colors.orange[200] : Colors.orange[900]),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.isDarkMode
+                                ? Colors.orange[200]
+                                : Colors.orange[900],
+                          ),
                         ),
                       ),
                     ],
@@ -464,19 +682,36 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: context.isDarkMode ? Colors.blue[900]!.withOpacity(0.25) : Colors.blue[50],
+                    color: context.isDarkMode
+                        ? Colors.blue[900]!.withOpacity(0.25)
+                        : Colors.blue[50],
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: context.isDarkMode ? Colors.blue[700]! : Colors.blue[200]!),
+                    border: Border.all(
+                      color: context.isDarkMode
+                          ? Colors.blue[700]!
+                          : Colors.blue[200]!,
+                    ),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.security, color: context.isDarkMode ? Colors.blue[200] : Colors.blue, size: 18),
+                      Icon(
+                        Icons.security,
+                        color: context.isDarkMode
+                            ? Colors.blue[200]
+                            : Colors.blue,
+                        size: 18,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'You will enter your MoMo PIN only on the official network USSD screen. '
                           'Agent Pro Ghana never asks for your PIN.',
-                          style: TextStyle(fontSize: 12, color: context.isDarkMode ? Colors.blue[200] : Colors.blue[900]),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.isDarkMode
+                                ? Colors.blue[200]
+                                : Colors.blue[900],
+                          ),
                         ),
                       ),
                     ],
@@ -486,7 +721,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
               const SizedBox(height: 24),
 
               AppButton(
-                label: _isManualCashOut ? 'Record Cash Out' : 'Proceed to ${_needsAmount ? 'Confirm' : 'Execute'}',
+                label: _isManualCashOut
+                    ? 'Record Cash Out'
+                    : 'Proceed to ${_needsAmount ? 'Confirm' : 'Execute'}',
                 onPressed: _proceed,
                 isLoading: _loading,
                 icon: Icons.arrow_forward,
@@ -500,8 +737,14 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
   @override
   void dispose() {
-    for (final c in [_customerPhoneCtrl, _amountCtrl,
-        _recipientPhoneCtrl, _referenceCtrl, _merchantIdCtrl, _feeCtrl]) {
+    for (final c in [
+      _customerPhoneCtrl,
+      _amountCtrl,
+      _recipientPhoneCtrl,
+      _referenceCtrl,
+      _merchantIdCtrl,
+      _feeCtrl,
+    ]) {
       c.dispose();
     }
     super.dispose();

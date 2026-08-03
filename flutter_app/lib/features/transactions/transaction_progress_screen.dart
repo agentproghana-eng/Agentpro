@@ -12,6 +12,7 @@ import '../../shared/widgets/app_widgets.dart';
 import '../../core/services/offline_queue_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/auth/auth_bloc.dart';
+
 class TransactionProgressScreen extends StatefulWidget {
   final Map<String, dynamic> data;
   // Personal transactions reuse this entire screen (USSD dialing, step
@@ -21,10 +22,15 @@ class TransactionProgressScreen extends StatefulWidget {
   // buttons navigate (Personal doesn't have its own history/detail
   // screens yet, so those fall back to Personal Home for now).
   final bool isPersonal;
-  const TransactionProgressScreen({super.key, required this.data, this.isPersonal = false});
+  const TransactionProgressScreen({
+    super.key,
+    required this.data,
+    this.isPersonal = false,
+  });
 
   @override
-  State<TransactionProgressScreen> createState() => _TransactionProgressScreenState();
+  State<TransactionProgressScreen> createState() =>
+      _TransactionProgressScreenState();
 }
 
 class _TransactionProgressScreenState extends State<TransactionProgressScreen>
@@ -46,8 +52,10 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
   @override
   void initState() {
     super.initState();
-    _pulseCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))
-      ..repeat(reverse: true);
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
     _startUSSD();
   }
 
@@ -55,8 +63,10 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     final transaction = widget.data['transaction'] as Map<String, dynamic>;
     final template = transaction['ussd_template'] as Map<String, dynamic>?;
     final automationParams = Map<String, String>.from(
-      (transaction['automation_params'] as Map<String, dynamic>? ?? {})
-          .map((k, v) => MapEntry(k, v?.toString() ?? '')));
+      (transaction['automation_params'] as Map<String, dynamic>? ?? {}).map(
+        (k, v) => MapEntry(k, v?.toString() ?? ''),
+      ),
+    );
     final provider = widget.data['provider'] as String;
     final transactionId = transaction['transaction_id'] as String;
 
@@ -77,7 +87,11 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       if (mounted) setState(() => _simWarning = reason);
       await _reportResult(
         transactionId,
-        USSDResult(outcome: USSDStatus.failed, failureReason: reason, sessionLog: const []),
+        USSDResult(
+          outcome: USSDStatus.failed,
+          failureReason: reason,
+          sessionLog: const [],
+        ),
       );
       return;
     }
@@ -88,12 +102,17 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       if (mounted) {
         setState(() {
           _simWarning = reason;
-          _permissionPermanentlyDenied = permissionResult == PermissionResult.permanentlyDenied;
+          _permissionPermanentlyDenied =
+              permissionResult == PermissionResult.permanentlyDenied;
         });
       }
       await _reportResult(
         transactionId,
-        USSDResult(outcome: USSDStatus.failed, failureReason: reason, sessionLog: const []),
+        USSDResult(
+          outcome: USSDStatus.failed,
+          failureReason: reason,
+          sessionLog: const [],
+        ),
       );
       return;
     }
@@ -107,11 +126,16 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     try {
       final hasSim = await SimCardService.hasProviderSim(provider);
       if (!hasSim) {
-        final reason = 'No ${_providerLabel(provider)} SIM card was detected on this device.';
+        final reason =
+            'No ${_providerLabel(provider)} SIM card was detected on this device.';
         if (mounted) setState(() => _simWarning = reason);
         await _reportResult(
           transactionId,
-          USSDResult(outcome: USSDStatus.failed, failureReason: reason, sessionLog: const []),
+          USSDResult(
+            outcome: USSDStatus.failed,
+            failureReason: reason,
+            sessionLog: const [],
+          ),
         );
         return;
       }
@@ -129,7 +153,11 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       }
       await _reportResult(
         transactionId,
-        USSDResult(outcome: USSDStatus.failed, failureReason: reason, sessionLog: const []),
+        USSDResult(
+          outcome: USSDStatus.failed,
+          failureReason: reason,
+          sessionLog: const [],
+        ),
       );
       return;
     } catch (_) {
@@ -138,225 +166,287 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       simSlot = 0;
     }
 
-  // MTN Cash In/Out and Telecel Deposit cannot use single-dial USSD -
-  // confirmed via live testing that even a short concatenated dial
-  // string fails immediately on both gateways. Route through the
-  // Accessibility Service pilot instead. Telecel Cash Out ("Withdrawal")
-  // is deliberately NOT included here - it's a manual-entry transaction
-  // (money already moved peer-to-peer to the agent's SIM), never a
-  // USSD dial at all.
-  final transactionType = widget.data["transaction_type"] as String?;
-  final bundleCategory = widget.data["bundle_category"] as String?;
-  final recipientMode = widget.data["recipient_mode"] as String?;
-  final selectionsInOrder = (widget.data["selections_in_order"] as List?)?.cast<String>() ?? const [];
-  final isMtnAccessibilityFlow = provider == "mtn" && (transactionType == "cash_in" || transactionType == "cash_out" || transactionType == "send_money");
-  final isTelecelDepositFlow = provider == "telecel" && transactionType == "cash_in";
+    // MTN Cash In/Out and Telecel Deposit cannot use single-dial USSD -
+    // confirmed via live testing that even a short concatenated dial
+    // string fails immediately on both gateways. Route through the
+    // Accessibility Service pilot instead. Telecel Cash Out ("Withdrawal")
+    // is deliberately NOT included here - it's a manual-entry transaction
+    // (money already moved peer-to-peer to the agent's SIM), never a
+    // USSD dial at all.
+    final transactionType = widget.data["transaction_type"] as String?;
+    final bundleCategory = widget.data["bundle_category"] as String?;
+    final recipientMode = widget.data["recipient_mode"] as String?;
+    final selectionsInOrder =
+        (widget.data["selections_in_order"] as List?)?.cast<String>() ??
+        const [];
+    final isMtnAccessibilityFlow =
+        provider == "mtn" &&
+        (transactionType == "cash_in" ||
+            transactionType == "cash_out" ||
+            transactionType == "send_money");
+    final isTelecelDepositFlow =
+        provider == "telecel" && transactionType == "cash_in";
 
-  // Telecel Operator ID is only actually needed by flows whose steps
-  // include a send_operator_id action (Telecel Airtime, and the
-  // hardcoded Deposit flow) - fetched here unconditionally so it's
-  // available to pass along either way, but NOT blanket-required for
-  // every Telecel transaction the way this used to work. That
-  // blanket requirement blocked any other Telecel flow (e.g. Send
-  // Money Same Network) for any account that never set this
-  // Agent-only value, which a Personal account has no reason to have
-  // done. The actual requirement is enforced natively in
-  // UssdAccessibilityChannel.kt's needsOperatorId check, which knows
-  // the resolved flow's real steps at the point it matters - this
-  // layer doesn't need to duplicate that logic or guess in advance.
-  String? telecelOperatorId;
-  if (provider == "telecel") {
-    final authState = context.read<AuthBloc>().state;
-    telecelOperatorId = authState is AuthAuthenticated ? authState.user['telecel_operator_id'] as String? : null;
-  }
+    // Telecel Operator ID is only actually needed by flows whose steps
+    // include a send_operator_id action (Telecel Airtime, and the
+    // hardcoded Deposit flow) - fetched here unconditionally so it's
+    // available to pass along either way, but NOT blanket-required for
+    // every Telecel transaction the way this used to work. That
+    // blanket requirement blocked any other Telecel flow (e.g. Send
+    // Money Same Network) for any account that never set this
+    // Agent-only value, which a Personal account has no reason to have
+    // done. The actual requirement is enforced natively in
+    // UssdAccessibilityChannel.kt's needsOperatorId check, which knows
+    // the resolved flow's real steps at the point it matters - this
+    // layer doesn't need to duplicate that logic or guess in advance.
+    String? telecelOperatorId;
+    if (provider == "telecel") {
+      final authState = context.read<AuthBloc>().state;
+      telecelOperatorId = authState is AuthAuthenticated
+          ? authState.user['telecel_operator_id'] as String?
+          : null;
+    }
 
-  if (isMtnAccessibilityFlow || isTelecelDepositFlow) {
-    await _startAccessibilityAutomation(transactionId, automationParams, transactionType!, provider, telecelOperatorId, simSlot: simSlot);
-    return;
-  }
+    if (isMtnAccessibilityFlow || isTelecelDepositFlow) {
+      await _startAccessibilityAutomation(
+        transactionId,
+        automationParams,
+        transactionType!,
+        provider,
+        telecelOperatorId,
+        simSlot: simSlot,
+      );
+      return;
+    }
 
-  if (mounted) setState(() => _statusMessage = 'Looking up automation...');
+    if (mounted) setState(() => _statusMessage = 'Looking up automation...');
 
-  // Offline transactions carry their Flow Builder data pre-cached
-  // (from the last successful online run), since /ussd-flows/resolve
-  // itself needs connectivity and can't be called now. Use that
-  // directly instead of hitting the network.
-  final cachedFlow = transaction['cached_flow'] as Map<String, dynamic>?;
-  if (cachedFlow != null) {
-    final steps = (cachedFlow['steps'] as List).cast<Map<String, dynamic>>();
-    final successMarkers = (cachedFlow['success_markers'] as List?)?.cast<String>();
-    final failureMarkers = (cachedFlow['failure_markers'] as List?)?.cast<String>();
-    final dialCode = cachedFlow['dial_code'] as String;
+    // Offline transactions carry their Flow Builder data pre-cached
+    // (from the last successful online run), since /ussd-flows/resolve
+    // itself needs connectivity and can't be called now. Use that
+    // directly instead of hitting the network.
+    final cachedFlow = transaction['cached_flow'] as Map<String, dynamic>?;
+    if (cachedFlow != null) {
+      final steps = (cachedFlow['steps'] as List).cast<Map<String, dynamic>>();
+      final successMarkers = (cachedFlow['success_markers'] as List?)
+          ?.cast<String>();
+      final failureMarkers = (cachedFlow['failure_markers'] as List?)
+          ?.cast<String>();
+      final dialCode = cachedFlow['dial_code'] as String;
 
-    await _startAccessibilityAutomation(
-      transactionId, automationParams, transactionType!, provider, telecelOperatorId,
-      simSlot: simSlot,
-      dialCode: dialCode, steps: steps, successMarkers: successMarkers, failureMarkers: failureMarkers,
-    );
-    return;
-  }
+      final selectionsMap = <String, String>{};
+      if (selectionsInOrder.isNotEmpty) {
+        int selectionIndex = 0;
+        for (int stepIndex = 0; stepIndex < steps.length; stepIndex++) {
+          if (steps[stepIndex]['action'] == 'send_selection' &&
+              selectionIndex < selectionsInOrder.length) {
+            selectionsMap[stepIndex.toString()] =
+                selectionsInOrder[selectionIndex];
+            selectionIndex++;
+          }
+        }
+      }
 
-  // Not MTN/Telecel's hardcoded flows - check whether a custom USSD
-  // Flow Builder flow exists for this provider/transaction_type before
-  // falling back to the single-dial USSDEngine below. Silently falls
-  // through if none exists (404) or the lookup fails for any other
-  // reason - most provider/type combos simply aren't customized, which
-  // is the normal, expected case, not an error worth surfacing.
-  try {
-    final resolveRes = await ApiClient.instance.get(
-      '/ussd-flows/resolve',
-      queryParameters: {
+      await _startAccessibilityAutomation(
+        transactionId,
+        automationParams,
+        transactionType!,
+        provider,
+        telecelOperatorId,
+        simSlot: simSlot,
+        dialCode: dialCode,
+        steps: steps,
+        successMarkers: successMarkers,
+        failureMarkers: failureMarkers,
+        selections: selectionsMap.isEmpty ? null : selectionsMap,
+      );
+      return;
+    }
+
+    // Not MTN/Telecel's hardcoded flows - check whether a custom USSD
+    // Flow Builder flow exists for this provider/transaction_type before
+    // falling back to the single-dial USSDEngine below. Silently falls
+    // through if none exists (404) or the lookup fails for any other
+    // reason - most provider/type combos simply aren't customized, which
+    // is the normal, expected case, not an error worth surfacing.
+    try {
+      final resolveRes = await ApiClient.instance.get(
+        '/ussd-flows/resolve',
+        queryParameters: {
           'provider': provider,
           'transaction_type': transactionType,
           if (bundleCategory != null) 'bundle_category': bundleCategory,
           if (recipientMode != null) 'recipient_mode': recipientMode,
         },
-    );
-    final flowData = resolveRes.data['data'] as Map<String, dynamic>;
-    final steps = (flowData['steps'] as List).cast<Map<String, dynamic>>();
-    final successMarkers = (flowData['success_markers'] as List?)?.cast<String>();
-    final failureMarkers = (flowData['failure_markers'] as List?)?.cast<String>();
-    final dialCode = flowData['dial_code'] as String;
+      );
+      final flowData = resolveRes.data['data'] as Map<String, dynamic>;
+      final steps = (flowData['steps'] as List).cast<Map<String, dynamic>>();
+      final successMarkers = (flowData['success_markers'] as List?)
+          ?.cast<String>();
+      final failureMarkers = (flowData['failure_markers'] as List?)
+          ?.cast<String>();
+      final dialCode = flowData['dial_code'] as String;
       final selectionsMap = <String, String>{};
       if (selectionsInOrder.isNotEmpty) {
         int si = 0;
         for (int i = 0; i < steps.length; i++) {
-          if (steps[i]['action'] == 'send_selection' && si < selectionsInOrder.length) {
+          if (steps[i]['action'] == 'send_selection' &&
+              si < selectionsInOrder.length) {
             selectionsMap[i.toString()] = selectionsInOrder[si];
             si++;
           }
         }
       }
 
-    await _startAccessibilityAutomation(
-      transactionId, automationParams, transactionType!, provider, telecelOperatorId,
-      simSlot: simSlot,
-      dialCode: dialCode, steps: steps, successMarkers: successMarkers, failureMarkers: failureMarkers,
+      await _startAccessibilityAutomation(
+        transactionId,
+        automationParams,
+        transactionType!,
+        provider,
+        telecelOperatorId,
+        simSlot: simSlot,
+        dialCode: dialCode,
+        steps: steps,
+        successMarkers: successMarkers,
+        failureMarkers: failureMarkers,
         selections: selectionsMap.isEmpty ? null : selectionsMap,
-    );
-    return;
-  } on DioException catch (e) {
-    // 404 just means no custom flow exists for this combo - fall
-    // through to the single-dial path below, same as always. Any
-    // other error also falls through rather than blocking the
-    // transaction entirely on a lookup failure.
-  } catch (_) {
-    // Ignore and fall through to single-dial below.
-  }
-
-  // No cached flow, no online Flow Builder flow, and no legacy
-  // single-dial template either - there is genuinely nothing to
-  // automate with. Report a clear failure instead of force-unwrapping
-  // template into a null-check crash, which used to fail silently
-  // inside this async function with no error shown at all, leaving
-  // the screen frozen on "Processing..." forever.
-  if (template == null) {
-    const reason = 'No USSD automation is configured for this transaction type yet.';
-    if (mounted) setState(() => _simWarning = reason);
-    await _reportResult(
-      transactionId,
-      USSDResult(outcome: USSDStatus.failed, failureReason: reason, sessionLog: const []),
-    );
-    return;
-  }
-
-  final ussdTemplate = USSDTemplate.fromMap(template);
-  _engine = USSDEngine(
-    template: ussdTemplate,
-    automationParams: automationParams,
-    provider: provider,
-    simSlot: simSlot,
-  );
-
-  // Listen to progress stream — the new engine only reports status +
-  // message, no step counts, since there's no more multi-step loop
-  // (see ussd_service.dart for why: a single dial replaces navigation).
-  _engine!.progressStream.listen((progress) {
-    if (mounted) {
-      setState(() {
-        _status = progress.status;
-        _statusMessage = progress.message;
-        _maybeStartConfirmTimer(progress.status);
-      });
+      );
+      return;
+    } on DioException catch (e) {
+      // 404 just means no custom flow exists for this combo - fall
+      // through to the single-dial path below, same as always. Any
+      // other error also falls through rather than blocking the
+      // transaction entirely on a lookup failure.
+    } catch (_) {
+      // Ignore and fall through to single-dial below.
     }
-  });
 
-  // Execute USSD
-  final result = await _engine!.execute();
+    // No cached flow, no online Flow Builder flow, and no legacy
+    // single-dial template either - there is genuinely nothing to
+    // automate with. Report a clear failure instead of force-unwrapping
+    // template into a null-check crash, which used to fail silently
+    // inside this async function with no error shown at all, leaving
+    // the screen frozen on "Processing..." forever.
+    if (template == null) {
+      const reason =
+          'No USSD automation is configured for this transaction type yet.';
+      if (mounted) setState(() => _simWarning = reason);
+      await _reportResult(
+        transactionId,
+        USSDResult(
+          outcome: USSDStatus.failed,
+          failureReason: reason,
+          sessionLog: const [],
+        ),
+      );
+      return;
+    }
 
-  // Report result to backend
-  await _reportResult(transactionId, result);
-}
-
-Future<void> _startAccessibilityAutomation(
-  String transactionId,
-  Map<String, String> automationParams,
-  String transactionType,
-  String provider,
-  String? operatorId, {
-  required int simSlot,
-  String? dialCode,
-  List<Map<String, dynamic>>? steps,
-  List<String>? successMarkers,
-  List<String>? failureMarkers,
-  Map<String, String>? selections,
-}) async {
-  // MTN Send Money uses the exact same Cash In USSD menu action as
-  // Cash In itself (confirmed via live device testing - same menu
-  // digit "3", same prompts, same receipt wording). The native layer
-  // only knows cash_in/cash_out branches, so translate at this
-  // boundary rather than teaching Kotlin a third transaction type it
-  // would handle identically anyway. The one real difference is WHICH
-  // phone number gets credited - the recipient's, not the customer's.
-  final nativeTransactionType = (provider == "mtn" && transactionType == "send_money") ? "cash_in" : transactionType;
-  final phoneForAutomation = (transactionType == "send_money")
-      ? (automationParams["recipient_phone"] ?? "")
-      : (automationParams["customer_phone"] ?? "");
-
-  final accessEngine = UssdAccessibilityEngine();
-
-  final enabled = await accessEngine.isServiceEnabled();
-  if (!enabled) {
-    const reason = "Accessibility permission is required for automated "
-        "USSD transactions. Enable Agent Pro Ghana under Settings > "
-        "Accessibility, then try again.";
-    if (mounted) setState(() => _simWarning = reason);
-    await accessEngine.openAccessibilitySettings();
-    await _reportResult(
-      transactionId,
-      USSDResult(outcome: USSDStatus.failed, failureReason: reason, sessionLog: const []),
+    final ussdTemplate = USSDTemplate.fromMap(template);
+    _engine = USSDEngine(
+      template: ussdTemplate,
+      automationParams: automationParams,
+      provider: provider,
+      simSlot: simSlot,
     );
-    return;
+
+    // Listen to progress stream — the new engine only reports status +
+    // message, no step counts, since there's no more multi-step loop
+    // (see ussd_service.dart for why: a single dial replaces navigation).
+    _engine!.progressStream.listen((progress) {
+      if (mounted) {
+        setState(() {
+          _status = progress.status;
+          _statusMessage = progress.message;
+          _maybeStartConfirmTimer(progress.status);
+        });
+      }
+    });
+
+    // Execute USSD
+    final result = await _engine!.execute();
+
+    // Report result to backend
+    await _reportResult(transactionId, result);
   }
 
-  accessEngine.progressStream.listen((progress) {
-    if (mounted) {
-      setState(() {
-        _status = progress.status;
-        _statusMessage = progress.message;
-        _maybeStartConfirmTimer(progress.status);
-      });
+  Future<void> _startAccessibilityAutomation(
+    String transactionId,
+    Map<String, String> automationParams,
+    String transactionType,
+    String provider,
+    String? operatorId, {
+    required int simSlot,
+    String? dialCode,
+    List<Map<String, dynamic>>? steps,
+    List<String>? successMarkers,
+    List<String>? failureMarkers,
+    Map<String, String>? selections,
+  }) async {
+    // MTN Send Money uses the exact same Cash In USSD menu action as
+    // Cash In itself (confirmed via live device testing - same menu
+    // digit "3", same prompts, same receipt wording). The native layer
+    // only knows cash_in/cash_out branches, so translate at this
+    // boundary rather than teaching Kotlin a third transaction type it
+    // would handle identically anyway. The one real difference is WHICH
+    // phone number gets credited - the recipient's, not the customer's.
+    final nativeTransactionType =
+        (provider == "mtn" && transactionType == "send_money")
+        ? "cash_in"
+        : transactionType;
+    final phoneForAutomation = (transactionType == "send_money")
+        ? (automationParams["recipient_phone"] ?? "")
+        : (automationParams["customer_phone"] ?? "");
+
+    final accessEngine = UssdAccessibilityEngine();
+
+    final enabled = await accessEngine.isServiceEnabled();
+    if (!enabled) {
+      const reason =
+          "Accessibility permission is required for automated "
+          "USSD transactions. Enable Agent Pro Ghana under Settings > "
+          "Accessibility, then try again.";
+      if (mounted) setState(() => _simWarning = reason);
+      await accessEngine.openAccessibilitySettings();
+      await _reportResult(
+        transactionId,
+        USSDResult(
+          outcome: USSDStatus.failed,
+          failureReason: reason,
+          sessionLog: const [],
+        ),
+      );
+      return;
     }
-  });
 
-  final result = await accessEngine.execute(
-    customerPhone: phoneForAutomation,
-    amount: automationParams["amount"] ?? "",
-    transactionType: nativeTransactionType,
-    provider: provider,
-    operatorId: operatorId,
-    reference: automationParams["payment_reference"],
-    merchantId: automationParams["merchant_id"],
-    simSlot: simSlot,
-    dialCode: dialCode,
-    steps: steps,
-    successMarkers: successMarkers,
-    failureMarkers: failureMarkers,
-  );
+    accessEngine.progressStream.listen((progress) {
+      if (mounted) {
+        setState(() {
+          _status = progress.status;
+          _statusMessage = progress.message;
+          _maybeStartConfirmTimer(progress.status);
+        });
+      }
+    });
 
-  accessEngine.dispose();
-  await _reportResult(transactionId, result);
-}
+    final result = await accessEngine.execute(
+      customerPhone: phoneForAutomation,
+      amount: automationParams["amount"] ?? "",
+      transactionType: nativeTransactionType,
+      provider: provider,
+      operatorId: operatorId,
+      reference: automationParams["payment_reference"],
+      merchantId: automationParams["merchant_id"],
+      simSlot: simSlot,
+      dialCode: dialCode,
+      steps: steps,
+      successMarkers: successMarkers,
+      failureMarkers: failureMarkers,
+    );
+
+    accessEngine.dispose();
+    await _reportResult(transactionId, result);
+  }
 
   String _providerLabel(String provider) => switch (provider) {
     'mtn' => 'MTN',
@@ -405,7 +495,9 @@ Future<void> _startAccessibilityAutomation(
       transactionId,
       USSDResult(
         outcome: outcome,
-        failureReason: outcome == USSDStatus.failed ? "Manually confirmed as failed by agent" : null,
+        failureReason: outcome == USSDStatus.failed
+            ? "Manually confirmed as failed by agent"
+            : null,
         sessionLog: const [],
       ),
     );
@@ -427,7 +519,9 @@ Future<void> _startAccessibilityAutomation(
     // happened but the app has no connectivity to report it. Queue it
     // for sync instead of calling the real API, which would just fail.
     if (transactionId.startsWith("local_")) {
-      final requestFields = Map<String, dynamic>.from(widget.data["request_fields"] as Map);
+      final requestFields = Map<String, dynamic>.from(
+        widget.data["request_fields"] as Map,
+      );
       await OfflineQueueService.queueTransaction(
         requestFields: requestFields,
         status: statusString,
@@ -502,8 +596,10 @@ Future<void> _startAccessibilityAutomation(
         setState(() {
           _completed = true;
           _outcome = result.outcome;
-          _failureReason = result.failureReason ??
-              (e.response?.data?['message'] as String? ?? 'Could not sync with server');
+          _failureReason =
+              result.failureReason ??
+              (e.response?.data?['message'] as String? ??
+                  'Could not sync with server');
         });
       }
     }
@@ -537,17 +633,24 @@ Future<void> _startAccessibilityAutomation(
           AnimatedBuilder(
             animation: _pulseCtrl,
             builder: (_, __) => Container(
-              width: 100, height: 100,
+              width: 100,
+              height: 100,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: isAwaitingPIN
-                    ? AppTheme.secondaryColor.withOpacity(0.1 + _pulseCtrl.value * 0.2)
-                    : AppTheme.primaryColor.withOpacity(0.1 + _pulseCtrl.value * 0.15),
+                    ? AppTheme.secondaryColor.withOpacity(
+                        0.1 + _pulseCtrl.value * 0.2,
+                      )
+                    : AppTheme.primaryColor.withOpacity(
+                        0.1 + _pulseCtrl.value * 0.15,
+                      ),
               ),
               child: Icon(
                 isAwaitingPIN ? Icons.lock_outline : Icons.swap_horiz,
                 size: 44,
-                color: isAwaitingPIN ? AppTheme.secondaryColor : AppTheme.primaryColor,
+                color: isAwaitingPIN
+                    ? AppTheme.secondaryColor
+                    : AppTheme.primaryColor,
               ),
             ),
           ),
@@ -556,7 +659,9 @@ Future<void> _startAccessibilityAutomation(
 
           Text(
             isAwaitingPIN ? 'PIN Entry Required' : 'Processing...',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
           ),
 
           const SizedBox(height: 8),
@@ -578,20 +683,39 @@ Future<void> _startAccessibilityAutomation(
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: context.isDarkMode ? const Color(0xFF332B15) : Colors.amber[50],
+                color: context.isDarkMode
+                    ? const Color(0xFF332B15)
+                    : Colors.amber[50],
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: context.isDarkMode ? const Color(0xFF7A6A2E) : Colors.amber[300]!),
+                border: Border.all(
+                  color: context.isDarkMode
+                      ? const Color(0xFF7A6A2E)
+                      : Colors.amber[300]!,
+                ),
               ),
               child: DefaultTextStyle.merge(
-                style: TextStyle(color: context.isDarkMode ? AppTheme.secondaryColor : const Color(0xFF7A5B00)),
+                style: TextStyle(
+                  color: context.isDarkMode
+                      ? AppTheme.secondaryColor
+                      : const Color(0xFF7A5B00),
+                ),
                 child: Column(
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.security, color: context.isDarkMode ? AppTheme.secondaryColor : Colors.amber[800]),
+                        Icon(
+                          Icons.security,
+                          color: context.isDarkMode
+                              ? AppTheme.secondaryColor
+                              : Colors.amber[800],
+                        ),
                         const SizedBox(width: 8),
-                        const Expanded(child: Text('Enter PIN on Network Screen',
-                          style: TextStyle(fontWeight: FontWeight.bold))),
+                        const Expanded(
+                          child: Text(
+                            'Enter PIN on Network Screen',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -618,10 +742,13 @@ Future<void> _startAccessibilityAutomation(
           // step-by-step progress list, since there's no longer a fixed
           // sequence of app-driven steps to visualize (see ussd_service.dart).
           SizedBox(
-            width: 32, height: 32,
+            width: 32,
+            height: 32,
             child: CircularProgressIndicator(
               strokeWidth: 3,
-              color: isAwaitingPIN ? AppTheme.secondaryColor : AppTheme.primaryColor,
+              color: isAwaitingPIN
+                  ? AppTheme.secondaryColor
+                  : AppTheme.primaryColor,
             ),
           ),
 
@@ -630,9 +757,15 @@ Future<void> _startAccessibilityAutomation(
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: context.isDarkMode ? const Color(0xFF1A2B45) : Colors.blue[50],
+                color: context.isDarkMode
+                    ? const Color(0xFF1A2B45)
+                    : Colors.blue[50],
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: context.isDarkMode ? const Color(0xFF3A5B8F) : Colors.blue[200]!),
+                border: Border.all(
+                  color: context.isDarkMode
+                      ? const Color(0xFF3A5B8F)
+                      : Colors.blue[200]!,
+                ),
               ),
               child: Column(
                 children: [
@@ -640,7 +773,12 @@ Future<void> _startAccessibilityAutomation(
                     "Nothing back from the network yet. If you've already "
                     "seen a result on your phone, you can confirm it here.",
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 13, color: context.isDarkMode ? const Color(0xFF8FB8E8) : Colors.blue[900]),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: context.isDarkMode
+                          ? const Color(0xFF8FB8E8)
+                          : Colors.blue[900],
+                    ),
                   ),
                   const SizedBox(height: 12),
                   ElevatedButton(
@@ -654,7 +792,10 @@ Future<void> _startAccessibilityAutomation(
 
           const Spacer(),
 
-          Text('Do not close this screen', style: TextStyle(color: context.appSecondaryText, fontSize: 12)),
+          Text(
+            'Do not close this screen',
+            style: TextStyle(color: context.appSecondaryText, fontSize: 12),
+          ),
           const SizedBox(height: 16),
         ],
       ),
@@ -663,7 +804,8 @@ Future<void> _startAccessibilityAutomation(
 
   Widget _buildResult() {
     final amount = widget.data['amount']?.toString() ?? '';
-    final txType = widget.data['transaction_type']?.toString().replaceAll('_', ' ') ?? '';
+    final txType =
+        widget.data['transaction_type']?.toString().replaceAll('_', ' ') ?? '';
     final customerPhone = widget.data['customer_phone']?.toString() ?? '';
     final receiptUrl = _completedTransaction?['receipt_url'];
     final isSuccess = _outcome == USSDStatus.success;
@@ -671,8 +813,14 @@ Future<void> _startAccessibilityAutomation(
 
     final (icon, color) = switch (_outcome) {
       USSDStatus.success => (Icons.check_circle, AppTheme.successColor),
-      USSDStatus.pendingConfirmation => (Icons.help_outline, AppTheme.warningColor),
-      _ => (_simWarning != null ? Icons.sim_card_alert_outlined : Icons.cancel, AppTheme.errorColor),
+      USSDStatus.pendingConfirmation => (
+        Icons.help_outline,
+        AppTheme.warningColor,
+      ),
+      _ => (
+        _simWarning != null ? Icons.sim_card_alert_outlined : Icons.cancel,
+        AppTheme.errorColor,
+      ),
     };
 
     final title = switch (_outcome) {
@@ -690,8 +838,12 @@ Future<void> _startAccessibilityAutomation(
           // Result Icon
           Center(
             child: Container(
-              width: 100, height: 100,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: color.withOpacity(0.1)),
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color.withOpacity(0.1),
+              ),
               child: Icon(icon, size: 60, color: color),
             ),
           ),
@@ -709,51 +861,89 @@ Future<void> _startAccessibilityAutomation(
           const SizedBox(height: 8),
 
           if (isSuccess) ...[
-            Text('GH₵ $amount', textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              'GH₵ $amount',
+              textAlign: TextAlign.center,
+              style: Theme.of(
+                context,
+              ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 4),
-            Text(txType.toUpperCase(), textAlign: TextAlign.center,
-              style: TextStyle(color: context.appSecondaryText, letterSpacing: 1)),
+            Text(
+              txType.toUpperCase(),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: context.appSecondaryText,
+                letterSpacing: 1,
+              ),
+            ),
             if (customerPhone.isNotEmpty) ...[
               const SizedBox(height: 4),
-              Text(customerPhone, textAlign: TextAlign.center,
-                style: TextStyle(color: context.appSecondaryText)),
+              Text(
+                customerPhone,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: context.appSecondaryText),
+              ),
             ],
             if (_wasManuallyConfirmed) ...[
               const SizedBox(height: 8),
-              Text('Confirmed manually by agent', textAlign: TextAlign.center,
-                style: TextStyle(color: context.appSecondaryText, fontSize: 11, fontStyle: FontStyle.italic)),
+              Text(
+                'Confirmed manually by agent',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: context.appSecondaryText,
+                  fontSize: 11,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
             ],
           ] else if (isPending) ...[
-            Text('GH₵ $amount · ${txType.toUpperCase()}', textAlign: TextAlign.center,
-              style: TextStyle(color: context.appSecondaryText, fontWeight: FontWeight.w600)),
+            Text(
+              'GH₵ $amount · ${txType.toUpperCase()}',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: context.appSecondaryText,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: AppTheme.warningColor.withOpacity(0.08),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.warningColor.withOpacity(0.3)),
+                border: Border.all(
+                  color: AppTheme.warningColor.withOpacity(0.3),
+                ),
               ),
               child: Text(
                 _failureReason ??
                     'We could not confirm whether this transaction completed. '
-                    'Please check your transaction history or ask the customer '
-                    'before retrying — retrying a transaction that already '
-                    'succeeded could result in a duplicate charge.',
+                        'Please check your transaction history or ask the customer '
+                        'before retrying — retrying a transaction that already '
+                        'succeeded could result in a duplicate charge.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 13),
               ),
             ),
           ] else ...[
             const SizedBox(height: 8),
-            Text(_failureReason ?? 'The transaction could not be completed.',
+            Text(
+              _failureReason ?? 'The transaction could not be completed.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: context.appSecondaryText)),
+              style: TextStyle(color: context.appSecondaryText),
+            ),
             if (_wasManuallyConfirmed) ...[
               const SizedBox(height: 8),
-              Text('Confirmed manually by agent', textAlign: TextAlign.center,
-                style: TextStyle(color: context.appSecondaryText, fontSize: 11, fontStyle: FontStyle.italic)),
+              Text(
+                'Confirmed manually by agent',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: context.appSecondaryText,
+                  fontSize: 11,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
             ],
           ],
 
@@ -761,12 +951,18 @@ Future<void> _startAccessibilityAutomation(
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(8)),
+              decoration: BoxDecoration(
+                color: context.appSurface,
+                borderRadius: BorderRadius.circular(8),
+              ),
               child: Column(
                 children: [
                   _RefRow('Reference', _completedTransaction!['reference']),
                   if (_completedTransaction!['network_reference'] != null)
-                    _RefRow('Network Ref', _completedTransaction!['network_reference']),
+                    _RefRow(
+                      'Network Ref',
+                      _completedTransaction!['network_reference'],
+                    ),
                 ],
               ),
             ),
@@ -787,7 +983,9 @@ Future<void> _startAccessibilityAutomation(
             AppButton(
               label: 'View Receipt',
               icon: Icons.receipt_long_outlined,
-              onPressed: () { /* Open PDF */ },
+              onPressed: () {
+                /* Open PDF */
+              },
               outlined: true,
             ),
 
@@ -795,7 +993,9 @@ Future<void> _startAccessibilityAutomation(
             AppButton(
               label: 'Check Transaction History',
               icon: Icons.history,
-              onPressed: () => context.push(widget.isPersonal ? '/personal-home' : '/transactions'),
+              onPressed: () => context.push(
+                widget.isPersonal ? '/personal-home' : '/transactions',
+              ),
               outlined: true,
             ),
 
@@ -804,14 +1004,16 @@ Future<void> _startAccessibilityAutomation(
           AppButton(
             label: 'New Transaction',
             icon: Icons.add,
-            onPressed: () => context.go(widget.isPersonal ? '/personal-home' : '/agent'),
+            onPressed: () =>
+                context.go(widget.isPersonal ? '/personal-home' : '/agent'),
           ),
 
           const SizedBox(height: 12),
 
           if (!widget.isPersonal)
             TextButton(
-              onPressed: () => context.push('/transactions/${_completedTransaction?['id']}'),
+              onPressed: () =>
+                  context.push('/transactions/${_completedTransaction?['id']}'),
               child: const Text('View Transaction Details'),
             ),
         ],
@@ -838,9 +1040,15 @@ class _RefRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
-          Text(label, style: TextStyle(color: context.appSecondaryText, fontSize: 12)),
+          Text(
+            label,
+            style: TextStyle(color: context.appSecondaryText, fontSize: 12),
+          ),
           const Spacer(),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+          Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+          ),
         ],
       ),
     );
