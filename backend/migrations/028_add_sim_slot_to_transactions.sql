@@ -5,4 +5,4 @@
 -- identifier on the growing number of Android versions/devices that
 -- restrict ICCID access - weaker than ICCID (can't detect a swapped
 -- physical SIM in the same slot), but far more consistently available.
-ALTER TABLE transactions ADD COLUMN sim_slot INTEGER;
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sim_slot INTEGER;
