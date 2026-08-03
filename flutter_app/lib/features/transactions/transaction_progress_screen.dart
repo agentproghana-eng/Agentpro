@@ -1090,220 +1090,479 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     );
   }
 
+  String _resultTitleCase(String value) {
+    return value
+        .replaceAll('_', ' ')
+        .split(' ')
+        .where((part) => part.isNotEmpty)
+        .map(
+          (part) =>
+              '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}',
+        )
+        .join(' ');
+  }
+
+  String _resultTimeLabel() {
+    final now = DateTime.now();
+    final hour = now.hour == 0
+        ? 12
+        : now.hour > 12
+            ? now.hour - 12
+            : now.hour;
+    final minute = now.minute.toString().padLeft(2, '0');
+    final period = now.hour >= 12 ? 'PM' : 'AM';
+
+    return '${now.day.toString().padLeft(2, '0')}/'
+        '${now.month.toString().padLeft(2, '0')}/${now.year} · '
+        '$hour:$minute $period';
+  }
+
+  Widget _resultDetailRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    Color? valueColor,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 9),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor.withOpacity(0.09),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: Icon(
+              icon,
+              size: 18,
+              color: AppTheme.primaryColor,
+            ),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: context.appSecondaryText,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                SelectableText(
+                  value,
+                  style: TextStyle(
+                    color: valueColor,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _resultNotice({
+    required IconData icon,
+    required String title,
+    required String message,
+    required Color color,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: color.withOpacity(context.isDarkMode ? 0.13 : 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withOpacity(0.32)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 21),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            style: TextStyle(
+              height: 1.45,
+              fontSize: 12,
+              color: context.appSecondaryText,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _retryTransaction() {
+    final provider = widget.data['provider']?.toString() ?? 'mtn';
+    final type = widget.data['transaction_type']?.toString() ?? '';
+
+    if (widget.isPersonal) {
+      context.go(
+        Uri(
+          path: '/personal-transactions/new',
+          queryParameters: {
+            'type': type,
+            'provider': provider,
+          },
+        ).toString(),
+      );
+      return;
+    }
+
+    context.go('/transactions?type=$type&provider=$provider');
+  }
+
   Widget _buildResult() {
-    final amount = widget.data['amount']?.toString() ?? '';
-    final txType =
-        widget.data['transaction_type']?.toString().replaceAll('_', ' ') ?? '';
-    final customerPhone = widget.data['customer_phone']?.toString() ?? '';
-    final receiptUrl = _completedTransaction?['receipt_url'];
+    final rawAmount = widget.data['amount']?.toString() ?? '';
+    final parsedAmount =
+        double.tryParse(rawAmount.replaceAll(',', '').trim()) ?? 0;
+    final showAmount = parsedAmount > 0;
+
+    final rawType = widget.data['transaction_type']?.toString() ?? '';
+    final transactionType = _resultTitleCase(rawType);
+    final provider = widget.data['provider']?.toString() ?? '';
+    final providerLabel = _providerLabel(provider);
+    final customerPhone =
+        widget.data['customer_phone']?.toString().trim() ?? '';
+
+    final reference =
+        _completedTransaction?['reference']?.toString() ?? '';
+    final networkReference =
+        _completedTransaction?['network_reference']?.toString() ?? '';
+    final isOfflinePending =
+        _completedTransaction?['offline_pending_sync'] == true;
+    final transactionId =
+        _completedTransaction?['id']?.toString();
+
     final isSuccess = _outcome == USSDStatus.success;
     final isPending = _outcome == USSDStatus.pendingConfirmation;
 
-    final (icon, color) = switch (_outcome) {
-      USSDStatus.success => (Icons.check_circle, AppTheme.successColor),
-      USSDStatus.pendingConfirmation => (
-        Icons.help_outline,
-        AppTheme.warningColor,
-      ),
-      _ => (
-        _simWarning != null ? Icons.sim_card_alert_outlined : Icons.cancel,
-        AppTheme.errorColor,
-      ),
-    };
+    final Color statusColor;
+    final IconData statusIcon;
+    final String title;
+    final String subtitle;
 
-    final title = switch (_outcome) {
-      USSDStatus.success => 'Transaction Successful!',
-      USSDStatus.pendingConfirmation => 'Please Verify This Transaction',
-      _ => _simWarning != null ? 'SIM Card Required' : 'Transaction Failed',
-    };
+    if (isSuccess) {
+      statusColor = AppTheme.successColor;
+      statusIcon = Icons.check_circle_rounded;
+      title = 'Transaction Successful';
+      subtitle = 'The transaction was completed successfully.';
+    } else if (isPending) {
+      statusColor = AppTheme.warningColor;
+      statusIcon = Icons.help_rounded;
+      title = 'Result Needs Verification';
+      subtitle =
+          'The network did not return a final confirmation.';
+    } else if (_simWarning != null) {
+      statusColor = AppTheme.errorColor;
+      statusIcon = Icons.sim_card_alert_outlined;
+      title = 'SIM Card Required';
+      subtitle = 'The transaction could not be started.';
+    } else {
+      statusColor = AppTheme.errorColor;
+      statusIcon = Icons.cancel_rounded;
+      title = 'Transaction Failed';
+      subtitle = 'The transaction was not completed.';
+    }
 
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    return SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
         children: [
-          // Result Icon
-          Center(
-            child: Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: color.withOpacity(0.1),
+          Container(
+            padding: const EdgeInsets.fromLTRB(18, 24, 18, 20),
+            decoration: BoxDecoration(
+              color: context.appSurface,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: statusColor.withOpacity(0.22),
               ),
-              child: Icon(icon, size: 60, color: color),
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-
-          const SizedBox(height: 8),
-
-          if (isSuccess) ...[
-            Text(
-              'GH₵ $amount',
-              textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              txType.toUpperCase(),
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: context.appSecondaryText,
-                letterSpacing: 1,
-              ),
-            ),
-            if (customerPhone.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                customerPhone,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: context.appSecondaryText),
-              ),
-            ],
-            if (_wasManuallyConfirmed) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Confirmed manually by agent',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: context.appSecondaryText,
-                  fontSize: 11,
-                  fontStyle: FontStyle.italic,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.06),
+                  blurRadius: 14,
+                  offset: const Offset(0, 5),
                 ),
-              ),
-            ],
-          ] else if (isPending) ...[
-            Text(
-              'GH₵ $amount · ${txType.toUpperCase()}',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: context.appSecondaryText,
-                fontWeight: FontWeight.w600,
-              ),
+              ],
             ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppTheme.warningColor.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: AppTheme.warningColor.withOpacity(0.3),
+            child: Column(
+              children: [
+                Container(
+                  width: 88,
+                  height: 88,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: statusColor.withOpacity(0.11),
+                  ),
+                  child: Icon(
+                    statusIcon,
+                    size: 52,
+                    color: statusColor,
+                  ),
                 ),
-              ),
-              child: Text(
-                _failureReason ??
-                    'We could not confirm whether this transaction completed. '
-                        'Please check your transaction history or ask the customer '
-                        'before retrying — retrying a transaction that already '
-                        'succeeded could result in a duplicate charge.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 13),
-              ),
-            ),
-          ] else ...[
-            const SizedBox(height: 8),
-            Text(
-              _failureReason ?? 'The transaction could not be completed.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: context.appSecondaryText),
-            ),
-            if (_wasManuallyConfirmed) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Confirmed manually by agent',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: context.appSecondaryText,
-                  fontSize: 11,
-                  fontStyle: FontStyle.italic,
+                const SizedBox(height: 17),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: statusColor,
+                    fontSize: 21,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-              ),
-            ],
-          ],
-
-          if (_completedTransaction?['reference'] != null) ...[
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: context.appSurface,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                children: [
-                  _RefRow('Reference', _completedTransaction!['reference']),
-                  if (_completedTransaction!['network_reference'] != null)
-                    _RefRow(
-                      'Network Ref',
-                      _completedTransaction!['network_reference'],
+                const SizedBox(height: 6),
+                Text(
+                  subtitle,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: context.appSecondaryText,
+                    fontSize: 12,
+                  ),
+                ),
+                if (showAmount) ...[
+                  const SizedBox(height: 18),
+                  Text(
+                    'GH₵ ${parsedAmount.toStringAsFixed(2)}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 30,
+                      fontWeight: FontWeight.w900,
                     ),
+                  ),
                 ],
-              ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.09),
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  child: Text(
+                    transactionType.isEmpty
+                        ? 'Mobile Money Transaction'
+                        : transactionType,
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 18),
+
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 15,
+              vertical: 6,
+            ),
+            decoration: BoxDecoration(
+              color: context.appSurface,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              children: [
+                _resultDetailRow(
+                  icon: Icons.cell_tower_outlined,
+                  label: 'Provider',
+                  value: providerLabel,
+                ),
+                const Divider(height: 1),
+                _resultDetailRow(
+                  icon: Icons.swap_horiz_rounded,
+                  label: 'Transaction Type',
+                  value: transactionType.isEmpty
+                      ? 'Mobile Money Transaction'
+                      : transactionType,
+                ),
+                if (customerPhone.isNotEmpty) ...[
+                  const Divider(height: 1),
+                  _resultDetailRow(
+                    icon: Icons.phone_outlined,
+                    label: rawType == 'business_deposit' ||
+                            rawType == 'business_withdrawal'
+                        ? 'Agent Short Code'
+                        : 'Customer Number',
+                    value: customerPhone,
+                  ),
+                ],
+                if (reference.isNotEmpty) ...[
+                  const Divider(height: 1),
+                  _resultDetailRow(
+                    icon: Icons.tag,
+                    label: 'AgentPro Reference',
+                    value: reference,
+                  ),
+                ],
+                if (networkReference.isNotEmpty) ...[
+                  const Divider(height: 1),
+                  _resultDetailRow(
+                    icon: Icons.confirmation_number_outlined,
+                    label: 'Network Reference',
+                    value: networkReference,
+                  ),
+                ],
+                const Divider(height: 1),
+                _resultDetailRow(
+                  icon: Icons.schedule_outlined,
+                  label: 'Completed',
+                  value: _resultTimeLabel(),
+                ),
+              ],
+            ),
+          ),
+
+          if (_wasManuallyConfirmed) ...[
+            const SizedBox(height: 14),
+            _resultNotice(
+              icon: Icons.fact_check_outlined,
+              title: 'Manually confirmed',
+              message:
+                  'This result was confirmed manually after checking '
+                  'the network response.',
+              color: AppTheme.warningColor,
             ),
           ],
 
-          const SizedBox(height: 32),
+          if (isOfflinePending) ...[
+            const SizedBox(height: 14),
+            _resultNotice(
+              icon: Icons.cloud_upload_outlined,
+              title: 'Waiting to sync',
+              message:
+                  'The transaction result is saved safely on this device '
+                  'and will sync when internet access returns.',
+              color: AppTheme.primaryColor,
+            ),
+          ],
+
+          if (isPending) ...[
+            const SizedBox(height: 14),
+            _resultNotice(
+              icon: Icons.warning_amber_rounded,
+              title: 'Check before retrying',
+              message: _failureReason ??
+                  'Check the network message, customer balance, or '
+                      'transaction history before trying again. A retry '
+                      'could duplicate a transaction that already succeeded.',
+              color: AppTheme.warningColor,
+            ),
+          ] else if (!isSuccess) ...[
+            const SizedBox(height: 14),
+            _resultNotice(
+              icon: Icons.info_outline,
+              title: 'What happened',
+              message:
+                  _failureReason ?? 'The transaction could not be completed.',
+              color: AppTheme.errorColor,
+            ),
+          ],
+
+          const SizedBox(height: 22),
 
           if (_permissionPermanentlyDenied) ...[
             AppButton(
               label: 'Open App Settings',
               icon: Icons.settings_outlined,
-              onPressed: () => PermissionService.openSettings(),
+              onPressed: PermissionService.openSettings,
             ),
             const SizedBox(height: 12),
           ],
 
-          if (isSuccess && receiptUrl != null)
+          if (isSuccess) ...[
             AppButton(
-              label: 'View Receipt',
-              icon: Icons.receipt_long_outlined,
-              onPressed: () {
-                /* Open PDF */
-              },
-              outlined: true,
+              label: 'New Transaction',
+              icon: Icons.add_circle_outline,
+              onPressed: () => context.go(
+                widget.isPersonal ? '/personal-home' : '/agent',
+              ),
             ),
-
-          if (isPending)
+            const SizedBox(height: 12),
             AppButton(
-              label: 'Check Transaction History',
-              icon: Icons.history,
-              onPressed: () => context.push(
-                widget.isPersonal ? '/personal-home' : '/transactions',
+              label: 'Done',
+              icon: Icons.home_outlined,
+              onPressed: () => context.go(
+                widget.isPersonal ? '/personal-home' : '/agent',
               ),
               outlined: true,
             ),
-
-          const SizedBox(height: 12),
-
-          AppButton(
-            label: 'New Transaction',
-            icon: Icons.add,
-            onPressed: () =>
-                context.go(widget.isPersonal ? '/personal-home' : '/agent'),
-          ),
-
-          const SizedBox(height: 12),
-
-          if (!widget.isPersonal)
-            TextButton(
-              onPressed: () =>
-                  context.push('/transactions/${_completedTransaction?['id']}'),
-              child: const Text('View Transaction Details'),
+          ] else if (isPending) ...[
+            AppButton(
+              label: 'Check Transaction History',
+              icon: Icons.history,
+              onPressed: () => context.go(
+                widget.isPersonal ? '/personal-home' : '/transactions',
+              ),
             ),
+            const SizedBox(height: 12),
+            AppButton(
+              label: 'Go Home',
+              icon: Icons.home_outlined,
+              onPressed: () => context.go(
+                widget.isPersonal ? '/personal-home' : '/agent',
+              ),
+              outlined: true,
+            ),
+          ] else ...[
+            AppButton(
+              label: 'Try Again',
+              icon: Icons.refresh_rounded,
+              onPressed: _retryTransaction,
+            ),
+            const SizedBox(height: 12),
+            AppButton(
+              label: 'Go Home',
+              icon: Icons.home_outlined,
+              onPressed: () => context.go(
+                widget.isPersonal ? '/personal-home' : '/agent',
+              ),
+              outlined: true,
+            ),
+          ],
+
+          if (!widget.isPersonal &&
+              transactionId != null &&
+              transactionId.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: () =>
+                  context.push('/transactions/$transactionId'),
+              icon: const Icon(Icons.open_in_new, size: 17),
+              label: const Text('View Transaction Details'),
+            ),
+          ],
         ],
       ),
     );
