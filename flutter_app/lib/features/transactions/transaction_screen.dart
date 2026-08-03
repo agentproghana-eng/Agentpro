@@ -529,12 +529,18 @@ class _TransactionScreenState extends State<TransactionScreen> {
               if (_needsCustomer) ...[
                 AppTextField(
                   controller: _customerPhoneCtrl,
-                  label: widget.transactionType == 'business_deposit'
+                  label: [
+                        'business_deposit',
+                        'business_withdrawal',
+                      ].contains(widget.transactionType)
                       ? 'Agent Short Code'
                       : (_needsReference
                             ? 'Enter Number'
                             : 'Customer Phone Number'),
-                  hint: widget.transactionType == 'business_deposit'
+                  hint: [
+                        'business_deposit',
+                        'business_withdrawal',
+                      ].contains(widget.transactionType)
                       ? 'Enter agent short code'
                       : '024XXXXXXX',
                   keyboardType: TextInputType.phone,

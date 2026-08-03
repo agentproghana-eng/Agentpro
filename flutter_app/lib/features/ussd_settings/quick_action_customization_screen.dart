@@ -86,6 +86,11 @@ const List<QuickActionDefinition> kAgentQuickActionDefinitions = [
     label: 'Business Deposit',
     icon: Icons.business_outlined,
   ),
+  QuickActionDefinition(
+    type: 'business_withdrawal',
+    label: 'Business Withdrawal',
+    icon: Icons.account_balance_outlined,
+  ),
 ];
 
 const List<QuickActionDefinition> kPersonalQuickActionDefinitions = [
@@ -149,6 +154,7 @@ const Map<String, Set<String>> kAgentQuickActionSupport = {
     'cash_in',
     'cash_out',
     'business_deposit',
+    'business_withdrawal',
     'airtime',
     'data_bundle',
     'balance_enquiry',

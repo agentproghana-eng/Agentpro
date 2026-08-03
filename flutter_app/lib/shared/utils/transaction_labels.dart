@@ -26,6 +26,7 @@ String transactionTypeLabel(String type, String provider) {
     case 'working_to_float': return 'M-PESA to Float';
     case 'float_to_working': return 'Float to M-PESA';
     case 'business_deposit': return 'Business Deposit';
+    case 'business_withdrawal': return 'Business Withdrawal';
     default:
       if (type.isEmpty) return '';
       return type.replaceAll('_', ' ').split(' ')
