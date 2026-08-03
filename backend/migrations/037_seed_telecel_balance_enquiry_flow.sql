@@ -25,6 +25,11 @@ WHERE NOT EXISTS (
     AND company_id IS NULL
     AND owner_user_id IS NULL
     AND is_active=true
+)
+AND EXISTS (
+  SELECT 1
+  FROM users
+  WHERE role = 'superuser'
 );
 
 INSERT INTO ussd_flow_steps (
