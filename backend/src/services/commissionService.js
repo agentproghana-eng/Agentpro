@@ -53,10 +53,23 @@ async function getCommissionSummary(params) {
   if (from_date) { conditions.push(`c.calculated_at >= $${idx++}`); queryParams.push(from_date); }
   if (to_date) { conditions.push(`c.calculated_at <= $${idx++}`); queryParams.push(to_date); }
 
-  const joinTransactions = provider
+  const providers = provider
+    ? [...new Set(
+        String(provider)
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean)
+      )]
+    : [];
+
+  const joinTransactions = providers.length
     ? `LEFT JOIN transactions t ON c.transaction_id = t.id`
     : '';
-  if (provider) { conditions.push(`t.provider = $${idx++}`); queryParams.push(provider); }
+
+  if (providers.length) {
+    conditions.push(`t.provider::text = ANY($${idx++}::text[])`);
+    queryParams.push(providers);
+  }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 

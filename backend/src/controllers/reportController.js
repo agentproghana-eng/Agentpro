@@ -11,6 +11,18 @@ const { getCommissionSummary } = require('../services/commissionService');
 
 // ── Build transaction query with filters ──────────────────────
 
+function parseMultiValue(value) {
+  if (!value) return [];
+
+  const values = Array.isArray(value) ? value : String(value).split(',');
+
+  return [...new Set(
+    values
+      .map((item) => String(item).trim())
+      .filter(Boolean)
+  )];
+}
+
 async function fetchTransactions(filters, userContext) {
   const conditions = [];
   const params = [];
@@ -27,9 +39,24 @@ async function fetchTransactions(filters, userContext) {
 
   if (filters.branch_id) { conditions.push(`t.branch_id = $${idx++}`); params.push(filters.branch_id); }
   if (filters.agent_id) { conditions.push(`t.agent_id = $${idx++}`); params.push(filters.agent_id); }
-  if (filters.provider) { conditions.push(`t.provider = $${idx++}`); params.push(filters.provider); }
-  if (filters.transaction_type) { conditions.push(`t.transaction_type = $${idx++}`); params.push(filters.transaction_type); }
-  if (filters.status) { conditions.push(`t.status = $${idx++}`); params.push(filters.status); }
+  const providers = parseMultiValue(filters.provider);
+  const transactionTypes = parseMultiValue(filters.transaction_type);
+  const statuses = parseMultiValue(filters.status);
+
+  if (providers.length) {
+    conditions.push(`t.provider::text = ANY($${idx++}::text[])`);
+    params.push(providers);
+  }
+
+  if (transactionTypes.length) {
+    conditions.push(`t.transaction_type::text = ANY($${idx++}::text[])`);
+    params.push(transactionTypes);
+  }
+
+  if (statuses.length) {
+    conditions.push(`t.status::text = ANY($${idx++}::text[])`);
+    params.push(statuses);
+  }
   if (filters.sim_iccid) { conditions.push(`t.sim_iccid = $${idx++}`); params.push(filters.sim_iccid); }
   if (filters.from_date) { conditions.push(`t.created_at >= $${idx++}`); params.push(filters.from_date); }
   if (filters.to_date) { conditions.push(`t.created_at <= $${idx++}`); params.push(filters.to_date); }

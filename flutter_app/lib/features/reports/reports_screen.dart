@@ -36,9 +36,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
   List<SimCard> _simCards = [];
   String? _simIccidFilter;
 
-  String _typeFilter = 'all';
-  String _providerFilter = 'all';
-  String _statusFilter = 'all';
+  final Set<String> _typeFilters = {};
+  final Set<String> _providerFilters = {};
+  final Set<String> _statusFilters = {};
   String _sortBy = 'date';
   String _sortOrder = 'desc';
 
@@ -89,7 +89,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
   @override
   void initState() {
     super.initState();
-    final role = (context.read<AuthBloc>().state as AuthAuthenticated).user['role'];
+    final role =
+        (context.read<AuthBloc>().state as AuthAuthenticated).user['role'];
     _isAgent = role == 'agent';
     _loadBranches();
     _loadAgents();
@@ -99,7 +100,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Future<void> _loadBranches() async {
     // Only Owner/Manager have multiple branches to filter by - Agents
     // work a single branch and never see this dropdown at all.
-    final role = (context.read<AuthBloc>().state as AuthAuthenticated).user['role'];
+    final role =
+        (context.read<AuthBloc>().state as AuthAuthenticated).user['role'];
     if (role != 'business_owner' && role != 'manager') {
       setState(() => _loadingBranches = false);
       return;
@@ -121,13 +123,17 @@ class _ReportsScreenState extends State<ReportsScreen> {
   // reports are already scoped to themselves server-side regardless,
   // so picking a different agent would be meaningless for that role.
   Future<void> _loadAgents() async {
-    final role = (context.read<AuthBloc>().state as AuthAuthenticated).user['role'];
+    final role =
+        (context.read<AuthBloc>().state as AuthAuthenticated).user['role'];
     if (role != 'business_owner' && role != 'manager') {
       setState(() => _loadingAgents = false);
       return;
     }
     try {
-      final res = await ApiClient.instance.get('/users', queryParameters: {'role': 'agent', 'limit': 200});
+      final res = await ApiClient.instance.get(
+        '/users',
+        queryParameters: {'role': 'agent', 'limit': 200},
+      );
       if (mounted) {
         setState(() {
           _agents = res.data['data'] ?? [];
@@ -158,9 +164,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       setState(() {
         _simMap = map;
         _simCards = cards.where((c) => c.iccid.isNotEmpty).toList();
-        if (_providerFilter != 'all' && map[_providerFilter] == null) {
-          _providerFilter = 'all';
-        }
+        _providerFilters.removeWhere((provider) => map[provider] == null);
       });
     } catch (_) {
       // Permission denied or detection failed - leave _simMap null and
@@ -171,10 +175,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   String _simNetworkLabel(String network) {
     switch (network) {
-      case 'mtn': return 'MTN';
-      case 'telecel': return 'Telecel';
-      case 'at_money': return 'AT Money';
-      default: return 'SIM';
+      case 'mtn':
+        return 'MTN';
+      case 'telecel':
+        return 'Telecel';
+      case 'at_money':
+        return 'AT Money';
+      default:
+        return 'SIM';
     }
   }
 
@@ -184,60 +192,84 @@ class _ReportsScreenState extends State<ReportsScreen> {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheetState) => Padding(
           padding: const EdgeInsets.all(16),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            const Text('Sort By', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            for (final option in _sortOptions)
-              RadioListTile<String>(
-                value: option['value']!,
-                groupValue: tempSortBy,
-                title: Text(option['label']!),
-                onChanged: (v) => setSheetState(() => tempSortBy = v!),
-                activeColor: AppTheme.primaryColor,
-                dense: true,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Sort By',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
-            const SizedBox(height: 8),
-            const Text('Direction', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Row(children: [
-              Expanded(
-                child: ChoiceChip(
-                  label: const Text('Ascending'),
-                  selected: tempSortOrder == 'asc',
-                  onSelected: (_) => setSheetState(() => tempSortOrder = 'asc'),
-                  selectedColor: AppTheme.primaryColor.withOpacity(0.15),
+              const SizedBox(height: 4),
+              for (final option in _sortOptions)
+                RadioListTile<String>(
+                  value: option['value']!,
+                  groupValue: tempSortBy,
+                  title: Text(option['label']!),
+                  onChanged: (v) => setSheetState(() => tempSortBy = v!),
+                  activeColor: AppTheme.primaryColor,
+                  dense: true,
                 ),
+              const SizedBox(height: 8),
+              const Text(
+                'Direction',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: ChoiceChip(
-                  label: const Text('Descending'),
-                  selected: tempSortOrder == 'desc',
-                  onSelected: (_) => setSheetState(() => tempSortOrder = 'desc'),
-                  selectedColor: AppTheme.primaryColor.withOpacity(0.15),
-                ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: ChoiceChip(
+                      label: const Text('Ascending'),
+                      selected: tempSortOrder == 'asc',
+                      onSelected: (_) =>
+                          setSheetState(() => tempSortOrder = 'asc'),
+                      selectedColor: AppTheme.primaryColor.withOpacity(0.15),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ChoiceChip(
+                      label: const Text('Descending'),
+                      selected: tempSortOrder == 'desc',
+                      onSelected: (_) =>
+                          setSheetState(() => tempSortOrder = 'desc'),
+                      selectedColor: AppTheme.primaryColor.withOpacity(0.15),
+                    ),
+                  ),
+                ],
               ),
-            ]),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () {
-                setState(() { _sortBy = tempSortBy; _sortOrder = tempSortOrder; });
-                Navigator.pop(ctx);
-              },
-              child: const Text('Apply'),
-            ),
-          ]),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    _sortBy = tempSortBy;
+                    _sortOrder = tempSortOrder;
+                  });
+                  Navigator.pop(ctx);
+                },
+                child: const Text('Apply'),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   String _sortLabel() {
-    final labels = {'date': 'Date', 'amount': 'Amount', 'commission': 'Commission', 'fee': 'Charge'};
+    final labels = {
+      'date': 'Date',
+      'amount': 'Amount',
+      'commission': 'Commission',
+      'fee': 'Charge',
+    };
     final arrow = _sortOrder == 'asc' ? '↑' : '↓';
     return '${labels[_sortBy] ?? 'Date'} $arrow';
   }
@@ -253,9 +285,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
           'format': _format,
           if (_branchId != null) 'branch_id': _branchId,
           if (_agentId != null) 'agent_id': _agentId,
-          if (_providerFilter != 'all') 'provider': _providerFilter,
-          if (isTx && _typeFilter != 'all') 'transaction_type': _typeFilter,
-          if (isTx && _statusFilter != 'all') 'status': _statusFilter,
+          if (_providerFilters.isNotEmpty)
+            'provider': _providerFilters.join(','),
+          if (isTx && _typeFilters.isNotEmpty)
+            'transaction_type': _typeFilters.join(','),
+          if (isTx && _statusFilters.isNotEmpty)
+            'status': _statusFilters.join(','),
           if (isTx && _simIccidFilter != null) 'sim_iccid': _simIccidFilter,
           if (isTx) 'sort_by': _sortBy,
           if (isTx) 'sort_order': _sortOrder,
@@ -264,12 +299,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
       );
       final dir = await getTemporaryDirectory();
       final ext = _format == 'excel' ? 'xlsx' : _format;
-      final file = File('${dir.path}/${type}_${DateTime.now().millisecondsSinceEpoch}.$ext');
+      final file = File(
+        '${dir.path}/${type}_${DateTime.now().millisecondsSinceEpoch}.$ext',
+      );
       await file.writeAsBytes(res.data);
       await OpenFile.open(file.path);
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to generate report'), backgroundColor: AppTheme.errorColor));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to generate report'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -280,25 +322,115 @@ class _ReportsScreenState extends State<ReportsScreen> {
     child: Text(text, style: const TextStyle(fontWeight: FontWeight.w600)),
   );
 
-  Widget _chipRow(List<Map<String, String>> options, String current, void Function(String) onSelect) {
-    return Wrap(spacing: 8, runSpacing: 8, children: [
-      for (final opt in options)
-        ChoiceChip(
-          label: Text(opt['label']!),
-          selected: current == opt['value'],
-          onSelected: (_) => onSelect(opt['value']!),
-        ),
-    ]);
+  Widget _chipRow(
+    List<Map<String, String>> options,
+    String current,
+    void Function(String) onSelect,
+  ) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final opt in options)
+          ChoiceChip(
+            label: Text(opt['label']!),
+            selected: current == opt['value'],
+            onSelected: (_) => onSelect(opt['value']!),
+          ),
+      ],
+    );
+  }
+
+  Widget _multiChipRow(
+    List<Map<String, String>> options,
+    Set<String> selectedValues,
+  ) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final option in options)
+          Builder(
+            builder: (context) {
+              final value = option['value']!;
+              final isAll = value == 'all';
+              final isSelected = isAll
+                  ? selectedValues.isEmpty
+                  : selectedValues.contains(value);
+
+              return FilterChip(
+                label: Text(option['label']!),
+                selected: isSelected,
+                showCheckmark: true,
+                onSelected: (_) {
+                  setState(() {
+                    if (isAll) {
+                      selectedValues.clear();
+                      return;
+                    }
+
+                    if (!selectedValues.add(value)) {
+                      selectedValues.remove(value);
+                    }
+                  });
+                },
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  String _filterSummary() {
+    final parts = <String>[_period[0].toUpperCase() + _period.substring(1)];
+
+    if (_typeFilters.isNotEmpty) {
+      parts.add(
+        '${_typeFilters.length} '
+        '${_typeFilters.length == 1 ? 'type' : 'types'}',
+      );
+    }
+
+    if (_providerFilters.isNotEmpty) {
+      final labels = _providers
+          .where((provider) => _providerFilters.contains(provider['value']))
+          .map((provider) => provider['label']!)
+          .join(' + ');
+
+      if (labels.isNotEmpty) {
+        parts.add(labels);
+      }
+    }
+
+    if (_statusFilters.isNotEmpty) {
+      parts.add(
+        '${_statusFilters.length} '
+        '${_statusFilters.length == 1 ? 'status' : 'statuses'}',
+      );
+    }
+
+    return parts.join(' · ');
+  }
+
+  void _clearMultiFilters() {
+    setState(() {
+      _typeFilters.clear();
+      _providerFilters.clear();
+      _statusFilters.clear();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final showBranchPicker = !_loadingBranches && _branches.isNotEmpty;
     final showAgentPicker = !_loadingAgents && _agents.isNotEmpty;
-    final noSimsDetected = _isAgent && _simMap != null && _simMap!.values.every((v) => v == null);
+    final noSimsDetected =
+        _isAgent && _simMap != null && _simMap!.values.every((v) => v == null);
     final visibleProviders = _simMap == null
         ? _providers
-        : _providers.where((p) => p['value'] == 'all' || _simMap![p['value']] != null).toList();
+        : _providers
+              .where((p) => p['value'] == 'all' || _simMap![p['value']] != null)
+              .toList();
     final showSimFilter = _isAgent && _simCards.length >= 2;
 
     return Scaffold(
@@ -309,126 +441,220 @@ class _ReportsScreenState extends State<ReportsScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Card(child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                _sectionLabel('Period'),
-                Wrap(spacing: 8, children: [
-                  for (final p in ['today', 'week', 'month', 'year'])
-                    ChoiceChip(label: Text(p[0].toUpperCase() + p.substring(1)),
-                      selected: _period == p, onSelected: (_) => setState(() => _period = p)),
-                ]),
-                const SizedBox(height: 16),
-
-                _sectionLabel('Type'),
-                _chipRow(_types, _typeFilter, (v) => setState(() => _typeFilter = v)),
-                const SizedBox(height: 16),
-
-                _sectionLabel('Provider'),
-                if (noSimsDetected)
-                  Text('No SIM card detected. Insert a SIM to filter by provider.',
-                    style: TextStyle(fontSize: 12, color: context.appSecondaryText))
-                else
-                  _chipRow(visibleProviders, _providerFilter, (v) => setState(() => _providerFilter = v)),
-                const SizedBox(height: 16),
-
-                if (showSimFilter) ...[
-                  _sectionLabel('SIM'),
-                  _chipRow([
-                    {'value': 'all', 'label': 'All'},
-                    for (final c in _simCards)
-                      {'value': c.iccid, 'label': 'SIM ${c.slot + 1} · ${_simNetworkLabel(c.network)}'},
-                  ], _simIccidFilter ?? 'all', (v) => setState(() => _simIccidFilter = v == 'all' ? null : v)),
-                  const SizedBox(height: 16),
-                ],
-
-                _sectionLabel('Status'),
-                _chipRow(_statuses, _statusFilter, (v) => setState(() => _statusFilter = v)),
-                const SizedBox(height: 16),
-
-                if (showAgentPicker) ...[
-                  _sectionLabel('Agent'),
-                  DropdownButtonFormField<String?>(
-                    value: _agentId,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _sectionLabel('Period'),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        for (final p in ['today', 'week', 'month', 'year'])
+                          ChoiceChip(
+                            label: Text(p[0].toUpperCase() + p.substring(1)),
+                            selected: _period == p,
+                            onSelected: (_) => setState(() => _period = p),
+                          ),
+                      ],
                     ),
-                    hint: const Text('All Agents'),
-                    items: [
-                      const DropdownMenuItem<String?>(value: null, child: Text('All Agents')),
-                      for (final a in _agents)
-                        DropdownMenuItem<String?>(
-                          value: a['id'] as String,
-                          child: Text('${a['first_name'] ?? ''} ${a['last_name'] ?? ''}'.trim()),
+                    const SizedBox(height: 16),
+
+                    _sectionLabel('Type'),
+                    _multiChipRow(_types, _typeFilters),
+                    const SizedBox(height: 16),
+
+                    _sectionLabel('Provider'),
+                    if (noSimsDetected)
+                      Text(
+                        'No SIM card detected. Insert a SIM to filter by provider.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.appSecondaryText,
                         ),
-                    ],
-                    onChanged: (v) => setState(() => _agentId = v),
-                  ),
-                  const SizedBox(height: 16),
-                ],
+                      )
+                    else
+                      _multiChipRow(visibleProviders, _providerFilters),
+                    const SizedBox(height: 16),
 
-                if (showBranchPicker) ...[
-                  _sectionLabel('Branch'),
-                  DropdownButtonFormField<String?>(
-                    value: _branchId,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                    hint: const Text('All Branches'),
-                    items: [
-                      const DropdownMenuItem<String?>(value: null, child: Text('All Branches')),
-                      for (final b in _branches)
-                        DropdownMenuItem<String?>(value: b['id'] as String, child: Text(b['name'] ?? '')),
+                    if (showSimFilter) ...[
+                      _sectionLabel('SIM'),
+                      _chipRow(
+                        [
+                          {'value': 'all', 'label': 'All'},
+                          for (final c in _simCards)
+                            {
+                              'value': c.iccid,
+                              'label':
+                                  'SIM ${c.slot + 1} · ${_simNetworkLabel(c.network)}',
+                            },
+                        ],
+                        _simIccidFilter ?? 'all',
+                        (v) => setState(
+                          () => _simIccidFilter = v == 'all' ? null : v,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
                     ],
-                    onChanged: (v) => setState(() => _branchId = v),
-                  ),
-                  const SizedBox(height: 16),
-                ],
 
-                _sectionLabel('Sort'),
-                InkWell(
-                  onTap: _showSortSheet,
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                    _sectionLabel('Status'),
+                    _multiChipRow(_statuses, _statusFilters),
+                    const SizedBox(height: 16),
+
+                    if (showAgentPicker) ...[
+                      _sectionLabel('Agent'),
+                      DropdownButtonFormField<String?>(
+                        value: _agentId,
+                        decoration: InputDecoration(
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        hint: const Text('All Agents'),
+                        items: [
+                          const DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text('All Agents'),
+                          ),
+                          for (final a in _agents)
+                            DropdownMenuItem<String?>(
+                              value: a['id'] as String,
+                              child: Text(
+                                '${a['first_name'] ?? ''} ${a['last_name'] ?? ''}'
+                                    .trim(),
+                              ),
+                            ),
+                        ],
+                        onChanged: (v) => setState(() => _agentId = v),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    if (showBranchPicker) ...[
+                      _sectionLabel('Branch'),
+                      DropdownButtonFormField<String?>(
+                        value: _branchId,
+                        decoration: InputDecoration(
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        hint: const Text('All Branches'),
+                        items: [
+                          const DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text('All Branches'),
+                          ),
+                          for (final b in _branches)
+                            DropdownMenuItem<String?>(
+                              value: b['id'] as String,
+                              child: Text(b['name'] ?? ''),
+                            ),
+                        ],
+                        onChanged: (v) => setState(() => _branchId = v),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    _sectionLabel('Sort'),
+                    InkWell(
+                      onTap: _showSortSheet,
                       borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: Colors.grey.withOpacity(0.3),
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(_sortLabel()),
+                            const Icon(Icons.swap_vert, size: 18),
+                          ],
+                        ),
+                      ),
                     ),
-                    child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                      Text(_sortLabel()),
-                      const Icon(Icons.swap_vert, size: 18),
-                    ]),
+                    const SizedBox(height: 16),
+
+                    _sectionLabel('Format'),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        for (final f in ['pdf', 'excel', 'csv'])
+                          ChoiceChip(
+                            label: Text(f.toUpperCase()),
+                            selected: _format == f,
+                            onSelected: (_) => setState(() => _format = f),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _filterSummary(),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: context.appSecondaryText,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 16),
-
-                _sectionLabel('Format'),
-                Wrap(spacing: 8, children: [
-                  for (final f in ['pdf', 'excel', 'csv'])
-                    ChoiceChip(label: Text(f.toUpperCase()),
-                      selected: _format == f, onSelected: (_) => setState(() => _format = f)),
-                ]),
-              ]),
-            )),
-            const SizedBox(height: 12),
-            Text('Type, Status, SIM, and Sort apply to the Transaction Report only.',
-              style: TextStyle(fontSize: 11, color: context.appSecondaryText, fontStyle: FontStyle.italic)),
+                if (_typeFilters.isNotEmpty ||
+                    _providerFilters.isNotEmpty ||
+                    _statusFilters.isNotEmpty)
+                  TextButton(
+                    onPressed: _clearMultiFilters,
+                    child: const Text('Clear filters'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Type, Status, SIM, and Sort apply to the Transaction Report only.',
+              style: TextStyle(
+                fontSize: 11,
+                color: context.appSecondaryText,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
             const SizedBox(height: 12),
             const SectionHeader(title: 'AVAILABLE REPORTS'),
             const SizedBox(height: 8),
             _ReportTile(
-              icon: Icons.receipt_long_outlined, color: AppTheme.primaryColor,
-              title: 'Transaction Report', subtitle: 'All transactions with status and amounts',
+              icon: Icons.receipt_long_outlined,
+              color: AppTheme.primaryColor,
+              title: 'Transaction Report',
+              subtitle: 'All transactions with status and amounts',
               onTap: () => _download('transactions'),
             ),
             _ReportTile(
-              icon: Icons.payments_outlined, color: AppTheme.successColor,
-              title: 'Commission Report', subtitle: 'Gross, provider share, and net commission',
+              icon: Icons.payments_outlined,
+              color: AppTheme.successColor,
+              title: 'Commission Report',
+              subtitle: 'Gross, provider share, and net commission',
               onTap: () => _download('commissions'),
             ),
           ],
@@ -439,17 +665,33 @@ class _ReportsScreenState extends State<ReportsScreen> {
 }
 
 class _ReportTile extends StatelessWidget {
-  final IconData icon; final Color color;
-  final String title, subtitle; final VoidCallback onTap;
-  const _ReportTile({required this.icon, required this.color, required this.title, required this.subtitle, required this.onTap});
+  final IconData icon;
+  final Color color;
+  final String title, subtitle;
+  final VoidCallback onTap;
+  const _ReportTile({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
   @override
   Widget build(BuildContext context) {
-    return Card(child: ListTile(
-      leading: CircleAvatar(backgroundColor: color.withOpacity(0.1), child: Icon(icon, color: color)),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
-      trailing: const Icon(Icons.download_outlined, color: AppTheme.primaryColor),
-      onTap: onTap,
-    ));
+    return Card(
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: color.withOpacity(0.1),
+          child: Icon(icon, color: color),
+        ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+        trailing: const Icon(
+          Icons.download_outlined,
+          color: AppTheme.primaryColor,
+        ),
+        onTap: onTap,
+      ),
+    );
   }
 }
