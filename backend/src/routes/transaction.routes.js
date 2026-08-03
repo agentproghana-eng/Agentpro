@@ -26,6 +26,7 @@ router.post('/', [
   body('transaction_type').isIn([
     'cash_in', 'cash_out', 'send_money', 'merchant_payment',
     'commission_balance', 'cash_in_commission', 'commission_transfer',
+    'working_to_float', 'float_to_working',
     'bill_payment', 'airtime', 'data_bundle', 'balance_enquiry',
     'mini_statement', 'reversal'
   ]).withMessage('Invalid transaction type'),

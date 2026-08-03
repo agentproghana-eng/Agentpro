@@ -135,6 +135,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
     'merchant_payment',
     'commission_balance',
     'cash_in_commission',
+    'working_to_float',
+    'float_to_working',
+    'commission_transfer',
   ].contains(widget.transactionType);
   bool get _isSendMoney => widget.transactionType == 'send_money';
 

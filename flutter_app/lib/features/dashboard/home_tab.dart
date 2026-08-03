@@ -435,9 +435,11 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
       _tile(icon: Icons.call_received, label: "Deposit", bgColor: const Color(0xFFE6F4F1), iconColor: AppTheme.primaryColor, type: "cash_in", onTap: () => context.push("/transactions?type=cash_in&provider=telecel")),
       _tile(icon: Icons.call_made, label: "Withdrawal", bgColor: const Color(0xFFFDF3DC), iconColor: const Color(0xFFB87E00), type: "cash_out", onTap: () => context.push("/transactions?type=cash_out&provider=telecel")),
       _tile(icon: Icons.phone_android, label: "Airtime", bgColor: const Color(0xFFFFF7D6), iconColor: const Color(0xFFA6821A), type: "airtime", onTap: () => context.push("/transactions?type=airtime&provider=telecel")),
-      _QuickAction(icon: Icons.wifi, label: "Internet Data", bgColor: context.appTileColor(Colors.grey[200]!), iconColor: Colors.grey, onTap: () => comingSoon("Internet Data")),
-      _QuickAction(icon: Icons.account_balance_wallet, label: "Balance", bgColor: context.appTileColor(Colors.grey[200]!), iconColor: Colors.grey, onTap: () => comingSoon("Balance")),
-      _QuickAction(icon: Icons.pie_chart, label: "Commission", bgColor: context.appTileColor(Colors.grey[200]!), iconColor: Colors.grey, onTap: () => comingSoon("Commission")),
+      _tile(icon: Icons.wifi, label: "Internet Data", bgColor: const Color(0xFFE0F7F5), iconColor: const Color(0xFF14847A), type: "data_bundle", onTap: () => context.push("/transactions?type=data_bundle&provider=telecel")),
+      _tile(icon: Icons.account_balance_wallet, label: "Balance", bgColor: const Color(0xFFDFF3EE), iconColor: const Color(0xFF1F8A6F), type: "balance_enquiry", onTap: () => context.push("/transactions?type=balance_enquiry&provider=telecel")),
+      _tile(icon: Icons.move_to_inbox, label: "M-PESA to Float", bgColor: const Color(0xFFE3EEFC), iconColor: const Color(0xFF2E6FD9), type: "working_to_float", onTap: () => context.push("/transactions?type=working_to_float&provider=telecel")),
+      _tile(icon: Icons.outbox, label: "Float to M-PESA", bgColor: const Color(0xFFF0E6FA), iconColor: const Color(0xFF8B5FBF), type: "float_to_working", onTap: () => context.push("/transactions?type=float_to_working&provider=telecel")),
+      _tile(icon: Icons.pie_chart, label: "Commission to Float", bgColor: const Color(0xFFFBE6EC), iconColor: const Color(0xFFB33F6B), type: "commission_transfer", onTap: () => context.push("/transactions?type=commission_transfer&provider=telecel")),
     ];
   }
 
