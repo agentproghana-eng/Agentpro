@@ -10,6 +10,7 @@ import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 import '../../core/services/offline_queue_service.dart';
+import '../../core/services/dashboard_refresh_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/auth/auth_bloc.dart';
 
@@ -1214,6 +1215,17 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     );
   }
 
+  void _returnHome({required bool refreshDashboard}) {
+    if (refreshDashboard) {
+      DashboardRefreshService.notifyTransactionCompleted(
+        isPersonal: widget.isPersonal,
+        provider: widget.data['provider']?.toString() ?? 'mtn',
+      );
+    }
+
+    context.go(widget.isPersonal ? '/personal-home' : '/agent');
+  }
+
   void _retryTransaction() {
     final provider = widget.data['provider']?.toString() ?? 'mtn';
     final type = widget.data['transaction_type']?.toString() ?? '';
@@ -1488,15 +1500,13 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             AppButton(
               label: 'New Transaction',
               icon: Icons.add_circle_outline,
-              onPressed: () =>
-                  context.go(widget.isPersonal ? '/personal-home' : '/agent'),
+              onPressed: () => _returnHome(refreshDashboard: true),
             ),
             const SizedBox(height: 12),
             AppButton(
               label: 'Done',
               icon: Icons.home_outlined,
-              onPressed: () =>
-                  context.go(widget.isPersonal ? '/personal-home' : '/agent'),
+              onPressed: () => _returnHome(refreshDashboard: true),
               outlined: true,
             ),
           ] else if (isPending) ...[
@@ -1511,8 +1521,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             AppButton(
               label: 'Go Home',
               icon: Icons.home_outlined,
-              onPressed: () =>
-                  context.go(widget.isPersonal ? '/personal-home' : '/agent'),
+              onPressed: () => _returnHome(refreshDashboard: true),
               outlined: true,
             ),
           ] else ...[
@@ -1525,8 +1534,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             AppButton(
               label: 'Go Home',
               icon: Icons.home_outlined,
-              onPressed: () =>
-                  context.go(widget.isPersonal ? '/personal-home' : '/agent'),
+              onPressed: () => _returnHome(refreshDashboard: false),
               outlined: true,
             ),
           ],

@@ -1,3 +1,4 @@
+import 'dart:async';
 // personal_home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../../core/auth/auth_bloc.dart';
 import '../../core/api/api_client.dart';
 import '../../core/services/sim_card_service.dart';
+import '../../core/services/dashboard_refresh_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
@@ -39,6 +41,8 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
   List<dynamic> _recent = [];
   bool _loadingRecent = true;
   Map<String, List<String>> _personalQuickActions = {};
+  StreamSubscription<DashboardRefreshEvent>? _dashboardRefreshSubscription;
+  bool _highlightNewestTransaction = false;
 
   final _providers = const [
     {'value': 'mtn', 'label': 'MTN'},
@@ -49,9 +53,60 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
   @override
   void initState() {
     super.initState();
+
+    _dashboardRefreshSubscription = DashboardRefreshService.events.listen(
+      _handleDashboardRefresh,
+    );
+
     _loadSimMap();
     _loadRecent();
     _loadQuickActions();
+  }
+
+  Future<void> _handleDashboardRefresh(DashboardRefreshEvent event) async {
+    if (!event.isPersonal || !mounted) return;
+
+    if (_provider != event.provider) {
+      setState(() => _provider = event.provider);
+    }
+
+    await _loadRecent();
+
+    if (!mounted || _recent.isEmpty) return;
+
+    setState(() => _highlightNewestTransaction = true);
+
+    await Future.delayed(const Duration(milliseconds: 1400));
+
+    if (mounted) {
+      setState(() => _highlightNewestTransaction = false);
+    }
+  }
+
+  Widget _animateNewestTransaction({
+    required Widget child,
+    required bool isNewest,
+  }) {
+    if (!isNewest) return child;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 450),
+      curve: Curves.easeOutCubic,
+      transform: Matrix4.translationValues(
+        0,
+        _highlightNewestTransaction ? 0 : 4,
+        0,
+      ),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(
+          color: _highlightNewestTransaction
+              ? AppTheme.primaryColor.withOpacity(0.42)
+              : Colors.transparent,
+        ),
+      ),
+      child: child,
+    );
   }
 
   // Same shape as the Agent HomeTab's _load() (limit=5, filtered by the
@@ -193,6 +248,12 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
     };
     final uri = Uri(path: '/personal-transactions/new', queryParameters: query);
     context.push(uri.toString());
+  }
+
+  @override
+  void dispose() {
+    _dashboardRefreshSubscription?.cancel();
+    super.dispose();
   }
 
   @override
@@ -494,8 +555,11 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                       padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
                       sliver: SliverList(
                         delegate: SliverChildBuilderDelegate(
-                          (context, i) => PersonalTransactionItem(
-                            tx: _recent[i] as Map<String, dynamic>,
+                          (context, i) => _animateNewestTransaction(
+                            isNewest: i == 0,
+                            child: PersonalTransactionItem(
+                              tx: _recent[i] as Map<String, dynamic>,
+                            ),
                           ),
                           childCount: _recent.length,
                         ),

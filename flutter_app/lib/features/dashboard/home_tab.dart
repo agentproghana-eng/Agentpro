@@ -1,3 +1,4 @@
+import "dart:async";
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:go_router/go_router.dart";
@@ -6,6 +7,7 @@ import "../../core/api/api_client.dart";
 import "../../shared/theme/app_theme.dart";
 import "../../shared/theme/app_colors.dart";
 import "../../core/services/sim_card_service.dart";
+import "../../core/services/dashboard_refresh_service.dart";
 import "../../shared/utils/transaction_labels.dart";
 import "../../core/router/app_router.dart";
 import "../ussd_settings/quick_action_customization_screen.dart";
@@ -31,6 +33,8 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   bool _shiftLoading = true;
   Map<String, List<String>> _agentQuickActions = {};
   Map<String, List<String>> _personalQuickActions = {};
+  StreamSubscription<DashboardRefreshEvent>? _dashboardRefreshSubscription;
+  bool _highlightNewestTransaction = false;
 
   @override
   void didChangeDependencies() {
@@ -41,6 +45,7 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   @override
   void dispose() {
     routeObserver.unsubscribe(this);
+    _dashboardRefreshSubscription?.cancel();
     super.dispose();
   }
 
@@ -56,12 +61,63 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   @override
   void initState() {
     super.initState();
+
+    _dashboardRefreshSubscription = DashboardRefreshService.events.listen(
+      _handleDashboardRefresh,
+    );
+
     _load();
     _loadSimMap();
     _loadFeatureFlags();
     _loadSimPurposes();
     _loadCurrentShift();
     _loadQuickActions();
+  }
+
+  Future<void> _handleDashboardRefresh(DashboardRefreshEvent event) async {
+    if (event.isPersonal || !mounted) return;
+
+    if (_provider != event.provider) {
+      setState(() => _provider = event.provider);
+    }
+
+    await Future.wait([_load(), _loadCurrentShift()]);
+
+    if (!mounted || _recent.isEmpty) return;
+
+    setState(() => _highlightNewestTransaction = true);
+
+    await Future.delayed(const Duration(milliseconds: 1400));
+
+    if (mounted) {
+      setState(() => _highlightNewestTransaction = false);
+    }
+  }
+
+  Widget _animateNewestTransaction({
+    required Widget child,
+    required bool isNewest,
+  }) {
+    if (!isNewest) return child;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 450),
+      curve: Curves.easeOutCubic,
+      transform: Matrix4.translationValues(
+        0,
+        _highlightNewestTransaction ? 0 : 4,
+        0,
+      ),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(
+          color: _highlightNewestTransaction
+              ? AppTheme.primaryColor.withOpacity(0.42)
+              : Colors.transparent,
+        ),
+      ),
+      child: child,
+    );
   }
 
   Future<void> _loadQuickActions() async {
@@ -620,8 +676,11 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
                     sliver: SliverList(
                       delegate: SliverChildBuilderDelegate(
-                        (context, i) => _RecentTxItem(
-                          tx: _recent[i] as Map<String, dynamic>,
+                        (context, i) => _animateNewestTransaction(
+                          isNewest: i == 0,
+                          child: _RecentTxItem(
+                            tx: _recent[i] as Map<String, dynamic>,
+                          ),
                         ),
                         childCount: _recent.length,
                       ),
