@@ -14,6 +14,7 @@ import '../../shared/widgets/personal_ad_banner.dart';
 import '../../shared/widgets/personal_transaction_item.dart';
 import '../ussd_settings/quick_action_customization_screen.dart';
 import '../../shared/widgets/offline_status_banner.dart';
+import '../../shared/widgets/dashboard_skeleton.dart';
 
 /// The Home tab of PersonalDashboard - matches the same fixed-header/
 /// CustomScrollView structure already shared by Owner/Manager/Agent's
@@ -479,10 +480,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                   ),
                   if (_loadingRecent)
                     const SliverToBoxAdapter(
-                      child: Padding(
-                        padding: EdgeInsets.all(30),
-                        child: Center(child: CircularProgressIndicator()),
-                      ),
+                      child: RecentTransactionsSkeleton(),
                     )
                   else if (_recent.isEmpty)
                     const SliverToBoxAdapter(

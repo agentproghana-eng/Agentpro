@@ -10,6 +10,7 @@ import "../../shared/utils/transaction_labels.dart";
 import "../../core/router/app_router.dart";
 import "../ussd_settings/quick_action_customization_screen.dart";
 import "../../shared/widgets/offline_status_banner.dart";
+import "../../shared/widgets/dashboard_skeleton.dart";
 
 class HomeTab extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -155,7 +156,7 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   // elapsed time when one is - tapping Close navigates to the
   // dedicated close-shift flow and refreshes on return.
   Widget _buildShiftCard() {
-    if (_shiftLoading) return const SizedBox.shrink();
+    if (_shiftLoading) return const ShiftCardSkeleton();
     final isOpen = _currentShift != null;
     final openedAt = isOpen
         ? DateTime.tryParse(_currentShift!["opened_at"]?.toString() ?? "")
@@ -606,12 +607,7 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
                   ),
                 ),
                 if (_loading)
-                  const SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.all(30),
-                      child: Center(child: CircularProgressIndicator()),
-                    ),
-                  )
+                  const SliverToBoxAdapter(child: RecentTransactionsSkeleton())
                 else if (_recent.isEmpty)
                   const SliverToBoxAdapter(
                     child: Padding(
