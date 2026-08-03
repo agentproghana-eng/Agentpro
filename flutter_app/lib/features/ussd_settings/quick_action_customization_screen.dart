@@ -131,6 +131,76 @@ const List<QuickActionDefinition> kPersonalQuickActionDefinitions = [
   ),
 ];
 
+const Map<String, Set<String>> kAgentQuickActionSupport = {
+  'mtn': {
+    'cash_in',
+    'cash_out',
+    'send_money',
+    'merchant_payment',
+    'bill_payment',
+    'airtime',
+    'data_bundle',
+    'balance_enquiry',
+    'commission_balance',
+    'cash_in_commission',
+    'commission_transfer',
+  },
+  'telecel': {
+    'cash_in',
+    'cash_out',
+    'business_deposit',
+    'airtime',
+    'data_bundle',
+    'balance_enquiry',
+    'working_to_float',
+    'float_to_working',
+    'commission_transfer',
+  },
+  'at_money': {
+    'cash_in',
+    'cash_out',
+    'send_money',
+    'merchant_payment',
+    'bill_payment',
+    'airtime',
+    'data_bundle',
+    'balance_enquiry',
+  },
+};
+
+const Map<String, Set<String>> kPersonalQuickActionSupport = {
+  'mtn': {
+    'send_money_same_network',
+    'send_money_cross_network',
+    'withdraw_cash',
+    'buy_airtime',
+    'buy_data',
+    'buy_mashup',
+    'check_momo_balance',
+    'check_airtime_balance',
+  },
+  'telecel': {
+    'send_money_same_network',
+    'send_money_cross_network',
+    'withdraw_cash',
+    'buy_airtime',
+    'buy_data',
+    'buy_mashup',
+    'check_momo_balance',
+    'check_airtime_balance',
+  },
+  'at_money': {
+    'send_money_same_network',
+    'send_money_cross_network',
+    'withdraw_cash',
+    'buy_airtime',
+    'buy_data',
+    'buy_mashup',
+    'check_momo_balance',
+    'check_airtime_balance',
+  },
+};
+
 const Map<String, List<String>> kAgentQuickActionDefaults = {
   'mtn': [
     'cash_in',
@@ -235,6 +305,19 @@ class _QuickActionCustomizationScreenState
           ? kPersonalQuickActionDefaults
           : kAgentQuickActionDefaults;
 
+  Map<String, Set<String>> get _support =>
+      widget.isPersonal
+          ? kPersonalQuickActionSupport
+          : kAgentQuickActionSupport;
+
+  Set<String> get _supportedTypes =>
+      _support[_provider] ?? const <String>{};
+
+  List<QuickActionDefinition> get _availableDefinitions =>
+      _definitions
+          .where((definition) => _supportedTypes.contains(definition.type))
+          .toList();
+
   List<String> get _selected => _preferences[_provider] ?? <String>[];
 
   @override
@@ -269,9 +352,16 @@ class _QuickActionCustomizationScreenState
         final providerValue = saved[provider];
 
         if (providerValue is List) {
+          final supported =
+              _support[provider] ?? const <String>{};
+
           parsed[provider] = providerValue
               .whereType<String>()
-              .where((type) => _definitionFor(type) != null)
+              .where(
+                (type) =>
+                    _definitionFor(type) != null &&
+                    supported.contains(type),
+              )
               .take(9)
               .toList();
         } else {
@@ -330,6 +420,40 @@ class _QuickActionCustomizationScreenState
       _preferences[_provider] = List<String>.from(
         _defaults[_provider] ?? const [],
       );
+    });
+  }
+
+  Future<void> _restoreAllDefaults() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Restore all providers?'),
+        content: Text(
+          'This will restore the default ${widget.isPersonal ? 'Personal' : 'Agent'} '
+          'Quick Actions for MTN, Telecel, and AT Money.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Restore All'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() {
+      _preferences = {
+        for (final provider in ['mtn', 'telecel', 'at_money'])
+          provider: List<String>.from(
+            _defaults[provider] ?? const [],
+          ),
+      };
     });
   }
 
@@ -436,20 +560,27 @@ class _QuickActionCustomizationScreenState
                   ],
                 ),
                 const SizedBox(height: 18),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                Text(
+                  '3×3 Preview (${_selected.length}/9)',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
                   children: [
-                    Text(
-                      '3×3 Preview (${_selected.length}/9)',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
                     TextButton.icon(
                       onPressed: _restoreDefaults,
                       icon: const Icon(Icons.restore, size: 17),
-                      label: const Text('Restore Defaults'),
+                      label: const Text('Restore This Provider'),
+                    ),
+                    TextButton.icon(
+                      onPressed: _restoreAllDefaults,
+                      icon: const Icon(Icons.restart_alt, size: 17),
+                      label: const Text('Restore All'),
                     ),
                   ],
                 ),
@@ -532,7 +663,7 @@ class _QuickActionCustomizationScreenState
                   ),
                 ),
                 const SizedBox(height: 8),
-                ..._definitions.map((definition) {
+                ..._availableDefinitions.map((definition) {
                   final checked = _selected.contains(definition.type);
 
                   return CheckboxListTile(
