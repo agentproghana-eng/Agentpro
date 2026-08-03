@@ -13,6 +13,7 @@ import "../../core/router/app_router.dart";
 import "../ussd_settings/quick_action_customization_screen.dart";
 import "../../shared/widgets/offline_status_banner.dart";
 import "../../shared/widgets/dashboard_skeleton.dart";
+import "../../shared/widgets/dashboard_empty_state.dart";
 
 class HomeTab extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -484,6 +485,19 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
     return widgets;
   }
 
+  String _providerLabel(String provider) {
+    switch (provider) {
+      case 'mtn':
+        return 'MTN';
+      case 'telecel':
+        return 'Telecel';
+      case 'at_money':
+        return 'AirtelTigo';
+      default:
+        return provider;
+    }
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
@@ -620,18 +634,38 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
                   ),
                 ),
                 SliverToBoxAdapter(child: _buildShiftCard()),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-                  sliver: SliverToBoxAdapter(
-                    child: GridView.count(
-                      crossAxisCount: 3,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      mainAxisSpacing: 6,
-                      crossAxisSpacing: 6,
-                      childAspectRatio: 0.9,
-                      children: _quickActionTiles(context),
-                    ),
+                SliverToBoxAdapter(
+                  child: Builder(
+                    builder: (context) {
+                      final quickActions = _quickActionTiles(context);
+
+                      if (quickActions.isEmpty) {
+                        return DashboardEmptyState(
+                          icon: Icons.grid_view_rounded,
+                          title: 'No quick actions available',
+                          message:
+                              'No transaction actions are currently '
+                              'available for ${_providerLabel(_provider)}. '
+                              'You can choose different actions in Templates.',
+                          actionLabel: 'Customize Quick Actions',
+                          actionIcon: Icons.tune_rounded,
+                          onAction: () => context.push('/agent-quick-actions'),
+                        );
+                      }
+
+                      return Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+                        child: GridView.count(
+                          crossAxisCount: 3,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          mainAxisSpacing: 6,
+                          crossAxisSpacing: 6,
+                          childAspectRatio: 0.9,
+                          children: quickActions,
+                        ),
+                      );
+                    },
                   ),
                 ),
                 SliverPadding(
@@ -665,10 +699,16 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
                 if (_loading)
                   const SliverToBoxAdapter(child: RecentTransactionsSkeleton())
                 else if (_recent.isEmpty)
-                  const SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Center(child: Text("No transactions yet")),
+                  SliverToBoxAdapter(
+                    child: DashboardEmptyState(
+                      icon: Icons.receipt_long_outlined,
+                      title: 'No recent transactions',
+                      message:
+                          'Transactions completed on '
+                          '${_providerLabel(_provider)} will appear here.',
+                      actionLabel: 'Refresh Activity',
+                      actionIcon: Icons.refresh_rounded,
+                      onAction: _load,
                     ),
                   )
                 else
@@ -676,10 +716,13 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
                     sliver: SliverList(
                       delegate: SliverChildBuilderDelegate(
-                        (context, i) => _animateNewestTransaction(
-                          isNewest: i == 0,
-                          child: _RecentTxItem(
-                            tx: _recent[i] as Map<String, dynamic>,
+                        (context, i) => DashboardListEntrance(
+                          index: i,
+                          child: _animateNewestTransaction(
+                            isNewest: i == 0,
+                            child: _RecentTxItem(
+                              tx: _recent[i] as Map<String, dynamic>,
+                            ),
                           ),
                         ),
                         childCount: _recent.length,

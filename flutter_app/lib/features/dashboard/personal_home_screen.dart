@@ -17,6 +17,7 @@ import '../../shared/widgets/personal_transaction_item.dart';
 import '../ussd_settings/quick_action_customization_screen.dart';
 import '../../shared/widgets/offline_status_banner.dart';
 import '../../shared/widgets/dashboard_skeleton.dart';
+import '../../shared/widgets/dashboard_empty_state.dart';
 
 /// The Home tab of PersonalDashboard - matches the same fixed-header/
 /// CustomScrollView structure already shared by Owner/Manager/Agent's
@@ -159,6 +160,19 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
     }
 
     return result;
+  }
+
+  String _providerLabel(String provider) {
+    switch (provider) {
+      case 'mtn':
+        return 'MTN';
+      case 'telecel':
+        return 'Telecel';
+      case 'at_money':
+        return 'AirtelTigo';
+      default:
+        return provider;
+    }
   }
 
   Future<void> _loadRecent() async {
@@ -468,27 +482,41 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                             ),
                     ),
                   ),
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-                    sliver: SliverToBoxAdapter(
-                      child: GridView.count(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        crossAxisCount: 3,
-                        crossAxisSpacing: 10,
-                        mainAxisSpacing: 10,
-                        childAspectRatio: 0.85,
-                        children: _visibleQuickActions
-                            .map(
-                              (action) => _QuickActionTile(
-                                icon: action.icon,
-                                label: action.label,
-                                onTap: () => _startTransaction(action.type),
-                              ),
-                            )
-                            .toList(),
-                      ),
-                    ),
+                  SliverToBoxAdapter(
+                    child: _visibleQuickActions.isEmpty
+                        ? DashboardEmptyState(
+                            icon: Icons.grid_view_rounded,
+                            title: 'No quick actions available',
+                            message:
+                                'No personal transaction actions are '
+                                'currently available for '
+                                '${_providerLabel(_provider)}.',
+                            actionLabel: 'Customize Quick Actions',
+                            actionIcon: Icons.tune_rounded,
+                            onAction: () =>
+                                context.push('/personal-quick-actions'),
+                          )
+                        : Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+                            child: GridView.count(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              crossAxisCount: 3,
+                              crossAxisSpacing: 10,
+                              mainAxisSpacing: 10,
+                              childAspectRatio: 0.85,
+                              children: _visibleQuickActions
+                                  .map(
+                                    (action) => _QuickActionTile(
+                                      icon: action.icon,
+                                      label: action.label,
+                                      onTap: () =>
+                                          _startTransaction(action.type),
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                          ),
                   ),
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 7),
@@ -544,10 +572,16 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                       child: RecentTransactionsSkeleton(),
                     )
                   else if (_recent.isEmpty)
-                    const SliverToBoxAdapter(
-                      child: Padding(
-                        padding: EdgeInsets.all(20),
-                        child: Center(child: Text('No transactions yet')),
+                    SliverToBoxAdapter(
+                      child: DashboardEmptyState(
+                        icon: Icons.account_balance_wallet_outlined,
+                        title: 'No personal transactions yet',
+                        message:
+                            'Buy airtime, data, or send money and your '
+                            'recent activity will appear here.',
+                        actionLabel: 'Refresh Activity',
+                        actionIcon: Icons.refresh_rounded,
+                        onAction: _loadRecent,
                       ),
                     )
                   else
@@ -555,10 +589,13 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                       padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
                       sliver: SliverList(
                         delegate: SliverChildBuilderDelegate(
-                          (context, i) => _animateNewestTransaction(
-                            isNewest: i == 0,
-                            child: PersonalTransactionItem(
-                              tx: _recent[i] as Map<String, dynamic>,
+                          (context, i) => DashboardListEntrance(
+                            index: i,
+                            child: _animateNewestTransaction(
+                              isNewest: i == 0,
+                              child: PersonalTransactionItem(
+                                tx: _recent[i] as Map<String, dynamic>,
+                              ),
                             ),
                           ),
                           childCount: _recent.length,
