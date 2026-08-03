@@ -8,6 +8,7 @@ import "../../core/services/sim_card_service.dart";
 import "../../shared/utils/transaction_labels.dart";
 import "../../core/router/app_router.dart";
 import "../ussd_settings/quick_action_customization_screen.dart";
+import "../../shared/widgets/offline_status_banner.dart";
 
 class HomeTab extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -65,8 +66,7 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
     try {
       final response = await ApiClient.instance.get("/users/me/quick-actions");
       final data =
-          response.data["data"] as Map<String, dynamic>? ??
-          <String, dynamic>{};
+          response.data["data"] as Map<String, dynamic>? ?? <String, dynamic>{};
 
       Map<String, List<String>> parseProfile(dynamic raw) {
         final result = <String, List<String>>{};
@@ -75,10 +75,7 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
         for (final provider in ["mtn", "telecel", "at_money"]) {
           final value = raw[provider];
           if (value is List) {
-            result[provider] = value
-                .whereType<String>()
-                .take(9)
-                .toList();
+            result[provider] = value.whereType<String>().take(9).toList();
           }
         }
 
@@ -109,9 +106,7 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
         ? kPersonalQuickActionDefaults[_provider]
         : kAgentQuickActionDefaults[_provider];
 
-    return List<String>.from(defaults ?? const <String>[])
-        .take(9)
-        .toList();
+    return List<String>.from(defaults ?? const <String>[]).take(9).toList();
   }
 
   QuickActionDefinition? _quickActionDefinition(
@@ -132,7 +127,11 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   Future<void> _loadCurrentShift() async {
     try {
       final res = await ApiClient.instance.get("/shifts/current");
-      if (mounted) setState(() { _currentShift = res.data["data"]; _shiftLoading = false; });
+      if (mounted)
+        setState(() {
+          _currentShift = res.data["data"];
+          _shiftLoading = false;
+        });
     } catch (_) {
       if (mounted) setState(() => _shiftLoading = false);
     }
@@ -143,8 +142,10 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
       final res = await ApiClient.instance.post("/shifts/open");
       if (mounted) setState(() => _currentShift = res.data["data"]);
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Failed to open shift")));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Failed to open shift")));
     }
   }
 
@@ -155,40 +156,64 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   Widget _buildShiftCard() {
     if (_shiftLoading) return const SizedBox.shrink();
     final isOpen = _currentShift != null;
-    final openedAt = isOpen ? DateTime.tryParse(_currentShift!["opened_at"]?.toString() ?? "") : null;
+    final openedAt = isOpen
+        ? DateTime.tryParse(_currentShift!["opened_at"]?.toString() ?? "")
+        : null;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isOpen ? context.appTileColor(const Color(0xFFE6F4F1)) : context.appSurface,
+        color: isOpen
+            ? context.appTileColor(const Color(0xFFE6F4F1))
+            : context.appSurface,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 3)],
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 3),
+        ],
       ),
-      child: Row(children: [
-        Icon(isOpen ? Icons.timer : Icons.timer_off_outlined,
-            color: isOpen ? AppTheme.primaryColor : Colors.grey, size: 22),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            isOpen
-                ? "Shift open since ${openedAt != null ? DateFormat('h:mm a').format(openedAt.toLocal()) : '—'}"
-                : "No active shift",
-            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: isOpen ? AppTheme.primaryColor : context.appSecondaryText),
+      child: Row(
+        children: [
+          Icon(
+            isOpen ? Icons.timer : Icons.timer_off_outlined,
+            color: isOpen ? AppTheme.primaryColor : Colors.grey,
+            size: 22,
           ),
-        ),
-        ElevatedButton(
-          onPressed: isOpen
-              ? () => context.push("/shifts/close/${_currentShift!['id']}").then((_) => _loadCurrentShift())
-              : _openShift,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: isOpen ? AppTheme.errorColor : AppTheme.primaryColor,
-            minimumSize: const Size(0, 34),
-            padding: const EdgeInsets.symmetric(horizontal: 14),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              isOpen
+                  ? "Shift open since ${openedAt != null ? DateFormat('h:mm a').format(openedAt.toLocal()) : '—'}"
+                  : "No active shift",
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+                color: isOpen
+                    ? AppTheme.primaryColor
+                    : context.appSecondaryText,
+              ),
+            ),
           ),
-          child: Text(isOpen ? "Close Shift" : "Open Shift", style: const TextStyle(fontSize: 12)),
-        ),
-      ]),
+          ElevatedButton(
+            onPressed: isOpen
+                ? () => context
+                      .push("/shifts/close/${_currentShift!['id']}")
+                      .then((_) => _loadCurrentShift())
+                : _openShift,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isOpen
+                  ? AppTheme.errorColor
+                  : AppTheme.primaryColor,
+              minimumSize: const Size(0, 34),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+            ),
+            child: Text(
+              isOpen ? "Close Shift" : "Open Shift",
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -227,8 +252,10 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   Future<void> _loadFeatureFlags() async {
     try {
       final res = await ApiClient.instance.get("/users/me/feature-flags");
-      final list = (res.data["data"]["disabled_transaction_types"] as List?) ?? [];
-      if (mounted) setState(() => _disabledTypes = list.map((e) => e.toString()).toSet());
+      final list =
+          (res.data["data"]["disabled_transaction_types"] as List?) ?? [];
+      if (mounted)
+        setState(() => _disabledTypes = list.map((e) => e.toString()).toSet());
     } catch (_) {
       // Leave _disabledTypes empty - fail open on the client, server
       // still enforces the kill-switch either way.
@@ -238,7 +265,14 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   // Renders a quick-action tile, automatically greying it out and
   // blocking navigation if an admin has disabled this provider+type
   // combo via the "disabled_transaction_types" config kill-switch.
-  Widget _tile({required IconData icon, required String label, required Color bgColor, required Color iconColor, required String type, required VoidCallback onTap}) {
+  Widget _tile({
+    required IconData icon,
+    required String label,
+    required Color bgColor,
+    required Color iconColor,
+    required String type,
+    required VoidCallback onTap,
+  }) {
     final disabled = _disabledTypes.contains("$_provider:$type");
     return _QuickAction(
       icon: icon,
@@ -247,7 +281,12 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
       iconColor: disabled ? Colors.grey : iconColor,
       onTap: disabled
           ? () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("This feature has been temporarily disabled by your administrator.")))
+              const SnackBar(
+                content: Text(
+                  "This feature has been temporarily disabled by your administrator.",
+                ),
+              ),
+            )
           : onTap,
     );
   }
@@ -275,7 +314,12 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
         // to the first one that does, so the tab row never opens on a
         // tab that is about to disappear.
         if (map[_provider] == null) {
-          final firstAvailable = map.entries.firstWhere((e) => e.value != null, orElse: () => map.entries.first).key;
+          final firstAvailable = map.entries
+              .firstWhere(
+                (e) => e.value != null,
+                orElse: () => map.entries.first,
+              )
+              .key;
           _provider = firstAvailable;
         }
       });
@@ -284,7 +328,6 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
       // the UI falls back to showing all three tabs rather than none.
     }
   }
-
 
   // Only shows tabs for SIMs actually present on the device. Falls
   // back to showing all three if detection has not finished yet or
@@ -295,39 +338,66 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   List<Widget> _buildProviderTabRow() {
     final providers = _simMap == null
         ? ["mtn", "telecel", "at_money"]
-        : _simMap!.entries.where((e) => e.value != null).map((e) => e.key).toList();
+        : _simMap!.entries
+              .where((e) => e.value != null)
+              .map((e) => e.key)
+              .toList();
 
     if (providers.isEmpty) {
       return [
         Expanded(
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Row(children: [
-              Icon(Icons.sim_card_alert_outlined, color: Colors.grey[500], size: 18),
-              const SizedBox(width: 8),
-              Text("Insert SIM", style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w600)),
-            ]),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.sim_card_alert_outlined,
+                  color: Colors.grey[500],
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  "Insert SIM",
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ];
     }
 
-    const labels = {"mtn": "MTN", "telecel": "Telecel", "at_money": "AirtelTigo"};
-    const colors = {"mtn": Color(0xFFFFCC00), "telecel": Color(0xFFE31837), "at_money": Color(0xFF003087)};
+    const labels = {
+      "mtn": "MTN",
+      "telecel": "Telecel",
+      "at_money": "AirtelTigo",
+    };
+    const colors = {
+      "mtn": Color(0xFFFFCC00),
+      "telecel": Color(0xFFE31837),
+      "at_money": Color(0xFF003087),
+    };
 
     final widgets = <Widget>[];
     for (var i = 0; i < providers.length; i++) {
       final p = providers[i];
-      widgets.add(Expanded(child: _ProviderTab(
-        label: labels[p]!,
-        value: p,
-        selected: _provider == p,
-        color: colors[p]!,
-        onTap: (v) {
-          setState(() => _provider = v);
-          _load();
-        },
-      )));
+      widgets.add(
+        Expanded(
+          child: _ProviderTab(
+            label: labels[p]!,
+            value: p,
+            selected: _provider == p,
+            color: colors[p]!,
+            onTap: (v) {
+              setState(() => _provider = v);
+              _load();
+            },
+          ),
+        ),
+      );
       if (i < providers.length - 1) widgets.add(const SizedBox(width: 4));
     }
     return widgets;
@@ -336,7 +406,10 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final res = await ApiClient.instance.get("/transactions", queryParameters: {"limit": 5, "provider": _provider});
+      final res = await ApiClient.instance.get(
+        "/transactions",
+        queryParameters: {"limit": 5, "provider": _provider},
+      );
       setState(() {
         _recent = res.data["data"] ?? [];
         _loading = false;
@@ -348,97 +421,198 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
 
   @override
   Widget build(BuildContext context) {
-    return Column(children: [
-      // Fixed header - deliberately OUTSIDE the CustomScrollView below,
-      // not a SliverAppBar. The previous SliverAppBar had pinned: true,
-      // but that only keeps an empty bar SHAPE pinned once collapsed -
-      // the actual logo/name/company/role content still scrolled away
-      // and disappeared. Living outside the scrollable area entirely is
-      // what makes it genuinely frozen. SafeArea(bottom: false) handles
-      // the status bar instead of a hardcoded top padding guess.
-      SafeArea(
-        bottom: false,
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(colors: [AppTheme.primaryColor, Color(0xFF004D43)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+    return Column(
+      children: [
+        // Fixed header - deliberately OUTSIDE the CustomScrollView below,
+        // not a SliverAppBar. The previous SliverAppBar had pinned: true,
+        // but that only keeps an empty bar SHAPE pinned once collapsed -
+        // the actual logo/name/company/role content still scrolled away
+        // and disappeared. Living outside the scrollable area entirely is
+        // what makes it genuinely frozen. SafeArea(bottom: false) handles
+        // the status bar instead of a hardcoded top padding guess.
+        SafeArea(
+          bottom: false,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [AppTheme.primaryColor, Color(0xFF004D43)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Image.asset(
+                        "assets/images/agentpro-icon.png",
+                        height: 26,
+                      ),
+                      const SizedBox(width: 8),
+                      const Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: "Agent",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            TextSpan(
+                              text: "Pro",
+                              style: TextStyle(
+                                color: AppTheme.secondaryColor,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  "${widget.user["first_name"] ?? ""} ${widget.user["last_name"] ?? ""}",
+                  style: const TextStyle(
+                    color: AppTheme.secondaryColor,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  widget.user["company_name"] ?? "",
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  (widget.user["role"] ?? "")
+                      .toString()
+                      .replaceAll("_", " ")
+                      .toUpperCase(),
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+              ],
+            ),
           ),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            Center(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Image.asset("assets/images/agentpro-icon.png", height: 26),
-                  const SizedBox(width: 8),
-                  const Text.rich(TextSpan(children: [
-                    TextSpan(text: "Agent", style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800)),
-                    TextSpan(text: "Pro", style: TextStyle(color: AppTheme.secondaryColor, fontSize: 17, fontWeight: FontWeight.w800)),
-                  ])),
-                ],
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text("${widget.user["first_name"] ?? ""} ${widget.user["last_name"] ?? ""}", style: const TextStyle(color: AppTheme.secondaryColor, fontSize: 15, fontWeight: FontWeight.w800)),
-            Text(widget.user["company_name"] ?? "", style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600)),
-            Text((widget.user["role"] ?? "").toString().replaceAll("_", " ").toUpperCase(), style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.6)),
-          ]),
         ),
-      ),
-      Expanded(
-        child: RefreshIndicator(
-          onRefresh: _load,
-          child: CustomScrollView(slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 3)]),
-                  child: Row(children: _buildProviderTabRow()),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _load,
+            child: CustomScrollView(
+              slivers: [
+                const SliverToBoxAdapter(child: OfflineStatusBanner()),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: context.appSurface,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.06),
+                            blurRadius: 3,
+                          ),
+                        ],
+                      ),
+                      child: Row(children: _buildProviderTabRow()),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            SliverToBoxAdapter(child: _buildShiftCard()),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-              sliver: SliverToBoxAdapter(
-                child: GridView.count(
-                  crossAxisCount: 3,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: 6,
-                  crossAxisSpacing: 6,
-                  childAspectRatio: 0.9,
-                  children: _quickActionTiles(context),
+                SliverToBoxAdapter(child: _buildShiftCard()),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+                  sliver: SliverToBoxAdapter(
+                    child: GridView.count(
+                      crossAxisCount: 3,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      mainAxisSpacing: 6,
+                      crossAxisSpacing: 6,
+                      childAspectRatio: 0.9,
+                      children: _quickActionTiles(context),
+                    ),
+                  ),
                 ),
-              ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                  sliver: SliverToBoxAdapter(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          "Recent Transactions",
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => context.push("/transactions/history"),
+                          child: const Text(
+                            "See All",
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.primaryColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_loading)
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.all(30),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                  )
+                else if (_recent.isEmpty)
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Center(child: Text("No transactions yet")),
+                    ),
+                  )
+                else
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, i) => _RecentTxItem(
+                          tx: _recent[i] as Map<String, dynamic>,
+                        ),
+                        childCount: _recent.length,
+                      ),
+                    ),
+                  ),
+              ],
             ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-              sliver: SliverToBoxAdapter(
-                child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                  const Text("Recent Transactions", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                  GestureDetector(onTap: () => context.push("/transactions/history"), child: const Text("See All", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryColor))),
-                ]),
-              ),
-            ),
-            if (_loading)
-              const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(30), child: Center(child: CircularProgressIndicator())))
-            else if (_recent.isEmpty)
-              const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(20), child: Center(child: Text("No transactions yet"))))
-            else
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                sliver: SliverList(delegate: SliverChildBuilderDelegate(
-                  (context, i) => _RecentTxItem(tx: _recent[i] as Map<String, dynamic>),
-                  childCount: _recent.length,
-                )),
-              ),
-          ]),
+          ),
         ),
-      ),
-    ]);
+      ],
+    );
   }
 
   // MTN/AirtelTigo keep the original 9-tile grid unchanged. Telecel gets
@@ -494,10 +668,7 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
 
     for (var index = 0; index < types.length; index++) {
       final type = types[index];
-      final definition = _quickActionDefinition(
-        type,
-        personal: false,
-      );
+      final definition = _quickActionDefinition(type, personal: false);
 
       if (definition == null) continue;
 
@@ -541,9 +712,8 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
           bgColor: backgrounds[index % backgrounds.length],
           iconColor: iconColors[index % iconColors.length],
           type: type,
-          onTap: () => context.push(
-            "/transactions?type=$type&provider=$_provider",
-          ),
+          onTap: () =>
+              context.push("/transactions?type=$type&provider=$_provider"),
         ),
       );
     }
@@ -575,10 +745,7 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
 
     for (var index = 0; index < types.length; index++) {
       final type = types[index];
-      final definition = _quickActionDefinition(
-        type,
-        personal: true,
-      );
+      final definition = _quickActionDefinition(type, personal: true);
 
       if (definition == null) continue;
 
@@ -620,7 +787,6 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
 
     return tiles;
   }
-
 }
 
 class _ProviderTab extends StatelessWidget {
@@ -630,7 +796,13 @@ class _ProviderTab extends StatelessWidget {
   final Color color;
   final void Function(String) onTap;
 
-  const _ProviderTab({required this.label, required this.value, required this.selected, required this.color, required this.onTap});
+  const _ProviderTab({
+    required this.label,
+    required this.value,
+    required this.selected,
+    required this.color,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -639,8 +811,23 @@ class _ProviderTab extends StatelessWidget {
       borderRadius: BorderRadius.circular(9),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 9),
-        decoration: BoxDecoration(color: selected ? color : Colors.transparent, borderRadius: BorderRadius.circular(9)),
-        child: Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: selected ? (color == const Color(0xFFFFCC00) ? Colors.black : Colors.white) : context.appSecondaryText)),
+        decoration: BoxDecoration(
+          color: selected ? color : Colors.transparent,
+          borderRadius: BorderRadius.circular(9),
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: selected
+                ? (color == const Color(0xFFFFCC00)
+                      ? Colors.black
+                      : Colors.white)
+                : context.appSecondaryText,
+          ),
+        ),
       ),
     );
   }
@@ -653,7 +840,13 @@ class _QuickAction extends StatelessWidget {
   final Color bgColor;
   final Color iconColor;
 
-  const _QuickAction({required this.icon, required this.label, required this.onTap, required this.bgColor, required this.iconColor});
+  const _QuickAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    required this.bgColor,
+    required this.iconColor,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -661,16 +854,33 @@ class _QuickAction extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(10),
       child: Container(
-        decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(10), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 3)]),
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Container(
-            width: 39, height: 39,
-            decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(8)),
-            child: Icon(icon, size: 20, color: iconColor),
-          ),
-          const SizedBox(height: 4),
-          Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-        ]),
+        decoration: BoxDecoration(
+          color: context.appSurface,
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 3),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 39,
+              height: 39,
+              decoration: BoxDecoration(
+                color: bgColor,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, size: 20, color: iconColor),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -686,28 +896,82 @@ class _RecentTxItem extends StatelessWidget {
     final isCashIn = type == "cash_in";
     final amount = double.tryParse(tx["amount"].toString()) ?? 0;
     DateTime? created;
-    try { created = DateTime.parse(tx["created_at"].toString()); } catch (e) {}
-    final timeStr = created != null ? DateFormat("HH:mm").format(created.toLocal()) : "";
+    try {
+      created = DateTime.parse(tx["created_at"].toString());
+    } catch (e) {}
+    final timeStr = created != null
+        ? DateFormat("HH:mm").format(created.toLocal())
+        : "";
 
     return GestureDetector(
       onTap: () => context.push('/transactions/${tx["id"]}'),
       child: Container(
         padding: const EdgeInsets.all(11),
         margin: const EdgeInsets.only(bottom: 8),
-        decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 3)]),
-        child: Row(children: [
-        Container(
-          width: 34, height: 34,
-          decoration: BoxDecoration(color: isCashIn ? context.appTileColor(const Color(0xFFE6F4F1)) : context.appTileColor(const Color(0xFFFDF3DC)), borderRadius: BorderRadius.circular(9)),
-          child: Icon(isCashIn ? Icons.call_received : Icons.call_made, size: 16, color: isCashIn ? AppTheme.primaryColor : const Color(0xFFB87E00)),
+        decoration: BoxDecoration(
+          color: context.appSurface,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 3),
+          ],
         ),
-        const SizedBox(width: 10),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(transactionTypeLabel(type, (tx["provider"] ?? "").toString()), style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
-          Text("${tx["customer_phone"] ?? ""} · $timeStr", style: const TextStyle(fontSize: 10.5, color: Colors.grey, fontWeight: FontWeight.w700)),
-        ])),
-        Text("${isCashIn ? "+" : "-"}GH₵${amount.toStringAsFixed(2)}", style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: isCashIn ? AppTheme.primaryColor : const Color(0xFFB33F3F))),
-        ]),
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: isCashIn
+                    ? context.appTileColor(const Color(0xFFE6F4F1))
+                    : context.appTileColor(const Color(0xFFFDF3DC)),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Icon(
+                isCashIn ? Icons.call_received : Icons.call_made,
+                size: 16,
+                color: isCashIn
+                    ? AppTheme.primaryColor
+                    : const Color(0xFFB87E00),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    transactionTypeLabel(
+                      type,
+                      (tx["provider"] ?? "").toString(),
+                    ),
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    "${tx["customer_phone"] ?? ""} · $timeStr",
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      color: Colors.grey,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              "${isCashIn ? "+" : "-"}GH₵${amount.toStringAsFixed(2)}",
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.bold,
+                color: isCashIn
+                    ? AppTheme.primaryColor
+                    : const Color(0xFFB33F3F),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

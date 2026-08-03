@@ -1107,8 +1107,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     final hour = now.hour == 0
         ? 12
         : now.hour > 12
-            ? now.hour - 12
-            : now.hour;
+        ? now.hour - 12
+        : now.hour;
     final minute = now.minute.toString().padLeft(2, '0');
     final period = now.hour >= 12 ? 'PM' : 'AM';
 
@@ -1135,11 +1135,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
               color: AppTheme.primaryColor.withOpacity(0.09),
               borderRadius: BorderRadius.circular(9),
             ),
-            child: Icon(
-              icon,
-              size: 18,
-              color: AppTheme.primaryColor,
-            ),
+            child: Icon(icon, size: 18, color: AppTheme.primaryColor),
           ),
           const SizedBox(width: 11),
           Expanded(
@@ -1226,10 +1222,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       context.go(
         Uri(
           path: '/personal-transactions/new',
-          queryParameters: {
-            'type': type,
-            'provider': provider,
-          },
+          queryParameters: {'type': type, 'provider': provider},
         ).toString(),
       );
       return;
@@ -1251,14 +1244,12 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     final customerPhone =
         widget.data['customer_phone']?.toString().trim() ?? '';
 
-    final reference =
-        _completedTransaction?['reference']?.toString() ?? '';
+    final reference = _completedTransaction?['reference']?.toString() ?? '';
     final networkReference =
         _completedTransaction?['network_reference']?.toString() ?? '';
     final isOfflinePending =
         _completedTransaction?['offline_pending_sync'] == true;
-    final transactionId =
-        _completedTransaction?['id']?.toString();
+    final transactionId = _completedTransaction?['id']?.toString();
 
     final isSuccess = _outcome == USSDStatus.success;
     final isPending = _outcome == USSDStatus.pendingConfirmation;
@@ -1277,8 +1268,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       statusColor = AppTheme.warningColor;
       statusIcon = Icons.help_rounded;
       title = 'Result Needs Verification';
-      subtitle =
-          'The network did not return a final confirmation.';
+      subtitle = 'The network did not return a final confirmation.';
     } else if (_simWarning != null) {
       statusColor = AppTheme.errorColor;
       statusIcon = Icons.sim_card_alert_outlined;
@@ -1300,9 +1290,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             decoration: BoxDecoration(
               color: context.appSurface,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: statusColor.withOpacity(0.22),
-              ),
+              border: Border.all(color: statusColor.withOpacity(0.22)),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.06),
@@ -1320,11 +1308,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
                     shape: BoxShape.circle,
                     color: statusColor.withOpacity(0.11),
                   ),
-                  child: Icon(
-                    statusIcon,
-                    size: 52,
-                    color: statusColor,
-                  ),
+                  child: Icon(statusIcon, size: 52, color: statusColor),
                 ),
                 const SizedBox(height: 17),
                 Text(
@@ -1384,10 +1368,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
           const SizedBox(height: 18),
 
           Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 15,
-              vertical: 6,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 6),
             decoration: BoxDecoration(
               color: context.appSurface,
               borderRadius: BorderRadius.circular(16),
@@ -1411,7 +1392,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
                   const Divider(height: 1),
                   _resultDetailRow(
                     icon: Icons.phone_outlined,
-                    label: rawType == 'business_deposit' ||
+                    label:
+                        rawType == 'business_deposit' ||
                             rawType == 'business_withdrawal'
                         ? 'Agent Short Code'
                         : 'Customer Number',
@@ -1473,7 +1455,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             _resultNotice(
               icon: Icons.warning_amber_rounded,
               title: 'Check before retrying',
-              message: _failureReason ??
+              message:
+                  _failureReason ??
                   'Check the network message, customer balance, or '
                       'transaction history before trying again. A retry '
                       'could duplicate a transaction that already succeeded.',
@@ -1505,17 +1488,15 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             AppButton(
               label: 'New Transaction',
               icon: Icons.add_circle_outline,
-              onPressed: () => context.go(
-                widget.isPersonal ? '/personal-home' : '/agent',
-              ),
+              onPressed: () =>
+                  context.go(widget.isPersonal ? '/personal-home' : '/agent'),
             ),
             const SizedBox(height: 12),
             AppButton(
               label: 'Done',
               icon: Icons.home_outlined,
-              onPressed: () => context.go(
-                widget.isPersonal ? '/personal-home' : '/agent',
-              ),
+              onPressed: () =>
+                  context.go(widget.isPersonal ? '/personal-home' : '/agent'),
               outlined: true,
             ),
           ] else if (isPending) ...[
@@ -1530,9 +1511,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             AppButton(
               label: 'Go Home',
               icon: Icons.home_outlined,
-              onPressed: () => context.go(
-                widget.isPersonal ? '/personal-home' : '/agent',
-              ),
+              onPressed: () =>
+                  context.go(widget.isPersonal ? '/personal-home' : '/agent'),
               outlined: true,
             ),
           ] else ...[
@@ -1545,9 +1525,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             AppButton(
               label: 'Go Home',
               icon: Icons.home_outlined,
-              onPressed: () => context.go(
-                widget.isPersonal ? '/personal-home' : '/agent',
-              ),
+              onPressed: () =>
+                  context.go(widget.isPersonal ? '/personal-home' : '/agent'),
               outlined: true,
             ),
           ],
@@ -1557,8 +1536,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
               transactionId.isNotEmpty) ...[
             const SizedBox(height: 8),
             TextButton.icon(
-              onPressed: () =>
-                  context.push('/transactions/$transactionId'),
+              onPressed: () => context.push('/transactions/$transactionId'),
               icon: const Icon(Icons.open_in_new, size: 17),
               label: const Text('View Transaction Details'),
             ),

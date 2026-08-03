@@ -12,6 +12,7 @@ import '../../shared/widgets/app_widgets.dart';
 import '../../shared/widgets/personal_ad_banner.dart';
 import '../../shared/widgets/personal_transaction_item.dart';
 import '../ussd_settings/quick_action_customization_screen.dart';
+import '../../shared/widgets/offline_status_banner.dart';
 
 /// The Home tab of PersonalDashboard - matches the same fixed-header/
 /// CustomScrollView structure already shared by Owner/Manager/Agent's
@@ -55,13 +56,10 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
   // selected provider tab) - just pointed at /personal-transactions.
   Future<void> _loadQuickActions() async {
     try {
-      final response = await ApiClient.instance.get(
-        '/users/me/quick-actions',
-      );
+      final response = await ApiClient.instance.get('/users/me/quick-actions');
 
       final data =
-          response.data['data'] as Map<String, dynamic>? ??
-          <String, dynamic>{};
+          response.data['data'] as Map<String, dynamic>? ?? <String, dynamic>{};
 
       final personal = data['personal'];
 
@@ -73,10 +71,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
         final value = personal[provider];
 
         if (value is List) {
-          parsed[provider] = value
-              .whereType<String>()
-              .take(9)
-              .toList();
+          parsed[provider] = value.whereType<String>().take(9).toList();
         }
       }
 
@@ -92,8 +87,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
     final types = saved != null
         ? saved
         : List<String>.from(
-            kPersonalQuickActionDefaults[_provider] ??
-                const <String>[],
+            kPersonalQuickActionDefaults[_provider] ?? const <String>[],
           );
 
     final result = <QuickActionDefinition>[];
@@ -113,8 +107,15 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
   Future<void> _loadRecent() async {
     setState(() => _loadingRecent = true);
     try {
-      final res = await ApiClient.instance.get('/personal-transactions', queryParameters: {'limit': 5, 'provider': _provider});
-      if (mounted) setState(() { _recent = res.data['data'] ?? []; _loadingRecent = false; });
+      final res = await ApiClient.instance.get(
+        '/personal-transactions',
+        queryParameters: {'limit': 5, 'provider': _provider},
+      );
+      if (mounted)
+        setState(() {
+          _recent = res.data['data'] ?? [];
+          _loadingRecent = false;
+        });
     } catch (_) {
       if (mounted) setState(() => _loadingRecent = false);
     }
@@ -150,20 +151,27 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
       }
 
       if (purposes.isNotEmpty) {
-        map = Map.fromEntries(map.entries.map((e) {
-          final sim = e.value;
-          if (sim != null && purposes[sim.slot] == 'agent') {
-            return MapEntry(e.key, null);
-          }
-          return e;
-        }));
+        map = Map.fromEntries(
+          map.entries.map((e) {
+            final sim = e.value;
+            if (sim != null && purposes[sim.slot] == 'agent') {
+              return MapEntry(e.key, null);
+            }
+            return e;
+          }),
+        );
       }
 
       if (!mounted) return;
       setState(() {
         _simMap = map;
         if (map[_provider] == null) {
-          final firstAvailable = map.entries.firstWhere((e) => e.value != null, orElse: () => map.entries.first).key;
+          final firstAvailable = map.entries
+              .firstWhere(
+                (e) => e.value != null,
+                orElse: () => map.entries.first,
+              )
+              .key;
           _provider = firstAvailable;
         }
       });
@@ -172,7 +180,6 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
       // the UI falls back to showing all three tabs.
     }
   }
-
 
   void _startTransaction(String type) {
     final sim = _simMap?[_provider];
@@ -189,155 +196,306 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
-    final user = authState is AuthAuthenticated ? authState.user : <String, dynamic>{};
+    final user = authState is AuthAuthenticated
+        ? authState.user
+        : <String, dynamic>{};
     final firstName = user['first_name'] ?? '';
     final isPaid = user['personal_subscription_plan'] == 'paid';
 
-    final noSimsDetected = _simMap != null && _simMap!.values.every((v) => v == null);
+    final noSimsDetected =
+        _simMap != null && _simMap!.values.every((v) => v == null);
     final visibleProviders = _simMap == null
         ? _providers
         : _providers.where((p) => _simMap![p['value']] != null).toList();
 
     return Scaffold(
-      body: Column(children: [
-        // Fixed header - deliberately OUTSIDE the CustomScrollView
-        // below, matching HomeTab's own approach exactly, for the same
-        // reason: living outside the scrollable area is what keeps it
-        // genuinely frozen rather than just pinned-but-collapsing.
-        SafeArea(
-          bottom: false,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(colors: [AppTheme.primaryColor, Color(0xFF004D43)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-            ),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-              Center(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Image.asset('assets/images/agentpro-icon.png', height: 26),
-                    const SizedBox(width: 8),
-                    const Text.rich(TextSpan(children: [
-                      TextSpan(text: 'Agent', style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800)),
-                      TextSpan(text: 'Pro', style: TextStyle(color: AppTheme.secondaryColor, fontSize: 17, fontWeight: FontWeight.w800)),
-                    ])),
-                  ],
+      body: Column(
+        children: [
+          // Fixed header - deliberately OUTSIDE the CustomScrollView
+          // below, matching HomeTab's own approach exactly, for the same
+          // reason: living outside the scrollable area is what keeps it
+          // genuinely frozen rather than just pinned-but-collapsing.
+          SafeArea(
+            bottom: false,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [AppTheme.primaryColor, Color(0xFF004D43)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
               ),
-              const SizedBox(height: 2),
-              const Text('Welcome', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w800)),
-              Text(firstName, style: const TextStyle(color: AppTheme.secondaryColor, fontSize: 12.5, fontWeight: FontWeight.w600)),
-              Text(isPaid ? 'PAID' : 'FREE', style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.6)),
-            ]),
-          ),
-        ),
-        Expanded(child: RefreshIndicator(
-          onRefresh: () => Future.wait([
-            _loadSimMap(),
-            _loadRecent(),
-            _loadQuickActions(),
-          ]),
-          child: CustomScrollView(slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: noSimsDetected
-                    ? Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: context.isDarkMode ? const Color(0xFF3D2E1A) : Colors.orange[50], borderRadius: BorderRadius.circular(10)),
-                        child: Text('No SIM card detected. Insert a SIM to use transaction features.',
-                          style: TextStyle(fontSize: 12, color: context.isDarkMode ? Colors.orange[200] : Colors.orange[900])),
-                      )
-                    : Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 3)]),
-                        child: Row(children: visibleProviders.map((p) {
-                          final selected = _provider == p['value'];
-                          final color = AppTheme.providerColor(p['value']!);
-                          return Expanded(
-                            child: GestureDetector(
-                              onTap: () {
-                                setState(() { _provider = p['value']!; });
-                                _loadRecent();
-                              },
-                              child: Container(
-                                margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-                                padding: const EdgeInsets.symmetric(vertical: 9),
-                                decoration: BoxDecoration(
-                                  color: selected ? color : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(9),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Center(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset(
+                          'assets/images/agentpro-icon.png',
+                          height: 26,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(
+                                text: 'Agent',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w800,
                                 ),
-                                child: Text(p['label']!, textAlign: TextAlign.center,
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12,
-                                    color: selected ? (p['value'] == 'mtn' ? Colors.black : Colors.white) : context.appSecondaryText)),
+                              ),
+                              TextSpan(
+                                text: 'Pro',
+                                style: TextStyle(
+                                  color: AppTheme.secondaryColor,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  const Text(
+                    'Welcome',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  Text(
+                    firstName,
+                    style: const TextStyle(
+                      color: AppTheme.secondaryColor,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    isPaid ? 'PAID' : 'FREE',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () => Future.wait([
+                _loadSimMap(),
+                _loadRecent(),
+                _loadQuickActions(),
+              ]),
+              child: CustomScrollView(
+                slivers: [
+                  const SliverToBoxAdapter(child: OfflineStatusBanner()),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: noSimsDetected
+                          ? Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: context.isDarkMode
+                                    ? const Color(0xFF3D2E1A)
+                                    : Colors.orange[50],
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                'No SIM card detected. Insert a SIM to use transaction features.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: context.isDarkMode
+                                      ? Colors.orange[200]
+                                      : Colors.orange[900],
+                                ),
+                              ),
+                            )
+                          : Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: context.appSurface,
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.06),
+                                    blurRadius: 3,
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                children: visibleProviders.map((p) {
+                                  final selected = _provider == p['value'];
+                                  final color = AppTheme.providerColor(
+                                    p['value']!,
+                                  );
+                                  return Expanded(
+                                    child: GestureDetector(
+                                      onTap: () {
+                                        setState(() {
+                                          _provider = p['value']!;
+                                        });
+                                        _loadRecent();
+                                      },
+                                      child: Container(
+                                        margin: const EdgeInsets.symmetric(
+                                          horizontal: 2,
+                                          vertical: 2,
+                                        ),
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 9,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: selected
+                                              ? color
+                                              : Colors.transparent,
+                                          borderRadius: BorderRadius.circular(
+                                            9,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          p['label']!,
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                            color: selected
+                                                ? (p['value'] == 'mtn'
+                                                      ? Colors.black
+                                                      : Colors.white)
+                                                : context.appSecondaryText,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
                               ),
                             ),
-                          );
-                        }).toList()),
-                      ),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-              sliver: SliverToBoxAdapter(
-                child: GridView.count(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
-                  childAspectRatio: 0.85,
-                  children: _visibleQuickActions
-                      .map(
-                        (action) => _QuickActionTile(
-                          icon: action.icon,
-                          label: action.label,
-                          onTap: () => _startTransaction(action.type),
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-              sliver: SliverToBoxAdapter(
-                child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                  const Text('Recent Transactions', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                  // Full history is Paid-only per spec - Free users see
-                  // the same last-5 preview here, but "See All" nudges
-                  // toward upgrading instead of opening a screen they'd
-                  // just get a 403 from.
-                  GestureDetector(
-                    onTap: () => context.push(isPaid ? '/personal-transactions/history' : '/personal-subscription'),
-                    child: Row(children: [
-                      if (!isPaid) const Padding(padding: EdgeInsets.only(right: 3), child: Icon(Icons.lock_outline, size: 12, color: AppTheme.primaryColor)),
-                      const Text('See All', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
-                    ]),
+                    ),
                   ),
-                ]),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+                    sliver: SliverToBoxAdapter(
+                      child: GridView.count(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        crossAxisCount: 3,
+                        crossAxisSpacing: 10,
+                        mainAxisSpacing: 10,
+                        childAspectRatio: 0.85,
+                        children: _visibleQuickActions
+                            .map(
+                              (action) => _QuickActionTile(
+                                icon: action.icon,
+                                label: action.label,
+                                onTap: () => _startTransaction(action.type),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                  ),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                    sliver: SliverToBoxAdapter(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Recent Transactions',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          // Full history is Paid-only per spec - Free users see
+                          // the same last-5 preview here, but "See All" nudges
+                          // toward upgrading instead of opening a screen they'd
+                          // just get a 403 from.
+                          GestureDetector(
+                            onTap: () => context.push(
+                              isPaid
+                                  ? '/personal-transactions/history'
+                                  : '/personal-subscription',
+                            ),
+                            child: Row(
+                              children: [
+                                if (!isPaid)
+                                  const Padding(
+                                    padding: EdgeInsets.only(right: 3),
+                                    child: Icon(
+                                      Icons.lock_outline,
+                                      size: 12,
+                                      color: AppTheme.primaryColor,
+                                    ),
+                                  ),
+                                const Text(
+                                  'See All',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.primaryColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (_loadingRecent)
+                    const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.all(30),
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                    )
+                  else if (_recent.isEmpty)
+                    const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Center(child: Text('No transactions yet')),
+                      ),
+                    )
+                  else
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, i) => PersonalTransactionItem(
+                            tx: _recent[i] as Map<String, dynamic>,
+                          ),
+                          childCount: _recent.length,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
-            if (_loadingRecent)
-              const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(30), child: Center(child: CircularProgressIndicator())))
-            else if (_recent.isEmpty)
-              const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(20), child: Center(child: Text('No transactions yet'))))
-            else
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-                sliver: SliverList(delegate: SliverChildBuilderDelegate(
-                  (context, i) => PersonalTransactionItem(tx: _recent[i] as Map<String, dynamic>),
-                  childCount: _recent.length,
-                )),
-              ),
-          ]),
-        )),
-        // Free-tier-only per spec - pinned below the scrollable content
-        // rather than inside it, so it never scrolls away.
-        if (!isPaid) const PersonalAdBanner(),
-      ]),
+          ),
+          // Free-tier-only per spec - pinned below the scrollable content
+          // rather than inside it, so it never scrolls away.
+          if (!isPaid) const PersonalAdBanner(),
+        ],
+      ),
     );
   }
 }
@@ -346,7 +504,11 @@ class _QuickActionTile extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  const _QuickActionTile({required this.icon, required this.label, required this.onTap});
+  const _QuickActionTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -357,7 +519,9 @@ class _QuickActionTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: context.appSurface,
           borderRadius: BorderRadius.circular(12),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 3)],
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 3),
+          ],
         ),
         padding: const EdgeInsets.all(8),
         child: Column(
@@ -365,11 +529,14 @@ class _QuickActionTile extends StatelessWidget {
           children: [
             Icon(icon, color: AppTheme.primaryColor, size: 26),
             const SizedBox(height: 6),
-            Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+            ),
           ],
         ),
       ),
     );
   }
 }
-
