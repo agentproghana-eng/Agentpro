@@ -381,36 +381,20 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  String _filterSummary() {
-    final parts = <String>[_period[0].toUpperCase() + _period.substring(1)];
-
-    if (_typeFilters.isNotEmpty) {
-      parts.add(
-        '${_typeFilters.length} '
-        '${_typeFilters.length == 1 ? 'type' : 'types'}',
-      );
-    }
-
-    if (_providerFilters.isNotEmpty) {
-      final labels = _providers
-          .where((provider) => _providerFilters.contains(provider['value']))
-          .map((provider) => provider['label']!)
-          .join(' + ');
-
-      if (labels.isNotEmpty) {
-        parts.add(labels);
+  String _optionLabel(List<Map<String, String>> options, String value) {
+    for (final option in options) {
+      if (option['value'] == value) {
+        return option['label'] ?? value;
       }
     }
 
-    if (_statusFilters.isNotEmpty) {
-      parts.add(
-        '${_statusFilters.length} '
-        '${_statusFilters.length == 1 ? 'status' : 'statuses'}',
-      );
-    }
-
-    return parts.join(' · ');
+    return value;
   }
+
+  bool get _hasActiveMultiFilters =>
+      _typeFilters.isNotEmpty ||
+      _providerFilters.isNotEmpty ||
+      _statusFilters.isNotEmpty;
 
   void _clearMultiFilters() {
     setState(() {
@@ -418,6 +402,83 @@ class _ReportsScreenState extends State<ReportsScreen> {
       _providerFilters.clear();
       _statusFilters.clear();
     });
+  }
+
+  Widget _activeFilterChips(BuildContext context) {
+    final chips = <Widget>[];
+
+    for (final type in _typeFilters) {
+      chips.add(
+        InputChip(
+          avatar: const Icon(Icons.swap_horiz_rounded, size: 16),
+          label: Text(_optionLabel(_types, type)),
+          onDeleted: () {
+            setState(() => _typeFilters.remove(type));
+          },
+        ),
+      );
+    }
+
+    for (final provider in _providerFilters) {
+      chips.add(
+        InputChip(
+          avatar: const Icon(Icons.sim_card_outlined, size: 16),
+          label: Text(_optionLabel(_providers, provider)),
+          onDeleted: () {
+            setState(() => _providerFilters.remove(provider));
+          },
+        ),
+      );
+    }
+
+    for (final status in _statusFilters) {
+      chips.add(
+        InputChip(
+          avatar: const Icon(Icons.check_circle_outline_rounded, size: 16),
+          label: Text(_optionLabel(_statuses, status)),
+          onDeleted: () {
+            setState(() => _statusFilters.remove(status));
+          },
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+      decoration: BoxDecoration(
+        color: context.appSurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: context.appSecondaryText.withOpacity(0.12)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.filter_alt_outlined,
+                size: 18,
+                color: AppTheme.primaryColor,
+              ),
+              const SizedBox(width: 7),
+              const Expanded(
+                child: Text(
+                  'Active Filters',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                ),
+              ),
+              TextButton(
+                onPressed: _clearMultiFilters,
+                child: const Text('Clear All'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Wrap(spacing: 8, runSpacing: 8, children: chips),
+        ],
+      ),
+    );
   }
 
   @override
@@ -609,29 +670,22 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _filterSummary(),
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: context.appSecondaryText,
-                    ),
-                  ),
+            if (_hasActiveMultiFilters) ...[
+              const SizedBox(height: 12),
+              _activeFilterChips(context),
+              const SizedBox(height: 8),
+            ] else ...[
+              const SizedBox(height: 12),
+              Text(
+                '${_period[0].toUpperCase()}${_period.substring(1)} · All filters',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: context.appSecondaryText,
                 ),
-                if (_typeFilters.isNotEmpty ||
-                    _providerFilters.isNotEmpty ||
-                    _statusFilters.isNotEmpty)
-                  TextButton(
-                    onPressed: _clearMultiFilters,
-                    child: const Text('Clear filters'),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 4),
+              ),
+              const SizedBox(height: 4),
+            ],
             Text(
               'Type, Status, SIM, and Sort apply to the Transaction Report only.',
               style: TextStyle(
