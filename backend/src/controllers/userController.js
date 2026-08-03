@@ -641,3 +641,169 @@ exports.updateMySettings = async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to update settings' });
   }
 };
+
+const QUICK_ACTION_PROVIDERS = ['mtn', 'telecel', 'at_money'];
+
+function validateQuickActionPreferences(value, fieldName) {
+  if (value === undefined) return null;
+
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return `${fieldName} must be an object keyed by provider`;
+  }
+
+  for (const [provider, transactionTypes] of Object.entries(value)) {
+    if (!QUICK_ACTION_PROVIDERS.includes(provider)) {
+      return `Invalid provider in ${fieldName}: ${provider}`;
+    }
+
+    if (!Array.isArray(transactionTypes)) {
+      return `${fieldName}.${provider} must be an array`;
+    }
+
+    if (transactionTypes.length > 9) {
+      return `${fieldName}.${provider} cannot contain more than 9 actions`;
+    }
+
+    if (!transactionTypes.every(
+      item => typeof item === 'string' && item.trim().length > 0
+    )) {
+      return `${fieldName}.${provider} must contain only transaction-type strings`;
+    }
+
+    if (new Set(transactionTypes).size !== transactionTypes.length) {
+      return `${fieldName}.${provider} cannot contain duplicate actions`;
+    }
+  }
+
+  return null;
+}
+
+exports.getMyQuickActions = async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT agent_quick_actions, personal_quick_actions
+       FROM users
+       WHERE id = $1`,
+      [req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        agent: result.rows[0].agent_quick_actions || {},
+        personal: result.rows[0].personal_quick_actions || {},
+      },
+    });
+  } catch (error) {
+    logger.error('Get my quick actions error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch Quick Action preferences',
+    });
+  }
+};
+
+exports.updateMyQuickActions = async (req, res) => {
+  const {
+    agent_quick_actions,
+    personal_quick_actions,
+  } = req.body;
+
+  if (
+    agent_quick_actions === undefined &&
+    personal_quick_actions === undefined
+  ) {
+    return res.status(422).json({
+      success: false,
+      message: 'Provide agent_quick_actions or personal_quick_actions',
+    });
+  }
+
+  const agentError = validateQuickActionPreferences(
+    agent_quick_actions,
+    'agent_quick_actions'
+  );
+
+  if (agentError) {
+    return res.status(422).json({
+      success: false,
+      message: agentError,
+    });
+  }
+
+  const personalError = validateQuickActionPreferences(
+    personal_quick_actions,
+    'personal_quick_actions'
+  );
+
+  if (personalError) {
+    return res.status(422).json({
+      success: false,
+      message: personalError,
+    });
+  }
+
+  try {
+    const result = await query(
+      `UPDATE users
+       SET agent_quick_actions =
+             COALESCE($1::jsonb, agent_quick_actions),
+           personal_quick_actions =
+             COALESCE($2::jsonb, personal_quick_actions),
+           updated_at = NOW()
+       WHERE id = $3
+       RETURNING agent_quick_actions, personal_quick_actions`,
+      [
+        agent_quick_actions === undefined
+          ? null
+          : JSON.stringify(agent_quick_actions),
+        personal_quick_actions === undefined
+          ? null
+          : JSON.stringify(personal_quick_actions),
+        req.user.id,
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    await auditLog({
+      userId: req.user.id,
+      companyId: req.user.company_id,
+      action: 'QUICK_ACTIONS_UPDATED',
+      entityType: 'user',
+      entityId: req.user.id,
+      newValues: {
+        agent_quick_actions,
+        personal_quick_actions,
+      },
+      ipAddress: req.ip,
+      requestId: req.requestId,
+    });
+
+    res.json({
+      success: true,
+      data: {
+        agent: result.rows[0].agent_quick_actions || {},
+        personal: result.rows[0].personal_quick_actions || {},
+      },
+    });
+  } catch (error) {
+    logger.error('Update my quick actions error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update Quick Action preferences',
+    });
+  }
+};

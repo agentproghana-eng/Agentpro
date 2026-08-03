@@ -9,6 +9,8 @@ userRouter.get('/', authorize('superuser', 'business_owner', 'manager'), userCon
 userRouter.post('/', authorize('superuser', 'business_owner'), userController.createUser);
 userRouter.patch('/me/password', userController.changePassword);
 userRouter.patch('/me/settings', userController.updateMySettings);
+userRouter.get('/me/quick-actions', userController.getMyQuickActions);
+userRouter.patch('/me/quick-actions', userController.updateMyQuickActions);
 userRouter.get('/me/feature-flags', userController.getFeatureFlags);
 userRouter.get('/:user_id', authorize('superuser', 'business_owner', 'manager'), userController.getUser);
 userRouter.patch('/:user_id', authorize('superuser', 'business_owner'), userController.updateUser);
