@@ -6,6 +6,81 @@ const { calculateCommission } = require('../services/commissionService');
 const { sendTransactionNotification } = require('../services/notificationService');
 const { generateTransactionReceipt } = require('../services/reportService');
 
+async function recordAgentSimUsage({
+  agentId,
+  companyId,
+  provider,
+  simIccid,
+  transactionId,
+  ipAddress,
+  requestId
+}) {
+  if (!simIccid) return;
+
+  try {
+    const [knownThisSim, hasAnyKnownSim] = await Promise.all([
+      query(
+        `SELECT 1
+         FROM agent_sim_registry
+         WHERE agent_id = $1
+           AND provider = $2
+           AND iccid = $3`,
+        [agentId, provider, simIccid]
+      ),
+      query(
+        `SELECT 1
+         FROM agent_sim_registry
+         WHERE agent_id = $1
+           AND provider = $2
+         LIMIT 1`,
+        [agentId, provider]
+      )
+    ]);
+
+    if (
+      knownThisSim.rows.length === 0 &&
+      hasAnyKnownSim.rows.length > 0
+    ) {
+      await auditLog({
+        userId: agentId,
+        companyId,
+        action: 'NEW_SIM_DETECTED',
+        entityType: 'transaction',
+        entityId: transactionId,
+        newValues: {
+          provider,
+          sim_iccid: simIccid,
+          message:
+            'A different physical SIM than previously seen was used for this agent/provider combo'
+        },
+        ipAddress,
+        requestId
+      });
+    }
+
+    await query(
+      `INSERT INTO agent_sim_registry (
+         agent_id,
+         provider,
+         iccid,
+         transaction_count
+       )
+       VALUES ($1, $2, $3, 1)
+       ON CONFLICT (agent_id, provider, iccid)
+       DO UPDATE SET
+         last_seen_at = NOW(),
+         transaction_count =
+           agent_sim_registry.transaction_count + 1`,
+      [agentId, provider, simIccid]
+    );
+  } catch (error) {
+    logger.error(
+      'SIM registry check error (non-blocking):',
+      error
+    );
+  }
+}
+
 // ─── Initiate Transaction ─────────────────────────────────────
 
 exports.initiateTransaction = async (req, res) => {
@@ -32,72 +107,91 @@ exports.initiateTransaction = async (req, res) => {
   const companyId = req.user.company_id;
 
   try {
-    // Kill-switch check - server-side enforcement so a stale app
-    // build that doesn't check the client-side feature flag can't
-    // bypass an admin-disabled transaction type. Fails open (allows
-    // the transaction) on any config read/parse error, matching
-    // getFeatureFlags' fail-safe behavior - a config problem should
-    // never itself block real transactions.
-    try {
-      const flagResult = await query(
-        `SELECT value FROM system_config WHERE key = 'disabled_transaction_types'`
-      );
-      if (flagResult.rows.length > 0) {
+    // Run independent transaction preflight queries concurrently.
+    // These checks do not depend on one another, so awaiting them
+    // sequentially only delays the USSD startup response.
+    const [
+      flagResult,
+      branchLookup,
+      templateResult,
+      flowResult
+    ] = await Promise.all([
+      query(
+        `SELECT value
+         FROM system_config
+         WHERE key = 'disabled_transaction_types'`
+      ).catch((flagErr) => {
+        // Feature flags deliberately fail open. A configuration read
+        // problem must not block a genuine transaction.
+        logger.error(
+          'Feature flag check failed (allowing transaction):',
+          flagErr
+        );
+        return { rows: [] };
+      }),
+
+      query(
+        `SELECT b.id
+         FROM branches b
+         INNER JOIN agent_branches ab
+           ON ab.branch_id = b.id
+         WHERE ab.agent_id = $1
+           AND b.status = 'active'`,
+        [agentId]
+      ),
+
+      query(
+        `SELECT *
+         FROM ussd_templates
+         WHERE provider = $1
+           AND transaction_type = $2
+           AND is_active = TRUE`,
+        [provider, transaction_type]
+      ),
+
+      query(
+        `SELECT 1
+         FROM ussd_flows
+         WHERE provider = $1
+           AND transaction_type = $2
+           AND is_active = TRUE
+           AND (company_id = $3 OR company_id IS NULL)
+         LIMIT 1`,
+        [provider, transaction_type, companyId]
+      )
+    ]);
+
+    if (flagResult.rows.length > 0) {
+      try {
         const disabled = JSON.parse(flagResult.rows[0].value);
-        if (Array.isArray(disabled) && disabled.includes(`${provider}:${transaction_type}`)) {
+
+        if (
+          Array.isArray(disabled) &&
+          disabled.includes(`${provider}:${transaction_type}`)
+        ) {
           return res.status(403).json({
             success: false,
-            message: 'This transaction type has been temporarily disabled by your administrator. Please try again later.',
+            message:
+              'This transaction type has been temporarily disabled by your administrator. Please try again later.'
           });
         }
+      } catch (flagParseError) {
+        logger.error(
+          'Feature flag parse failed (allowing transaction):',
+          flagParseError
+        );
       }
-    } catch (flagErr) {
-      logger.error('Feature flag check failed (allowing transaction):', flagErr);
     }
-
-    // Determine the agent's assigned branch server-side - agents,
-    // managers, and owners never send branch_id from the client;
-    // every transaction is always recorded against whichever branch
-    // the user is currently assigned to via agent_branches (the
-    // single source of truth, kept in sync by branch assignment /
-    // reassignment endpoints and by branch creation for owners).
-    const branchLookup = await query(
-      `SELECT b.id FROM branches b
-       INNER JOIN agent_branches ab ON ab.branch_id = b.id
-       WHERE ab.agent_id = $1 AND b.status = 'active'`,
-      [agentId]
-    );
 
     if (branchLookup.rows.length === 0) {
       return res.status(403).json({
         success: false,
-        message: 'You are not currently assigned to a branch. Contact your business owner or manager.'
+        message:
+          'You are not currently assigned to a branch. Contact your business owner or manager.'
       });
     }
 
     const branch_id = branchLookup.rows[0].id;
-
-    // Fetch USSD template for this provider + transaction type. The
-    // legacy single-dial ussd_templates table used to be the only
-    // source of truth here, but the newer Flow Builder
-    // (ussd_flows/ussd_flow_steps) system - resolved separately by
-    // Flutter via GET /ussd-flows/resolve after this call succeeds -
-    // is now an equally valid alternative automation path. This only
-    // needs to confirm *some* automation exists before letting the
-    // transaction be created; it doesn't need the flow's actual steps.
-    const templateResult = await query(
-      `SELECT * FROM ussd_templates
-       WHERE provider = $1 AND transaction_type = $2 AND is_active = TRUE`,
-      [provider, transaction_type]
-    );
-
-    const flowResult = await query(
-      `SELECT 1 FROM ussd_flows
-       WHERE provider = $1 AND transaction_type = $2 AND is_active = TRUE
-         AND (company_id = $3 OR company_id IS NULL)
-       LIMIT 1`,
-      [provider, transaction_type, companyId]
-    );
 
     if (templateResult.rows.length === 0 && flowResult.rows.length === 0) {
       return res.status(400).json({
@@ -145,50 +239,6 @@ exports.initiateTransaction = async (req, res) => {
       requestId: req.requestId
     });
 
-    // SIM fingerprint check - only meaningful when the device actually
-    // reported an ICCID (not all devices/Android versions expose it).
-    // Wrapped so any failure here never blocks the transaction itself,
-    // since this is a security signal, not a validation gate.
-    if (sim_iccid) {
-      try {
-        const knownThisSim = await query(
-          `SELECT 1 FROM agent_sim_registry WHERE agent_id = $1 AND provider = $2 AND iccid = $3`,
-          [agentId, provider, sim_iccid]
-        );
-        const hasAnyKnownSim = await query(
-          `SELECT 1 FROM agent_sim_registry WHERE agent_id = $1 AND provider = $2 LIMIT 1`,
-          [agentId, provider]
-        );
-
-        // Only flag if this agent+provider already has an established
-        // SIM on record and this transaction used a genuinely different
-        // one - not on the very first transaction ever for this combo,
-        // which is just establishing the baseline.
-        if (knownThisSim.rows.length === 0 && hasAnyKnownSim.rows.length > 0) {
-          await auditLog({
-            userId: agentId,
-            companyId,
-            action: 'NEW_SIM_DETECTED',
-            entityType: 'transaction',
-            entityId: transaction.id,
-            newValues: { provider, sim_iccid, message: 'A different physical SIM than previously seen was used for this agent/provider combo' },
-            ipAddress: req.ip,
-            requestId: req.requestId
-          });
-        }
-
-        await query(
-          `INSERT INTO agent_sim_registry (agent_id, provider, iccid, transaction_count)
-           VALUES ($1, $2, $3, 1)
-           ON CONFLICT (agent_id, provider, iccid)
-           DO UPDATE SET last_seen_at = NOW(), transaction_count = agent_sim_registry.transaction_count + 1`,
-          [agentId, provider, sim_iccid]
-        );
-      } catch (simCheckError) {
-        logger.error('SIM registry check error (non-blocking):', simCheckError);
-      }
-    }
-
     // Return transaction details + USSD template for the Flutter app
     // The app will execute USSD automation using this template
     res.status(201).json({
@@ -219,6 +269,21 @@ exports.initiateTransaction = async (req, res) => {
         }
       }
     });
+
+    // SIM fingerprinting is a security signal, not a prerequisite for
+    // opening the USSD session. Run it after the response so registry
+    // reads/writes cannot delay the dial. Errors are handled internally.
+    void recordAgentSimUsage({
+      agentId,
+      companyId,
+      provider,
+      simIccid: sim_iccid,
+      transactionId: transaction.id,
+      ipAddress: req.ip,
+      requestId: req.requestId
+    });
+
+    return;
 
   } catch (error) {
     logger.error('Transaction initiation error:', error);
