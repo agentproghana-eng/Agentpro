@@ -68,11 +68,14 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
     );
 
     _load();
-    _loadSimMap();
-    _loadFeatureFlags();
-    _loadSimPurposes();
-    _loadCurrentShift();
-    _loadQuickActions();
+
+    // Secondary dashboard data loads in the background so the main
+    // dashboard appears as quickly as possible.
+    unawaited(_loadSimMap());
+    unawaited(_loadFeatureFlags());
+    unawaited(_loadSimPurposes());
+    unawaited(_loadCurrentShift());
+    unawaited(_loadQuickActions());
   }
 
   Future<void> _handleDashboardRefresh(DashboardRefreshEvent event) async {
