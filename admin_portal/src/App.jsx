@@ -1,4 +1,6 @@
 import { useState, useEffect, createContext, useContext } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { LoadingState, ErrorState } from './components/PageState.jsx';
 import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import toast, { Toaster } from 'react-hot-toast';
@@ -190,41 +192,147 @@ function Layout({ children }) {
 // ── Dashboard Page ────────────────────────────────────────────
 
 function DashboardPage() {
-  const [overview, setOverview] = useState(null);
-  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    API.get('/admin/overview').then(r => { setOverview(r.data.data); setLoading(false); });
-  }, []);
+  const {
+    data: overview,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({
+    queryKey: ['admin', 'overview'],
+    queryFn: async () => {
+      const response = await API.get('/admin/overview');
+      return response.data.data;
+    },
+  });
 
-  if (loading) return <div className="text-center py-16 text-gray-400">Loading dashboard...</div>;
+  if (isLoading) {
+    return <LoadingState label="Loading platform overview..." />;
+  }
 
-  // path is omitted for cards with no destination page yet (Total
-  // Users, Transactions Today) - those stay non-clickable rather than
-  // navigating somewhere that doesn't exist.
+  if (isError) {
+    return (
+      <ErrorState
+        title="Dashboard could not be loaded"
+        message={
+          error?.response?.data?.message ||
+          error?.message ||
+          'The platform overview is currently unavailable.'
+        }
+        onRetry={refetch}
+      />
+    );
+  }
+
   const cards = [
-    { label: 'Total Companies', value: overview?.companies?.total ?? '—', sub: `${overview?.companies?.active ?? 0} active`, color: 'blue', path: '/companies' },
-    { label: 'Total Users', value: overview?.users?.total ?? '—', sub: 'Platform-wide', color: 'green' },
-    { label: 'Transactions Today', value: overview?.transactions_today ?? '—', sub: 'All companies', color: 'purple' },
-    { label: 'Active Subscriptions', value: overview?.active_subscriptions ?? '—', sub: 'Business Plan', color: 'yellow', path: '/subscriptions' },
-    { label: 'Pending Ads', value: overview?.pending_ads ?? '—', sub: 'Awaiting moderation', color: 'red', path: '/marketplace' },
+    {
+      label: 'Total Companies',
+      value: overview?.companies?.total ?? '—',
+      sub: `${overview?.companies?.active ?? 0} active`,
+      path: '/companies',
+    },
+    {
+      label: 'Total Users',
+      value: overview?.users?.total ?? '—',
+      sub: 'Platform-wide',
+    },
+    {
+      label: 'Transactions Today',
+      value: overview?.transactions_today ?? '—',
+      sub: 'All companies',
+    },
+    {
+      label: 'Active Subscriptions',
+      value: overview?.active_subscriptions ?? '—',
+      sub: 'Business Plan',
+      path: '/subscriptions',
+    },
+    {
+      label: 'Pending Ads',
+      value: overview?.pending_ads ?? '—',
+      sub: 'Awaiting moderation',
+      path: '/marketplace',
+    },
   ];
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-6">Platform Overview</h2>
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-8">
-        {cards.map(card => (
-          <div key={card.label}
-            onClick={card.path ? () => navigate(card.path) : undefined}
-            className={`bg-white rounded-xl p-4 shadow-sm ${card.path ? 'cursor-pointer hover:shadow-md hover:ring-2 hover:ring-primary/30 transition' : ''}`}>
-            <p className="text-2xl font-bold text-gray-900">{card.value}</p>
-            <p className="text-sm font-medium text-gray-600 mt-1">{card.label}</p>
-            <p className="text-xs text-gray-400">{card.sub}</p>
-          </div>
-        ))}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">
+            Platform Overview
+          </h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Current operational status across Agent Pro Ghana.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => refetch()}
+          disabled={isFetching}
+          className="inline-flex items-center gap-2 rounded-lg border
+                     border-gray-200 bg-white px-4 py-2 text-sm
+                     font-medium text-gray-700 shadow-sm transition
+                     hover:bg-gray-50 disabled:cursor-not-allowed
+                     disabled:opacity-60"
+        >
+          <span
+            className={isFetching ? 'animate-spin' : ''}
+            aria-hidden="true"
+          >
+            ↻
+          </span>
+          {isFetching ? 'Refreshing...' : 'Refresh'}
+        </button>
       </div>
+
+      <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-5">
+        {cards.map((card) => {
+          const content = (
+            <>
+              <p className="text-2xl font-bold text-gray-900">
+                {card.value}
+              </p>
+              <p className="mt-1 text-sm font-medium text-gray-600">
+                {card.label}
+              </p>
+              <p className="text-xs text-gray-400">
+                {card.sub}
+              </p>
+            </>
+          );
+
+          if (!card.path) {
+            return (
+              <div
+                key={card.label}
+                className="rounded-xl bg-white p-4 shadow-sm"
+              >
+                {content}
+              </div>
+            );
+          }
+
+          return (
+            <button
+              key={card.label}
+              type="button"
+              onClick={() => navigate(card.path)}
+              className="rounded-xl bg-white p-4 text-left shadow-sm
+                         transition hover:shadow-md hover:ring-2
+                         hover:ring-primary/30 focus:outline-none
+                         focus:ring-2 focus:ring-primary"
+            >
+              {content}
+            </button>
+          );
+        })}
+      </div>
+
       <PendingRegistrationsWidget />
     </div>
   );
