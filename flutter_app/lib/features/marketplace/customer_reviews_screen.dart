@@ -343,8 +343,10 @@ class _ReviewCard extends StatelessWidget {
                 'No written review.',
                 style: TextStyle(
                   fontStyle: FontStyle.italic,
-                  color:
-                      Theme.of(context).colorScheme.onSurface.withOpacity(0.55),
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.55),
                 ),
               ),
             ],

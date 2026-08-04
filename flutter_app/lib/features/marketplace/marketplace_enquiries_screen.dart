@@ -86,7 +86,7 @@ class _MarketplaceEnquiriesScreenState
       body: RefreshIndicator(
         onRefresh: _load,
         child: _loading
-            ? const ListView(
+            ? ListView(
                 physics: AlwaysScrollableScrollPhysics(),
                 children: [
                   SizedBox(height: 180),
@@ -113,7 +113,7 @@ class _MarketplaceEnquiriesScreenState
                     ],
                   )
                 : _conversations.isEmpty
-                    ? const ListView(
+                    ? ListView(
                         physics: AlwaysScrollableScrollPhysics(),
                         padding: EdgeInsets.all(24),
                         children: [
