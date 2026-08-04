@@ -49,6 +49,8 @@ import '../../features/marketplace/post_ad_screen.dart';
 import '../../features/marketplace/my_ads_screen.dart';
 import '../../features/marketplace/ad_detail_screen.dart';
 import '../../features/marketplace/customer_reviews_screen.dart';
+import '../../features/marketplace/marketplace_enquiries_screen.dart';
+import '../../features/marketplace/marketplace_conversation_screen.dart';
 import '../../features/settings/settings_screen.dart';
 import '../../features/settings/sim_purpose_settings_screen.dart';
 import '../../features/notifications/notifications_screen.dart';
@@ -273,6 +275,16 @@ class AppRouter {
         GoRoute(
           path: '/marketplace/reviews',
           builder: (_, __) => const CustomerReviewsScreen(),
+        ),
+        GoRoute(
+          path: '/marketplace/enquiries',
+          builder: (_, __) => const MarketplaceEnquiriesScreen(),
+        ),
+        GoRoute(
+          path: '/marketplace/enquiries/:conversation_id',
+          builder: (_, state) => MarketplaceConversationScreen(
+            conversationId: state.pathParameters['conversation_id']!,
+          ),
         ),
         GoRoute(
           path: '/marketplace/ads/:ad_id',

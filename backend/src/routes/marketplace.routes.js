@@ -255,6 +255,299 @@ mpRouter.get('/reviews/received', async (req, res) => {
   }
 });
 
+// Start or continue a private customer enquiry about an active ad.
+mpRouter.post('/:ad_id/enquiries', async (req, res) => {
+  const body = req.body.message?.trim();
+
+  if (!body || body.length > 2000) {
+    return res.status(422).json({
+      success: false,
+      message: 'Message is required and must not exceed 2000 characters',
+    });
+  }
+
+  try {
+    const adResult = await query(
+      `SELECT id, posted_by, title, status
+       FROM advertisements
+       WHERE id = $1`,
+      [req.params.ad_id]
+    );
+
+    if (!adResult.rows.length) {
+      return res.status(404).json({
+        success: false,
+        message: 'Advertisement not found',
+      });
+    }
+
+    const ad = adResult.rows[0];
+
+    if (ad.status !== 'active') {
+      return res.status(422).json({
+        success: false,
+        message: 'Enquiries can only be sent for active advertisements',
+      });
+    }
+
+    if (ad.posted_by === req.user.id) {
+      return res.status(422).json({
+        success: false,
+        message: 'You cannot send an enquiry about your own advertisement',
+      });
+    }
+
+    const conversationResult = await query(
+      `INSERT INTO marketplace_conversations
+         (advertisement_id, customer_id, seller_id)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (advertisement_id, customer_id)
+       DO UPDATE SET
+         status = 'open',
+         updated_at = NOW()
+       RETURNING *`,
+      [ad.id, req.user.id, ad.posted_by]
+    );
+
+    const conversation = conversationResult.rows[0];
+
+    const messageResult = await query(
+      `INSERT INTO marketplace_messages
+         (conversation_id, sender_id, body)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [conversation.id, req.user.id, body]
+    );
+
+    res.status(201).json({
+      success: true,
+      data: {
+        conversation,
+        message: messageResult.rows[0],
+      },
+    });
+  } catch (e) {
+    console.error('POST /marketplace/:ad_id/enquiries error:', e);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to send enquiry',
+    });
+  }
+});
+
+// List marketplace conversations for the current user.
+mpRouter.get('/enquiries', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT
+         c.id,
+         c.advertisement_id,
+         c.customer_id,
+         c.seller_id,
+         c.status,
+         c.created_at,
+         c.updated_at,
+         a.title AS ad_title,
+         a.image_urls,
+         customer.first_name AS customer_first_name,
+         customer.last_name AS customer_last_name,
+         customer.profile_image_url AS customer_profile_image_url,
+         seller.first_name AS seller_first_name,
+         seller.last_name AS seller_last_name,
+         seller.profile_image_url AS seller_profile_image_url,
+         (
+           SELECT mm.body
+           FROM marketplace_messages mm
+           WHERE mm.conversation_id = c.id
+           ORDER BY mm.created_at DESC
+           LIMIT 1
+         ) AS last_message,
+         (
+           SELECT mm.created_at
+           FROM marketplace_messages mm
+           WHERE mm.conversation_id = c.id
+           ORDER BY mm.created_at DESC
+           LIMIT 1
+         ) AS last_message_at,
+         (
+           SELECT COUNT(*)::int
+           FROM marketplace_messages mm
+           WHERE mm.conversation_id = c.id
+             AND mm.sender_id <> $1
+             AND mm.read_at IS NULL
+         ) AS unread_count
+       FROM marketplace_conversations c
+       INNER JOIN advertisements a
+         ON a.id = c.advertisement_id
+       INNER JOIN users customer
+         ON customer.id = c.customer_id
+       INNER JOIN users seller
+         ON seller.id = c.seller_id
+       WHERE c.customer_id = $1 OR c.seller_id = $1
+       ORDER BY COALESCE(
+         (
+           SELECT MAX(mm.created_at)
+           FROM marketplace_messages mm
+           WHERE mm.conversation_id = c.id
+         ),
+         c.updated_at
+       ) DESC`,
+      [req.user.id]
+    );
+
+    res.json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (e) {
+    console.error('GET /marketplace/enquiries error:', e);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch enquiries',
+    });
+  }
+});
+
+// Fetch one conversation and its messages.
+mpRouter.get('/enquiries/:conversation_id', async (req, res) => {
+  try {
+    const conversationResult = await query(
+      `SELECT
+         c.*,
+         a.title AS ad_title,
+         a.status AS ad_status,
+         customer.first_name AS customer_first_name,
+         customer.last_name AS customer_last_name,
+         customer.profile_image_url AS customer_profile_image_url,
+         seller.first_name AS seller_first_name,
+         seller.last_name AS seller_last_name,
+         seller.profile_image_url AS seller_profile_image_url
+       FROM marketplace_conversations c
+       INNER JOIN advertisements a
+         ON a.id = c.advertisement_id
+       INNER JOIN users customer
+         ON customer.id = c.customer_id
+       INNER JOIN users seller
+         ON seller.id = c.seller_id
+       WHERE c.id = $1
+         AND (c.customer_id = $2 OR c.seller_id = $2)`,
+      [req.params.conversation_id, req.user.id]
+    );
+
+    if (!conversationResult.rows.length) {
+      return res.status(404).json({
+        success: false,
+        message: 'Conversation not found',
+      });
+    }
+
+    const messagesResult = await query(
+      `SELECT
+         m.id,
+         m.conversation_id,
+         m.sender_id,
+         m.body,
+         m.read_at,
+         m.created_at,
+         u.first_name AS sender_first_name,
+         u.last_name AS sender_last_name
+       FROM marketplace_messages m
+       INNER JOIN users u ON u.id = m.sender_id
+       WHERE m.conversation_id = $1
+       ORDER BY m.created_at ASC`,
+      [req.params.conversation_id]
+    );
+
+    await query(
+      `UPDATE marketplace_messages
+       SET read_at = NOW()
+       WHERE conversation_id = $1
+         AND sender_id <> $2
+         AND read_at IS NULL`,
+      [req.params.conversation_id, req.user.id]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        conversation: conversationResult.rows[0],
+        messages: messagesResult.rows,
+      },
+    });
+  } catch (e) {
+    console.error('GET /marketplace/enquiries/:conversation_id error:', e);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch conversation',
+    });
+  }
+});
+
+// Send a message in an existing marketplace conversation.
+mpRouter.post('/enquiries/:conversation_id/messages', async (req, res) => {
+  const body = req.body.message?.trim();
+
+  if (!body || body.length > 2000) {
+    return res.status(422).json({
+      success: false,
+      message: 'Message is required and must not exceed 2000 characters',
+    });
+  }
+
+  try {
+    const conversationResult = await query(
+      `SELECT id, customer_id, seller_id, status
+       FROM marketplace_conversations
+       WHERE id = $1
+         AND (customer_id = $2 OR seller_id = $2)`,
+      [req.params.conversation_id, req.user.id]
+    );
+
+    if (!conversationResult.rows.length) {
+      return res.status(404).json({
+        success: false,
+        message: 'Conversation not found',
+      });
+    }
+
+    if (conversationResult.rows[0].status === 'closed') {
+      return res.status(422).json({
+        success: false,
+        message: 'This conversation is closed',
+      });
+    }
+
+    const result = await query(
+      `INSERT INTO marketplace_messages
+         (conversation_id, sender_id, body)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [req.params.conversation_id, req.user.id, body]
+    );
+
+    await query(
+      `UPDATE marketplace_conversations
+       SET updated_at = NOW()
+       WHERE id = $1`,
+      [req.params.conversation_id]
+    );
+
+    res.status(201).json({
+      success: true,
+      data: result.rows[0],
+    });
+  } catch (e) {
+    console.error(
+      'POST /marketplace/enquiries/:conversation_id/messages error:',
+      e
+    );
+    res.status(500).json({
+      success: false,
+      message: 'Failed to send message',
+    });
+  }
+});
+
 // Get a single ad by ID — scoped to the owner, since this is used to show
 // payment instructions and status for an ad that may not yet be public
 // (i.e. not necessarily 'active', so it can't go through the public list).

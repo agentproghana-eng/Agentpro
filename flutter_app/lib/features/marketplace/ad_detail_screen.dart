@@ -25,7 +25,10 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final res = await ApiClient.instance.get('/marketplace/${widget.adId}');
       if (mounted) {
@@ -48,7 +51,8 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => _AdPaymentSheet(
         adId: widget.adId,
         fee: double.tryParse(_ad?['publishing_fee']?.toString() ?? '0') ?? 0,
@@ -78,7 +82,8 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
   Widget _buildContent() {
     final ad = _ad!;
     final status = ad['status'] as String? ?? '';
-    final price = ad['price'] != null ? double.tryParse(ad['price'].toString()) : null;
+    final price =
+        ad['price'] != null ? double.tryParse(ad['price'].toString()) : null;
     final fee = double.tryParse(ad['publishing_fee']?.toString() ?? '0') ?? 0;
 
     return RefreshIndicator(
@@ -86,24 +91,29 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          if (ad['image_urls'] != null && (ad['image_urls'] as List).isNotEmpty) ...[
+          if (ad['image_urls'] != null &&
+              (ad['image_urls'] as List).isNotEmpty) ...[
             SizedBox(
               height: 220,
               child: PageView(
-                children: (ad['image_urls'] as List).map((url) => ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    color: AppTheme.primaryColor.withOpacity(0.1),
-                    child: Image.network(
-                      url as String,
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => Container(
-                        color: AppTheme.primaryColor.withOpacity(0.1),
-                        child: Center(child: Icon(Icons.broken_image_outlined, size: 40, color: Colors.grey[500])),
-                      ),
-                    ),
-                  ),
-                )).toList(),
+                children: (ad['image_urls'] as List)
+                    .map((url) => ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            color: AppTheme.primaryColor.withOpacity(0.1),
+                            child: Image.network(
+                              url as String,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => Container(
+                                color: AppTheme.primaryColor.withOpacity(0.1),
+                                child: Center(
+                                    child: Icon(Icons.broken_image_outlined,
+                                        size: 40, color: Colors.grey[500])),
+                              ),
+                            ),
+                          ),
+                        ))
+                    .toList(),
               ),
             ),
             const SizedBox(height: 16),
@@ -118,7 +128,8 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
                     children: [
                       Expanded(
                         child: Text(ad['title'] ?? '',
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                            style: const TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.bold)),
                       ),
                       StatusBadge(status: status),
                     ],
@@ -127,10 +138,13 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
                     const SizedBox(height: 8),
                     GhsAmount(amount: price, fontSize: 20),
                   ],
-                  if ((int.tryParse(ad['rating_count']?.toString() ?? '0') ?? 0) > 0) ...[
+                  if ((int.tryParse(ad['rating_count']?.toString() ?? '0') ??
+                          0) >
+                      0) ...[
                     const SizedBox(height: 6),
                     Row(children: [
-                      const Icon(Icons.star, size: 15, color: Color(0xFFFFB300)),
+                      const Icon(Icons.star,
+                          size: 15, color: Color(0xFFFFB300)),
                       const SizedBox(width: 4),
                       Text(
                         '${double.parse(ad['avg_rating'].toString()).toStringAsFixed(1)} · ${ad['rating_count']} rating${ad['rating_count'].toString() == '1' ? '' : 's'}',
@@ -139,19 +153,24 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
                     ]),
                   ],
                   const SizedBox(height: 12),
-                  Text(ad['description'] ?? '', style: TextStyle(color: Colors.grey[700])),
+                  Text(ad['description'] ?? '',
+                      style: TextStyle(color: Colors.grey[700])),
                   if (ad['location'] != null) ...[
                     const SizedBox(height: 12),
                     Row(children: [
-                      Icon(Icons.location_on_outlined, size: 16, color: Colors.grey[500]),
+                      Icon(Icons.location_on_outlined,
+                          size: 16, color: Colors.grey[500]),
                       const SizedBox(width: 4),
-                      Text(ad['location'], style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+                      Text(ad['location'],
+                          style:
+                              TextStyle(color: Colors.grey[600], fontSize: 13)),
                     ]),
                   ],
                   if (ad['published_at'] != null) ...[
                     const SizedBox(height: 8),
                     Row(children: [
-                      Icon(Icons.calendar_today_outlined, size: 15, color: Colors.grey[500]),
+                      Icon(Icons.calendar_today_outlined,
+                          size: 15, color: Colors.grey[500]),
                       const SizedBox(width: 4),
                       Text(
                         'Published ${DateFormat('MMM d, y \'at\' h:mm a').format(DateTime.parse(ad['published_at']).toLocal())}',
@@ -162,11 +181,15 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
                   if (ad['contact_phone'] != null) ...[
                     const SizedBox(height: 8),
                     Row(children: [
-                      Icon(Icons.phone_outlined, size: 15, color: Colors.grey[500]),
+                      Icon(Icons.phone_outlined,
+                          size: 15, color: Colors.grey[500]),
                       const SizedBox(width: 4),
                       Text(
                         ad['contact_phone'],
-                        style: TextStyle(color: Colors.grey[600], fontSize: 13, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600),
                       ),
                     ]),
                   ],
@@ -175,9 +198,11 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
             ),
           ),
           const SizedBox(height: 16),
-
-          _StatusExplainer(status: status, fee: fee, expiresAt: ad['expires_at'], rejectionReason: ad['rejection_reason']),
-
+          _StatusExplainer(
+              status: status,
+              fee: fee,
+              expiresAt: ad['expires_at'],
+              rejectionReason: ad['rejection_reason']),
           if (status == 'pending_payment') ...[
             const SizedBox(height: 20),
             AppButton(
@@ -213,41 +238,42 @@ class _StatusExplainer extends StatelessWidget {
   Widget build(BuildContext context) {
     final (icon, color, title, body) = switch (status) {
       'pending_review' => (
-        Icons.hourglass_top,
-        AppTheme.secondaryColor,
-        'Awaiting Review',
-        'Our team is reviewing your ad. You\'ll be notified once it\'s '
-            'approved and ready for payment — usually within 24 hours.',
-      ),
+          Icons.hourglass_top,
+          AppTheme.secondaryColor,
+          'Awaiting Review',
+          'Our team is reviewing your ad. You\'ll be notified once it\'s '
+              'approved and ready for payment — usually within 24 hours.',
+        ),
       'pending_payment' => (
-        Icons.payment,
-        AppTheme.secondaryColor,
-        'Approved — Payment Required',
-        'Your ad was approved! Pay the GH₵ ${fee.toStringAsFixed(2)} publishing '
-            'fee via MTN MoMo below, then submit your payment reference to go live.',
-      ),
+          Icons.payment,
+          AppTheme.secondaryColor,
+          'Approved — Payment Required',
+          'Your ad was approved! Pay the GH₵ ${fee.toStringAsFixed(2)} publishing '
+              'fee via MTN MoMo below, then submit your payment reference to go live.',
+        ),
       'active' => (
-        Icons.check_circle,
-        AppTheme.successColor,
-        'Live on Business Hub',
-        expiresAt != null
-            ? 'Your ad is published and visible to all users until '
-                '${DateFormat('dd MMM yyyy').format(DateTime.parse(expiresAt!))}.'
-            : 'Your ad is published and visible to all users.',
-      ),
+          Icons.check_circle,
+          AppTheme.successColor,
+          'Live on Business Hub',
+          expiresAt != null
+              ? 'Your ad is published and visible to all users until '
+                  '${DateFormat('dd MMM yyyy').format(DateTime.parse(expiresAt!))}.'
+              : 'Your ad is published and visible to all users.',
+        ),
       'rejected' => (
-        Icons.cancel,
-        AppTheme.errorColor,
-        'Not Approved',
-        rejectionReason ?? 'This ad did not meet our content guidelines. '
-            'Contact support if you have questions.',
-      ),
+          Icons.cancel,
+          AppTheme.errorColor,
+          'Not Approved',
+          rejectionReason ??
+              'This ad did not meet our content guidelines. '
+                  'Contact support if you have questions.',
+        ),
       'expired' => (
-        Icons.event_busy,
-        Colors.grey,
-        'Expired',
-        'This ad\'s 30-day listing period has ended. Post a new ad to relist.',
-      ),
+          Icons.event_busy,
+          Colors.grey,
+          'Expired',
+          'This ad\'s 30-day listing period has ended. Post a new ad to relist.',
+        ),
       _ => (Icons.info_outline, Colors.grey, status, ''),
     };
 
@@ -264,7 +290,8 @@ class _StatusExplainer extends StatelessWidget {
           Row(children: [
             Icon(icon, color: color, size: 20),
             const SizedBox(width: 8),
-            Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: color)),
+            Text(title,
+                style: TextStyle(fontWeight: FontWeight.bold, color: color)),
           ]),
           if (body.isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -284,7 +311,8 @@ class _AdPaymentSheet extends StatefulWidget {
   final double fee;
   final VoidCallback onSubmitted;
 
-  const _AdPaymentSheet({required this.adId, required this.fee, required this.onSubmitted});
+  const _AdPaymentSheet(
+      {required this.adId, required this.fee, required this.onSubmitted});
 
   @override
   State<_AdPaymentSheet> createState() => _AdPaymentSheetState();
@@ -298,27 +326,29 @@ class _AdPaymentSheetState extends State<_AdPaymentSheet> {
   Future<void> _submit() async {
     if (_refCtrl.text.trim().isEmpty || _phoneCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill in both fields')));
+          const SnackBar(content: Text('Please fill in both fields')));
       return;
     }
 
     setState(() => _submitting = true);
     try {
-      await ApiClient.instance.post('/marketplace/${widget.adId}/payment', data: {
+      await ApiClient.instance
+          .post('/marketplace/${widget.adId}/payment', data: {
         'momo_reference': _refCtrl.text.trim(),
         'payment_phone': _phoneCtrl.text.trim(),
       });
       if (mounted) {
         Navigator.pop(context);
         widget.onSubmitted();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Payment reference submitted. Awaiting verification.')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content:
+                Text('Payment reference submitted. Awaiting verification.')));
       }
     } on DioException catch (e) {
       final msg = e.response?.data?['message'] ?? 'Failed to submit payment';
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor));
+            SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor));
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -328,15 +358,18 @@ class _AdPaymentSheetState extends State<_AdPaymentSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+      padding: EdgeInsets.fromLTRB(
+          16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('Submit Payment Reference', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text('Submit Payment Reference',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
-          Text('Pay GH₵ ${widget.fee.toStringAsFixed(2)} via MTN MoMo, then enter your reference below.',
-            style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+          Text(
+              'Pay GH₵ ${widget.fee.toStringAsFixed(2)} via MTN MoMo, then enter your reference below.',
+              style: TextStyle(color: Colors.grey[600], fontSize: 13)),
           const SizedBox(height: 16),
           TextField(
             controller: _refCtrl,
@@ -357,7 +390,10 @@ class _AdPaymentSheetState extends State<_AdPaymentSheet> {
             ),
           ),
           const SizedBox(height: 20),
-          AppButton(label: 'Submit Reference', onPressed: _submit, isLoading: _submitting),
+          AppButton(
+              label: 'Submit Reference',
+              onPressed: _submit,
+              isLoading: _submitting),
         ],
       ),
     );
