@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
-import '../../shared/widgets/app_widgets.dart';
 
 class SavedAdsScreen extends StatefulWidget {
   const SavedAdsScreen({super.key});
@@ -135,10 +134,10 @@ class _SavedAdsScreenState extends State<SavedAdsScreen> {
                     ],
                   )
                 : _ads.isEmpty
-                    ? const ListView(
-                        physics: AlwaysScrollableScrollPhysics(),
-                        padding: EdgeInsets.all(24),
-                        children: [
+                    ? ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(24),
+                        children: const [
                           SizedBox(height: 100),
                           Icon(Icons.favorite_border, size: 58),
                           SizedBox(height: 12),
