@@ -10,6 +10,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
+import 'dart:async';
 import 'dart:io';
 
 class ReportsScreen extends StatefulWidget {
@@ -22,6 +23,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
   String _period = 'month';
   String _format = 'pdf';
   bool _loading = false;
+
+  Timer? _countDebounce;
+  int _countRequestId = 0;
+  int? _matchingTransactionCount;
+  bool _loadingMatchCount = false;
 
   bool _loadingBranches = true;
   List<dynamic> _branches = [];
@@ -95,6 +101,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
     _loadBranches();
     _loadAgents();
     if (_isAgent) _loadSims();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scheduleMatchCount(immediate: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _countDebounce?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadBranches() async {
@@ -274,6 +290,72 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return '${labels[_sortBy] ?? 'Date'} $arrow';
   }
 
+  Map<String, dynamic> _transactionFilterParameters() {
+    return {
+      'period': _period,
+      if (_branchId != null) 'branch_id': _branchId,
+      if (_agentId != null) 'agent_id': _agentId,
+      if (_providerFilters.isNotEmpty) 'provider': _providerFilters.join(','),
+      if (_typeFilters.isNotEmpty) 'transaction_type': _typeFilters.join(','),
+      if (_statusFilters.isNotEmpty) 'status': _statusFilters.join(','),
+      if (_simIccidFilter != null) 'sim_iccid': _simIccidFilter,
+    };
+  }
+
+  void _scheduleMatchCount({bool immediate = false}) {
+    _countDebounce?.cancel();
+
+    if (immediate) {
+      _loadMatchCount();
+      return;
+    }
+
+    _countDebounce = Timer(const Duration(milliseconds: 350), _loadMatchCount);
+  }
+
+  Future<void> _loadMatchCount() async {
+    final requestId = ++_countRequestId;
+
+    if (mounted) {
+      setState(() => _loadingMatchCount = true);
+    }
+
+    try {
+      final response = await ApiClient.instance.get(
+        '/reports/transactions/count',
+        queryParameters: _transactionFilterParameters(),
+      );
+
+      if (!mounted || requestId != _countRequestId) {
+        return;
+      }
+
+      final rawCount = response.data['data']?['count'];
+      final count = rawCount is int
+          ? rawCount
+          : int.tryParse(rawCount?.toString() ?? '') ?? 0;
+
+      setState(() {
+        _matchingTransactionCount = count;
+        _loadingMatchCount = false;
+      });
+    } catch (_) {
+      if (!mounted || requestId != _countRequestId) {
+        return;
+      }
+
+      setState(() {
+        _matchingTransactionCount = null;
+        _loadingMatchCount = false;
+      });
+    }
+  }
+
+  void _setReportFilter(VoidCallback update) {
+    setState(update);
+    _scheduleMatchCount();
+  }
+
   Future<void> _download(String type) async {
     setState(() => _loading = true);
     try {
@@ -363,7 +445,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 selected: isSelected,
                 showCheckmark: true,
                 onSelected: (_) {
-                  setState(() {
+                  _setReportFilter(() {
                     if (isAll) {
                       selectedValues.clear();
                       return;
@@ -397,7 +479,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       _statusFilters.isNotEmpty;
 
   void _clearMultiFilters() {
-    setState(() {
+    _setReportFilter(() {
       _typeFilters.clear();
       _providerFilters.clear();
       _statusFilters.clear();
@@ -413,7 +495,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           avatar: const Icon(Icons.swap_horiz_rounded, size: 16),
           label: Text(_optionLabel(_types, type)),
           onDeleted: () {
-            setState(() => _typeFilters.remove(type));
+            _setReportFilter(() => _typeFilters.remove(type));
           },
         ),
       );
@@ -425,7 +507,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           avatar: const Icon(Icons.sim_card_outlined, size: 16),
           label: Text(_optionLabel(_providers, provider)),
           onDeleted: () {
-            setState(() => _providerFilters.remove(provider));
+            _setReportFilter(() => _providerFilters.remove(provider));
           },
         ),
       );
@@ -437,7 +519,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           avatar: const Icon(Icons.check_circle_outline_rounded, size: 16),
           label: Text(_optionLabel(_statuses, status)),
           onDeleted: () {
-            setState(() => _statusFilters.remove(status));
+            _setReportFilter(() => _statusFilters.remove(status));
           },
         ),
       );
@@ -516,7 +598,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           ChoiceChip(
                             label: Text(p[0].toUpperCase() + p.substring(1)),
                             selected: _period == p,
-                            onSelected: (_) => setState(() => _period = p),
+                            onSelected: (_) =>
+                                _setReportFilter(() => _period = p),
                           ),
                       ],
                     ),
@@ -552,7 +635,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             },
                         ],
                         _simIccidFilter ?? 'all',
-                        (v) => setState(
+                        (v) => _setReportFilter(
                           () => _simIccidFilter = v == 'all' ? null : v,
                         ),
                       ),
@@ -592,7 +675,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                               ),
                             ),
                         ],
-                        onChanged: (v) => setState(() => _agentId = v),
+                        onChanged: (v) => _setReportFilter(() => _agentId = v),
                       ),
                       const SizedBox(height: 16),
                     ],
@@ -623,7 +706,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                               child: Text(b['name'] ?? ''),
                             ),
                         ],
-                        onChanged: (v) => setState(() => _branchId = v),
+                        onChanged: (v) => _setReportFilter(() => _branchId = v),
                       ),
                       const SizedBox(height: 16),
                     ],
@@ -692,6 +775,48 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 fontSize: 11,
                 color: context.appSecondaryText,
                 fontStyle: FontStyle.italic,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: context.appSurface,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: context.appSecondaryText.withOpacity(0.12),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.manage_search_rounded,
+                    color: AppTheme.primaryColor,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _loadingMatchCount
+                          ? 'Checking matching transactions...'
+                          : _matchingTransactionCount == null
+                          ? 'Matching count unavailable'
+                          : '$_matchingTransactionCount '
+                                '${_matchingTransactionCount == 1 ? 'transaction' : 'transactions'} '
+                                'match your filters',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  if (_loadingMatchCount)
+                    const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                ],
               ),
             ),
             const SizedBox(height: 12),

@@ -8,6 +8,11 @@ const { authenticate, authorize, requireActiveSubscription } = require('../middl
 
 reportRouter.use(authenticate, requireActiveSubscription);
 reportRouter.get('/dashboard', reportController.dashboardSummary);
+reportRouter.get(
+  '/transactions/count',
+  authorize('superuser','business_owner','manager','agent','auditor'),
+  reportController.transactionCount
+);
 reportRouter.get('/transactions', authorize('superuser','business_owner','manager','agent','auditor'), reportController.transactionReport);
 reportRouter.get('/commissions', authorize('superuser','business_owner','manager','auditor'), reportController.commissionReport);
 

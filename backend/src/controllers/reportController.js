@@ -109,6 +109,171 @@ async function fetchTransactions(filters, userContext) {
   return { transactions: txResult.rows, summary: summaryResult.rows[0] };
 }
 
+
+function resolvePeriodRange(period, fromDate, toDate) {
+  let resolvedFrom = fromDate;
+  let resolvedTo = toDate || new Date().toISOString();
+
+  if (period && !fromDate) {
+    const now = new Date();
+
+    if (period === 'today') {
+      resolvedFrom = new Date(
+        now.setHours(0, 0, 0, 0)
+      ).toISOString();
+    }
+
+    if (period === 'week') {
+      const date = new Date();
+      date.setDate(date.getDate() - 7);
+      resolvedFrom = date.toISOString();
+    }
+
+    if (period === 'month') {
+      const date = new Date();
+      date.setDate(1);
+      date.setHours(0, 0, 0, 0);
+      resolvedFrom = date.toISOString();
+    }
+
+    if (period === 'year') {
+      const date = new Date();
+      date.setMonth(0, 1);
+      date.setHours(0, 0, 0, 0);
+      resolvedFrom = date.toISOString();
+    }
+  }
+
+  return { resolvedFrom, resolvedTo };
+}
+
+async function fetchTransactionCount(filters, userContext) {
+  const conditions = [];
+  const params = [];
+  let idx = 1;
+
+  if (userContext.role === 'agent') {
+    conditions.push(`t.agent_id = $${idx++}`);
+    params.push(userContext.id);
+  } else if (userContext.role !== 'superuser') {
+    conditions.push(`t.company_id = $${idx++}`);
+    params.push(userContext.company_id);
+  }
+
+  if (filters.branch_id) {
+    conditions.push(`t.branch_id = $${idx++}`);
+    params.push(filters.branch_id);
+  }
+
+  if (filters.agent_id) {
+    conditions.push(`t.agent_id = $${idx++}`);
+    params.push(filters.agent_id);
+  }
+
+  const providers = parseMultiValue(filters.provider);
+  const transactionTypes = parseMultiValue(
+    filters.transaction_type
+  );
+  const statuses = parseMultiValue(filters.status);
+
+  if (providers.length) {
+    conditions.push(
+      `t.provider::text = ANY($${idx++}::text[])`
+    );
+    params.push(providers);
+  }
+
+  if (transactionTypes.length) {
+    conditions.push(
+      `t.transaction_type::text = ANY($${idx++}::text[])`
+    );
+    params.push(transactionTypes);
+  }
+
+  if (statuses.length) {
+    conditions.push(
+      `t.status::text = ANY($${idx++}::text[])`
+    );
+    params.push(statuses);
+  }
+
+  if (filters.sim_iccid) {
+    conditions.push(`t.sim_iccid = $${idx++}`);
+    params.push(filters.sim_iccid);
+  }
+
+  if (filters.from_date) {
+    conditions.push(`t.created_at >= $${idx++}`);
+    params.push(filters.from_date);
+  }
+
+  if (filters.to_date) {
+    conditions.push(`t.created_at <= $${idx++}`);
+    params.push(filters.to_date);
+  }
+
+  const where = conditions.length
+    ? `WHERE ${conditions.join(' AND ')}`
+    : '';
+
+  const result = await query(
+    `SELECT COUNT(*)::int AS count
+     FROM transactions t
+     ${where}`,
+    params
+  );
+
+  return result.rows[0]?.count || 0;
+}
+
+exports.transactionCount = async (req, res) => {
+  const {
+    from_date,
+    to_date,
+    branch_id,
+    agent_id,
+    provider,
+    transaction_type,
+    status,
+    sim_iccid,
+    period,
+  } = req.query;
+
+  try {
+    const { resolvedFrom, resolvedTo } = resolvePeriodRange(
+      period,
+      from_date,
+      to_date
+    );
+
+    const count = await fetchTransactionCount(
+      {
+        from_date: resolvedFrom,
+        to_date: resolvedTo,
+        branch_id,
+        agent_id,
+        provider,
+        transaction_type,
+        status,
+        sim_iccid,
+      },
+      req.user
+    );
+
+    return res.json({
+      success: true,
+      data: { count },
+    });
+  } catch (error) {
+    logger.error('Transaction count error:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to count matching transactions',
+    });
+  }
+};
+
 // ── Resolve a branch's display name for report titles ─────────
 // Returns null if no branch_id was given or it doesn't resolve, so
 // callers can fall back to the existing generic title unchanged.
