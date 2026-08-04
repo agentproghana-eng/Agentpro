@@ -378,72 +378,89 @@ class _TransactionScreenState extends State<TransactionScreen> {
       return;
     }
 
-    try {
-      final res = await ApiClient.instance.post(
-        '/transactions',
-        data: {
-          'provider': _selectedProvider,
-          'transaction_type': widget.transactionType,
-          'amount': double.tryParse(_amountCtrl.text.replaceAll(',', '')) ?? 0,
-          'customer_phone': _customerPhoneCtrl.text.trim(),
-          'customer_name': '',
-          'recipient_phone': _recipientPhoneCtrl.text.trim(),
-          'biller_code': '',
-          'account_number': '',
-          'payment_reference': _referenceCtrl.text.trim(),
-          'merchant_id': _merchantIdCtrl.text.trim(),
-          'fee': _isSendMoney
-              ? (double.tryParse(_feeCtrl.text.replaceAll(',', '')) ?? 0)
-              : 0,
-          'notes': '',
-          'sim_iccid': _simMap?[_selectedProvider]?.iccid ?? '',
-          'sim_slot': _simMap?[_selectedProvider]?.slot,
-        },
-      );
+    final requestFields = <String, dynamic>{
+      'provider': _selectedProvider,
+      'transaction_type': widget.transactionType,
+      'amount': double.tryParse(_amountCtrl.text.replaceAll(',', '')) ?? 0,
+      'customer_phone': _customerPhoneCtrl.text.trim(),
+      'customer_name': '',
+      'recipient_phone': _recipientPhoneCtrl.text.trim(),
+      'biller_code': '',
+      'account_number': '',
+      'payment_reference': _referenceCtrl.text.trim(),
+      'merchant_id': _merchantIdCtrl.text.trim(),
+      'fee': _isSendMoney
+          ? (double.tryParse(_feeCtrl.text.replaceAll(',', '')) ?? 0)
+          : 0,
+      'notes': '',
+      'sim_iccid': _simMap?[_selectedProvider]?.iccid ?? '',
+      'sim_slot': _simMap?[_selectedProvider]?.slot,
+    };
 
-      final template =
-          res.data["data"]["ussd_template"] as Map<String, dynamic>?;
+    // Start backend validation/creation now, but do not wait on this
+    // form screen. TransactionProgressScreen prepares permission and
+    // SIM information in parallel, then waits for this Future before
+    // it is allowed to dial.
+    final transactionFuture = _initiateOnlineTransaction(
+      requestFields: requestFields,
+      provider: _selectedProvider,
+      transactionType: widget.transactionType,
+    );
 
-      // Do not block USSD startup on local caching or a second flow
-      // lookup. The progress screen can resolve the flow itself when
-      // required. These caches are only for future/offline runs.
-      unawaited(
-        _cacheTransactionAutomationData(
-          provider: _selectedProvider,
-          transactionType: widget.transactionType,
-          template: template,
-        ),
-      );
+    if (!mounted) return;
 
-      if (!mounted) return;
-      context.push(
-        '/transactions/progress',
-        extra: {
-          'transaction': res.data['data'],
-          'provider': _selectedProvider,
-          'transaction_type': widget.transactionType,
-          'amount': _amountCtrl.text,
-          'customer_phone': _customerPhoneCtrl.text.trim(),
-          'customer_name': '',
-          'selections_in_order':
-              _isTelecelDataBundle && _selectedTelecelBundle != null
-              ? <String>[_selectedTelecelBundle!.digit]
-              : const <String>[],
-        },
-      );
-    } on DioException catch (e) {
-      final msg =
-          e.response?.data?['message'] ??
-          (e.response == null && cachedTemplate == null
-              ? "No internet, and this transaction type hasn't been completed online before, so offline mode isn't available for it yet. Connect to the internet, complete this transaction once, then it will work offline too."
-              : 'Failed to initiate transaction');
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor),
-        );
-    } finally {
-      if (mounted) setState(() => _loading = false);
+    context.push(
+      '/transactions/progress',
+      extra: {
+        'transaction_future': transactionFuture,
+        'provider': _selectedProvider,
+        'transaction_type': widget.transactionType,
+        'amount': _amountCtrl.text,
+        'customer_phone': _customerPhoneCtrl.text.trim(),
+        'customer_name': '',
+        'selections_in_order':
+            _isTelecelDataBundle && _selectedTelecelBundle != null
+            ? <String>[_selectedTelecelBundle!.digit]
+            : const <String>[],
+      },
+    );
+
+    if (mounted) {
+      setState(() => _loading = false);
     }
+  }
+
+  Future<Map<String, dynamic>> _initiateOnlineTransaction({
+    required Map<String, dynamic> requestFields,
+    required String provider,
+    required String transactionType,
+  }) async {
+    final response = await ApiClient.instance.post(
+      '/transactions',
+      data: requestFields,
+    );
+
+    final rawTransaction = response.data['data'];
+
+    if (rawTransaction is! Map) {
+      throw const FormatException('Invalid transaction initiation response');
+    }
+
+    final transaction = Map<String, dynamic>.from(rawTransaction);
+    final rawTemplate = transaction['ussd_template'];
+    final template = rawTemplate is Map
+        ? Map<String, dynamic>.from(rawTemplate)
+        : null;
+
+    unawaited(
+      _cacheTransactionAutomationData(
+        provider: provider,
+        transactionType: transactionType,
+        template: template,
+      ),
+    );
+
+    return transaction;
   }
 
   Future<void> _cacheTransactionAutomationData({

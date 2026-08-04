@@ -14,6 +14,23 @@ import '../../core/services/dashboard_refresh_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/auth/auth_bloc.dart';
 
+class _USSDDevicePreparation {
+  final int? simSlot;
+  final String? failureReason;
+  final bool permissionPermanentlyDenied;
+
+  const _USSDDevicePreparation.ready(this.simSlot)
+    : failureReason = null,
+      permissionPermanentlyDenied = false;
+
+  const _USSDDevicePreparation.failed(
+    this.failureReason, {
+    this.permissionPermanentlyDenied = false,
+  }) : simSlot = null;
+
+  bool get isReady => simSlot != null && failureReason == null;
+}
+
 class _ProgressTimelineItem {
   final String title;
   final String subtitle;
@@ -176,6 +193,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
   bool _wasManuallyConfirmed = false;
   bool _showConfirmButton = false;
   Timer? _confirmTimer;
+  Map<String, dynamic>? _resolvedTransaction;
   USSDStatus _outcome = USSDStatus.failed;
   String? _failureReason;
   Map<String, dynamic>? _completedTransaction;
@@ -194,52 +212,63 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
   }
 
   Future<void> _startUSSD() async {
-    final transaction = widget.data['transaction'] as Map<String, dynamic>;
-    final template = transaction['ussd_template'] as Map<String, dynamic>?;
-    final automationParams = Map<String, String>.from(
-      (transaction['automation_params'] as Map<String, dynamic>? ?? {}).map(
-        (k, v) => MapEntry(k, v?.toString() ?? ''),
-      ),
-    );
     final provider = widget.data['provider'] as String;
-    final transactionId = transaction['transaction_id'] as String;
 
-    // USSD automation requires CALL_PHONE and READ_PHONE_STATE granted at
-    // runtime (Android 6+) — request before touching SIM detection or dialing.
-    // Bounded with a timeout - if the underlying permission_handler
-    // plugin's native call itself hangs (seen on some device/OEM
-    // combos even when the permission is genuinely already granted),
-    // this turns a silent, indefinite stall into a clear, reportable
-    // failure instead of leaving the screen frozen forever with no
-    // way to tell whether it's still working or truly stuck.
-    PermissionResult permissionResult;
+    // Backend validation/creation and local device preparation begin
+    // together. Dialing remains blocked until both have succeeded.
+    final transactionFuture = _resolveTransactionData();
+    final deviceFuture = _prepareUSSDDevice(provider);
+
+    late Map<String, dynamic> transaction;
+    late _USSDDevicePreparation devicePreparation;
+
     try {
-      permissionResult = await PermissionService.requestTelephonyPermissions()
-          .timeout(const Duration(seconds: 10));
-    } on Exception {
-      const reason = 'Timed out checking phone permissions. Please try again.';
-      if (mounted) setState(() => _simWarning = reason);
-      await _reportResult(
-        transactionId,
-        USSDResult(
-          outcome: USSDStatus.failed,
-          failureReason: reason,
-          sessionLog: const [],
-        ),
+      final results = await Future.wait<Object>([
+        transactionFuture,
+        deviceFuture,
+      ]);
+
+      transaction = results[0] as Map<String, dynamic>;
+      _resolvedTransaction = transaction;
+      devicePreparation = results[1] as _USSDDevicePreparation;
+    } on DioException catch (error) {
+      final responseData = error.response?.data;
+      final message = responseData is Map
+          ? responseData['message']?.toString()
+          : null;
+
+      _showStartupFailure(message ?? 'Failed to initiate transaction.');
+      return;
+    } on FormatException catch (error) {
+      _showStartupFailure(error.message);
+      return;
+    } catch (_) {
+      _showStartupFailure(
+        'The transaction could not be started. Please try again.',
       );
       return;
     }
-    if (permissionResult != PermissionResult.granted) {
-      final reason = permissionResult == PermissionResult.permanentlyDenied
-          ? 'Phone permission was denied. Enable it in Settings to process transactions.'
-          : 'Phone permission is required to process Mobile Money transactions.';
+
+    final transactionId = transaction['transaction_id']?.toString();
+
+    if (transactionId == null || transactionId.isEmpty) {
+      _showStartupFailure('The server did not return a transaction ID.');
+      return;
+    }
+
+    if (!devicePreparation.isReady) {
+      final reason =
+          devicePreparation.failureReason ??
+          'The phone could not be prepared for USSD.';
+
       if (mounted) {
         setState(() {
           _simWarning = reason;
           _permissionPermanentlyDenied =
-              permissionResult == PermissionResult.permanentlyDenied;
+              devicePreparation.permissionPermanentlyDenied;
         });
       }
+
       await _reportResult(
         transactionId,
         USSDResult(
@@ -251,67 +280,20 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       return;
     }
 
-    // Resolve which physical SIM slot carries this provider's network.
-    // If the device has no SIM for the chosen provider, fail fast with a
-    // clear message rather than dialing on the wrong network and burning
-    // a confusing failed USSD session.
-    if (mounted) setState(() => _statusMessage = 'Detecting SIM card...');
-    int simSlot;
-    try {
-      // Resolve both provider presence and physical slot from one native
-      // SIM query. Previously this made two platform-channel calls:
-      // hasProviderSim(), followed by getSlotForProvider().
-      final simCards = await SimCardService.getSimCards();
-      SimCard? providerSim;
+    final simSlot = devicePreparation.simSlot!;
+    final rawTemplate = transaction['ussd_template'];
+    final template = rawTemplate is Map
+        ? Map<String, dynamic>.from(rawTemplate)
+        : null;
 
-      for (final sim in simCards) {
-        if (sim.network == provider) {
-          providerSim = sim;
-          break;
-        }
-      }
+    final rawAutomationParams = transaction['automation_params'];
 
-      if (providerSim == null) {
-        final reason =
-            'No ${_providerLabel(provider)} SIM card was detected on this device.';
-        if (mounted) setState(() => _simWarning = reason);
-        await _reportResult(
-          transactionId,
-          USSDResult(
-            outcome: USSDStatus.failed,
-            failureReason: reason,
-            sessionLog: const [],
-          ),
-        );
-        return;
-      }
-
-      simSlot = providerSim.slot;
-    } on SimPermissionException {
-      // Belt-and-suspenders: we already requested permission above, but the
-      // OS can still deny the actual platform call in edge cases (e.g. the
-      // grant hasn't propagated yet). Treat the same as the upfront check.
-      final reason = 'Phone permission is required to detect SIM cards.';
-      if (mounted) {
-        setState(() {
-          _simWarning = reason;
-          _permissionPermanentlyDenied = true;
-        });
-      }
-      await _reportResult(
-        transactionId,
-        USSDResult(
-          outcome: USSDStatus.failed,
-          failureReason: reason,
-          sessionLog: const [],
-        ),
-      );
-      return;
-    } catch (_) {
-      // SIM detection failed for an unexpected reason — fall back to slot 0
-      // rather than blocking the transaction entirely.
-      simSlot = 0;
-    }
+    final automationParams = Map<String, String>.from(
+      (rawAutomationParams is Map
+              ? Map<String, dynamic>.from(rawAutomationParams)
+              : <String, dynamic>{})
+          .map((key, value) => MapEntry(key, value?.toString() ?? '')),
+    );
 
     // MTN Cash In/Out and Telecel Deposit cannot use single-dial USSD -
     // confirmed via live testing that even a short concatenated dial
@@ -494,6 +476,100 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
     // Report result to backend
     await _reportResult(transactionId, result);
+  }
+
+  Future<Map<String, dynamic>> _resolveTransactionData() async {
+    final existingTransaction = widget.data['transaction'];
+
+    if (existingTransaction is Map) {
+      return Map<String, dynamic>.from(existingTransaction);
+    }
+
+    final pendingTransaction = widget.data['transaction_future'];
+
+    if (pendingTransaction is Future<Map<String, dynamic>>) {
+      return pendingTransaction;
+    }
+
+    if (pendingTransaction is Future) {
+      final resolved = await pendingTransaction;
+
+      if (resolved is Map) {
+        return Map<String, dynamic>.from(resolved);
+      }
+    }
+
+    throw const FormatException('Missing transaction initiation data');
+  }
+
+  Future<_USSDDevicePreparation> _prepareUSSDDevice(String provider) async {
+    if (mounted) {
+      setState(() => _statusMessage = 'Checking phone permissions...');
+    }
+
+    PermissionResult permissionResult;
+
+    try {
+      permissionResult = await PermissionService.requestTelephonyPermissions()
+          .timeout(const Duration(seconds: 10));
+    } on Exception {
+      return const _USSDDevicePreparation.failed(
+        'Timed out checking phone permissions. Please try again.',
+      );
+    }
+
+    if (permissionResult != PermissionResult.granted) {
+      final permanentlyDenied =
+          permissionResult == PermissionResult.permanentlyDenied;
+
+      return _USSDDevicePreparation.failed(
+        permanentlyDenied
+            ? 'Phone permission was denied. Enable it in Settings to process transactions.'
+            : 'Phone permission is required to process Mobile Money transactions.',
+        permissionPermanentlyDenied: permanentlyDenied,
+      );
+    }
+
+    if (mounted) {
+      setState(() => _statusMessage = 'Detecting SIM card...');
+    }
+
+    try {
+      final simCards = await SimCardService.getSimCards();
+
+      for (final sim in simCards) {
+        if (sim.network == provider) {
+          return _USSDDevicePreparation.ready(sim.slot);
+        }
+      }
+
+      return _USSDDevicePreparation.failed(
+        'No ${_providerLabel(provider)} SIM card was detected on this device.',
+      );
+    } on SimPermissionException {
+      return const _USSDDevicePreparation.failed(
+        'Phone permission is required to detect SIM cards.',
+        permissionPermanentlyDenied: true,
+      );
+    } catch (_) {
+      // Preserve the existing fallback behavior for unexpected SIM
+      // detection failures.
+      return const _USSDDevicePreparation.ready(0);
+    }
+  }
+
+  void _showStartupFailure(String message) {
+    _pulseCtrl.stop();
+
+    if (!mounted) return;
+
+    setState(() {
+      _status = USSDStatus.failed;
+      _outcome = USSDStatus.failed;
+      _failureReason = message;
+      _statusMessage = message;
+      _completed = true;
+    });
   }
 
   Future<void> _startResolvedFlow({
@@ -708,8 +784,20 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     );
     if (outcome == null) return;
     _wasManuallyConfirmed = true;
-    final transaction = widget.data["transaction"] as Map<String, dynamic>;
-    final transactionId = transaction["transaction_id"] as String;
+
+    final transaction =
+        _resolvedTransaction ??
+        (widget.data["transaction"] is Map
+            ? Map<String, dynamic>.from(widget.data["transaction"] as Map)
+            : null);
+
+    final transactionId = transaction?["transaction_id"]?.toString();
+
+    if (transactionId == null || transactionId.isEmpty) {
+      _showStartupFailure("The transaction reference is unavailable.");
+      return;
+    }
+
     await _reportResult(
       transactionId,
       USSDResult(
