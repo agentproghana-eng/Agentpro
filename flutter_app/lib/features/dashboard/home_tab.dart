@@ -8,6 +8,7 @@ import "../../shared/theme/app_theme.dart";
 import "../../shared/theme/app_colors.dart";
 import "../../core/services/sim_card_service.dart";
 import "../../core/services/dashboard_refresh_service.dart";
+import "../../core/services/app_cache_service.dart";
 import "../../shared/utils/transaction_labels.dart";
 import "../../core/router/app_router.dart";
 import "../ussd_settings/quick_action_customization_screen.dart";
@@ -356,16 +357,33 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   // dashboard. Fails silently, same as feature flags - a pure Agent
   // account (no purposes ever saved) simply never triggers this.
   Future<void> _loadSimPurposes() async {
+    const cacheKey = "dashboard_sim_purposes";
+
+    final cached = AppCacheService.get(cacheKey);
+
+    if (cached is Map && mounted) {
+      setState(() {
+        _simPurposes = Map<int, String>.from(cached);
+      });
+    }
+
     try {
       final res = await ApiClient.instance.get('/user-sim-purposes');
+
       final saved = (res.data['data'] as List?) ?? [];
       final map = <int, String>{};
+
       for (final p in saved) {
         map[p['sim_slot'] as int] = p['purpose'] as String;
       }
-      if (mounted) setState(() => _simPurposes = map);
+
+      AppCacheService.set(cacheKey, map);
+
+      if (mounted) {
+        setState(() => _simPurposes = map);
+      }
     } catch (_) {
-      // Leave _simPurposes empty - Quick Actions just stay Agent's own.
+      // Keep cached values if refresh fails.
     }
   }
 
@@ -376,15 +394,33 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   }
 
   Future<void> _loadFeatureFlags() async {
+    const cacheKey = "dashboard_feature_flags";
+
+    final cached = AppCacheService.get(cacheKey);
+
+    if (cached is List && mounted) {
+      setState(() {
+        _disabledTypes = cached.map((e) => e.toString()).toSet();
+      });
+    }
+
     try {
       final res = await ApiClient.instance.get("/users/me/feature-flags");
+
       final list =
           (res.data["data"]["disabled_transaction_types"] as List?) ?? [];
-      if (mounted)
-        setState(() => _disabledTypes = list.map((e) => e.toString()).toSet());
+
+      final disabled = list.map((e) => e.toString()).toList();
+
+      AppCacheService.set(cacheKey, disabled);
+
+      if (mounted) {
+        setState(() {
+          _disabledTypes = disabled.toSet();
+        });
+      }
     } catch (_) {
-      // Leave _disabledTypes empty - fail open on the client, server
-      // still enforces the kill-switch either way.
+      // Keep cached values. Server remains the source of truth.
     }
   }
 
