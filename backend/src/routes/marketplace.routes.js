@@ -146,6 +146,115 @@ mpRouter.get('/dashboard', async (req, res) => {
   }
 });
 
+// Reviews received by the current user's advertisements.
+mpRouter.get('/reviews/received', async (req, res) => {
+  const {
+    ad_id,
+    rating,
+    page = 1,
+    limit = 20,
+  } = req.query;
+
+  const parsedPage = Math.max(parseInt(page, 10) || 1, 1);
+  const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+  const offset = (parsedPage - 1) * parsedLimit;
+
+  try {
+    const conditions = ['a.posted_by = $1'];
+    const params = [req.user.id];
+    let index = 2;
+
+    if (ad_id) {
+      conditions.push(`a.id = $${index++}`);
+      params.push(ad_id);
+    }
+
+    if (rating) {
+      const parsedRating = parseInt(rating, 10);
+      if (!Number.isInteger(parsedRating) || parsedRating < 1 || parsedRating > 5) {
+        return res.status(422).json({
+          success: false,
+          message: 'Rating must be between 1 and 5',
+        });
+      }
+
+      conditions.push(`ar.rating = $${index++}`);
+      params.push(parsedRating);
+    }
+
+    const where = `WHERE ${conditions.join(' AND ')}`;
+
+    const [reviews, count, ads] = await Promise.all([
+      query(
+        `SELECT
+           ar.id,
+           ar.advertisement_id,
+           ar.rating,
+           ar.review,
+           ar.created_at,
+           a.title AS ad_title,
+           u.first_name AS reviewer_first_name,
+           u.last_name AS reviewer_last_name,
+           u.profile_image_url AS reviewer_profile_image_url
+         FROM ad_ratings ar
+         INNER JOIN advertisements a
+           ON a.id = ar.advertisement_id
+         INNER JOIN users u
+           ON u.id = ar.rated_by
+         ${where}
+         ORDER BY ar.created_at DESC
+         LIMIT $${index++}
+         OFFSET $${index++}`,
+        [...params, parsedLimit, offset]
+      ),
+      query(
+        `SELECT COUNT(*)::int AS total
+         FROM ad_ratings ar
+         INNER JOIN advertisements a
+           ON a.id = ar.advertisement_id
+         ${where}`,
+        params
+      ),
+      query(
+        `SELECT
+           a.id,
+           a.title,
+           COUNT(ar.id)::int AS review_count
+         FROM advertisements a
+         LEFT JOIN ad_ratings ar
+           ON ar.advertisement_id = a.id
+         WHERE a.posted_by = $1
+         GROUP BY a.id, a.title
+         HAVING COUNT(ar.id) > 0
+         ORDER BY a.title`,
+        [req.user.id]
+      ),
+    ]);
+
+    const total = count.rows[0]?.total ?? 0;
+
+    res.json({
+      success: true,
+      data: reviews.rows,
+      filters: {
+        ads: ads.rows,
+      },
+      meta: {
+        page: parsedPage,
+        limit: parsedLimit,
+        total,
+        total_pages: Math.ceil(total / parsedLimit),
+      },
+    });
+  } catch (e) {
+    console.error('GET /marketplace/reviews/received error:', e);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch customer reviews',
+    });
+  }
+});
+
 // Get a single ad by ID — scoped to the owner, since this is used to show
 // payment instructions and status for an ad that may not yet be public
 // (i.e. not necessarily 'active', so it can't go through the public list).

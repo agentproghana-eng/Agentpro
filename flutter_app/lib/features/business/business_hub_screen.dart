@@ -137,6 +137,12 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
               subtitle: 'Promote your products or services',
               onTap: () => context.push('/marketplace/post'),
             ),
+            _HubCard(
+              icon: Icons.rate_review_outlined,
+              title: 'Customer Reviews',
+              subtitle: 'Read ratings and feedback from your customers',
+              onTap: () => context.push('/marketplace/reviews'),
+            ),
           ],
         ),
       ),
