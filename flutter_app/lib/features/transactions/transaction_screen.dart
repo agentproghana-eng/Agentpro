@@ -77,10 +77,13 @@ class _TransactionScreenState extends State<TransactionScreen> {
   Map<String, SimCard?>? _simMap;
   AgentTelecelBundleOption? _selectedTelecelBundle;
 
+  Timer? _flowPreloadDebounce;
+  final Set<String> _flowPreloadAttempts = {};
+
   @override
   void initState() {
     super.initState();
-    _loadSimMap();
+
     if (widget.initialProvider != null) {
       _selectedProvider = widget.initialProvider!;
     }
@@ -92,6 +95,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
     if (_needsReference) {
       _selectedProvider = 'mtn';
     }
+
+    // Start SIM detection and flow warming only after the final initial
+    // provider has been selected.
+    _loadSimMap();
+    _scheduleFlowPreload(immediate: true);
+
     _amountCtrl.addListener(() {
       if (!_isSendMoney || !_feeAutoCalculated) return;
       final amount = double.tryParse(_amountCtrl.text.replaceAll(',', '')) ?? 0;
@@ -169,17 +178,104 @@ class _TransactionScreenState extends State<TransactionScreen> {
     try {
       final map = await SimCardService.getNetworkSimMap();
       if (!mounted) return;
+      var providerChanged = false;
+
       setState(() {
         _simMap = map;
+
         if (!_needsReference && map[_selectedProvider] == null) {
-          final available = map.entries.where((e) => e.value != null).toList();
-          if (available.isNotEmpty) _selectedProvider = available.first.key;
+          final available = map.entries
+              .where((entry) => entry.value != null)
+              .toList();
+
+          if (available.isNotEmpty) {
+            final resolvedProvider = available.first.key;
+            providerChanged = resolvedProvider != _selectedProvider;
+            _selectedProvider = resolvedProvider;
+          }
         }
       });
+
+      if (providerChanged) {
+        _scheduleFlowPreload();
+      }
     } catch (_) {
       // Permission denied or detection failed - leave _simMap null so
       // the UI falls back to showing all three tabs.
     }
+  }
+
+  void _scheduleFlowPreload({bool immediate = false}) {
+    _flowPreloadDebounce?.cancel();
+
+    if (immediate) {
+      unawaited(_preloadSelectedFlow());
+      return;
+    }
+
+    _flowPreloadDebounce = Timer(
+      const Duration(milliseconds: 180),
+      () => unawaited(_preloadSelectedFlow()),
+    );
+  }
+
+  Future<void> _preloadSelectedFlow() async {
+    final provider = _selectedProvider;
+    final transactionType = widget.transactionType;
+    final cacheKey = '$provider:$transactionType';
+
+    // The progress screen can already start immediately when this
+    // definition is present, so no network refresh is needed here.
+    if (OfflineQueueService.getCachedFlow(provider, transactionType) != null) {
+      return;
+    }
+
+    // Avoid repeating a failed or successful warm-up request while this
+    // Transaction screen remains open.
+    if (!_flowPreloadAttempts.add(cacheKey)) {
+      return;
+    }
+
+    try {
+      final response = await ApiClient.instance.get(
+        '/ussd-flows/resolve',
+        queryParameters: {
+          'provider': provider,
+          'transaction_type': transactionType,
+        },
+      );
+
+      final rawFlow = response.data['data'];
+      if (rawFlow is! Map) return;
+
+      await OfflineQueueService.cacheFlow(
+        provider,
+        transactionType,
+        Map<String, dynamic>.from(rawFlow),
+      );
+    } catch (_) {
+      // Some combinations use hardcoded automation or have no custom
+      // flow. Preloading must never interrupt form entry or submission.
+    }
+  }
+
+  void _selectProvider(String provider) {
+    if (provider == _selectedProvider) {
+      return;
+    }
+
+    setState(() {
+      _selectedProvider = provider;
+      _selectedTelecelBundle = null;
+
+      if (provider != 'telecel' || widget.transactionType != 'data_bundle') {
+        return;
+      }
+
+      _amountCtrl.clear();
+    });
+
+    _scheduleFlowPreload();
   }
 
   Future<void> _proceed() async {
@@ -458,7 +554,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     }[p]!;
                     return Expanded(
                       child: GestureDetector(
-                        onTap: () => setState(() => _selectedProvider = p),
+                        onTap: () => _selectProvider(p),
                         child: Container(
                           margin: const EdgeInsets.only(right: 8),
                           padding: const EdgeInsets.symmetric(vertical: 10),
@@ -777,6 +873,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
   @override
   void dispose() {
+    _flowPreloadDebounce?.cancel();
+
     for (final c in [
       _customerPhoneCtrl,
       _amountCtrl,
