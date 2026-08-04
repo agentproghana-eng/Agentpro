@@ -72,6 +72,49 @@ mpRouter.get('/mine', async (req, res) => {
   } catch (e) { res.status(500).json({ success: false, message: 'Failed to fetch your ads' }); }
 });
 
+// Business Hub performance summary for the current user.
+mpRouter.get('/dashboard', async (req, res) => {
+  try {
+    const result = await query(
+      `WITH ad_summary AS (
+         SELECT
+           COUNT(*) FILTER (WHERE status = 'active')::int AS active_ads,
+           COUNT(*) FILTER (
+             WHERE status IN ('pending_review', 'pending_payment')
+           )::int AS pending_ads,
+           COUNT(*) FILTER (WHERE status = 'expired')::int AS expired_ads,
+           COALESCE(SUM(views_count), 0)::int AS total_views
+         FROM advertisements
+         WHERE posted_by = $1
+       ),
+       rating_summary AS (
+         SELECT
+           COALESCE(AVG(ar.rating), 0)::float AS average_rating,
+           COUNT(ar.id)::int AS review_count
+         FROM ad_ratings ar
+         INNER JOIN advertisements a
+           ON a.id = ar.advertisement_id
+         WHERE a.posted_by = $1
+       )
+       SELECT *
+       FROM ad_summary
+       CROSS JOIN rating_summary`,
+      [req.user.id]
+    );
+
+    res.json({
+      success: true,
+      data: result.rows[0],
+    });
+  } catch (e) {
+    console.error('GET /marketplace/dashboard error:', e);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch Business Hub performance',
+    });
+  }
+});
+
 // Get a single ad by ID — scoped to the owner, since this is used to show
 // payment instructions and status for an ad that may not yet be public
 // (i.e. not necessarily 'active', so it can't go through the public list).
