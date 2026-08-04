@@ -32,6 +32,10 @@ class StorageService {
     await _storage.write(key: _keyAccessToken, value: token);
   }
 
+  static String? getCachedAccessToken() {
+    return _accessTokenCache;
+  }
+
   static Future<String?> getAccessToken() async {
     if (_accessTokenCache != null) {
       return _accessTokenCache;
