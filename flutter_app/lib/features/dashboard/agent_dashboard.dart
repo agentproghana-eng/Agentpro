@@ -5,7 +5,7 @@ import '../../core/auth/auth_bloc.dart';
 import '../../shared/theme/app_theme.dart';
 import 'home_tab.dart';
 import '../community/community_feed_screen.dart';
-import '../marketplace/marketplace_screen.dart';
+import '../business/business_hub_screen.dart';
 import '../../shared/widgets/more_tile.dart';
 
 class AgentDashboard extends StatefulWidget {
@@ -29,7 +29,7 @@ class _AgentDashboardState extends State<AgentDashboard> {
         children: [
           HomeTab(user: user),
           const CommunityFeedScreen(),
-          const MarketplaceScreen(),
+          const BusinessHubScreen(),
           const _MoreTab(),
         ],
       ),
@@ -37,9 +37,21 @@ class _AgentDashboardState extends State<AgentDashboard> {
         selectedIndex: _navIndex,
         onDestinationSelected: (i) => setState(() => _navIndex = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.people_outline), selectedIcon: Icon(Icons.people), label: 'Community'),
-          NavigationDestination(icon: Icon(Icons.storefront_outlined), selectedIcon: Icon(Icons.storefront), label: 'Business Hub'),
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.people_outline),
+            selectedIcon: Icon(Icons.people),
+            label: 'Community',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.storefront_outlined),
+            selectedIcon: Icon(Icons.storefront),
+            label: 'Business Hub',
+          ),
           NavigationDestination(icon: Icon(Icons.more_horiz), label: 'More'),
         ],
       ),
@@ -67,19 +79,47 @@ class _MoreTab extends StatelessWidget {
       body: ListView(
         children: [
           const MoreGroupLabel('MoMo'),
-          MoreTile(Icons.receipt_long_outlined, 'My Transactions', () => context.push('/transactions/history')),
-          MoreTile(Icons.account_balance_wallet_outlined, 'My Float Balance', () => context.push('/my-balance')),
-          MoreTile(Icons.bar_chart_outlined, 'My Reports', () => context.push('/reports')),
-          MoreTile(Icons.wifi_tethering, 'USSD Automation', () => context.push('/ussd-settings')),
+          MoreTile(
+            Icons.receipt_long_outlined,
+            'My Transactions',
+            () => context.push('/transactions/history'),
+          ),
+          MoreTile(
+            Icons.account_balance_wallet_outlined,
+            'My Float Balance',
+            () => context.push('/my-balance'),
+          ),
+          MoreTile(
+            Icons.bar_chart_outlined,
+            'My Reports',
+            () => context.push('/reports'),
+          ),
+          MoreTile(
+            Icons.wifi_tethering,
+            'USSD Automation',
+            () => context.push('/ussd-settings'),
+          ),
 
           // Only shown to someone holding both Business and Personal
           // capability at once - a pure Agent has no other mode.
           if (user['personal_subscription_plan'] != null)
-            MoreTile(Icons.person_outline, 'Switch to Personal Mode', () => context.go('/personal-home')),
+            MoreTile(
+              Icons.person_outline,
+              'Switch to Personal Mode',
+              () => context.go('/personal-home'),
+            ),
 
           const MoreGroupLabel('Help'),
-          MoreTile(Icons.support_agent_outlined, 'Help', () => context.push('/support')),
-          MoreTile(Icons.settings_outlined, 'Settings', () => context.push('/settings')),
+          MoreTile(
+            Icons.support_agent_outlined,
+            'Help',
+            () => context.push('/support'),
+          ),
+          MoreTile(
+            Icons.settings_outlined,
+            'Settings',
+            () => context.push('/settings'),
+          ),
           const Divider(),
           MoreTile(Icons.logout, 'Sign Out', () {
             context.read<AuthBloc>().add(AuthLogoutEvent());

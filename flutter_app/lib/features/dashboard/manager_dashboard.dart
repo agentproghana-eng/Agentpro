@@ -6,7 +6,7 @@ import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import 'home_tab.dart';
 import '../community/community_feed_screen.dart';
-import '../marketplace/marketplace_screen.dart';
+import '../business/business_hub_screen.dart';
 import '../../shared/widgets/more_tile.dart';
 
 class ManagerDashboard extends StatefulWidget {
@@ -28,7 +28,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         children: [
           HomeTab(user: user),
           const CommunityFeedScreen(),
-          const MarketplaceScreen(),
+          const BusinessHubScreen(),
           _ManagerMoreTab(),
         ],
       ),
@@ -36,9 +36,21 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         selectedIndex: _navIndex,
         onDestinationSelected: (i) => setState(() => _navIndex = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.people_outline), selectedIcon: Icon(Icons.people), label: 'Community'),
-          NavigationDestination(icon: Icon(Icons.storefront_outlined), selectedIcon: Icon(Icons.storefront), label: 'Business Hub'),
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.people_outline),
+            selectedIcon: Icon(Icons.people),
+            label: 'Community',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.storefront_outlined),
+            selectedIcon: Icon(Icons.storefront),
+            label: 'Business Hub',
+          ),
           NavigationDestination(icon: Icon(Icons.more_horiz), label: 'More'),
         ],
       ),
@@ -56,22 +68,62 @@ class _ManagerMoreTab extends StatelessWidget {
       body: ListView(
         children: [
           const MoreGroupLabel('MoMo'),
-          MoreTile(Icons.receipt_long_outlined, 'Transactions', () => context.push('/transactions/history')),
-          MoreTile(Icons.account_balance_wallet_outlined, 'Float Overview', () => context.push('/float-overview')),
-          MoreTile(Icons.bar_chart_outlined, 'Reports', () => context.push('/reports')),
-          MoreTile(Icons.fact_check_outlined, 'Shift Reconciliation', () => context.push('/shifts/history')),
-          MoreTile(Icons.wifi_tethering, 'USSD Automation', () => context.push('/ussd-settings')),
+          MoreTile(
+            Icons.receipt_long_outlined,
+            'Transactions',
+            () => context.push('/transactions/history'),
+          ),
+          MoreTile(
+            Icons.account_balance_wallet_outlined,
+            'Float Overview',
+            () => context.push('/float-overview'),
+          ),
+          MoreTile(
+            Icons.bar_chart_outlined,
+            'Reports',
+            () => context.push('/reports'),
+          ),
+          MoreTile(
+            Icons.fact_check_outlined,
+            'Shift Reconciliation',
+            () => context.push('/shifts/history'),
+          ),
+          MoreTile(
+            Icons.wifi_tethering,
+            'USSD Automation',
+            () => context.push('/ussd-settings'),
+          ),
 
           const MoreGroupLabel('Business'),
-          MoreTile(Icons.people_outlined, 'Staff Management', () => context.push('/users')),
-          MoreTile(Icons.store_outlined, 'My Branches', () => context.push('/branches')),
+          MoreTile(
+            Icons.people_outlined,
+            'Staff Management',
+            () => context.push('/users'),
+          ),
+          MoreTile(
+            Icons.store_outlined,
+            'My Branches',
+            () => context.push('/branches'),
+          ),
 
           const MoreGroupLabel('Help'),
-          MoreTile(Icons.support_agent_outlined, 'Help', () => context.push('/support')),
-          MoreTile(Icons.settings_outlined, 'Settings', () => context.push('/settings')),
+          MoreTile(
+            Icons.support_agent_outlined,
+            'Help',
+            () => context.push('/support'),
+          ),
+          MoreTile(
+            Icons.settings_outlined,
+            'Settings',
+            () => context.push('/settings'),
+          ),
           const Divider(),
-          MoreTile(Icons.logout, 'Sign Out', () => context.read<AuthBloc>().add(AuthLogoutEvent()),
-            color: AppTheme.errorColor),
+          MoreTile(
+            Icons.logout,
+            'Sign Out',
+            () => context.read<AuthBloc>().add(AuthLogoutEvent()),
+            color: AppTheme.errorColor,
+          ),
         ],
       ),
     );
