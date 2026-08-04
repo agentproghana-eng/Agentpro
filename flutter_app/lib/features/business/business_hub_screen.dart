@@ -1,3 +1,4 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -105,6 +106,10 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
             ),
             const SizedBox(height: 14),
             _buildPerformanceSection(),
+            if (!_loading && _error == null) ...[
+              const SizedBox(height: 16),
+              _buildViewsChart(),
+            ],
             const SizedBox(height: 24),
             const Text(
               'Business Tools',
@@ -131,6 +136,169 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
               title: 'Post Advertisement',
               subtitle: 'Promote your products or services',
               onTap: () => context.push('/marketplace/post'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Map<String, dynamic>> get _viewTrend {
+    final rawTrend = _performance['view_trend'];
+    if (rawTrend is! List) return const [];
+
+    return rawTrend
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  Widget _buildViewsChart() {
+    final trend = _viewTrend;
+    final visibleTrend =
+        trend.length > 7 ? trend.sublist(trend.length - 7) : trend;
+
+    final spots = <FlSpot>[];
+    var highestValue = 0.0;
+
+    for (var index = 0; index < visibleTrend.length; index++) {
+      final rawViews = visibleTrend[index]['views'];
+      final views = rawViews is num
+          ? rawViews.toDouble()
+          : double.tryParse(rawViews?.toString() ?? '') ?? 0;
+
+      if (views > highestValue) highestValue = views;
+      spots.add(FlSpot(index.toDouble(), views));
+    }
+
+    final maxY = highestValue < 4 ? 4.0 : highestValue + 1;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Views — Last 7 Days',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Daily views recorded since analytics tracking began.',
+              style: TextStyle(
+                fontSize: 11,
+                color:
+                    Theme.of(context).colorScheme.onSurface.withOpacity(0.65),
+              ),
+            ),
+            const SizedBox(height: 18),
+            SizedBox(
+              height: 190,
+              child: visibleTrend.isEmpty
+                  ? const Center(child: Text('No view data yet'))
+                  : LineChart(
+                      LineChartData(
+                        minX: 0,
+                        maxX: (visibleTrend.length - 1).toDouble(),
+                        minY: 0,
+                        maxY: maxY,
+                        borderData: FlBorderData(show: false),
+                        gridData: const FlGridData(
+                          drawVerticalLine: false,
+                        ),
+                        lineTouchData: LineTouchData(
+                          touchTooltipData: LineTouchTooltipData(
+                            getTooltipItems: (touchedSpots) {
+                              return touchedSpots.map((spot) {
+                                final index = spot.x.round();
+                                final date =
+                                    visibleTrend[index]['date']?.toString();
+                                final parsedDate = date == null
+                                    ? null
+                                    : DateTime.tryParse(date);
+                                final label = parsedDate == null
+                                    ? date ?? ''
+                                    : '${parsedDate.day}/${parsedDate.month}';
+
+                                return LineTooltipItem(
+                                  '${spot.y.toInt()} view'
+                                  '${spot.y.toInt() == 1 ? '' : 's'}\n'
+                                  '$label',
+                                  const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                );
+                              }).toList();
+                            },
+                          ),
+                        ),
+                        titlesData: FlTitlesData(
+                          topTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          rightTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          leftTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: 30,
+                              interval: maxY <= 4 ? 1 : null,
+                              getTitlesWidget: (value, meta) {
+                                if (value != value.roundToDouble()) {
+                                  return const SizedBox.shrink();
+                                }
+                                return Text(
+                                  value.toInt().toString(),
+                                  style: const TextStyle(fontSize: 10),
+                                );
+                              },
+                            ),
+                          ),
+                          bottomTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: 28,
+                              interval: 1,
+                              getTitlesWidget: (value, meta) {
+                                final index = value.round();
+                                if (index < 0 || index >= visibleTrend.length) {
+                                  return const SizedBox.shrink();
+                                }
+
+                                final date = DateTime.tryParse(
+                                  visibleTrend[index]['date']?.toString() ?? '',
+                                );
+                                if (date == null) {
+                                  return const SizedBox.shrink();
+                                }
+
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 6),
+                                  child: Text(
+                                    '${date.day}/${date.month}',
+                                    style: const TextStyle(fontSize: 9),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                        lineBarsData: [
+                          LineChartBarData(
+                            spots: spots,
+                            isCurved: true,
+                            barWidth: 3,
+                            dotData: const FlDotData(show: true),
+                            belowBarData: BarAreaData(show: true),
+                          ),
+                        ],
+                      ),
+                    ),
             ),
           ],
         ),

@@ -102,9 +102,40 @@ mpRouter.get('/dashboard', async (req, res) => {
       [req.user.id]
     );
 
+    const trends = await query(
+      `WITH days AS (
+         SELECT generate_series(
+           CURRENT_DATE - INTERVAL '29 days',
+           CURRENT_DATE,
+           INTERVAL '1 day'
+         )::date AS day
+       ),
+       daily_views AS (
+         SELECT
+           av.viewed_at::date AS day,
+           COUNT(*)::int AS views
+         FROM advertisement_views av
+         INNER JOIN advertisements a
+           ON a.id = av.advertisement_id
+         WHERE a.posted_by = $1
+           AND av.viewed_at >= CURRENT_DATE - INTERVAL '29 days'
+         GROUP BY av.viewed_at::date
+       )
+       SELECT
+         TO_CHAR(days.day, 'YYYY-MM-DD') AS date,
+         COALESCE(daily_views.views, 0)::int AS views
+       FROM days
+       LEFT JOIN daily_views ON daily_views.day = days.day
+       ORDER BY days.day`,
+      [req.user.id]
+    );
+
     res.json({
       success: true,
-      data: result.rows[0],
+      data: {
+        ...result.rows[0],
+        view_trend: trends.rows,
+      },
     });
   } catch (e) {
     console.error('GET /marketplace/dashboard error:', e);
@@ -139,8 +170,19 @@ mpRouter.get('/:ad_id', async (req, res) => {
     // listing - otherwise a seller refreshing their own ad would
     // inflate the number they're using to judge its performance.
     if (ad.posted_by !== req.user.id) {
-      query('UPDATE advertisements SET views_count = views_count + 1 WHERE id = $1', [req.params.ad_id])
-        .catch(() => {}); // non-blocking, view count is not critical enough to fail the request over
+      Promise.all([
+        query(
+          'UPDATE advertisements SET views_count = views_count + 1 WHERE id = $1',
+          [req.params.ad_id]
+        ),
+        query(
+          `INSERT INTO advertisement_views
+             (advertisement_id, viewed_by)
+           VALUES ($1, $2)`,
+          [req.params.ad_id, req.user.id]
+        ),
+      ]).catch(() => {});
+      // View analytics are non-blocking and must not prevent the ad from loading.
     }
     res.json({ success: true, data: ad });
   } catch (e) { res.status(500).json({ success: false, message: 'Failed to fetch ad' }); }
