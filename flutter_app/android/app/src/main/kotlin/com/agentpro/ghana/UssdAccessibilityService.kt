@@ -2,6 +2,7 @@ package com.agentpro.ghana
 
 import android.accessibilityservice.AccessibilityService
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -154,6 +155,13 @@ class UssdAccessibilityService : AccessibilityService() {
         fun onResult(outcome: String, message: String)
     }
 
+    // Prevent duplicate Android accessibility events from causing
+    // repeated USSD submissions.
+    private var lastScreenText: String? = null
+    private var lastScreenHandledAt: Long = 0L
+    private var lastResponseValue: String? = null
+    private var lastResponseAt: Long = 0L
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         Log.d(TAG, "UssdAccessibilityService connected")
@@ -165,8 +173,33 @@ class UssdAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         if (!isSessionActive) return
+
+        // Ignore accessibility noise that cannot represent a new USSD screen.
+        if (
+            event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+            event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+        ) {
+            return
+        }
+
         val root = rootInActiveWindow ?: return
-        val screenText = collectText(root).lowercase()
+        val screenText = collectText(root).lowercase().trim()
+
+        if (screenText.isEmpty()) return
+
+        val now = SystemClock.elapsedRealtime()
+
+        // Android may send the same USSD screen several times.
+        // Process only the first one.
+        if (
+            screenText == lastScreenText &&
+            now - lastScreenHandledAt < 150L
+        ) {
+            return
+        }
+
+        lastScreenText = screenText
+        lastScreenHandledAt = now
 
         when {
             reachedPinPrompt -> handleAfterPinPrompt(root, screenText)
@@ -332,6 +365,18 @@ class UssdAccessibilityService : AccessibilityService() {
     // numbers, amounts, Operator ID, and non-sensitive post-PIN confirm
     // digits - never for PIN entry itself.
     private fun respond(root: AccessibilityNodeInfo, value: String) {
+        val now = SystemClock.elapsedRealtime()
+
+        // Prevent duplicate menu selections caused by repeated Android
+        // accessibility events.
+        if (
+            value == lastResponseValue &&
+            now - lastResponseAt < 500L
+        ) {
+            Log.d(TAG, "Ignored duplicate USSD response: $value")
+            return
+        }
+
         val editText = findByClassName(root, "android.widget.EditText") ?: run {
             Log.w(TAG, "No EditText found on screen")
             return
@@ -344,6 +389,8 @@ class UssdAccessibilityService : AccessibilityService() {
         val sendButton = findByText(root, "send")
         if (sendButton != null) {
             sendButton.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            lastResponseValue = value
+            lastResponseAt = now
         } else {
             Log.w(TAG, "No Send button found on screen")
         }
