@@ -16,6 +16,7 @@ import 'core/services/inactivity_service.dart';
 import 'core/router/app_router.dart';
 import 'shared/theme/app_theme.dart';
 import 'core/services/offline_queue_service.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -30,15 +31,17 @@ void main() async {
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
     ]),
-    Firebase.initializeApp(),
     StorageService.init(),
-    OfflineQueueService.init(),
     FlutterJailbreakDetection.jailbroken.catchError((_) => false),
   ]);
 
-  final isJailbroken = results[4] as bool;
+  final isJailbroken = results[2] as bool;
 
   runApp(AgentProApp(isJailbroken: isJailbroken));
+
+  // Non-blocking startup tasks. The UI can appear immediately.
+  unawaited(Firebase.initializeApp());
+  unawaited(OfflineQueueService.init());
 
   // Notification permission (a native OS prompt) and FCM setup don't
   // need to block the very first frame - deferred until after the app
@@ -87,7 +90,7 @@ class AgentProApp extends StatelessWidget {
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 28,
-                      fontWeight: FontWeight.bold
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                   SizedBox(height: 16),
@@ -126,7 +129,9 @@ class AgentProApp extends StatelessWidget {
               // timeout fires and needs to show a SnackBar.
               return InactivityDetector(
                 timeout: const Duration(minutes: 5),
-                child: _AccessibilityGate(child: child ?? const SizedBox.shrink()),
+                child: _AccessibilityGate(
+                  child: child ?? const SizedBox.shrink(),
+                ),
               );
             },
           );
@@ -135,7 +140,6 @@ class AgentProApp extends StatelessWidget {
     );
   }
 }
-
 
 // Checked once per cold launch, after the first frame - Accessibility
 // Service can't be requested via a system permission dialog the way
