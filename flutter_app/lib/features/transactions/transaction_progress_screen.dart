@@ -302,7 +302,15 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     // is deliberately NOT included here - it's a manual-entry transaction
     // (money already moved peer-to-peer to the agent's SIM), never a
     // USSD dial at all.
-    final transactionType = widget.data["transaction_type"] as String?;
+    final transactionType =
+        widget.data["transaction_type"]?.toString() ??
+        transaction["transaction_type"]?.toString();
+
+    if (transactionType == null || transactionType.isEmpty) {
+      _showStartupFailure("The transaction type is unavailable.");
+      return;
+    }
+
     final bundleCategory = widget.data["bundle_category"] as String?;
     final recipientMode = widget.data["recipient_mode"] as String?;
     final selectionsInOrder =
@@ -574,7 +582,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
   Future<void> _startResolvedFlow({
     required String transactionId,
-    required Map<String, dynamic> automationParams,
+    required Map<String, String> automationParams,
     required String transactionType,
     required String provider,
     required String? telecelOperatorId,
