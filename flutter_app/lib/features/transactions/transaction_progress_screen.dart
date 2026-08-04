@@ -258,8 +258,20 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     if (mounted) setState(() => _statusMessage = 'Detecting SIM card...');
     int simSlot;
     try {
-      final hasSim = await SimCardService.hasProviderSim(provider);
-      if (!hasSim) {
+      // Resolve both provider presence and physical slot from one native
+      // SIM query. Previously this made two platform-channel calls:
+      // hasProviderSim(), followed by getSlotForProvider().
+      final simCards = await SimCardService.getSimCards();
+      SimCard? providerSim;
+
+      for (final sim in simCards) {
+        if (sim.network == provider) {
+          providerSim = sim;
+          break;
+        }
+      }
+
+      if (providerSim == null) {
         final reason =
             'No ${_providerLabel(provider)} SIM card was detected on this device.';
         if (mounted) setState(() => _simWarning = reason);
@@ -273,7 +285,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         );
         return;
       }
-      simSlot = await SimCardService.getSlotForProvider(provider);
+
+      simSlot = providerSim.slot;
     } on SimPermissionException {
       // Belt-and-suspenders: we already requested permission above, but the
       // OS can still deny the actual platform call in edge cases (e.g. the
