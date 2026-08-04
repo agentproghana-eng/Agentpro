@@ -1,6 +1,15 @@
 import { useState, useEffect, createContext, useContext } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { LoadingState, ErrorState } from './components/PageState.jsx';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+import {
+  LoadingState,
+  ErrorState,
+  EmptyState,
+} from './components/PageState.jsx';
+import { ConfirmDialog } from './components/ConfirmDialog.jsx';
 import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import toast, { Toaster } from 'react-hot-toast';
@@ -341,24 +350,56 @@ function DashboardPage() {
 // ── Pending Registrations Widget ──────────────────────────────
 
 function PendingRegistrationsWidget() {
-  const [regs, setRegs] = useState([]);
-  useEffect(() => {
-    API.get('/admin/pending-registrations').then(r => setRegs(r.data.data || []));
-  }, []);
+  const {
+    data: registrations = [],
+    isLoading,
+    isError,
+  } = useQuery({
+    queryKey: ['admin', 'pending-registrations'],
+    queryFn: async () => {
+      const response = await API.get('/admin/pending-registrations');
+      return response.data.data || [];
+    },
+  });
 
-  if (!regs.length) return null;
+  if (isLoading || isError || registrations.length === 0) {
+    return null;
+  }
 
   return (
-    <div className="bg-white rounded-xl shadow-sm p-6">
-      <h3 className="font-bold text-gray-900 mb-4">🔔 Pending Registrations ({regs.length})</h3>
+    <div className="rounded-xl bg-white p-6 shadow-sm">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h3 className="font-bold text-gray-900">
+          Pending Registrations ({registrations.length})
+        </h3>
+
+        <Link
+          to="/registrations"
+          className="text-sm font-medium text-primary hover:underline"
+        >
+          View all
+        </Link>
+      </div>
+
       <div className="space-y-3">
-        {regs.map(r => (
-          <div key={r.id} className="border border-gray-100 rounded-lg p-3 flex items-center justify-between">
-            <div>
-              <p className="font-semibold text-sm">{r.name}</p>
-              <p className="text-xs text-gray-500">{r.email} · {r.phone}</p>
+        {registrations.slice(0, 5).map((registration) => (
+          <div
+            key={registration.id}
+            className="flex items-center justify-between gap-4 rounded-lg border border-gray-100 p-3"
+          >
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-gray-900">
+                {registration.name}
+              </p>
+              <p className="truncate text-xs text-gray-500">
+                {registration.email} · {registration.phone}
+              </p>
             </div>
-            <Link to="/registrations" className="text-xs bg-primary text-white px-3 py-1.5 rounded-lg hover:bg-primary-dark">
+
+            <Link
+              to="/registrations"
+              className="shrink-0 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-dark"
+            >
               Review
             </Link>
           </div>
@@ -371,60 +412,204 @@ function PendingRegistrationsWidget() {
 // ── Registrations Page ────────────────────────────────────────
 
 function RegistrationsPage() {
-  const [regs, setRegs] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const [selectedRegistration, setSelectedRegistration] =
+    useState(null);
 
-  const load = () => {
-    API.get('/admin/pending-registrations')
-      .then(r => { setRegs(r.data.data || []); setLoading(false); });
-  };
-  useEffect(load, []);
+  const {
+    data: registrations = [],
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({
+    queryKey: ['admin', 'pending-registrations'],
+    queryFn: async () => {
+      const response = await API.get('/admin/pending-registrations');
+      return response.data.data || [];
+    },
+  });
 
-  const approve = async (companyId) => {
-    try {
-      const res = await API.patch(`/admin/pending-registrations/${companyId}/approve`);
-      toast.success(res.data.message || "Approved! 30-day free trial started.");
-      load();
-    } catch (e) {
-      toast.error(e.response?.data?.message || "Failed to approve registration");
-    }
-  };
+  const approvalMutation = useMutation({
+    mutationFn: async (companyId) => {
+      const response = await API.patch(
+        `/admin/pending-registrations/${companyId}/approve`,
+      );
+      return response.data;
+    },
+    onSuccess: async (data) => {
+      toast.success(
+        data.message || 'Registration approved successfully.',
+      );
+      setSelectedRegistration(null);
+
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ['admin', 'pending-registrations'],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ['admin', 'overview'],
+        }),
+      ]);
+    },
+    onError: (mutationError) => {
+      toast.error(
+        mutationError.response?.data?.message ||
+          'Failed to approve registration.',
+      );
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <LoadingState label="Loading pending registrations..." />
+    );
+  }
+
+  if (isError) {
+    return (
+      <ErrorState
+        title="Registrations could not be loaded"
+        message={
+          error?.response?.data?.message ||
+          error?.message ||
+          'The registration review queue is unavailable.'
+        }
+        onRetry={refetch}
+      />
+    );
+  }
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-6">Pending Registrations</h2>
-      {loading ? <p>Loading...</p> : regs.length === 0 ? (
-        <div className="text-center py-16 text-gray-400">
-          <p className="text-4xl mb-4">✅</p>
-          <p>No pending registrations</p>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">
+            Pending Registrations
+          </h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Review new companies before granting platform access.
+          </p>
         </div>
+
+        <button
+          type="button"
+          onClick={() => refetch()}
+          disabled={isFetching || approvalMutation.isPending}
+          className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+        >
+          {isFetching ? 'Refreshing...' : 'Refresh'}
+        </button>
+      </div>
+
+      {registrations.length === 0 ? (
+        <EmptyState
+          icon="✅"
+          title="No pending registrations"
+          message="New company applications will appear here for review."
+        />
       ) : (
         <div className="grid gap-4">
-          {regs.map(r => (
-            <div key={r.id} className="bg-white rounded-xl shadow-sm p-6">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h3 className="font-bold text-gray-900">{r.name}</h3>
-                  <p className="text-sm text-gray-500">{r.registration_number}</p>
+          {registrations.map((registration) => (
+            <article
+              key={registration.id}
+              className="rounded-xl bg-white p-6 shadow-sm"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <h3 className="truncate font-bold text-gray-900">
+                    {registration.name}
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    {registration.registration_number ||
+                      'No registration number'}
+                  </p>
                 </div>
-                <span className="bg-yellow-100 text-yellow-700 text-xs px-2 py-1 rounded-full">Pending</span>
+
+                <span className="rounded-full bg-yellow-100 px-2 py-1 text-xs font-medium text-yellow-700">
+                  Pending
+                </span>
               </div>
-              <div className="grid grid-cols-2 gap-4 mt-4 text-sm">
-                <div><span className="text-gray-500">Owner:</span> {r.first_name} {r.last_name}</div>
-                <div><span className="text-gray-500">Email:</span> {r.email}</div>
-                <div><span className="text-gray-500">Phone:</span> {r.phone}</div>
-                <div><span className="text-gray-500">Ghana Card:</span> {r.ghana_card_number || '—'}</div>
-                <div><span className="text-gray-500">Applied:</span> {new Date(r.created_at).toLocaleDateString()}</div>
-              </div>
+
+              <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="text-gray-500">Owner</dt>
+                  <dd className="font-medium text-gray-900">
+                    {registration.first_name}{' '}
+                    {registration.last_name}
+                  </dd>
+                </div>
+
+                <div>
+                  <dt className="text-gray-500">Email</dt>
+                  <dd className="break-all font-medium text-gray-900">
+                    {registration.email}
+                  </dd>
+                </div>
+
+                <div>
+                  <dt className="text-gray-500">Phone</dt>
+                  <dd className="font-medium text-gray-900">
+                    {registration.phone || '—'}
+                  </dd>
+                </div>
+
+                <div>
+                  <dt className="text-gray-500">Ghana Card</dt>
+                  <dd className="font-medium text-gray-900">
+                    {registration.ghana_card_number || '—'}
+                  </dd>
+                </div>
+
+                <div>
+                  <dt className="text-gray-500">Applied</dt>
+                  <dd className="font-medium text-gray-900">
+                    {registration.created_at
+                      ? new Date(
+                          registration.created_at,
+                        ).toLocaleDateString()
+                      : '—'}
+                  </dd>
+                </div>
+              </dl>
+
               <button
-                onClick={() => approve(r.id)}
-                className="w-full mt-4 bg-primary text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-primary-dark transition">
-                ✅ Approve & Start 30-Day Free Trial
+                type="button"
+                onClick={() =>
+                  setSelectedRegistration(registration)
+                }
+                disabled={approvalMutation.isPending}
+                className="mt-5 w-full rounded-lg bg-primary py-2.5 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-50"
+              >
+                Approve and Start 30-Day Free Trial
               </button>
-            </div>
+            </article>
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={selectedRegistration !== null}
+        title="Approve company registration?"
+        message={
+          selectedRegistration
+            ? `This will activate ${selectedRegistration.name}, activate its owner, create a Main Branch, and start the 30-day free trial.`
+            : ''
+        }
+        confirmLabel="Approve Registration"
+        loading={approvalMutation.isPending}
+        onClose={() => {
+          if (!approvalMutation.isPending) {
+            setSelectedRegistration(null);
+          }
+        }}
+        onConfirm={() => {
+          if (selectedRegistration) {
+            approvalMutation.mutate(selectedRegistration.id);
+          }
+        }}
+      />
     </div>
   );
 }
@@ -432,69 +617,262 @@ function RegistrationsPage() {
 // ── Subscriptions Page ────────────────────────────────────────
 
 function SubscriptionsPage() {
-  const [payments, setPayments] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const [pendingAction, setPendingAction] = useState(null);
 
-  const load = () => {
-    API.get('/subscriptions/pending-payments')
-      .then(r => { setPayments(r.data.data || []); setLoading(false); });
-  };
-  useEffect(load, []);
+  const {
+    data: payments = [],
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({
+    queryKey: ['admin', 'pending-subscription-payments'],
+    queryFn: async () => {
+      const response = await API.get(
+        '/subscriptions/pending-payments',
+      );
+      return response.data.data || [];
+    },
+  });
 
-  const verify = async (paymentId, action, reason = '') => {
-    try {
-      await API.patch(`/subscriptions/payment/${paymentId}/verify`, { action, rejection_reason: reason });
-      toast.success(action === 'approve' ? 'Subscription activated! ✅' : 'Payment rejected');
-      load();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Action failed');
-    }
-  };
+  const verificationMutation = useMutation({
+    mutationFn: async ({ paymentId, action, reason }) => {
+      const response = await API.patch(
+        `/subscriptions/payment/${paymentId}/verify`,
+        {
+          action,
+          rejection_reason: reason || undefined,
+        },
+      );
+
+      return {
+        response: response.data,
+        action,
+      };
+    },
+    onSuccess: async ({ response, action }) => {
+      toast.success(
+        response.message ||
+          (action === 'approve'
+            ? 'Subscription activated.'
+            : 'Payment rejected.'),
+      );
+
+      setPendingAction(null);
+
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ['admin', 'pending-subscription-payments'],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ['admin', 'overview'],
+        }),
+      ]);
+    },
+    onError: (mutationError) => {
+      toast.error(
+        mutationError.response?.data?.message ||
+          'The payment could not be processed.',
+      );
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <LoadingState label="Loading subscription payments..." />
+    );
+  }
+
+  if (isError) {
+    return (
+      <ErrorState
+        title="Subscription payments could not be loaded"
+        message={
+          error?.response?.data?.message ||
+          error?.message ||
+          'The payment verification queue is unavailable.'
+        }
+        onRetry={refetch}
+      />
+    );
+  }
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-6">Pending Subscription Payments</h2>
-      {loading ? <p>Loading...</p> : payments.length === 0 ? (
-        <div className="text-center py-16 text-gray-400">
-          <p className="text-4xl mb-4">✅</p>
-          <p>No pending payments</p>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">
+            Pending Subscription Payments
+          </h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Verify submitted Mobile Money payment references.
+          </p>
         </div>
+
+        <button
+          type="button"
+          onClick={() => refetch()}
+          disabled={isFetching || verificationMutation.isPending}
+          className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+        >
+          {isFetching ? 'Refreshing...' : 'Refresh'}
+        </button>
+      </div>
+
+      {payments.length === 0 ? (
+        <EmptyState
+          icon="💳"
+          title="No pending subscription payments"
+          message="New payment references will appear here for verification."
+        />
       ) : (
         <div className="grid gap-4">
-          {payments.map(p => (
-            <div key={p.id} className="bg-white rounded-xl shadow-sm p-6">
-              <div className="flex justify-between items-start">
+          {payments.map((payment) => (
+            <article
+              key={payment.id}
+              className="rounded-xl bg-white p-6 shadow-sm"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <h3 className="font-bold">{p.company_name}</h3>
-                  <p className="text-sm text-gray-500">{p.submitted_by_email}</p>
+                  <h3 className="font-bold text-gray-900">
+                    {payment.company_name ||
+                      payment.company?.name ||
+                      'Unknown company'}
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Reference: {payment.momo_reference || '—'}
+                  </p>
                 </div>
-                <span className="text-lg font-bold text-green-600">GH₵ {parseFloat(p.amount).toFixed(2)}</span>
+
+                <span className="rounded-full bg-yellow-100 px-2 py-1 text-xs font-medium text-yellow-700">
+                  Pending verification
+                </span>
               </div>
-              <div className="grid grid-cols-2 gap-3 mt-4 text-sm">
-                <div><span className="text-gray-500">MoMo Ref:</span> <span className="font-mono font-semibold">{p.momo_reference}</span></div>
-                <div><span className="text-gray-500">Payment Phone:</span> {p.payment_phone}</div>
-                <div><span className="text-gray-500">Submitted:</span> {new Date(p.submitted_at).toLocaleString()}</div>
-              </div>
-              <div className="flex gap-3 mt-4">
-                <button onClick={() => verify(p.id, 'approve')}
-                  className="flex-1 bg-green-600 text-white py-2 rounded-lg text-sm font-semibold hover:bg-green-700">
-                  ✅ Verify & Activate
+
+              <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                <div>
+                  <dt className="text-gray-500">Amount</dt>
+                  <dd className="font-semibold text-gray-900">
+                    GH₵ {Number(payment.amount || 0).toFixed(2)}
+                  </dd>
+                </div>
+
+                <div>
+                  <dt className="text-gray-500">
+                    Payment phone
+                  </dt>
+                  <dd className="font-medium text-gray-900">
+                    {payment.payment_phone || '—'}
+                  </dd>
+                </div>
+
+                <div>
+                  <dt className="text-gray-500">
+                    Submitted by
+                  </dt>
+                  <dd className="font-medium text-gray-900">
+                    {payment.first_name ||
+                      payment.user_first_name ||
+                      '—'}{' '}
+                    {payment.last_name ||
+                      payment.user_last_name ||
+                      ''}
+                  </dd>
+                </div>
+
+                <div>
+                  <dt className="text-gray-500">Submitted</dt>
+                  <dd className="font-medium text-gray-900">
+                    {payment.submitted_at
+                      ? new Date(
+                          payment.submitted_at,
+                        ).toLocaleString()
+                      : '—'}
+                  </dd>
+                </div>
+              </dl>
+
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPendingAction({
+                      payment,
+                      action: 'approve',
+                    })
+                  }
+                  disabled={verificationMutation.isPending}
+                  className="flex-1 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+                >
+                  Approve Payment
                 </button>
-                <button onClick={() => {
-                  const reason = prompt('Rejection reason:');
-                  if (reason) verify(p.id, 'reject', reason);
-                }}
-                  className="flex-1 bg-red-50 text-red-600 py-2 rounded-lg text-sm font-semibold hover:bg-red-100 border border-red-200">
-                  ❌ Reject
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPendingAction({
+                      payment,
+                      action: 'reject',
+                    })
+                  }
+                  disabled={verificationMutation.isPending}
+                  className="flex-1 rounded-lg bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+                >
+                  Reject Payment
                 </button>
               </div>
-            </div>
+            </article>
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={pendingAction !== null}
+        title={
+          pendingAction?.action === 'approve'
+            ? 'Approve subscription payment?'
+            : 'Reject subscription payment?'
+        }
+        message={
+          pendingAction?.action === 'approve'
+            ? 'This will activate the company subscription using the submitted payment reference.'
+            : 'The payment will remain inactive and the user will be informed that verification was rejected.'
+        }
+        confirmLabel={
+          pendingAction?.action === 'approve'
+            ? 'Approve Payment'
+            : 'Reject Payment'
+        }
+        tone={
+          pendingAction?.action === 'reject'
+            ? 'danger'
+            : 'primary'
+        }
+        requireReason={pendingAction?.action === 'reject'}
+        reasonLabel="Rejection reason"
+        reasonPlaceholder="Explain why this payment could not be verified..."
+        loading={verificationMutation.isPending}
+        onClose={() => {
+          if (!verificationMutation.isPending) {
+            setPendingAction(null);
+          }
+        }}
+        onConfirm={(reason) => {
+          if (!pendingAction) return;
+
+          verificationMutation.mutate({
+            paymentId: pendingAction.payment.id,
+            action: pendingAction.action,
+            reason,
+          });
+        }}
+      />
     </div>
   );
 }
+
 
 // ── System Config Page ────────────────────────────────────────
 
