@@ -379,8 +379,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
       await _startResolvedFlow(
         transactionId: transactionId,
-        automationParams: automationParams,
-        transactionType: transactionType,
+        automationParams: Map<String, String>.from(automationParams),
+        transactionType: transactionType!,
         provider: provider,
         telecelOperatorId: telecelOperatorId,
         simSlot: simSlot,
@@ -419,8 +419,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
       await _startResolvedFlow(
         transactionId: transactionId,
-        automationParams: automationParams,
-        transactionType: transactionType,
+        automationParams: Map<String, String>.from(automationParams),
+        transactionType: transactionType!,
         provider: provider,
         telecelOperatorId: telecelOperatorId,
         simSlot: simSlot,
