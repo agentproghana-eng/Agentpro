@@ -8,6 +8,7 @@ import "../../shared/theme/app_theme.dart";
 import "../../shared/theme/app_colors.dart";
 import "../../core/services/sim_card_service.dart";
 import "../../core/services/dashboard_refresh_service.dart";
+import "../../core/services/app_cache_service.dart";
 import "../../shared/utils/transaction_labels.dart";
 import "../../core/router/app_router.dart";
 import "../ussd_settings/quick_action_customization_screen.dart";
@@ -125,67 +126,78 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   }
 
   Future<void> _loadQuickActions() async {
-    try {
-      final response = await ApiClient.instance.get("/users/me/quick-actions");
-      final data =
-          response.data["data"] as Map<String, dynamic>? ?? <String, dynamic>{};
+  const cacheKey = 'dashboard_quick_actions';
 
-      Map<String, List<String>> parseProfile(dynamic raw) {
-        final result = <String, List<String>>{};
-        if (raw is! Map) return result;
+  Map<String, List<String>> parseProfile(dynamic raw) {
+    final result = <String, List<String>>{};
 
-        for (final provider in ["mtn", "telecel", "at_money"]) {
-          final value = raw[provider];
-          if (value is List) {
-            result[provider] = value.whereType<String>().take(9).toList();
-          }
-        }
+    if (raw is! Map) return result;
 
-        return result;
+    for (final provider in ["mtn", "telecel", "at_money"]) {
+      final value = raw[provider];
+
+      if (value is List) {
+        result[provider] = value.whereType<String>().take(9).toList();
+      }
+    }
+
+    return result;
+  }
+
+  // Show cached quick actions immediately if available.
+  final cached = AppCacheService.get(cacheKey);
+
+  if (cached is Map<String, dynamic> && mounted) {
+    final agent = cached["agent"];
+    final personal = cached["personal"];
+
+    setState(() {
+      if (agent is Map) {
+        _agentQuickActions = agent.map(
+          (key, value) => MapEntry(
+            key.toString(),
+            List<String>.from(value as List),
+          ),
+        );
       }
 
-      if (!mounted) return;
-
-      setState(() {
-        _agentQuickActions = parseProfile(data["agent"]);
-        _personalQuickActions = parseProfile(data["personal"]);
-      });
-    } catch (_) {
-      // Keep provider-specific defaults when preferences cannot be loaded.
-    }
+      if (personal is Map) {
+        _personalQuickActions = personal.map(
+          (key, value) => MapEntry(
+            key.toString(),
+            List<String>.from(value as List),
+          ),
+        );
+      }
+    });
   }
 
-  List<String> _quickActionTypes({required bool personal}) {
-    final saved = personal
-        ? _personalQuickActions[_provider]
-        : _agentQuickActions[_provider];
+  try {
+    final response =
+        await ApiClient.instance.get("/users/me/quick-actions");
 
-    if (saved != null) {
-      return saved.take(9).toList();
-    }
+    final data =
+        response.data["data"] as Map<String, dynamic>? ??
+            <String, dynamic>{};
 
-    final defaults = personal
-        ? kPersonalQuickActionDefaults[_provider]
-        : kAgentQuickActionDefaults[_provider];
+    final agent = parseProfile(data["agent"]);
+    final personal = parseProfile(data["personal"]);
 
-    return List<String>.from(defaults ?? const <String>[]).take(9).toList();
+    AppCacheService.set(cacheKey, {
+      "agent": agent,
+      "personal": personal,
+    });
+
+    if (!mounted) return;
+
+    setState(() {
+      _agentQuickActions = agent;
+      _personalQuickActions = personal;
+    });
+  } catch (_) {
+    // Keep cached values (or provider defaults) if the request fails.
   }
-
-  QuickActionDefinition? _quickActionDefinition(
-    String type, {
-    required bool personal,
-  }) {
-    final definitions = personal
-        ? kPersonalQuickActionDefinitions
-        : kAgentQuickActionDefinitions;
-
-    for (final definition in definitions) {
-      if (definition.type == type) return definition;
-    }
-
-    return null;
-  }
-
+}
   Future<void> _loadCurrentShift() async {
     try {
       final res = await ApiClient.instance.get("/shifts/current");
