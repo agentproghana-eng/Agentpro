@@ -61,7 +61,8 @@ class ApiClient {
 
   static Future<bool> refreshToken() async {
     try {
-      final refreshToken = await StorageService.getRefreshToken();
+      final token = StorageService.getCachedAccessToken() ??
+    await StorageService.getAccessToken();
       if (refreshToken == null) return false;
 
       final response = await Dio().post(
