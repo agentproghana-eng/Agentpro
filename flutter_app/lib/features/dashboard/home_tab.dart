@@ -229,15 +229,38 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   }
 
   Future<void> _loadCurrentShift() async {
+    const cacheKey = "dashboard_current_shift";
+
+    final cached = AppCacheService.get(cacheKey);
+
+    if (cached is Map && mounted) {
+      setState(() {
+        _currentShift = Map<String, dynamic>.from(cached);
+        _shiftLoading = false;
+      });
+    }
+
     try {
       final res = await ApiClient.instance.get("/shifts/current");
-      if (mounted)
+
+      final shift = res.data["data"];
+
+      if (shift is Map) {
+        AppCacheService.set(cacheKey, Map<String, dynamic>.from(shift));
+      } else {
+        AppCacheService.remove(cacheKey);
+      }
+
+      if (mounted) {
         setState(() {
-          _currentShift = res.data["data"];
+          _currentShift = shift;
           _shiftLoading = false;
         });
+      }
     } catch (_) {
-      if (mounted) setState(() => _shiftLoading = false);
+      if (mounted) {
+        setState(() => _shiftLoading = false);
+      }
     }
   }
 
