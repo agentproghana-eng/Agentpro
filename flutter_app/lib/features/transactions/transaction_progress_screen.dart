@@ -368,44 +368,34 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
     if (mounted) setState(() => _statusMessage = 'Looking up automation...');
 
-    // Offline transactions carry their Flow Builder data pre-cached
-    // (from the last successful online run), since /ussd-flows/resolve
-    // itself needs connectivity and can't be called now. Use that
-    // directly instead of hitting the network.
-    final cachedFlow = transaction['cached_flow'] as Map<String, dynamic>?;
+    // Use a supplied offline flow first, then the synchronously cached
+    // Hive flow. This avoids waiting for another HTTP request during the
+    // common transaction path. An online refresh runs in the background
+    // so later transactions receive any server-side flow changes.
+    final suppliedCachedFlow = transaction['cached_flow'];
+    final cachedFlow = suppliedCachedFlow is Map
+        ? Map<String, dynamic>.from(suppliedCachedFlow)
+        : OfflineQueueService.getCachedFlow(provider, transactionType!);
+
     if (cachedFlow != null) {
-      final steps = (cachedFlow['steps'] as List).cast<Map<String, dynamic>>();
-      final successMarkers = (cachedFlow['success_markers'] as List?)
-          ?.cast<String>();
-      final failureMarkers = (cachedFlow['failure_markers'] as List?)
-          ?.cast<String>();
-      final dialCode = cachedFlow['dial_code'] as String;
+      unawaited(
+        _refreshCachedFlow(
+          provider: provider,
+          transactionType: transactionType,
+          bundleCategory: bundleCategory,
+          recipientMode: recipientMode,
+        ),
+      );
 
-      final selectionsMap = <String, String>{};
-      if (selectionsInOrder.isNotEmpty) {
-        int selectionIndex = 0;
-        for (int stepIndex = 0; stepIndex < steps.length; stepIndex++) {
-          if (steps[stepIndex]['action'] == 'send_selection' &&
-              selectionIndex < selectionsInOrder.length) {
-            selectionsMap[stepIndex.toString()] =
-                selectionsInOrder[selectionIndex];
-            selectionIndex++;
-          }
-        }
-      }
-
-      await _startAccessibilityAutomation(
-        transactionId,
-        automationParams,
-        transactionType!,
-        provider,
-        telecelOperatorId,
+      await _startResolvedFlow(
+        transactionId: transactionId,
+        automationParams: automationParams,
+        transactionType: transactionType,
+        provider: provider,
+        telecelOperatorId: telecelOperatorId,
         simSlot: simSlot,
-        dialCode: dialCode,
-        steps: steps,
-        successMarkers: successMarkers,
-        failureMarkers: failureMarkers,
-        selections: selectionsMap.isEmpty ? null : selectionsMap,
+        flowData: cachedFlow,
+        selectionsInOrder: selectionsInOrder,
       );
       return;
     }
@@ -426,37 +416,26 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
           if (recipientMode != null) 'recipient_mode': recipientMode,
         },
       );
-      final flowData = resolveRes.data['data'] as Map<String, dynamic>;
-      final steps = (flowData['steps'] as List).cast<Map<String, dynamic>>();
-      final successMarkers = (flowData['success_markers'] as List?)
-          ?.cast<String>();
-      final failureMarkers = (flowData['failure_markers'] as List?)
-          ?.cast<String>();
-      final dialCode = flowData['dial_code'] as String;
-      final selectionsMap = <String, String>{};
-      if (selectionsInOrder.isNotEmpty) {
-        int si = 0;
-        for (int i = 0; i < steps.length; i++) {
-          if (steps[i]['action'] == 'send_selection' &&
-              si < selectionsInOrder.length) {
-            selectionsMap[i.toString()] = selectionsInOrder[si];
-            si++;
-          }
-        }
+      final rawFlowData = resolveRes.data['data'];
+      if (rawFlowData is! Map) {
+        throw const FormatException('Invalid USSD flow response');
       }
 
-      await _startAccessibilityAutomation(
-        transactionId,
-        automationParams,
-        transactionType!,
-        provider,
-        telecelOperatorId,
+      final flowData = Map<String, dynamic>.from(rawFlowData);
+
+      unawaited(
+        OfflineQueueService.cacheFlow(provider, transactionType!, flowData),
+      );
+
+      await _startResolvedFlow(
+        transactionId: transactionId,
+        automationParams: automationParams,
+        transactionType: transactionType,
+        provider: provider,
+        telecelOperatorId: telecelOperatorId,
         simSlot: simSlot,
-        dialCode: dialCode,
-        steps: steps,
-        successMarkers: successMarkers,
-        failureMarkers: failureMarkers,
-        selections: selectionsMap.isEmpty ? null : selectionsMap,
+        flowData: flowData,
+        selectionsInOrder: selectionsInOrder,
       );
       return;
     } on DioException catch (e) {
@@ -515,6 +494,99 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
     // Report result to backend
     await _reportResult(transactionId, result);
+  }
+
+  Future<void> _startResolvedFlow({
+    required String transactionId,
+    required Map<String, dynamic> automationParams,
+    required String transactionType,
+    required String provider,
+    required String? telecelOperatorId,
+    required int simSlot,
+    required Map<String, dynamic> flowData,
+    required List<String> selectionsInOrder,
+  }) async {
+    final rawSteps = flowData['steps'];
+    final dialCode = flowData['dial_code'];
+
+    if (rawSteps is! List ||
+        rawSteps.isEmpty ||
+        dialCode is! String ||
+        dialCode.isEmpty) {
+      throw const FormatException('Cached USSD flow is incomplete');
+    }
+
+    final steps = rawSteps
+        .map((step) => Map<String, dynamic>.from(step as Map))
+        .toList();
+
+    final successMarkers = (flowData['success_markers'] as List?)
+        ?.map((value) => value.toString())
+        .toList();
+
+    final failureMarkers = (flowData['failure_markers'] as List?)
+        ?.map((value) => value.toString())
+        .toList();
+
+    final selectionsMap = <String, String>{};
+
+    if (selectionsInOrder.isNotEmpty) {
+      var selectionIndex = 0;
+
+      for (var stepIndex = 0; stepIndex < steps.length; stepIndex++) {
+        if (steps[stepIndex]['action'] == 'send_selection' &&
+            selectionIndex < selectionsInOrder.length) {
+          selectionsMap[stepIndex.toString()] =
+              selectionsInOrder[selectionIndex];
+          selectionIndex++;
+        }
+      }
+    }
+
+    await _startAccessibilityAutomation(
+      transactionId,
+      automationParams,
+      transactionType,
+      provider,
+      telecelOperatorId,
+      simSlot: simSlot,
+      dialCode: dialCode,
+      steps: steps,
+      successMarkers: successMarkers,
+      failureMarkers: failureMarkers,
+      selections: selectionsMap.isEmpty ? null : selectionsMap,
+    );
+  }
+
+  Future<void> _refreshCachedFlow({
+    required String provider,
+    required String transactionType,
+    String? bundleCategory,
+    String? recipientMode,
+  }) async {
+    try {
+      final response = await ApiClient.instance.get(
+        '/ussd-flows/resolve',
+        queryParameters: {
+          'provider': provider,
+          'transaction_type': transactionType,
+          if (bundleCategory != null) 'bundle_category': bundleCategory,
+          if (recipientMode != null) 'recipient_mode': recipientMode,
+        },
+      );
+
+      final rawFlowData = response.data['data'];
+      if (rawFlowData is! Map) return;
+
+      await OfflineQueueService.cacheFlow(
+        provider,
+        transactionType,
+        Map<String, dynamic>.from(rawFlowData),
+      );
+    } catch (_) {
+      // Refreshing future-use cache must never delay or interrupt
+      // the active USSD transaction.
+    }
   }
 
   Future<void> _startAccessibilityAutomation(
