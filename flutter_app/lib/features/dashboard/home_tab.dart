@@ -8,7 +8,6 @@ import "../../shared/theme/app_theme.dart";
 import "../../shared/theme/app_colors.dart";
 import "../../core/services/sim_card_service.dart";
 import "../../core/services/dashboard_refresh_service.dart";
-import "../../core/services/app_cache_service.dart";
 import "../../shared/utils/transaction_labels.dart";
 import "../../core/router/app_router.dart";
 import "../ussd_settings/quick_action_customization_screen.dart";
@@ -150,11 +149,9 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
       if (raw is! Map) return result;
 
       for (final entry in raw.entries) {
-        final value = entry.value;
-
-        if (value is List) {
-          result[entry.key.toString()] = value
-              .map((item) => item.toString())
+        if (entry.value is List) {
+          result[entry.key.toString()] = (entry.value as List)
+              .map((e) => e.toString())
               .take(9)
               .toList();
         }
@@ -163,37 +160,30 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
       return result;
     }
 
-    // Show cached quick actions immediately, then refresh silently.
     final cached = AppCacheService.get(cacheKey);
 
     if (cached is Map && mounted) {
-      final cachedAgent = parseCachedProfile(cached["agent"]);
-      final cachedPersonal = parseCachedProfile(cached["personal"]);
+      final agent = parseCachedProfile(cached["agent"]);
+      final personal = parseCachedProfile(cached["personal"]);
 
-      if (cachedAgent.isNotEmpty || cachedPersonal.isNotEmpty) {
+      if (agent.isNotEmpty || personal.isNotEmpty) {
         setState(() {
-          _agentQuickActions = cachedAgent;
-          _personalQuickActions = cachedPersonal;
+          _agentQuickActions = agent;
+          _personalQuickActions = personal;
         });
       }
     }
 
     try {
-      final response = await ApiClient.instance.get(
-        "/users/me/quick-actions",
-      );
+      final response = await ApiClient.instance.get("/users/me/quick-actions");
 
       final data =
-          response.data["data"] as Map<String, dynamic>? ??
-          <String, dynamic>{};
+          response.data["data"] as Map<String, dynamic>? ?? <String, dynamic>{};
 
       final agent = parseProfile(data["agent"]);
       final personal = parseProfile(data["personal"]);
 
-      AppCacheService.set(cacheKey, {
-        "agent": agent,
-        "personal": personal,
-      });
+      AppCacheService.set(cacheKey, {"agent": agent, "personal": personal});
 
       if (!mounted) return;
 
@@ -202,7 +192,7 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
         _personalQuickActions = personal;
       });
     } catch (_) {
-      // Keep cached values or provider defaults if the request fails.
+      // Keep cached/default values when request fails.
     }
   }
 
