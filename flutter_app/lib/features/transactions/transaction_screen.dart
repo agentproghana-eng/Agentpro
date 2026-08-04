@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -305,34 +307,17 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
       final template =
           res.data["data"]["ussd_template"] as Map<String, dynamic>?;
-      if (template != null) {
-        await OfflineQueueService.cacheTemplate(
-          _selectedProvider,
-          widget.transactionType,
-          template,
-        );
-      }
 
-      // Also try to cache the Flow Builder resolve data - the create
-      // response above never includes it, only GET /ussd-flows/resolve
-      // does. Failing silently here (404 = no custom flow for this
-      // combo, or any other lookup error) is fine; the legacy template
-      // or MTN/Telecel hardcoded path covers those cases instead.
-      try {
-        final flowRes = await ApiClient.instance.get(
-          '/ussd-flows/resolve',
-          queryParameters: {
-            'provider': _selectedProvider,
-            'transaction_type': widget.transactionType,
-          },
-        );
-        final flowData = flowRes.data['data'] as Map<String, dynamic>;
-        await OfflineQueueService.cacheFlow(
-          _selectedProvider,
-          widget.transactionType,
-          flowData,
-        );
-      } catch (_) {}
+      // Do not block USSD startup on local caching or a second flow
+      // lookup. The progress screen can resolve the flow itself when
+      // required. These caches are only for future/offline runs.
+      unawaited(
+        _cacheTransactionAutomationData(
+          provider: _selectedProvider,
+          transactionType: widget.transactionType,
+          template: template,
+        ),
+      );
 
       if (!mounted) return;
       context.push(
@@ -362,6 +347,46 @@ class _TransactionScreenState extends State<TransactionScreen> {
         );
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _cacheTransactionAutomationData({
+    required String provider,
+    required String transactionType,
+    Map<String, dynamic>? template,
+  }) async {
+    if (template != null) {
+      try {
+        await OfflineQueueService.cacheTemplate(
+          provider,
+          transactionType,
+          template,
+        );
+      } catch (_) {
+        // Caching must never delay or fail the live transaction.
+      }
+    }
+
+    try {
+      final flowRes = await ApiClient.instance.get(
+        '/ussd-flows/resolve',
+        queryParameters: {
+          'provider': provider,
+          'transaction_type': transactionType,
+        },
+      );
+
+      final rawData = flowRes.data['data'];
+      if (rawData is! Map) return;
+
+      await OfflineQueueService.cacheFlow(
+        provider,
+        transactionType,
+        Map<String, dynamic>.from(rawData),
+      );
+    } catch (_) {
+      // No custom flow, no network, or cache failure. The active
+      // transaction continues through the progress screen normally.
     }
   }
 
@@ -529,7 +554,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
               if (_needsCustomer) ...[
                 AppTextField(
                   controller: _customerPhoneCtrl,
-                  label: [
+                  label:
+                      [
                         'business_deposit',
                         'business_withdrawal',
                       ].contains(widget.transactionType)
@@ -537,7 +563,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
                       : (_needsReference
                             ? 'Enter Number'
                             : 'Customer Phone Number'),
-                  hint: [
+                  hint:
+                      [
                         'business_deposit',
                         'business_withdrawal',
                       ].contains(widget.transactionType)
