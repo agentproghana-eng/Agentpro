@@ -17,6 +17,8 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
   Map<String, dynamic>? _ad;
   bool _loading = true;
   String? _error;
+  bool _isSaved = false;
+  bool _updatingSaved = false;
 
   @override
   void initState() {
@@ -30,10 +32,19 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
       _error = null;
     });
     try {
-      final res = await ApiClient.instance.get('/marketplace/${widget.adId}');
+      final responses = await Future.wait([
+        ApiClient.instance.get('/marketplace/${widget.adId}'),
+        ApiClient.instance.get(
+          '/marketplace/${widget.adId}/saved-status',
+        ),
+      ]);
+
+      final res = responses[0];
+      final savedStatus = responses[1];
       if (mounted) {
         setState(() {
           _ad = res.data['data'];
+          _isSaved = savedStatus.data['data']?['is_saved'] == true;
           _loading = false;
         });
       }
@@ -43,6 +54,47 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
           _error = e.response?.data?['message'] ?? 'Failed to load ad';
           _loading = false;
         });
+      }
+    }
+  }
+
+  Future<void> _toggleSaved() async {
+    if (_updatingSaved) return;
+
+    final previousValue = _isSaved;
+
+    setState(() {
+      _isSaved = !previousValue;
+      _updatingSaved = true;
+    });
+
+    try {
+      if (previousValue) {
+        await ApiClient.instance.delete(
+          '/marketplace/${widget.adId}/save',
+        );
+      } else {
+        await ApiClient.instance.post(
+          '/marketplace/${widget.adId}/save',
+        );
+      }
+    } on DioException catch (e) {
+      if (!mounted) return;
+
+      setState(() => _isSaved = previousValue);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.response?.data?['message'] ??
+                'Failed to update saved advertisement.',
+          ),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _updatingSaved = false);
       }
     }
   }
@@ -64,7 +116,27 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Ad Status')),
+      appBar: AppBar(
+        title: const Text('Ad Status'),
+        actions: [
+          if (!_loading && _error == null)
+            IconButton(
+              tooltip: _isSaved ? 'Remove from saved' : 'Save ad',
+              onPressed: _updatingSaved ? null : _toggleSaved,
+              icon: _updatingSaved
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : Icon(
+                      _isSaved ? Icons.favorite : Icons.favorite_border,
+                    ),
+            ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null

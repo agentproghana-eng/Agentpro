@@ -548,6 +548,164 @@ mpRouter.post('/enquiries/:conversation_id/messages', async (req, res) => {
   }
 });
 
+
+// List advertisements saved by the current user.
+mpRouter.get('/saved', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT
+         a.*,
+         ac.name AS category_name,
+         COALESCE(AVG(ar.rating), 0)::float AS avg_rating,
+         COUNT(ar.id)::int AS rating_count,
+         TRUE AS is_saved
+       FROM marketplace_saved_ads msa
+       INNER JOIN advertisements a
+         ON a.id = msa.ad_id
+       LEFT JOIN ad_categories ac
+         ON ac.id = a.category_id
+       LEFT JOIN ad_ratings ar
+         ON ar.advertisement_id = a.id
+       WHERE msa.user_id = $1
+         AND a.status = 'active'
+       GROUP BY a.id, ac.name, msa.created_at
+       ORDER BY msa.created_at DESC`,
+      [req.user.id]
+    );
+
+    res.json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (e) {
+    console.error('GET /marketplace/saved error:', e);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch saved advertisements',
+    });
+  }
+});
+
+// Return only saved advertisement IDs for lightweight list hydration.
+mpRouter.get('/saved/ids', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT ad_id
+       FROM marketplace_saved_ads
+       WHERE user_id = $1`,
+      [req.user.id]
+    );
+
+    res.json({
+      success: true,
+      data: result.rows.map((row) => row.ad_id),
+    });
+  } catch (e) {
+    console.error('GET /marketplace/saved/ids error:', e);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch saved advertisement IDs',
+    });
+  }
+});
+
+// Check whether one advertisement is saved by the current user.
+mpRouter.get('/:ad_id/saved-status', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT EXISTS (
+         SELECT 1
+         FROM marketplace_saved_ads
+         WHERE user_id = $1
+           AND ad_id = $2
+       ) AS is_saved`,
+      [req.user.id, req.params.ad_id]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        is_saved: result.rows[0]?.is_saved === true,
+      },
+    });
+  } catch (e) {
+    console.error('GET /marketplace/:ad_id/saved-status error:', e);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to check saved status',
+    });
+  }
+});
+
+// Save an active advertisement.
+mpRouter.post('/:ad_id/save', async (req, res) => {
+  try {
+    const adResult = await query(
+      `SELECT id, status
+       FROM advertisements
+       WHERE id = $1`,
+      [req.params.ad_id]
+    );
+
+    if (!adResult.rows.length) {
+      return res.status(404).json({
+        success: false,
+        message: 'Advertisement not found',
+      });
+    }
+
+    if (adResult.rows[0].status !== 'active') {
+      return res.status(422).json({
+        success: false,
+        message: 'Only active advertisements can be saved',
+      });
+    }
+
+    await query(
+      `INSERT INTO marketplace_saved_ads (user_id, ad_id)
+       VALUES ($1, $2)
+       ON CONFLICT (user_id, ad_id) DO NOTHING`,
+      [req.user.id, req.params.ad_id]
+    );
+
+    res.json({
+      success: true,
+      data: { is_saved: true },
+      message: 'Advertisement saved',
+    });
+  } catch (e) {
+    console.error('POST /marketplace/:ad_id/save error:', e);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to save advertisement',
+    });
+  }
+});
+
+// Remove an advertisement from saved items.
+mpRouter.delete('/:ad_id/save', async (req, res) => {
+  try {
+    await query(
+      `DELETE FROM marketplace_saved_ads
+       WHERE user_id = $1
+         AND ad_id = $2`,
+      [req.user.id, req.params.ad_id]
+    );
+
+    res.json({
+      success: true,
+      data: { is_saved: false },
+      message: 'Advertisement removed from saved items',
+    });
+  } catch (e) {
+    console.error('DELETE /marketplace/:ad_id/save error:', e);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to remove saved advertisement',
+    });
+  }
+});
+
 // Get a single ad by ID — scoped to the owner, since this is used to show
 // payment instructions and status for an ad that may not yet be public
 // (i.e. not necessarily 'active', so it can't go through the public list).
