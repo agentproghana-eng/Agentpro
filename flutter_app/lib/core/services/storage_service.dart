@@ -13,21 +13,33 @@ class StorageService {
   static const _keyPinHash = 'pin_hash';
   static const _keyPinSalt = 'pin_salt';
 
+  // In-memory cache avoids secure-storage reads on every API request.
+  static String? _accessTokenCache;
+
   static Future<void> init() async {
     _storage = const FlutterSecureStorage(
       aOptions: AndroidOptions(
         encryptedSharedPreferences: true,
-        keyCipherAlgorithm: KeyCipherAlgorithm.RSA_ECB_OAEPwithSHA_256andMGF1Padding,
+        keyCipherAlgorithm:
+            KeyCipherAlgorithm.RSA_ECB_OAEPwithSHA_256andMGF1Padding,
         storageCipherAlgorithm: StorageCipherAlgorithm.AES_GCM_NoPadding,
       ),
     );
   }
 
-  static Future<void> saveAccessToken(String token) =>
-      _storage.write(key: _keyAccessToken, value: token);
+  static Future<void> saveAccessToken(String token) async {
+    _accessTokenCache = token;
+    await _storage.write(key: _keyAccessToken, value: token);
+  }
 
-  static Future<String?> getAccessToken() =>
-      _storage.read(key: _keyAccessToken);
+  static Future<String?> getAccessToken() async {
+    if (_accessTokenCache != null) {
+      return _accessTokenCache;
+    }
+
+    _accessTokenCache = await _storage.read(key: _keyAccessToken);
+    return _accessTokenCache;
+  }
 
   static Future<void> saveRefreshToken(String token) =>
       _storage.write(key: _keyRefreshToken, value: token);
@@ -105,6 +117,7 @@ class StorageService {
   /// Deliberately preserves biometric_enabled, a pure device
   /// preference, same as before.
   static Future<void> clearSession() async {
+    _accessTokenCache = null;
     await _storage.delete(key: _keyAccessToken);
     await _storage.delete(key: _keyRefreshToken);
     await _storage.delete(key: _keyUser);
