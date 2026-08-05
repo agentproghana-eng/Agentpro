@@ -24,27 +24,201 @@ const upload = multer({
   },
 });
 
-// List active ads (free tier can browse)
+// List active ads with search, filtering, sorting and pagination.
 mpRouter.get('/', async (req, res) => {
-  const { category_id, search, page = 1, limit = 20 } = req.query;
-  const offset = (parseInt(page) - 1) * parseInt(limit);
+  const {
+    category_id,
+    search,
+    location,
+    min_price,
+    max_price,
+    min_rating,
+    sort = 'newest',
+    page = 1,
+    limit = 20,
+  } = req.query;
+
+  const parsedPage = Math.max(parseInt(page, 10) || 1, 1);
+  const parsedLimit = Math.min(
+    Math.max(parseInt(limit, 10) || 20, 1),
+    100
+  );
+  const offset = (parsedPage - 1) * parsedLimit;
+
   try {
     const conditions = [`a.status = 'active'`];
     const params = [];
-    let idx = 1;
-    if (category_id) { conditions.push(`a.category_id = $${idx++}`); params.push(category_id); }
-    if (search) { conditions.push(`(a.title ILIKE $${idx} OR a.description ILIKE $${idx})`); params.push(`%${search}%`); idx++; }
+    let index = 1;
+
+    if (category_id) {
+      conditions.push(`a.category_id = $${index++}`);
+      params.push(category_id);
+    }
+
+    if (search && search.trim()) {
+      conditions.push(
+        `(a.title ILIKE $${index}
+          OR a.description ILIKE $${index}
+          OR ac.name ILIKE $${index}
+          OR a.location ILIKE $${index})`
+      );
+      params.push(`%${search.trim()}%`);
+      index++;
+    }
+
+    if (location && location.trim()) {
+      conditions.push(`a.location ILIKE $${index++}`);
+      params.push(`%${location.trim()}%`);
+    }
+
+    if (min_price !== undefined && min_price !== '') {
+      const parsedMinPrice = Number(min_price);
+
+      if (!Number.isFinite(parsedMinPrice) || parsedMinPrice < 0) {
+        return res.status(422).json({
+          success: false,
+          message: 'Minimum price must be a valid non-negative number',
+        });
+      }
+
+      conditions.push(`a.price >= $${index++}`);
+      params.push(parsedMinPrice);
+    }
+
+    if (max_price !== undefined && max_price !== '') {
+      const parsedMaxPrice = Number(max_price);
+
+      if (!Number.isFinite(parsedMaxPrice) || parsedMaxPrice < 0) {
+        return res.status(422).json({
+          success: false,
+          message: 'Maximum price must be a valid non-negative number',
+        });
+      }
+
+      conditions.push(`a.price <= $${index++}`);
+      params.push(parsedMaxPrice);
+    }
+
+    if (
+      min_price !== undefined &&
+      min_price !== '' &&
+      max_price !== undefined &&
+      max_price !== '' &&
+      Number(min_price) > Number(max_price)
+    ) {
+      return res.status(422).json({
+        success: false,
+        message: 'Minimum price cannot exceed maximum price',
+      });
+    }
+
+    const parsedMinRating =
+      min_rating !== undefined && min_rating !== ''
+        ? Number(min_rating)
+        : null;
+
+    if (
+      parsedMinRating !== null &&
+      (
+        !Number.isFinite(parsedMinRating) ||
+        parsedMinRating < 1 ||
+        parsedMinRating > 5
+      )
+    ) {
+      return res.status(422).json({
+        success: false,
+        message: 'Minimum rating must be between 1 and 5',
+      });
+    }
+
+    const orderBy = {
+      newest: 'a.published_at DESC NULLS LAST',
+      oldest: 'a.published_at ASC NULLS LAST',
+      most_viewed: 'a.views_count DESC, a.published_at DESC NULLS LAST',
+      highest_rated:
+        'avg_rating DESC NULLS LAST, rating_count DESC, a.published_at DESC NULLS LAST',
+      price_low: 'a.price ASC NULLS LAST, a.published_at DESC NULLS LAST',
+      price_high: 'a.price DESC NULLS LAST, a.published_at DESC NULLS LAST',
+    }[sort];
+
+    if (!orderBy) {
+      return res.status(422).json({
+        success: false,
+        message: 'Invalid marketplace sort option',
+      });
+    }
+
     const where = `WHERE ${conditions.join(' AND ')}`;
+    const having =
+      parsedMinRating === null
+        ? ''
+        : `HAVING COALESCE(AVG(ar.rating), 0) >= $${index}`;
+
+    const dataParams = [...params];
+
+    if (parsedMinRating !== null) {
+      dataParams.push(parsedMinRating);
+      index++;
+    }
+
+    const limitParameter = index++;
+    const offsetParameter = index++;
+
+    const dataSql = `
+      SELECT
+        a.*,
+        ac.name AS category_name,
+        COALESCE(AVG(ar.rating), 0)::float AS avg_rating,
+        COUNT(ar.id)::int AS rating_count
+      FROM advertisements a
+      LEFT JOIN ad_categories ac
+        ON ac.id = a.category_id
+      LEFT JOIN ad_ratings ar
+        ON ar.advertisement_id = a.id
+      ${where}
+      GROUP BY a.id, ac.name
+      ${having}
+      ORDER BY ${orderBy}
+      LIMIT $${limitParameter}
+      OFFSET $${offsetParameter}
+    `;
+
+    const countSql = `
+      SELECT COUNT(*)::int AS total
+      FROM (
+        SELECT a.id
+        FROM advertisements a
+        LEFT JOIN ad_categories ac
+          ON ac.id = a.category_id
+        LEFT JOIN ad_ratings ar
+          ON ar.advertisement_id = a.id
+        ${where}
+        GROUP BY a.id
+        ${having}
+      ) filtered_ads
+    `;
+
     const [data, count] = await Promise.all([
-      query(`SELECT a.*, ac.name as category_name, AVG(ar.rating) as avg_rating, COUNT(ar.id) as rating_count
-             FROM advertisements a LEFT JOIN ad_categories ac ON a.category_id = ac.id
-             LEFT JOIN ad_ratings ar ON ar.advertisement_id = a.id
-             ${where} GROUP BY a.id, ac.name ORDER BY a.published_at DESC LIMIT $${idx++} OFFSET $${idx++}`,
-        [...params, parseInt(limit), offset]),
-      query(`SELECT COUNT(*) FROM advertisements a ${where}`, params),
+      query(dataSql, [...dataParams, parsedLimit, offset]),
+      query(countSql, dataParams),
     ]);
-    res.json({ success: true, data: data.rows, meta: { total: parseInt(count.rows[0].count) } });
-  } catch (e) { res.status(500).json({ success: false, message: 'Failed to fetch ads' }); }
+
+    res.json({
+      success: true,
+      data: data.rows,
+      meta: {
+        page: parsedPage,
+        limit: parsedLimit,
+        total: count.rows[0]?.total || 0,
+      },
+    });
+  } catch (e) {
+    console.error('GET /marketplace error:', e);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch ads',
+    });
+  }
 });
 
 // Get categories
