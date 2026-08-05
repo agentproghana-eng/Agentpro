@@ -121,9 +121,10 @@ exports.listFeed = async (req, res) => {
   const parsedPage = Number.parseInt(req.query.page, 10);
   const parsedLimit = Number.parseInt(req.query.limit, 10);
 
-  const page = Number.isInteger(parsedPage) && parsedPage > 0
-    ? parsedPage
-    : 1;
+  const page =
+    Number.isInteger(parsedPage) && parsedPage > 0
+      ? parsedPage
+      : 1;
 
   const limit = Number.isInteger(parsedLimit)
     ? Math.min(Math.max(parsedLimit, 1), 50)
@@ -131,32 +132,97 @@ exports.listFeed = async (req, res) => {
 
   const offset = (page - 1) * limit;
 
+  const validTypes = new Set([
+    "general",
+    "question",
+    "network_issue",
+    "fraud_alert",
+    "business_tip",
+    "announcement",
+  ]);
+
+  const requestedType = req.query.type?.toString();
+  const postType =
+    requestedType && validTypes.has(requestedType)
+      ? requestedType
+      : null;
+
   try {
     const result = await query(
-      `SELECT p.*, u.first_name, u.last_name, u.role,
-              (SELECT json_object_agg(reaction_type, cnt) FROM (
-                SELECT reaction_type, COUNT(*) as cnt FROM agent_post_likes
-                WHERE post_id = p.id GROUP BY reaction_type
-              ) sub) as reaction_counts,
-              (SELECT COUNT(*) FROM agent_post_comments c WHERE c.post_id = p.id) as comment_count,
-              (SELECT reaction_type FROM agent_post_likes l WHERE l.post_id = p.id AND l.user_id = $1) as my_reaction
+      `SELECT
+         p.*,
+         u.first_name,
+         u.last_name,
+         u.role,
+
+         EXISTS (
+           SELECT 1
+           FROM agent_saved_posts saved
+           WHERE saved.post_id = p.id
+             AND saved.user_id = $1
+         ) AS is_saved,
+
+         (
+           SELECT json_object_agg(reaction_type, cnt)
+           FROM (
+             SELECT
+               reaction_type,
+               COUNT(*)::int AS cnt
+             FROM agent_post_likes
+             WHERE post_id = p.id
+             GROUP BY reaction_type
+           ) reaction_summary
+         ) AS reaction_counts,
+
+         (
+           SELECT COUNT(*)::int
+           FROM agent_post_comments comment
+           WHERE comment.post_id = p.id
+         ) AS comment_count,
+
+         (
+           SELECT reaction_type
+           FROM agent_post_likes reaction
+           WHERE reaction.post_id = p.id
+             AND reaction.user_id = $1
+         ) AS my_reaction
+
        FROM agent_posts p
-       JOIN users u ON u.id = p.author_id
-       WHERE p.status = $2
-          OR (
-            p.status = $3
-            AND p.author_id = $1
-          )
-       ORDER BY p.created_at DESC
-       LIMIT $4 OFFSET $5`,
+       INNER JOIN users u
+         ON u.id = p.author_id
+
+       WHERE (
+         p.status = 'active'
+         OR (
+           p.status = 'pending_review'
+           AND p.author_id = $1
+         )
+       )
+       AND (
+         $2::community_post_type IS NULL
+         OR p.post_type = $2
+       )
+       AND NOT EXISTS (
+         SELECT 1
+         FROM agent_community_blocks block
+         WHERE block.blocker_id = $1
+           AND block.blocked_user_id = p.author_id
+       )
+
+       ORDER BY
+         p.is_pinned DESC,
+         p.is_urgent DESC,
+         p.created_at DESC
+
+       LIMIT $3 OFFSET $4`,
       [
         req.user.id,
-        "active",
-        "pending_review",
+        postType,
         limit,
         offset,
       ]
     );
+
     res.json({
       success: true,
       data: result.rows,
@@ -168,9 +234,14 @@ exports.listFeed = async (req, res) => {
     });
   } catch (error) {
     logger.error("List feed error:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch feed" });
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch feed",
+    });
   }
 };
+
 
 const VALID_REACTIONS = ["like", "love", "laugh", "wow", "sad", "pray", "dislike"];
 
