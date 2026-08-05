@@ -19,6 +19,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   List<Map<String, dynamic>> _topRatedAds = [];
   List<Map<String, dynamic>> _trendingAds = [];
   List<Map<String, dynamic>> _featuredSellers = [];
+  List<Map<String, dynamic>> _recommendedAds = [];
+  List<Map<String, dynamic>> _recentlyViewedAds = [];
   List<Map<String, dynamic>> _categories = [];
 
   final Set<String> _savedIds = <String>{};
@@ -157,6 +159,14 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             },
           ),
           ApiClient.instance.get('/marketplace/featured-sellers'),
+          ApiClient.instance.get(
+            '/marketplace/recommendations',
+            queryParameters: {'limit': 8},
+          ),
+          ApiClient.instance.get(
+            '/marketplace/recently-viewed',
+            queryParameters: {'limit': 8},
+          ),
           ApiClient.instance.get('/marketplace/saved/ids'),
         ]);
 
@@ -164,7 +174,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         final rawTopRated = responses[1].data['data'];
         final rawTrending = responses[2].data['data'];
         final rawFeaturedSellers = responses[3].data['data'];
-        final rawSavedIds = responses[4].data['data'];
+        final rawRecommendations = responses[4].data['data'];
+        final rawRecentlyViewed = responses[5].data['data'];
+        final rawSavedIds = responses[6].data['data'];
 
         if (!mounted) return;
 
@@ -173,6 +185,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           _topRatedAds = _mapAds(rawTopRated);
           _trendingAds = _mapAds(rawTrending);
           _featuredSellers = _mapAds(rawFeaturedSellers);
+          _recommendedAds = _mapAds(rawRecommendations);
+          _recentlyViewedAds = _mapAds(rawRecentlyViewed);
 
           _savedIds
             ..clear()
@@ -206,6 +220,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         _topRatedAds = [];
         _trendingAds = [];
         _featuredSellers = [];
+        _recommendedAds = [];
+        _recentlyViewedAds = [];
 
         _savedIds
           ..clear()
@@ -716,6 +732,22 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         padding: const EdgeInsets.only(bottom: 96),
         children: [
           if (_featuredSellers.isNotEmpty) _buildFeaturedBusinesses(),
+          if (_recommendedAds.isNotEmpty)
+            _buildHorizontalSection(
+              title: 'Recommended for You',
+              subtitle: 'Suggestions based on your browsing',
+              icon: Icons.auto_awesome_outlined,
+              ads: _recommendedAds,
+              onViewAll: _showRecommendationsSheet,
+            ),
+          if (_recentlyViewedAds.isNotEmpty)
+            _buildHorizontalSection(
+              title: 'Recently Viewed',
+              subtitle: 'Continue exploring advertisements you opened',
+              icon: Icons.history,
+              ads: _recentlyViewedAds,
+              onViewAll: _showRecentlyViewedSheet,
+            ),
           if (_topRatedAds.isNotEmpty)
             _buildHorizontalSection(
               title: 'Top Rated',
@@ -788,6 +820,90 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _showRecommendationsSheet() {
+    return _showAdCollectionSheet(
+      title: 'Recommended for You',
+      subtitle: 'Suggestions based on your marketplace activity',
+      ads: _recommendedAds,
+    );
+  }
+
+  Future<void> _showRecentlyViewedSheet() {
+    return _showAdCollectionSheet(
+      title: 'Recently Viewed',
+      subtitle: 'Advertisements you opened recently',
+      ads: _recentlyViewedAds,
+    );
+  }
+
+  Future<void> _showAdCollectionSheet({
+    required String title,
+    required String subtitle,
+    required List<Map<String, dynamic>> ads,
+  }) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return FractionallySizedBox(
+          heightFactor: 0.88,
+          child: SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 21,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        subtitle,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: GridView.builder(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      childAspectRatio: 0.75,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 10,
+                    ),
+                    itemCount: ads.length,
+                    itemBuilder: (context, index) {
+                      final ad = ads[index];
+                      final id = ad['id']?.toString() ?? '';
+
+                      return _AdCard(
+                        ad: ad,
+                        isSaved: _savedIds.contains(id),
+                        isUpdating: _updatingIds.contains(id),
+                        onToggleSaved: () => _toggleSaved(ad),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
