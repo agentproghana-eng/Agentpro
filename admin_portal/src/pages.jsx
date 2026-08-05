@@ -574,6 +574,53 @@ export function MarketplaceBusinessesPage() {
     </div>
   );
 }
+export function CommunityModerationPage() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">
+          Community Moderation
+        </h1>
+        <p className="mt-2 text-gray-600">
+          Manage Agent Community posts, reports and moderation.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <div className="rounded-xl border bg-white p-5">
+          <p className="text-sm text-gray-500">Reported Posts</p>
+          <p className="mt-2 text-3xl font-bold">0</p>
+        </div>
+
+        <div className="rounded-xl border bg-white p-5">
+          <p className="text-sm text-gray-500">Pending Review</p>
+          <p className="mt-2 text-3xl font-bold">0</p>
+        </div>
+
+        <div className="rounded-xl border bg-white p-5">
+          <p className="text-sm text-gray-500">Official Posts</p>
+          <p className="mt-2 text-3xl font-bold">0</p>
+        </div>
+
+        <div className="rounded-xl border bg-white p-5">
+          <p className="text-sm text-gray-500">Fraud Alerts</p>
+          <p className="mt-2 text-3xl font-bold">0</p>
+        </div>
+      </div>
+
+      <div className="rounded-xl border bg-white p-8 text-center">
+        <h2 className="text-xl font-semibold">
+          Community Moderation Dashboard
+        </h2>
+
+        <p className="mt-3 text-gray-600">
+          The moderation APIs are already connected.
+          The interactive moderation tables will be added next.
+        </p>
+      </div>
+    </div>
+  );
+}
 
 // ── Company Detail Page ───────────────────────────────────────
 // Reuses the existing /users?company_id=X endpoint rather than a

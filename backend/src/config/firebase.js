@@ -4,18 +4,39 @@ const { logger } = require('../utils/logger');
 let firebaseApp;
 
 function initFirebase() {
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+
+  const hasValidConfig =
+    projectId &&
+    clientEmail &&
+    privateKey &&
+    privateKey.includes('BEGIN PRIVATE KEY');
+
+  if (!hasValidConfig) {
+    logger.warn(
+      'Firebase Admin skipped because valid Firebase credentials are not configured'
+    );
+    return null;
+  }
+
   try {
     firebaseApp = admin.initializeApp({
       credential: admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        projectId,
+        privateKey: privateKey.replace(/\\n/g, '\n'),
+        clientEmail,
       }),
     });
+
     logger.info('Firebase Admin initialized');
+    return firebaseApp;
   } catch (error) {
     logger.error('Firebase init error:', error);
-    throw error;
+    logger.warn('Continuing without Firebase Admin');
+    firebaseApp = null;
+    return null;
   }
 }
 

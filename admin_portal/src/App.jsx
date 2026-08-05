@@ -140,6 +140,7 @@ const NAV = [
   { path: '/registrations', icon: '🔔', label: 'Registrations' },
   { path: '/subscriptions', icon: '💳', label: 'Subscriptions' },
   { path: '/companies', icon: '🏢', label: 'Companies' },
+  { path: '/community', icon: '💬', label: 'Community' },
   {
     path: '/marketplace-businesses',
     icon: '✅',
@@ -1109,6 +1110,7 @@ function MarketplacePage() {
 import {
   CompaniesPage,
   MarketplaceBusinessesPage,
+  CommunityModerationPage,
   CompanyDetailPage,
   ShiftsPage,
   USSDTemplatesPage,
@@ -1139,6 +1141,10 @@ export default function App() {
                   <Route
                     path="/marketplace-businesses"
                     element={<MarketplaceBusinessesPage />}
+                  />
+                  <Route
+                    path="/community"
+                    element={<CommunityModerationPage />}
                   />
                   <Route path="/companies/:companyId" element={<CompanyDetailPage />} />
                   <Route path="/shifts" element={<ShiftsPage />} />

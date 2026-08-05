@@ -1,7 +1,9 @@
 const { Resend } = require("resend");
 const { logger } = require("../utils/logger");
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resend = process.env.RESEND_API_KEY
+  ? new Resend(process.env.RESEND_API_KEY)
+  : null;
 
 // Resend requires a verified domain to send from a custom address.
 // Until a real domain is verified in the Resend dashboard, EMAIL_FROM
@@ -9,6 +11,13 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM = process.env.EMAIL_FROM || "Agent Pro Ghana <onboarding@resend.dev>";
 
 async function sendEmail({ to, subject, html, text }) {
+  if (!resend) {
+    logger.warn(
+      `Email skipped because RESEND_API_KEY is not configured: ${subject} -> ${to}`
+    );
+    return { skipped: true };
+  }
+
   try {
     const { data, error } = await resend.emails.send({
       from: FROM,
