@@ -580,19 +580,35 @@ export function CommunityModerationPage() {
     comment_reports: [],
   });
   const [pendingPosts, setPendingPosts] = useState([]);
+  const [allPosts, setAllPosts] = useState([]);
+  const [moderationHistory, setModerationHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState(null);
   const [activeTab, setActiveTab] = useState('reports');
+  const [postStatusFilter, setPostStatusFilter] = useState('all');
+  const [postTypeFilter, setPostTypeFilter] = useState('all');
+  const [postSearch, setPostSearch] = useState('');
 
   const load = async () => {
     setLoading(true);
 
     try {
-      const [reportResponse, pendingResponse] = await Promise.all([
+      const [
+        reportResponse,
+        pendingResponse,
+        postsResponse,
+        historyResponse,
+      ] = await Promise.all([
         API.get('/agent-posts/moderation/reports', {
           params: { status: 'pending' },
         }),
         API.get('/agent-posts/moderation/pending'),
+        API.get('/agent-posts/moderation/posts', {
+          params: { limit: 100 },
+        }),
+        API.get('/agent-posts/moderation/history', {
+          params: { limit: 100 },
+        }),
       ]);
 
       setReports(
@@ -602,6 +618,8 @@ export function CommunityModerationPage() {
         },
       );
       setPendingPosts(pendingResponse.data.data || []);
+      setAllPosts(postsResponse.data.data || []);
+      setModerationHistory(historyResponse.data.data || []);
     } catch (error) {
       toast.error(
         error.response?.data?.message ||
@@ -674,6 +692,26 @@ export function CommunityModerationPage() {
   const totalReports =
     postReports.length + commentReports.length;
 
+  const filteredPosts = allPosts.filter((post) => {
+    const matchesStatus =
+      postStatusFilter === 'all' ||
+      post.status === postStatusFilter;
+
+    const matchesType =
+      postTypeFilter === 'all' ||
+      post.post_type === postTypeFilter;
+
+    const term = postSearch.trim().toLowerCase();
+    const matchesSearch =
+      !term ||
+      post.content?.toLowerCase().includes(term) ||
+      post.first_name?.toLowerCase().includes(term) ||
+      post.last_name?.toLowerCase().includes(term) ||
+      post.email?.toLowerCase().includes(term);
+
+    return matchesStatus && matchesType && matchesSearch;
+  });
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -738,6 +776,32 @@ export function CommunityModerationPage() {
           ].join(' ')}
         >
           Pending Review ({pendingPosts.length})
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('posts')}
+          className={[
+            'border-b-2 px-4 py-3 text-sm font-medium',
+            activeTab === 'posts'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-gray-500',
+          ].join(' ')}
+        >
+          All Posts ({allPosts.length})
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('history')}
+          className={[
+            'border-b-2 px-4 py-3 text-sm font-medium',
+            activeTab === 'history'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-gray-500',
+          ].join(' ')}
+        >
+          Moderation History ({moderationHistory.length})
         </button>
       </div>
 
@@ -1000,6 +1064,299 @@ export function CommunityModerationPage() {
                     </button>
                   </div>
                 ),
+              },
+            ]}
+          />
+        </section>
+      )}
+
+      {activeTab === 'posts' && (
+        <section className="space-y-4">
+          <div className="flex flex-wrap gap-3 rounded-xl bg-white p-4 shadow-sm">
+            <input
+              value={postSearch}
+              onChange={(event) =>
+                setPostSearch(event.target.value)
+              }
+              placeholder="Search posts or authors..."
+              className="min-w-64 flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm"
+            />
+
+            <select
+              value={postStatusFilter}
+              onChange={(event) =>
+                setPostStatusFilter(event.target.value)
+              }
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+            >
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="pending_review">
+                Pending review
+              </option>
+              <option value="removed">Removed</option>
+            </select>
+
+            <select
+              value={postTypeFilter}
+              onChange={(event) =>
+                setPostTypeFilter(event.target.value)
+              }
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+            >
+              <option value="all">All types</option>
+              <option value="general">General</option>
+              <option value="question">Question</option>
+              <option value="business_tip">
+                Business tip
+              </option>
+              <option value="fraud_alert">Fraud alert</option>
+              <option value="announcement">
+                Announcement
+              </option>
+            </select>
+          </div>
+
+          <div className="overflow-hidden rounded-xl bg-white shadow-sm">
+            <Table
+              loading={loading}
+              data={filteredPosts}
+              emptyMsg="No Community posts match these filters"
+              columns={[
+                {
+                  key: 'content',
+                  label: 'Post',
+                  render: (row) => (
+                    <div className="max-w-md">
+                      <p className="line-clamp-3 text-sm text-gray-800">
+                        {row.content || 'Voice-note post'}
+                      </p>
+                      <p className="mt-1 text-xs text-gray-500">
+                        {row.first_name} {row.last_name}
+                        {' · '}
+                        {row.email}
+                      </p>
+                    </div>
+                  ),
+                },
+                {
+                  key: 'post_type',
+                  label: 'Type',
+                  render: (row) => (
+                    <select
+                      value={row.post_type || 'general'}
+                      disabled={updatingId === row.id}
+                      onChange={(event) =>
+                        moderatePost(row.id, {
+                          post_type: event.target.value,
+                          reason:
+                            'Post type changed by administrator',
+                        })
+                      }
+                      className="rounded-lg border border-gray-200 px-2 py-1 text-xs"
+                    >
+                      <option value="general">General</option>
+                      <option value="question">Question</option>
+                      <option value="business_tip">
+                        Business tip
+                      </option>
+                      <option value="fraud_alert">
+                        Fraud alert
+                      </option>
+                      <option value="announcement">
+                        Announcement
+                      </option>
+                    </select>
+                  ),
+                },
+                {
+                  key: 'status',
+                  label: 'Status',
+                  render: (row) => (
+                    <Badge status={row.status} />
+                  ),
+                },
+                {
+                  key: 'engagement',
+                  label: 'Engagement',
+                  render: (row) => (
+                    <div className="text-xs text-gray-600">
+                      <div>{row.comment_count || 0} comments</div>
+                      <div>
+                        {row.pending_report_count || 0} open reports
+                      </div>
+                    </div>
+                  ),
+                },
+                {
+                  key: 'labels',
+                  label: 'Labels',
+                  render: (row) => (
+                    <div className="flex max-w-48 flex-wrap gap-1">
+                      {row.is_pinned && (
+                        <span className="rounded-full bg-purple-100 px-2 py-1 text-xs text-purple-700">
+                          Pinned
+                        </span>
+                      )}
+                      {row.is_official && (
+                        <span className="rounded-full bg-blue-100 px-2 py-1 text-xs text-blue-700">
+                          Official
+                        </span>
+                      )}
+                      {row.is_urgent && (
+                        <span className="rounded-full bg-red-100 px-2 py-1 text-xs text-red-700">
+                          Urgent
+                        </span>
+                      )}
+                    </div>
+                  ),
+                },
+                {
+                  key: 'moderation_actions',
+                  label: 'Actions',
+                  render: (row) => (
+                    <div className="flex min-w-72 flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={updatingId === row.id}
+                        onClick={() =>
+                          moderatePost(row.id, {
+                            is_pinned: !row.is_pinned,
+                            reason: row.is_pinned
+                              ? 'Post unpinned by administrator'
+                              : 'Post pinned by administrator',
+                          })
+                        }
+                        className="rounded-lg border border-purple-200 px-2 py-1 text-xs text-purple-700"
+                      >
+                        {row.is_pinned ? 'Unpin' : 'Pin'}
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={updatingId === row.id}
+                        onClick={() =>
+                          moderatePost(row.id, {
+                            is_official: !row.is_official,
+                            reason: row.is_official
+                              ? 'Official label removed'
+                              : 'Marked as official',
+                          })
+                        }
+                        className="rounded-lg border border-blue-200 px-2 py-1 text-xs text-blue-700"
+                      >
+                        {row.is_official
+                          ? 'Remove official'
+                          : 'Official'}
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={updatingId === row.id}
+                        onClick={() =>
+                          moderatePost(row.id, {
+                            is_urgent: !row.is_urgent,
+                            reason: row.is_urgent
+                              ? 'Urgent label removed'
+                              : 'Marked as urgent',
+                          })
+                        }
+                        className="rounded-lg border border-amber-200 px-2 py-1 text-xs text-amber-800"
+                      >
+                        {row.is_urgent
+                          ? 'Remove urgent'
+                          : 'Urgent'}
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={updatingId === row.id}
+                        onClick={() =>
+                          moderatePost(row.id, {
+                            status:
+                              row.status === 'removed'
+                                ? 'active'
+                                : 'removed',
+                            reason:
+                              row.status === 'removed'
+                                ? 'Post restored by administrator'
+                                : 'Post removed by administrator',
+                          })
+                        }
+                        className={[
+                          'rounded-lg border px-2 py-1 text-xs',
+                          row.status === 'removed'
+                            ? 'border-green-200 text-green-700'
+                            : 'border-red-200 text-red-700',
+                        ].join(' ')}
+                      >
+                        {row.status === 'removed'
+                          ? 'Restore'
+                          : 'Remove'}
+                      </button>
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          </div>
+        </section>
+      )}
+
+      {activeTab === 'history' && (
+        <section className="overflow-hidden rounded-xl bg-white shadow-sm">
+          <Table
+            loading={loading}
+            data={moderationHistory}
+            emptyMsg="No moderation actions recorded"
+            columns={[
+              {
+                key: 'post_content',
+                label: 'Post',
+                render: (row) => (
+                  <div className="max-w-md">
+                    <p className="line-clamp-2 text-sm">
+                      {row.post_content || 'Voice-note post'}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Author: {row.author_first_name}{' '}
+                      {row.author_last_name}
+                    </p>
+                  </div>
+                ),
+              },
+              {
+                key: 'action',
+                label: 'Action',
+                render: (row) => (
+                  <Badge status={row.action} />
+                ),
+              },
+              {
+                key: 'moderator',
+                label: 'Moderator',
+                render: (row) => (
+                  <div>
+                    <p className="text-sm">
+                      {row.moderator_first_name}{' '}
+                      {row.moderator_last_name}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {row.moderator_email}
+                    </p>
+                  </div>
+                ),
+              },
+              {
+                key: 'reason',
+                label: 'Reason',
+                render: (row) => row.reason || '—',
+              },
+              {
+                key: 'created_at',
+                label: 'Date',
+                render: (row) =>
+                  new Date(row.created_at).toLocaleString(),
               },
             ]}
           />
