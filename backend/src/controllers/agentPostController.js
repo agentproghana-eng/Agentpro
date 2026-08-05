@@ -81,7 +81,7 @@ exports.createPost = async (req, res) => {
     const status = isAd ? "pending_review" : "active";
 
     const result = await query(
-      "INSERT INTO agent_posts (
+      `INSERT INTO agent_posts (
          author_id,
          content,
          audio_url,
@@ -90,7 +90,7 @@ exports.createPost = async (req, res) => {
          post_type
        )
        VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING *",
+       RETURNING *`,
       [
         req.user.id,
         trimmed || null,
