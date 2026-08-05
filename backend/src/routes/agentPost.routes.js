@@ -20,17 +20,10 @@ const upload = multer({
   },
 });
 
-// Agent Community is shared by all registered mobile-money business
-// participants: business owners, managers, and agents. Enforce this at
-// the API layer rather than relying only on Flutter navigation.
-router.use(
-  authenticate,
-  authorize('business_owner', 'manager', 'agent')
-);
+router.use(authenticate);
 
-// Static routes must appear before /:post_id.
-router.get("/saved", enhancementController.listSavedPosts);
-router.get("/blocked-users", enhancementController.listBlockedUsers);
+// Superuser moderation routes must be registered before the
+// business-role restriction below.
 router.get(
   "/moderation/reports",
   authorize("superuser"),
@@ -41,6 +34,30 @@ router.patch(
   authorize("superuser"),
   enhancementController.resolveReport
 );
+router.get(
+  "/moderation/pending",
+  authorize("superuser"),
+  agentPostController.listPending
+);
+router.patch(
+  "/:post_id/community-moderation",
+  authorize("superuser"),
+  enhancementController.updatePostModeration
+);
+router.patch(
+  "/:post_id/moderate",
+  authorize("superuser"),
+  agentPostController.moderatePost
+);
+
+// Agent Community member routes.
+router.use(
+  authorize("business_owner", "manager", "agent")
+);
+
+// Static routes must appear before /:post_id.
+router.get("/saved", enhancementController.listSavedPosts);
+router.get("/blocked-users", enhancementController.listBlockedUsers);
 
 router.post(
   "/users/:user_id/block",
@@ -64,12 +81,6 @@ router.delete(
   "/:post_id/accepted-answer",
   enhancementController.clearAcceptedAnswer
 );
-router.patch(
-  "/:post_id/community-moderation",
-  authorize("superuser"),
-  enhancementController.updatePostModeration
-);
-
 router.delete("/:post_id", agentPostController.deletePost);
 router.post("/:post_id/like", requireActiveSubscription, agentPostController.toggleLike);
 router.get("/:post_id/comments", agentPostController.listComments);
@@ -83,8 +94,5 @@ router.post(
   "/comments/:comment_id/report",
   enhancementController.reportComment
 );
-
-router.get("/moderation/pending", authorize("superuser"), agentPostController.listPending);
-router.patch("/:post_id/moderate", authorize("superuser"), agentPostController.moderatePost);
 
 module.exports = router;
