@@ -880,15 +880,156 @@ mpRouter.delete('/:ad_id/save', async (req, res) => {
   }
 });
 
+// Get a public seller storefront and all active advertisements.
+mpRouter.get('/sellers/:seller_id', async (req, res) => {
+  try {
+    const sellerResult = await query(
+      `SELECT
+         u.id AS seller_id,
+         u.first_name,
+         u.last_name,
+         u.phone AS seller_phone,
+         u.email AS seller_email,
+         u.profile_image_url,
+         u.company_id,
+         c.name AS company_name,
+         c.phone AS company_phone,
+         c.email AS company_email,
+         c.address AS company_address,
+         c.logo_url AS company_logo_url,
+         c.status AS company_status,
+         c.approved_at,
+         (
+           c.id IS NOT NULL
+           AND c.status = 'active'
+           AND c.approved_at IS NOT NULL
+         ) AS is_verified,
+         COUNT(DISTINCT CASE
+           WHEN a.status = 'active' THEN a.id
+         END)::int AS active_ad_count,
+         COALESCE(AVG(ar.rating), 0)::float AS average_rating,
+         COUNT(ar.id)::int AS review_count
+       FROM users u
+       LEFT JOIN companies c
+         ON c.id = u.company_id
+       LEFT JOIN advertisements a
+         ON a.posted_by = u.id
+       LEFT JOIN ad_ratings ar
+         ON ar.advertisement_id = a.id
+       WHERE u.id = $1
+       GROUP BY
+         u.id,
+         u.first_name,
+         u.last_name,
+         u.phone,
+         u.email,
+         u.profile_image_url,
+         u.company_id,
+         c.id,
+         c.name,
+         c.phone,
+         c.email,
+         c.address,
+         c.logo_url,
+         c.status,
+         c.approved_at`,
+      [req.params.seller_id]
+    );
+
+    if (!sellerResult.rows.length) {
+      return res.status(404).json({
+        success: false,
+        message: 'Seller not found',
+      });
+    }
+
+    const adsResult = await query(
+      `SELECT
+         a.*,
+         ac.name AS category_name,
+         COALESCE(AVG(ar.rating), 0)::float AS avg_rating,
+         COUNT(ar.id)::int AS rating_count
+       FROM advertisements a
+       LEFT JOIN ad_categories ac
+         ON ac.id = a.category_id
+       LEFT JOIN ad_ratings ar
+         ON ar.advertisement_id = a.id
+       WHERE a.posted_by = $1
+         AND a.status = 'active'
+       GROUP BY a.id, ac.name
+       ORDER BY a.published_at DESC NULLS LAST`,
+      [req.params.seller_id]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        seller: sellerResult.rows[0],
+        advertisements: adsResult.rows,
+      },
+    });
+  } catch (e) {
+    console.error('GET /marketplace/sellers/:seller_id error:', e);
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch seller storefront',
+    });
+  }
+});
+
 // Get a single ad by ID — scoped to the owner, since this is used to show
 // payment instructions and status for an ad that may not yet be public
 // (i.e. not necessarily 'active', so it can't go through the public list).
 mpRouter.get('/:ad_id', async (req, res) => {
   try {
     const result = await query(
-      `SELECT a.*, ac.name as category_name
-       FROM advertisements a LEFT JOIN ad_categories ac ON a.category_id = ac.id
-       WHERE a.id = $1`,
+      `SELECT
+         a.*,
+         ac.name AS category_name,
+         u.id AS seller_id,
+         u.first_name AS seller_first_name,
+         u.last_name AS seller_last_name,
+         u.profile_image_url AS seller_profile_image_url,
+         u.phone AS seller_phone,
+         c.name AS company_name,
+         c.logo_url AS company_logo_url,
+         c.phone AS company_phone,
+         c.email AS company_email,
+         c.address AS company_address,
+         (
+           c.id IS NOT NULL
+           AND c.status = 'active'
+           AND c.approved_at IS NOT NULL
+         ) AS is_verified,
+         COALESCE(AVG(ar.rating), 0)::float AS avg_rating,
+         COUNT(ar.id)::int AS rating_count
+       FROM advertisements a
+       LEFT JOIN ad_categories ac
+         ON ac.id = a.category_id
+       INNER JOIN users u
+         ON u.id = a.posted_by
+       LEFT JOIN companies c
+         ON c.id = u.company_id
+       LEFT JOIN ad_ratings ar
+         ON ar.advertisement_id = a.id
+       WHERE a.id = $1
+       GROUP BY
+         a.id,
+         ac.name,
+         u.id,
+         u.first_name,
+         u.last_name,
+         u.profile_image_url,
+         u.phone,
+         c.id,
+         c.name,
+         c.logo_url,
+         c.phone,
+         c.email,
+         c.address,
+         c.status,
+         c.approved_at`,
       [req.params.ad_id]
     );
     if (!result.rows.length) {

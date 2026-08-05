@@ -172,12 +172,13 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
                     .map((url) => ClipRRect(
                           borderRadius: BorderRadius.circular(12),
                           child: Container(
-                            color: AppTheme.primaryColor.withOpacity(0.1),
+                            color: AppTheme.primaryColor.withValues(alpha: 0.1),
                             child: Image.network(
                               url as String,
                               fit: BoxFit.contain,
                               errorBuilder: (_, __, ___) => Container(
-                                color: AppTheme.primaryColor.withOpacity(0.1),
+                                color: AppTheme.primaryColor
+                                    .withValues(alpha: 0.1),
                                 child: Center(
                                     child: Icon(Icons.broken_image_outlined,
                                         size: 40, color: Colors.grey[500])),
@@ -352,9 +353,9 @@ class _StatusExplainer extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

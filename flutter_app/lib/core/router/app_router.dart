@@ -49,6 +49,7 @@ import '../../features/marketplace/marketplace_screen.dart';
 import '../../features/marketplace/post_ad_screen.dart';
 import '../../features/marketplace/my_ads_screen.dart';
 import '../../features/marketplace/ad_detail_screen.dart';
+import '../../features/marketplace/seller_storefront_screen.dart';
 import '../../features/marketplace/customer_reviews_screen.dart';
 import '../../features/marketplace/saved_ads_screen.dart';
 import '../../features/marketplace/marketplace_enquiries_screen.dart';
@@ -293,6 +294,12 @@ class AppRouter {
           path: '/marketplace/enquiries/:conversation_id',
           builder: (_, state) => MarketplaceConversationScreen(
             conversationId: state.pathParameters['conversation_id']!,
+          ),
+        ),
+        GoRoute(
+          path: '/marketplace/sellers/:seller_id',
+          builder: (_, state) => SellerStorefrontScreen(
+            sellerId: state.pathParameters['seller_id']!,
           ),
         ),
         GoRoute(
