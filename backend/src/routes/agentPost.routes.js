@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const multer = require("multer");
 const agentPostController = require("../controllers/agentPostController");
+const enhancementController = require("../controllers/agentCommunityEnhancementController");
 const { authenticate, authorize, requireActiveSubscription } = require("../middleware/auth");
 
 // Voice notes: memoryStorage (no local disk writes - the buffer is
@@ -27,13 +28,61 @@ router.use(
   authorize('business_owner', 'manager', 'agent')
 );
 
+// Static routes must appear before /:post_id.
+router.get("/saved", enhancementController.listSavedPosts);
+router.get("/blocked-users", enhancementController.listBlockedUsers);
+router.get(
+  "/moderation/reports",
+  authorize("superuser"),
+  enhancementController.listReports
+);
+router.patch(
+  "/moderation/reports/:report_id",
+  authorize("superuser"),
+  enhancementController.resolveReport
+);
+
+router.post(
+  "/users/:user_id/block",
+  enhancementController.blockUser
+);
+router.delete(
+  "/users/:user_id/block",
+  enhancementController.unblockUser
+);
+
 router.get("/", agentPostController.listFeed);
 router.post("/", requireActiveSubscription, upload.single("audio"), agentPostController.createPost);
+router.post("/:post_id/save", enhancementController.savePost);
+router.delete("/:post_id/save", enhancementController.unsavePost);
+router.post("/:post_id/report", enhancementController.reportPost);
+router.patch(
+  "/:post_id/accepted-answer",
+  enhancementController.acceptAnswer
+);
+router.delete(
+  "/:post_id/accepted-answer",
+  enhancementController.clearAcceptedAnswer
+);
+router.patch(
+  "/:post_id/community-moderation",
+  authorize("superuser"),
+  enhancementController.updatePostModeration
+);
+
 router.delete("/:post_id", agentPostController.deletePost);
 router.post("/:post_id/like", requireActiveSubscription, agentPostController.toggleLike);
 router.get("/:post_id/comments", agentPostController.listComments);
 router.post("/:post_id/comments", requireActiveSubscription, upload.single("audio"), agentPostController.addComment);
-router.post("/comments/:comment_id/react", requireActiveSubscription, agentPostController.toggleCommentReaction);
+router.post(
+  "/comments/:comment_id/react",
+  requireActiveSubscription,
+  agentPostController.toggleCommentReaction
+);
+router.post(
+  "/comments/:comment_id/report",
+  enhancementController.reportComment
+);
 
 router.get("/moderation/pending", authorize("superuser"), agentPostController.listPending);
 router.patch("/:post_id/moderate", authorize("superuser"), agentPostController.moderatePost);

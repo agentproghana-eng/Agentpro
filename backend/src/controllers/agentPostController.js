@@ -40,12 +40,31 @@ exports.detectAdvertisement = detectAdvertisement;
 // audio moderation would require a separate transcription step that
 // doesn't exist yet.
 exports.createPost = async (req, res) => {
-  const { content } = req.body;
+  const { content, post_type = "general" } = req.body;
   const trimmed = (content || "").trim();
   const audioFile = req.file;
 
   if (!trimmed && !audioFile) {
-    return res.status(422).json({ success: false, message: "Post content or a voice note is required" });
+    return res.status(422).json({
+      success: false,
+      message: "Post content or a voice note is required",
+    });
+  }
+
+  const validPostTypes = [
+    "general",
+    "question",
+    "network_issue",
+    "fraud_alert",
+    "business_tip",
+    "announcement",
+  ];
+
+  if (!validPostTypes.includes(post_type)) {
+    return res.status(422).json({
+      success: false,
+      message: "Invalid post type",
+    });
   }
 
   try {
@@ -62,8 +81,24 @@ exports.createPost = async (req, res) => {
     const status = isAd ? "pending_review" : "active";
 
     const result = await query(
-      "INSERT INTO agent_posts (author_id, content, audio_url, status, flagged_reason) VALUES ($1, $2, $3, $4, $5) RETURNING *",
-      [req.user.id, trimmed || null, audioUrl, status, isAd ? "AI flagged as advertisement" : null]
+      "INSERT INTO agent_posts (
+         author_id,
+         content,
+         audio_url,
+         status,
+         flagged_reason,
+         post_type
+       )
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *",
+      [
+        req.user.id,
+        trimmed || null,
+        audioUrl,
+        status,
+        isAd ? "AI flagged as advertisement" : null,
+        post_type,
+      ]
     );
 
     res.status(201).json({
