@@ -25,6 +25,16 @@ router.use(authenticate);
 // Superuser moderation routes must be registered before the
 // business-role restriction below.
 router.get(
+  "/moderation/posts",
+  authorize("superuser"),
+  enhancementController.listModerationPosts
+);
+router.get(
+  "/moderation/history",
+  authorize("superuser"),
+  enhancementController.listModerationHistory
+);
+router.get(
   "/moderation/reports",
   authorize("superuser"),
   enhancementController.listReports

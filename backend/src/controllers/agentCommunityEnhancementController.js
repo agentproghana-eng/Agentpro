@@ -818,3 +818,238 @@ exports.resolveReport = async (req, res) => {
     });
   }
 };
+
+// List all Agent Community posts for superuser moderation.
+exports.listModerationPosts = async (req, res) => {
+  const {
+    status,
+    post_type,
+    pinned,
+    official,
+    urgent,
+    search,
+    page = 1,
+    limit = 50,
+  } = req.query;
+
+  const pageNumber = Math.max(Number.parseInt(page, 10) || 1, 1);
+  const pageLimit = Math.min(
+    Math.max(Number.parseInt(limit, 10) || 50, 1),
+    100,
+  );
+  const offset = (pageNumber - 1) * pageLimit;
+
+  const conditions = [];
+  const values = [];
+
+  const addCondition = (sql, value) => {
+    values.push(value);
+    conditions.push(sql.replace('?', `$${values.length}`));
+  };
+
+  if (status) {
+    addCondition('post.status = ?', status);
+  }
+
+  if (post_type) {
+    if (!POST_TYPES.has(post_type)) {
+      return res.status(422).json({
+        success: false,
+        message: 'Invalid post type',
+      });
+    }
+
+    addCondition('post.post_type = ?', post_type);
+  }
+
+  if (pinned === 'true' || pinned === 'false') {
+    addCondition('post.is_pinned = ?', pinned === 'true');
+  }
+
+  if (official === 'true' || official === 'false') {
+    addCondition('post.is_official = ?', official === 'true');
+  }
+
+  if (urgent === 'true' || urgent === 'false') {
+    addCondition('post.is_urgent = ?', urgent === 'true');
+  }
+
+  if (search?.trim()) {
+    addCondition(
+      `(post.content ILIKE '%' || ? || '%'
+        OR author.first_name ILIKE '%' || ? || '%'
+        OR author.last_name ILIKE '%' || ? || '%'
+        OR author.email ILIKE '%' || ? || '%')`,
+      search.trim(),
+    );
+
+    const searchValue = values.at(-1);
+    values.push(searchValue, searchValue, searchValue);
+
+    const firstParameter = values.length - 3;
+    conditions[conditions.length - 1] =
+      `(post.content ILIKE '%' || $${firstParameter} || '%'
+        OR author.first_name ILIKE '%' || $${firstParameter + 1} || '%'
+        OR author.last_name ILIKE '%' || $${firstParameter + 2} || '%'
+        OR author.email ILIKE '%' || $${firstParameter + 3} || '%')`;
+  }
+
+  const whereClause = conditions.length
+    ? `WHERE ${conditions.join(' AND ')}`
+    : '';
+
+  try {
+    const countResult = await query(
+      `SELECT COUNT(*)::int AS total
+       FROM agent_posts post
+       INNER JOIN users author ON author.id = post.author_id
+       ${whereClause}`,
+      values,
+    );
+
+    const dataValues = [...values, pageLimit, offset];
+    const limitParameter = dataValues.length - 1;
+    const offsetParameter = dataValues.length;
+
+    const result = await query(
+      `SELECT
+         post.*,
+         author.first_name,
+         author.last_name,
+         author.email,
+         author.role,
+         (
+           SELECT COUNT(*)::int
+           FROM agent_post_comments comment
+           WHERE comment.post_id = post.id
+         ) AS comment_count,
+         (
+           SELECT COUNT(*)::int
+           FROM agent_post_reports report
+           WHERE report.post_id = post.id
+             AND report.status = 'pending'
+         ) AS pending_report_count
+       FROM agent_posts post
+       INNER JOIN users author ON author.id = post.author_id
+       ${whereClause}
+       ORDER BY
+         post.is_pinned DESC,
+         post.is_urgent DESC,
+         post.created_at DESC
+       LIMIT $${limitParameter}
+       OFFSET $${offsetParameter}`,
+      dataValues,
+    );
+
+    res.json({
+      success: true,
+      data: result.rows,
+      pagination: {
+        page: pageNumber,
+        limit: pageLimit,
+        total: countResult.rows[0].total,
+        has_more:
+          offset + result.rows.length <
+          countResult.rows[0].total,
+      },
+    });
+  } catch (error) {
+    logger.error(
+      'List Agent Community moderation posts error:',
+      error,
+    );
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch community posts',
+    });
+  }
+};
+
+// List the moderation audit trail.
+exports.listModerationHistory = async (req, res) => {
+  const { post_id, action, page = 1, limit = 50 } = req.query;
+
+  const pageNumber = Math.max(Number.parseInt(page, 10) || 1, 1);
+  const pageLimit = Math.min(
+    Math.max(Number.parseInt(limit, 10) || 50, 1),
+    100,
+  );
+  const offset = (pageNumber - 1) * pageLimit;
+
+  const conditions = [];
+  const values = [];
+
+  if (post_id) {
+    values.push(post_id);
+    conditions.push(`history.post_id = $${values.length}`);
+  }
+
+  if (action) {
+    values.push(action);
+    conditions.push(`history.action = $${values.length}`);
+  }
+
+  const whereClause = conditions.length
+    ? `WHERE ${conditions.join(' AND ')}`
+    : '';
+
+  try {
+    const countResult = await query(
+      `SELECT COUNT(*)::int AS total
+       FROM agent_post_moderation_history history
+       ${whereClause}`,
+      values,
+    );
+
+    const dataValues = [...values, pageLimit, offset];
+    const limitParameter = dataValues.length - 1;
+    const offsetParameter = dataValues.length;
+
+    const result = await query(
+      `SELECT
+         history.*,
+         post.content AS post_content,
+         author.first_name AS author_first_name,
+         author.last_name AS author_last_name,
+         moderator.first_name AS moderator_first_name,
+         moderator.last_name AS moderator_last_name,
+         moderator.email AS moderator_email
+       FROM agent_post_moderation_history history
+       INNER JOIN agent_posts post
+         ON post.id = history.post_id
+       INNER JOIN users author
+         ON author.id = post.author_id
+       INNER JOIN users moderator
+         ON moderator.id = history.moderator_id
+       ${whereClause}
+       ORDER BY history.created_at DESC
+       LIMIT $${limitParameter}
+       OFFSET $${offsetParameter}`,
+      dataValues,
+    );
+
+    res.json({
+      success: true,
+      data: result.rows,
+      pagination: {
+        page: pageNumber,
+        limit: pageLimit,
+        total: countResult.rows[0].total,
+        has_more:
+          offset + result.rows.length <
+          countResult.rows[0].total,
+      },
+    });
+  } catch (error) {
+    logger.error(
+      'List Agent Community moderation history error:',
+      error,
+    );
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch moderation history',
+    });
+  }
+};
