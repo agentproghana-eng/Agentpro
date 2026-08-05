@@ -2,10 +2,10 @@ class AppConstants {
   AppConstants._();
 
   // ── API ──────────────────────────────────────────────────────
-static const String apiBaseUrl = String.fromEnvironment(
-  'API_BASE_URL',
-  defaultValue: 'https://agentpro-production-5ece.up.railway.app/api/v1',
-);
+  static const String apiBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://agentpro-api-izi3.onrender.com/api/v1',
+  );
 
   // For local development:
   // static const String apiBaseUrl = 'http://10.0.2.2:3000/v1';

@@ -9,11 +9,11 @@
     <!-- Production API: enforce HTTPS + certificate pinning -->
     <domain-config cleartextTrafficPermitted="false">
         <domain includeSubdomains="true">agentproghana.com</domain>
-        <domain includeSubdomains="true">api.agentproghana.com</domain>
+        <domain includeSubdomains="true">agentpro-api-izi3.onrender.com</domain>
 
         <!-- Certificate pinning
              Replace these with your actual certificate SHA-256 hashes from:
-             openssl s_client -connect api.agentproghana.com:443 | openssl x509 -noout -fingerprint -sha256
+             openssl s_client -connect agentpro-api-izi3.onrender.com:443 | openssl x509 -noout -fingerprint -sha256
         -->
         <pin-set expiration="2026-01-01">
             <!-- Primary certificate pin (replace with actual) -->

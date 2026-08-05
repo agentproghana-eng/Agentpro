@@ -53,7 +53,7 @@ android {
         multiDexEnabled true
 
         // Build config fields
-        buildConfigField "String", "API_BASE_URL", '"https://api.agentproghana.com/v1"'
+        buildConfigField "String", "API_BASE_URL", '"https://agentpro-api-izi3.onrender.com/api/v1"'
     }
 
     signingConfigs {

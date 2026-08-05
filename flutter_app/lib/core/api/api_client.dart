@@ -4,7 +4,7 @@ import '../services/storage_service.dart';
 
 class ApiClient {
   static const String _baseUrl =
-      'https://agentpro-production-5ece.up.railway.app/api/v1';
+      'https://agentpro-api-izi3.onrender.com/api/v1';
   // For local dev: 'http://10.0.2.2:3000/v1'
 
   static final Dio _dio = _createDio();
@@ -24,8 +24,7 @@ class ApiClient {
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
-          final token =
-              StorageService.getCachedAccessToken() ??
+          final token = StorageService.getCachedAccessToken() ??
               await StorageService.getAccessToken();
           if (token != null) {
             options.headers['Authorization'] = 'Bearer $token';
@@ -71,7 +70,7 @@ class ApiClient {
   static Future<bool> refreshToken() async {
     try {
       final token = StorageService.getCachedAccessToken() ??
-    await StorageService.getAccessToken();
+          await StorageService.getAccessToken();
       if (refreshToken == null) return false;
 
       final response = await Dio().post(
