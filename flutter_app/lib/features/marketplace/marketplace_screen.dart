@@ -16,6 +16,8 @@ class MarketplaceScreen extends StatefulWidget {
 
 class _MarketplaceScreenState extends State<MarketplaceScreen> {
   List<Map<String, dynamic>> _ads = [];
+  List<Map<String, dynamic>> _topRatedAds = [];
+  List<Map<String, dynamic>> _trendingAds = [];
   List<Map<String, dynamic>> _categories = [];
 
   final Set<String> _savedIds = <String>{};
@@ -58,6 +60,16 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     if (_sort != 'newest') count++;
 
     return count;
+  }
+
+  bool get _showHomeSections {
+    return _searchController.text.trim().isEmpty &&
+        _selectedCategoryId == null &&
+        _locationController.text.trim().isEmpty &&
+        _minPriceController.text.trim().isEmpty &&
+        _maxPriceController.text.trim().isEmpty &&
+        _minimumRating == null &&
+        _sort == 'newest';
   }
 
   Future<void> _loadInitialData() async {
@@ -120,6 +132,58 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     }
 
     try {
+      if (_showHomeSections) {
+        final responses = await Future.wait([
+          ApiClient.instance.get(
+            '/marketplace',
+            queryParameters: {
+              'sort': 'newest',
+              'limit': 20,
+            },
+          ),
+          ApiClient.instance.get(
+            '/marketplace',
+            queryParameters: {
+              'sort': 'highest_rated',
+              'limit': 8,
+            },
+          ),
+          ApiClient.instance.get(
+            '/marketplace',
+            queryParameters: {
+              'sort': 'most_viewed',
+              'limit': 8,
+            },
+          ),
+          ApiClient.instance.get('/marketplace/saved/ids'),
+        ]);
+
+        final rawLatest = responses[0].data['data'];
+        final rawTopRated = responses[1].data['data'];
+        final rawTrending = responses[2].data['data'];
+        final rawSavedIds = responses[3].data['data'];
+
+        if (!mounted) return;
+
+        setState(() {
+          _ads = _mapAds(rawLatest);
+          _topRatedAds = _mapAds(rawTopRated);
+          _trendingAds = _mapAds(rawTrending);
+
+          _savedIds
+            ..clear()
+            ..addAll(
+              rawSavedIds is List
+                  ? rawSavedIds.map((id) => id.toString())
+                  : const <String>[],
+            );
+
+          _loading = false;
+        });
+
+        return;
+      }
+
       final responses = await Future.wait([
         ApiClient.instance.get(
           '/marketplace',
@@ -134,12 +198,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       if (!mounted) return;
 
       setState(() {
-        _ads = rawAds is List
-            ? rawAds
-                .whereType<Map>()
-                .map((item) => Map<String, dynamic>.from(item))
-                .toList()
-            : [];
+        _ads = _mapAds(rawAds);
+        _topRatedAds = [];
+        _trendingAds = [];
 
         _savedIds
           ..clear()
@@ -167,6 +228,15 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         _loading = false;
       });
     }
+  }
+
+  List<Map<String, dynamic>> _mapAds(dynamic raw) {
+    if (raw is! List) return [];
+
+    return raw
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
   }
 
   Future<void> _toggleSaved(Map<String, dynamic> ad) async {
@@ -593,12 +663,17 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       return EmptyState(
         icon: Icons.storefront_outlined,
         title: 'No advertisements found',
-        subtitle: _activeFilterCount > 0
-            ? 'Try changing or clearing your filters.'
-            : 'New advertisements will appear here.',
+        subtitle:
+            _activeFilterCount > 0 || _searchController.text.trim().isNotEmpty
+                ? 'Try changing or clearing your search and filters.'
+                : 'New advertisements will appear here.',
         actionLabel: _activeFilterCount > 0 ? 'Clear Filters' : null,
         onAction: _activeFilterCount > 0 ? _clearFilters : null,
       );
+    }
+
+    if (_showHomeSections) {
+      return _buildMarketplaceHome();
     }
 
     return RefreshIndicator(
@@ -628,6 +703,160 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     );
   }
 
+  Widget _buildMarketplaceHome() {
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.only(bottom: 96),
+        children: [
+          if (_topRatedAds.isNotEmpty)
+            _buildHorizontalSection(
+              title: 'Top Rated',
+              subtitle: 'Highly rated products and services',
+              icon: Icons.star_outline,
+              ads: _topRatedAds,
+              onViewAll: () {
+                setState(() => _sort = 'highest_rated');
+                _load();
+              },
+            ),
+          if (_trendingAds.isNotEmpty)
+            _buildHorizontalSection(
+              title: 'Trending Now',
+              subtitle: 'Advertisements receiving the most attention',
+              icon: Icons.trending_up,
+              ads: _trendingAds,
+              onViewAll: () {
+                setState(() => _sort = 'most_viewed');
+                _load();
+              },
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 22, 16, 10),
+            child: Row(
+              children: [
+                const Icon(Icons.new_releases_outlined),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Latest Ads',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    setState(() => _sort = 'newest');
+                    _load();
+                  },
+                  child: const Text('View all'),
+                ),
+              ],
+            ),
+          ),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 0.75,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+            ),
+            itemCount: _ads.length,
+            itemBuilder: (context, index) {
+              final ad = _ads[index];
+              final id = ad['id']?.toString() ?? '';
+
+              return _AdCard(
+                ad: ad,
+                isSaved: _savedIds.contains(id),
+                isUpdating: _updatingIds.contains(id),
+                onToggleSaved: () => _toggleSaved(ad),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHorizontalSection({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required List<Map<String, dynamic>> ads,
+    required VoidCallback onViewAll,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Icon(icon),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        subtitle,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  onPressed: onViewAll,
+                  child: const Text('View all'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 230,
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              scrollDirection: Axis.horizontal,
+              itemCount: ads.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (context, index) {
+                final ad = ads[index];
+                final id = ad['id']?.toString() ?? '';
+
+                return SizedBox(
+                  width: 165,
+                  child: _MarketplaceSectionCard(
+                    ad: ad,
+                    isSaved: _savedIds.contains(id),
+                    isUpdating: _updatingIds.contains(id),
+                    onToggleSaved: () => _toggleSaved(ad),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -635,6 +864,143 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     _minPriceController.dispose();
     _maxPriceController.dispose();
     super.dispose();
+  }
+}
+
+class _MarketplaceSectionCard extends StatelessWidget {
+  final Map<String, dynamic> ad;
+  final bool isSaved;
+  final bool isUpdating;
+  final VoidCallback onToggleSaved;
+
+  const _MarketplaceSectionCard({
+    required this.ad,
+    required this.isSaved,
+    required this.isUpdating,
+    required this.onToggleSaved,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final images = ad['image_urls'];
+    final hasImage = images is List && images.isNotEmpty;
+
+    final price = double.tryParse(ad['price']?.toString() ?? '0') ?? 0;
+
+    final rating = double.tryParse(ad['avg_rating']?.toString() ?? '0') ?? 0;
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => context.push('/marketplace/ads/${ad['id']}'),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Container(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                    child: hasImage
+                        ? Image.network(
+                            images.first.toString(),
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const Icon(
+                              Icons.image_outlined,
+                              size: 38,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.image_outlined,
+                            size: 38,
+                          ),
+                  ),
+                  Positioned(
+                    top: 2,
+                    right: 2,
+                    child: IconButton.filledTonal(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: isSaved ? 'Remove from saved' : 'Save ad',
+                      onPressed: isUpdating ? null : onToggleSaved,
+                      icon: isUpdating
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : Icon(
+                              isSaved ? Icons.favorite : Icons.favorite_border,
+                              size: 19,
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(9),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (ad['category_name'] != null)
+                    Text(
+                      ad['category_name'].toString(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: context.appSecondaryText,
+                        fontSize: 10,
+                      ),
+                    ),
+                  Text(
+                    ad['title']?.toString() ?? '',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  if (price > 0)
+                    Text(
+                      'GH₵ ${price.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        color: context.isDarkMode
+                            ? AppTheme.primaryLight
+                            : AppTheme.primaryColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  if (rating > 0) ...[
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.star,
+                          size: 13,
+                          color: Color(0xFFFFB300),
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          rating.toStringAsFixed(1),
+                          style: TextStyle(
+                            color: context.appSecondaryText,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
