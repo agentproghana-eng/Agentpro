@@ -83,8 +83,18 @@ exports.createPost = async (req, res) => {
 // own pending_review posts (so authors see their own "under review"
 // posts even though nobody else can).
 exports.listFeed = async (req, res) => {
-  const { page = 1, limit = 20 } = req.query;
-  const offset = (parseInt(page) - 1) * parseInt(limit);
+  const parsedPage = Number.parseInt(req.query.page, 10);
+  const parsedLimit = Number.parseInt(req.query.limit, 10);
+
+  const page = Number.isInteger(parsedPage) && parsedPage > 0
+    ? parsedPage
+    : 1;
+
+  const limit = Number.isInteger(parsedLimit)
+    ? Math.min(Math.max(parsedLimit, 1), 50)
+    : 20;
+
+  const offset = (page - 1) * limit;
 
   try {
     const result = await query(
@@ -97,12 +107,30 @@ exports.listFeed = async (req, res) => {
               (SELECT reaction_type FROM agent_post_likes l WHERE l.post_id = p.id AND l.user_id = $1) as my_reaction
        FROM agent_posts p
        JOIN users u ON u.id = p.author_id
-       WHERE p.status = $2 OR p.status = $4 OR (p.status = $3 AND p.author_id = $1)
+       WHERE p.status = $2
+          OR (
+            p.status = $3
+            AND p.author_id = $1
+          )
        ORDER BY p.created_at DESC
-       LIMIT $5 OFFSET $6`,
-      [req.user.id, "active", "pending_review", "removed", parseInt(limit), offset]
+       LIMIT $4 OFFSET $5`,
+      [
+        req.user.id,
+        "active",
+        "pending_review",
+        limit,
+        offset,
+      ]
     );
-    res.json({ success: true, data: result.rows });
+    res.json({
+      success: true,
+      data: result.rows,
+      pagination: {
+        page,
+        limit,
+        has_more: result.rows.length === limit,
+      },
+    });
   } catch (error) {
     logger.error("List feed error:", error);
     res.status(500).json({ success: false, message: "Failed to fetch feed" });

@@ -19,7 +19,13 @@ const upload = multer({
   },
 });
 
-router.use(authenticate);
+// Agent Community is shared by all registered mobile-money business
+// participants: business owners, managers, and agents. Enforce this at
+// the API layer rather than relying only on Flutter navigation.
+router.use(
+  authenticate,
+  authorize('business_owner', 'manager', 'agent')
+);
 
 router.get("/", agentPostController.listFeed);
 router.post("/", requireActiveSubscription, upload.single("audio"), agentPostController.createPost);
