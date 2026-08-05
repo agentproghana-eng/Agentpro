@@ -101,7 +101,7 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
               'Track the reach and status of your advertisements.',
               style: TextStyle(
                 color:
-                    Theme.of(context).colorScheme.onSurface.withOpacity(0.65),
+                    Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.65),
               ),
             ),
             const SizedBox(height: 14),
@@ -109,6 +109,36 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
             if (!_loading && _error == null) ...[
               const SizedBox(height: 16),
               _buildViewsChart(),
+              const SizedBox(height: 24),
+              const Text(
+                'Top Performing Ads',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              _buildTopAds(),
+              const SizedBox(height: 24),
+              const Text(
+                'Ads Needing Attention',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              _buildAttentionAds(),
+              const SizedBox(height: 24),
+              const Text(
+                'Recent Customer Activity',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              _buildRecentActivity(),
             ],
             const SizedBox(height: 24),
             const Text(
@@ -168,7 +198,7 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
   Widget _buildViewsChart() {
     final trend = _viewTrend;
     final visibleTrend =
-        trend.length > 7 ? trend.sublist(trend.length - 7) : trend;
+        trend.length > 30 ? trend.sublist(trend.length - 30) : trend;
 
     final spots = <FlSpot>[];
     var highestValue = 0.0;
@@ -192,7 +222,7 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Views — Last 7 Days',
+              'Views — Last 30 Days',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 15,
@@ -204,7 +234,7 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
               style: TextStyle(
                 fontSize: 11,
                 color:
-                    Theme.of(context).colorScheme.onSurface.withOpacity(0.65),
+                    Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.65),
               ),
             ),
             const SizedBox(height: 18),
@@ -353,29 +383,47 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
     }
 
     final averageRating = _asDouble('average_rating');
+    final growth = _asDouble('view_growth_percent');
 
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      childAspectRatio: 1.45,
+      childAspectRatio: 1.42,
       crossAxisSpacing: 10,
       mainAxisSpacing: 10,
       children: [
+        _PerformanceCard(
+          icon: Icons.inventory_2_outlined,
+          label: 'Total Ads',
+          value: _asInt('total_ads').toString(),
+        ),
         _PerformanceCard(
           icon: Icons.check_circle_outline,
           label: 'Active Ads',
           value: _asInt('active_ads').toString(),
         ),
         _PerformanceCard(
-          icon: Icons.hourglass_top,
-          label: 'Pending',
-          value: _asInt('pending_ads').toString(),
-        ),
-        _PerformanceCard(
           icon: Icons.visibility_outlined,
           label: 'Total Views',
           value: _asInt('total_views').toString(),
+        ),
+        _PerformanceCard(
+          icon: Icons.calendar_view_week_outlined,
+          label: 'Views This Week',
+          value: _asInt('views_this_week').toString(),
+          detail: '${growth >= 0 ? '+' : ''}${growth.toStringAsFixed(1)}%',
+        ),
+        _PerformanceCard(
+          icon: Icons.favorite_outline,
+          label: 'Saved Ads',
+          value: _asInt('saved_ads').toString(),
+        ),
+        _PerformanceCard(
+          icon: Icons.mark_chat_unread_outlined,
+          label: 'Enquiries',
+          value: _asInt('enquiries').toString(),
+          detail: '${_asInt('unread_messages')} unread',
         ),
         _PerformanceCard(
           icon: Icons.star_outline,
@@ -389,13 +437,167 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
           label: 'Reviews',
           value: _asInt('review_count').toString(),
         ),
-        _PerformanceCard(
-          icon: Icons.event_busy_outlined,
-          label: 'Expired Ads',
-          value: _asInt('expired_ads').toString(),
-        ),
       ],
     );
+  }
+
+  List<Map<String, dynamic>> _asMapList(String key) {
+    final raw = _performance[key];
+
+    if (raw is! List) return const [];
+
+    return raw
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  Widget _buildTopAds() {
+    final ads = _asMapList('top_ads');
+
+    if (ads.isEmpty) {
+      return const _AnalyticsEmptyCard(
+        message: 'Publish advertisements to see performance rankings.',
+      );
+    }
+
+    return Card(
+      child: Column(
+        children: ads.map((ad) {
+          return ListTile(
+            onTap: () => context.push(
+              '/marketplace/ads/${ad['id']}',
+            ),
+            leading: const CircleAvatar(
+              child: Icon(Icons.campaign_outlined),
+            ),
+            title: Text(
+              ad['title']?.toString() ?? 'Advertisement',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(
+              '${ad['views'] ?? 0} views · '
+              '${ad['saves'] ?? 0} saves · '
+              '${ad['enquiries'] ?? 0} enquiries',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildAttentionAds() {
+    final ads = _asMapList('attention_ads');
+
+    if (ads.isEmpty) {
+      return const _AnalyticsEmptyCard(
+        icon: Icons.check_circle_outline,
+        message: 'Your active advertisements are performing normally.',
+      );
+    }
+
+    return Card(
+      child: Column(
+        children: ads.map((ad) {
+          return ListTile(
+            onTap: () => context.push(
+              '/marketplace/ads/${ad['id']}',
+            ),
+            leading: const CircleAvatar(
+              child: Icon(Icons.lightbulb_outline),
+            ),
+            title: Text(
+              ad['title']?.toString() ?? 'Advertisement',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(
+              ad['reason']?.toString() ?? 'Needs attention',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildRecentActivity() {
+    final activities = _asMapList('recent_activity');
+
+    if (activities.isEmpty) {
+      return const _AnalyticsEmptyCard(
+        message: 'Customer activity will appear here.',
+      );
+    }
+
+    return Card(
+      child: Column(
+        children: activities.map((activity) {
+          final type = activity['activity_type']?.toString();
+          final customer = activity['customer_name']?.toString().trim();
+          final title = activity['advertisement_title']?.toString() ??
+              'your advertisement';
+
+          final (icon, message) = switch (type) {
+            'save' => (
+                Icons.favorite_outline,
+                '${customer?.isNotEmpty == true ? customer : 'A customer'} '
+                    'saved $title',
+              ),
+            'enquiry' => (
+                Icons.chat_bubble_outline,
+                '${customer?.isNotEmpty == true ? customer : 'A customer'} '
+                    'sent an enquiry about $title',
+              ),
+            'review' => (
+                Icons.star_outline,
+                '${customer?.isNotEmpty == true ? customer : 'A customer'} '
+                    'reviewed $title',
+              ),
+            _ => (
+                Icons.visibility_outlined,
+                'Someone viewed $title',
+              ),
+          };
+
+          final occurredAt = DateTime.tryParse(
+            activity['occurred_at']?.toString() ?? '',
+          );
+
+          return ListTile(
+            leading: CircleAvatar(child: Icon(icon, size: 19)),
+            title: Text(
+              message,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle:
+                occurredAt == null ? null : Text(_relativeTime(occurredAt)),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  String _relativeTime(DateTime date) {
+    final difference = DateTime.now().difference(date.toLocal());
+
+    if (difference.inMinutes < 1) return 'Just now';
+    if (difference.inMinutes < 60) {
+      return '${difference.inMinutes} min ago';
+    }
+    if (difference.inHours < 24) {
+      return '${difference.inHours} hr ago';
+    }
+    if (difference.inDays < 7) {
+      return '${difference.inDays} day'
+          '${difference.inDays == 1 ? '' : 's'} ago';
+    }
+
+    return '${date.toLocal().day}/${date.toLocal().month}/'
+        '${date.toLocal().year}';
   }
 }
 
@@ -403,11 +605,13 @@ class _PerformanceCard extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
+  final String? detail;
 
   const _PerformanceCard({
     required this.icon,
     required this.label,
     required this.value,
+    this.detail,
   });
 
   @override
@@ -438,7 +642,50 @@ class _PerformanceCard extends StatelessWidget {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 11,
-                color: colors.onSurface.withOpacity(0.65),
+                color: colors.onSurface.withValues(alpha: 0.65),
+              ),
+            ),
+            if (detail != null) ...[
+              const SizedBox(height: 2),
+              Text(
+                detail!,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: colors.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AnalyticsEmptyCard extends StatelessWidget {
+  final IconData icon;
+  final String message;
+
+  const _AnalyticsEmptyCard({
+    this.icon = Icons.analytics_outlined,
+    required this.message,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            Icon(icon, size: 28),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
           ],

@@ -249,78 +249,325 @@ mpRouter.get('/mine', async (req, res) => {
 // Business Hub performance summary for the current user.
 mpRouter.get('/dashboard', async (req, res) => {
   try {
-    const result = await query(
-      `WITH ad_summary AS (
-         SELECT
-           COUNT(*) FILTER (WHERE status = 'active')::int AS active_ads,
-           COUNT(*) FILTER (
-             WHERE status IN ('pending_review', 'pending_payment')
-           )::int AS pending_ads,
-           COUNT(*) FILTER (WHERE status = 'expired')::int AS expired_ads,
-           COALESCE(SUM(views_count), 0)::int AS total_views
-         FROM advertisements
-         WHERE posted_by = $1
-       ),
-       rating_summary AS (
-         SELECT
-           COALESCE(AVG(ar.rating), 0)::float AS average_rating,
-           COUNT(ar.id)::int AS review_count
-         FROM ad_ratings ar
-         INNER JOIN advertisements a
-           ON a.id = ar.advertisement_id
-         WHERE a.posted_by = $1
-       )
-       SELECT *
-       FROM ad_summary
-       CROSS JOIN rating_summary`,
-      [req.user.id]
-    );
+    const sellerId = req.user.id;
 
-    const trends = await query(
-      `WITH days AS (
-         SELECT generate_series(
-           CURRENT_DATE - INTERVAL '29 days',
-           CURRENT_DATE,
-           INTERVAL '1 day'
-         )::date AS day
-       ),
-       daily_views AS (
+    const [
+      summaryResult,
+      trendResult,
+      topAdsResult,
+      attentionAdsResult,
+      activityResult,
+    ] = await Promise.all([
+      query(
+        `SELECT
+           COUNT(*)::int AS total_ads,
+           COUNT(*) FILTER (
+             WHERE a.status = 'active'
+           )::int AS active_ads,
+           COUNT(*) FILTER (
+             WHERE a.status IN ('pending_review', 'pending_payment')
+           )::int AS pending_ads,
+           COUNT(*) FILTER (
+             WHERE a.status = 'expired'
+           )::int AS expired_ads,
+           COALESCE(SUM(a.views_count), 0)::int AS total_views,
+
+           (
+             SELECT COUNT(*)::int
+             FROM advertisement_views av
+             INNER JOIN advertisements viewed_ad
+               ON viewed_ad.id = av.advertisement_id
+             WHERE viewed_ad.posted_by = $1
+               AND av.viewed_at >= NOW() - INTERVAL '7 days'
+           ) AS views_this_week,
+
+           (
+             SELECT COUNT(*)::int
+             FROM advertisement_views av
+             INNER JOIN advertisements viewed_ad
+               ON viewed_ad.id = av.advertisement_id
+             WHERE viewed_ad.posted_by = $1
+               AND av.viewed_at >= NOW() - INTERVAL '14 days'
+               AND av.viewed_at < NOW() - INTERVAL '7 days'
+           ) AS views_previous_week,
+
+           (
+             SELECT COUNT(*)::int
+             FROM marketplace_saved_ads msa
+             INNER JOIN advertisements saved_ad
+               ON saved_ad.id = msa.ad_id
+             WHERE saved_ad.posted_by = $1
+           ) AS saved_ads,
+
+           (
+             SELECT COUNT(*)::int
+             FROM marketplace_conversations mc
+             WHERE mc.seller_id = $1
+           ) AS enquiries,
+
+           (
+             SELECT COUNT(*)::int
+             FROM marketplace_messages mm
+             INNER JOIN marketplace_conversations mc
+               ON mc.id = mm.conversation_id
+             WHERE mc.seller_id = $1
+               AND mm.sender_id <> $1
+               AND mm.read_at IS NULL
+           ) AS unread_messages,
+
+           (
+             SELECT COALESCE(AVG(ar.rating), 0)::float
+             FROM ad_ratings ar
+             INNER JOIN advertisements rated_ad
+               ON rated_ad.id = ar.advertisement_id
+             WHERE rated_ad.posted_by = $1
+           ) AS average_rating,
+
+           (
+             SELECT COUNT(*)::int
+             FROM ad_ratings ar
+             INNER JOIN advertisements rated_ad
+               ON rated_ad.id = ar.advertisement_id
+             WHERE rated_ad.posted_by = $1
+           ) AS review_count
+
+         FROM advertisements a
+         WHERE a.posted_by = $1`,
+        [sellerId]
+      ),
+
+      query(
+        `WITH days AS (
+           SELECT generate_series(
+             CURRENT_DATE - INTERVAL '29 days',
+             CURRENT_DATE,
+             INTERVAL '1 day'
+           )::date AS date
+         ),
+         views AS (
+           SELECT
+             av.viewed_at::date AS date,
+             COUNT(*)::int AS count
+           FROM advertisement_views av
+           INNER JOIN advertisements a
+             ON a.id = av.advertisement_id
+           WHERE a.posted_by = $1
+             AND av.viewed_at >= CURRENT_DATE - INTERVAL '29 days'
+           GROUP BY av.viewed_at::date
+         ),
+         saves AS (
+           SELECT
+             msa.created_at::date AS date,
+             COUNT(*)::int AS count
+           FROM marketplace_saved_ads msa
+           INNER JOIN advertisements a
+             ON a.id = msa.ad_id
+           WHERE a.posted_by = $1
+             AND msa.created_at >= CURRENT_DATE - INTERVAL '29 days'
+           GROUP BY msa.created_at::date
+         ),
+         enquiries AS (
+           SELECT
+             mc.created_at::date AS date,
+             COUNT(*)::int AS count
+           FROM marketplace_conversations mc
+           WHERE mc.seller_id = $1
+             AND mc.created_at >= CURRENT_DATE - INTERVAL '29 days'
+           GROUP BY mc.created_at::date
+         )
          SELECT
-           av.viewed_at::date AS day,
-           COUNT(*)::int AS views
-         FROM advertisement_views av
-         INNER JOIN advertisements a
-           ON a.id = av.advertisement_id
+           days.date,
+           COALESCE(views.count, 0)::int AS views,
+           COALESCE(saves.count, 0)::int AS saves,
+           COALESCE(enquiries.count, 0)::int AS enquiries
+         FROM days
+         LEFT JOIN views ON views.date = days.date
+         LEFT JOIN saves ON saves.date = days.date
+         LEFT JOIN enquiries ON enquiries.date = days.date
+         ORDER BY days.date`,
+        [sellerId]
+      ),
+
+      query(
+        `SELECT
+           a.id,
+           a.title,
+           a.image_urls,
+           a.status,
+           a.views_count::int AS views,
+           COUNT(DISTINCT msa.id)::int AS saves,
+           COUNT(DISTINCT mc.id)::int AS enquiries,
+           COALESCE(AVG(ar.rating), 0)::float AS average_rating
+         FROM advertisements a
+         LEFT JOIN marketplace_saved_ads msa
+           ON msa.ad_id = a.id
+         LEFT JOIN marketplace_conversations mc
+           ON mc.advertisement_id = a.id
+         LEFT JOIN ad_ratings ar
+           ON ar.advertisement_id = a.id
          WHERE a.posted_by = $1
-           AND av.viewed_at >= CURRENT_DATE - INTERVAL '29 days'
-         GROUP BY av.viewed_at::date
-       )
-       SELECT
-         TO_CHAR(days.day, 'YYYY-MM-DD') AS date,
-         COALESCE(daily_views.views, 0)::int AS views
-       FROM days
-       LEFT JOIN daily_views ON daily_views.day = days.day
-       ORDER BY days.day`,
-      [req.user.id]
-    );
+         GROUP BY a.id
+         ORDER BY
+           (
+             a.views_count
+             + COUNT(DISTINCT msa.id) * 3
+             + COUNT(DISTINCT mc.id) * 5
+           ) DESC,
+           a.created_at DESC
+         LIMIT 5`,
+        [sellerId]
+      ),
+
+      query(
+        `SELECT
+           a.id,
+           a.title,
+           a.image_urls,
+           a.status,
+           a.views_count::int AS views,
+           a.expires_at,
+           COUNT(DISTINCT msa.id)::int AS saves,
+           COUNT(DISTINCT mc.id)::int AS enquiries,
+           CASE
+             WHEN a.status = 'active'
+              AND a.expires_at IS NOT NULL
+              AND a.expires_at <= NOW() + INTERVAL '3 days'
+               THEN 'Expiring soon'
+             WHEN a.status = 'active'
+              AND a.views_count = 0
+               THEN 'No views yet'
+             WHEN a.status = 'active'
+              AND COUNT(DISTINCT mc.id) = 0
+              AND a.published_at <= NOW() - INTERVAL '7 days'
+               THEN 'No enquiries after 7 days'
+             ELSE 'Low engagement'
+           END AS reason
+         FROM advertisements a
+         LEFT JOIN marketplace_saved_ads msa
+           ON msa.ad_id = a.id
+         LEFT JOIN marketplace_conversations mc
+           ON mc.advertisement_id = a.id
+         WHERE a.posted_by = $1
+           AND a.status = 'active'
+         GROUP BY a.id
+         HAVING
+           a.views_count = 0
+           OR (
+             COUNT(DISTINCT mc.id) = 0
+             AND a.published_at <= NOW() - INTERVAL '7 days'
+           )
+           OR (
+             a.expires_at IS NOT NULL
+             AND a.expires_at <= NOW() + INTERVAL '3 days'
+           )
+         ORDER BY
+           a.views_count ASC,
+           a.expires_at ASC NULLS LAST
+         LIMIT 5`,
+        [sellerId]
+      ),
+
+      query(
+        `SELECT *
+         FROM (
+           SELECT
+             'view' AS activity_type,
+             a.id AS advertisement_id,
+             a.title AS advertisement_title,
+             NULL::text AS customer_name,
+             av.viewed_at AS occurred_at
+           FROM advertisement_views av
+           INNER JOIN advertisements a
+             ON a.id = av.advertisement_id
+           WHERE a.posted_by = $1
+
+           UNION ALL
+
+           SELECT
+             'save' AS activity_type,
+             a.id AS advertisement_id,
+             a.title AS advertisement_title,
+             CONCAT(u.first_name, ' ', u.last_name) AS customer_name,
+             msa.created_at AS occurred_at
+           FROM marketplace_saved_ads msa
+           INNER JOIN advertisements a
+             ON a.id = msa.ad_id
+           LEFT JOIN users u
+             ON u.id = msa.user_id
+           WHERE a.posted_by = $1
+
+           UNION ALL
+
+           SELECT
+             'enquiry' AS activity_type,
+             a.id AS advertisement_id,
+             a.title AS advertisement_title,
+             CONCAT(u.first_name, ' ', u.last_name) AS customer_name,
+             mc.created_at AS occurred_at
+           FROM marketplace_conversations mc
+           INNER JOIN advertisements a
+             ON a.id = mc.advertisement_id
+           LEFT JOIN users u
+             ON u.id = mc.customer_id
+           WHERE mc.seller_id = $1
+
+           UNION ALL
+
+           SELECT
+             'review' AS activity_type,
+             a.id AS advertisement_id,
+             a.title AS advertisement_title,
+             CONCAT(u.first_name, ' ', u.last_name) AS customer_name,
+             ar.created_at AS occurred_at
+           FROM ad_ratings ar
+           INNER JOIN advertisements a
+             ON a.id = ar.advertisement_id
+           LEFT JOIN users u
+             ON u.id = ar.user_id
+           WHERE a.posted_by = $1
+         ) activity
+         ORDER BY occurred_at DESC
+         LIMIT 12`,
+        [sellerId]
+      ),
+    ]);
+
+    const summary = summaryResult.rows[0] || {};
+
+    const currentWeek = Number(summary.views_this_week || 0);
+    const previousWeek = Number(summary.views_previous_week || 0);
+
+    let viewGrowthPercent = 0;
+
+    if (previousWeek > 0) {
+      viewGrowthPercent =
+        ((currentWeek - previousWeek) / previousWeek) * 100;
+    } else if (currentWeek > 0) {
+      viewGrowthPercent = 100;
+    }
 
     res.json({
       success: true,
       data: {
-        ...result.rows[0],
-        view_trend: trends.rows,
+        ...summary,
+        view_growth_percent:
+          Math.round(viewGrowthPercent * 10) / 10,
+        view_trend: trendResult.rows,
+        top_ads: topAdsResult.rows,
+        attention_ads: attentionAdsResult.rows,
+        recent_activity: activityResult.rows,
       },
     });
   } catch (e) {
     console.error('GET /marketplace/dashboard error:', e);
+
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch Business Hub performance',
+      message: 'Failed to fetch marketplace dashboard',
     });
   }
 });
 
-// Reviews received by the current user's advertisements.
 mpRouter.get('/reviews/received', async (req, res) => {
   const {
     ad_id,
