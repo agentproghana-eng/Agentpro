@@ -138,6 +138,268 @@ router.patch("/pending-registrations/:company_id/approve", async (req, res) => {
   }
 });
 
+
+// ── Marketplace Businesses ────────────────────────────────────
+
+// List companies with owner and marketplace trust/placement state.
+router.get('/marketplace-businesses', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT
+         c.id AS company_id,
+         c.name AS company_name,
+         c.phone AS company_phone,
+         c.email AS company_email,
+         c.address,
+         c.logo_url,
+         c.status AS company_status,
+         c.created_at,
+         c.marketplace_verified,
+         c.marketplace_verified_at,
+         c.marketplace_featured,
+         c.marketplace_featured_priority,
+         c.marketplace_featured_at,
+         owner.id AS owner_user_id,
+         owner.first_name,
+         owner.last_name,
+         owner.email,
+         owner.phone,
+         owner.status,
+         s.plan AS subscription_plan,
+         s.status AS subscription_status,
+         COUNT(DISTINCT CASE
+           WHEN a.status = 'active' THEN a.id
+         END)::int AS active_ad_count,
+         COALESCE(AVG(ar.rating), 0)::float AS average_rating,
+         COUNT(ar.id)::int AS review_count
+       FROM companies c
+       LEFT JOIN users owner
+         ON owner.company_id = c.id
+        AND owner.role = 'business_owner'
+       LEFT JOIN subscriptions s
+         ON s.company_id = c.id
+       LEFT JOIN advertisements a
+         ON a.company_id = c.id
+       LEFT JOIN ad_ratings ar
+         ON ar.advertisement_id = a.id
+       GROUP BY
+         c.id,
+         owner.id,
+         owner.first_name,
+         owner.last_name,
+         owner.email,
+         owner.phone,
+         owner.status,
+         s.plan,
+         s.status
+       ORDER BY
+         c.marketplace_featured DESC,
+         c.marketplace_featured_priority DESC,
+         c.marketplace_verified DESC,
+         c.name ASC`
+    );
+
+    res.json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (e) {
+    logger.error('List marketplace businesses error:', e);
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch marketplace businesses',
+    });
+  }
+});
+
+// Change marketplace verification independently of account approval.
+router.patch(
+  '/marketplace-businesses/:company_id/verification',
+  async (req, res) => {
+    const { verified } = req.body;
+
+    if (typeof verified !== 'boolean') {
+      return res.status(422).json({
+        success: false,
+        message: 'verified must be a boolean',
+      });
+    }
+
+    try {
+      const result = await query(
+        `UPDATE companies
+         SET marketplace_verified = $1,
+             marketplace_verified_at =
+               CASE WHEN $1 THEN NOW() ELSE NULL END,
+             marketplace_verified_by =
+               CASE WHEN $1 THEN $2 ELSE NULL END,
+             updated_at = NOW()
+         WHERE id = $3
+         RETURNING
+           id,
+           name,
+           marketplace_verified,
+           marketplace_verified_at`,
+        [verified, req.user.id, req.params.company_id]
+      );
+
+      if (!result.rows.length) {
+        return res.status(404).json({
+          success: false,
+          message: 'Company not found',
+        });
+      }
+
+      await auditLog({
+        userId: req.user.id,
+        companyId: req.params.company_id,
+        action: verified
+          ? 'MARKETPLACE_BUSINESS_VERIFIED'
+          : 'MARKETPLACE_BUSINESS_UNVERIFIED',
+        entityType: 'company',
+        entityId: req.params.company_id,
+        newValues: {
+          marketplace_verified: verified,
+        },
+        ipAddress: req.ip,
+        requestId: req.requestId,
+      });
+
+      res.json({
+        success: true,
+        data: result.rows[0],
+        message: verified
+          ? 'Business verified for the marketplace'
+          : 'Marketplace verification removed',
+      });
+    } catch (e) {
+      logger.error('Update marketplace verification error:', e);
+
+      res.status(500).json({
+        success: false,
+        message: 'Failed to update marketplace verification',
+      });
+    }
+  }
+);
+
+// Feature or unfeature a business and control its display order.
+router.patch(
+  '/marketplace-businesses/:company_id/featured',
+  async (req, res) => {
+    const { featured, priority = 0 } = req.body;
+    const parsedPriority = Number(priority);
+
+    if (typeof featured !== 'boolean') {
+      return res.status(422).json({
+        success: false,
+        message: 'featured must be a boolean',
+      });
+    }
+
+    if (
+      !Number.isInteger(parsedPriority) ||
+      parsedPriority < 0 ||
+      parsedPriority > 10000
+    ) {
+      return res.status(422).json({
+        success: false,
+        message: 'priority must be an integer between 0 and 10000',
+      });
+    }
+
+    try {
+      const companyResult = await query(
+        `SELECT id, name, status, marketplace_verified
+         FROM companies
+         WHERE id = $1`,
+        [req.params.company_id]
+      );
+
+      if (!companyResult.rows.length) {
+        return res.status(404).json({
+          success: false,
+          message: 'Company not found',
+        });
+      }
+
+      const company = companyResult.rows[0];
+
+      if (featured && company.status !== 'active') {
+        return res.status(422).json({
+          success: false,
+          message: 'Only active companies can be featured',
+        });
+      }
+
+      if (featured && !company.marketplace_verified) {
+        return res.status(422).json({
+          success: false,
+          message: 'Verify the business before featuring it',
+        });
+      }
+
+      const result = await query(
+        `UPDATE companies
+         SET marketplace_featured = $1,
+             marketplace_featured_priority =
+               CASE WHEN $1 THEN $2 ELSE 0 END,
+             marketplace_featured_at =
+               CASE WHEN $1 THEN NOW() ELSE NULL END,
+             marketplace_featured_by =
+               CASE WHEN $1 THEN $3 ELSE NULL END,
+             updated_at = NOW()
+         WHERE id = $4
+         RETURNING
+           id,
+           name,
+           marketplace_featured,
+           marketplace_featured_priority,
+           marketplace_featured_at`,
+        [
+          featured,
+          parsedPriority,
+          req.user.id,
+          req.params.company_id,
+        ]
+      );
+
+      await auditLog({
+        userId: req.user.id,
+        companyId: req.params.company_id,
+        action: featured
+          ? 'MARKETPLACE_BUSINESS_FEATURED'
+          : 'MARKETPLACE_BUSINESS_UNFEATURED',
+        entityType: 'company',
+        entityId: req.params.company_id,
+        newValues: {
+          marketplace_featured: featured,
+          marketplace_featured_priority:
+            featured ? parsedPriority : 0,
+        },
+        ipAddress: req.ip,
+        requestId: req.requestId,
+      });
+
+      res.json({
+        success: true,
+        data: result.rows[0],
+        message: featured
+          ? 'Business added to Featured Businesses'
+          : 'Business removed from Featured Businesses',
+      });
+    } catch (e) {
+      logger.error('Update featured marketplace business error:', e);
+
+      res.status(500).json({
+        success: false,
+        message: 'Failed to update featured business',
+      });
+    }
+  }
+);
+
 // ── System Config ─────────────────────────────────────────────
 router.get('/config', async (req, res) => {
   try {

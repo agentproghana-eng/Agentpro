@@ -880,6 +880,67 @@ mpRouter.delete('/:ad_id/save', async (req, res) => {
   }
 });
 
+// Featured verified businesses for the Business Hub home.
+mpRouter.get('/featured-sellers', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT
+         c.id AS company_id,
+         c.name AS company_name,
+         c.logo_url AS company_logo_url,
+         c.address AS company_address,
+         c.marketplace_featured_priority,
+         owner.id AS seller_id,
+         owner.first_name,
+         owner.last_name,
+         owner.profile_image_url,
+         COUNT(DISTINCT CASE
+           WHEN a.status = 'active' THEN a.id
+         END)::int AS active_ad_count,
+         COALESCE(AVG(ar.rating), 0)::float AS average_rating,
+         COUNT(ar.id)::int AS review_count
+       FROM companies c
+       INNER JOIN users owner
+         ON owner.company_id = c.id
+        AND owner.role = 'business_owner'
+        AND owner.status = 'active'
+       LEFT JOIN advertisements a
+         ON a.company_id = c.id
+       LEFT JOIN ad_ratings ar
+         ON ar.advertisement_id = a.id
+       WHERE c.status = 'active'
+         AND c.marketplace_verified = TRUE
+         AND c.marketplace_featured = TRUE
+       GROUP BY
+         c.id,
+         owner.id,
+         owner.first_name,
+         owner.last_name,
+         owner.profile_image_url
+       HAVING COUNT(DISTINCT CASE
+         WHEN a.status = 'active' THEN a.id
+       END) > 0
+       ORDER BY
+         c.marketplace_featured_priority DESC,
+         c.marketplace_featured_at DESC NULLS LAST,
+         c.name ASC
+       LIMIT 20`
+    );
+
+    res.json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (e) {
+    console.error('GET /marketplace/featured-sellers error:', e);
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch featured businesses',
+    });
+  }
+});
+
 // Get a public seller storefront and all active advertisements.
 mpRouter.get('/sellers/:seller_id', async (req, res) => {
   try {
@@ -899,11 +960,7 @@ mpRouter.get('/sellers/:seller_id', async (req, res) => {
          c.logo_url AS company_logo_url,
          c.status AS company_status,
          c.approved_at,
-         (
-           c.id IS NOT NULL
-           AND c.status = 'active'
-           AND c.approved_at IS NOT NULL
-         ) AS is_verified,
+         COALESCE(c.marketplace_verified, FALSE) AS is_verified,
          COUNT(DISTINCT CASE
            WHEN a.status = 'active' THEN a.id
          END)::int AS active_ad_count,
@@ -997,11 +1054,8 @@ mpRouter.get('/:ad_id', async (req, res) => {
          c.phone AS company_phone,
          c.email AS company_email,
          c.address AS company_address,
-         (
-           c.id IS NOT NULL
-           AND c.status = 'active'
-           AND c.approved_at IS NOT NULL
-         ) AS is_verified,
+         COALESCE(c.marketplace_verified, FALSE) AS is_verified,
+         COALESCE(c.marketplace_featured, FALSE) AS is_featured,
          COALESCE(AVG(ar.rating), 0)::float AS avg_rating,
          COUNT(ar.id)::int AS rating_count
        FROM advertisements a

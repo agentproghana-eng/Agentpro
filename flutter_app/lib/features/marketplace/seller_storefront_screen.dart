@@ -232,6 +232,7 @@ class _SellerStorefrontScreenState extends State<SellerStorefrontScreen> {
     final reviewCount = _asInt('review_count');
     final activeAdCount = _asInt('active_ad_count');
     final isVerified = _seller?['is_verified'] == true;
+    final isFeatured = _seller?['is_featured'] == true;
 
     final location = _seller?['company_address']?.toString();
     final phone =
@@ -289,15 +290,34 @@ class _SellerStorefrontScreenState extends State<SellerStorefrontScreen> {
                 ],
               ],
             ),
-            if (isVerified) ...[
-              const SizedBox(height: 5),
-              const Text(
-                'Verified Business',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.blue,
-                ),
+            if (isVerified || isFeatured) ...[
+              const SizedBox(height: 7),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 7,
+                runSpacing: 5,
+                children: [
+                  if (isVerified)
+                    const Chip(
+                      avatar: Icon(
+                        Icons.verified,
+                        size: 16,
+                        color: Colors.blue,
+                      ),
+                      label: Text('Verified Business'),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  if (isFeatured)
+                    const Chip(
+                      avatar: Icon(
+                        Icons.star,
+                        size: 16,
+                        color: Color(0xFFFFB300),
+                      ),
+                      label: Text('Featured Seller'),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                ],
               ),
             ],
             const SizedBox(height: 18),

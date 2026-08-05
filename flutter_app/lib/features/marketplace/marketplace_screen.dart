@@ -18,6 +18,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   List<Map<String, dynamic>> _ads = [];
   List<Map<String, dynamic>> _topRatedAds = [];
   List<Map<String, dynamic>> _trendingAds = [];
+  List<Map<String, dynamic>> _featuredSellers = [];
   List<Map<String, dynamic>> _categories = [];
 
   final Set<String> _savedIds = <String>{};
@@ -155,13 +156,15 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               'limit': 8,
             },
           ),
+          ApiClient.instance.get('/marketplace/featured-sellers'),
           ApiClient.instance.get('/marketplace/saved/ids'),
         ]);
 
         final rawLatest = responses[0].data['data'];
         final rawTopRated = responses[1].data['data'];
         final rawTrending = responses[2].data['data'];
-        final rawSavedIds = responses[3].data['data'];
+        final rawFeaturedSellers = responses[3].data['data'];
+        final rawSavedIds = responses[4].data['data'];
 
         if (!mounted) return;
 
@@ -169,6 +172,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           _ads = _mapAds(rawLatest);
           _topRatedAds = _mapAds(rawTopRated);
           _trendingAds = _mapAds(rawTrending);
+          _featuredSellers = _mapAds(rawFeaturedSellers);
 
           _savedIds
             ..clear()
@@ -201,6 +205,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         _ads = _mapAds(rawAds);
         _topRatedAds = [];
         _trendingAds = [];
+        _featuredSellers = [];
 
         _savedIds
           ..clear()
@@ -710,6 +715,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.only(bottom: 96),
         children: [
+          if (_featuredSellers.isNotEmpty) _buildFeaturedBusinesses(),
           if (_topRatedAds.isNotEmpty)
             _buildHorizontalSection(
               title: 'Top Rated',
@@ -779,6 +785,64 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                 onToggleSaved: () => _toggleSaved(ad),
               );
             },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFeaturedBusinesses() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.workspace_premium_outlined,
+                  color: Color(0xFFFFB300),
+                ),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Featured Businesses',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(48, 2, 16, 10),
+            child: Text(
+              'Verified sellers selected by Agent Pro Ghana',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          SizedBox(
+            height: 158,
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              scrollDirection: Axis.horizontal,
+              itemCount: _featuredSellers.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (context, index) {
+                final seller = _featuredSellers[index];
+
+                return SizedBox(
+                  width: 145,
+                  child: _FeaturedBusinessCard(
+                    seller: seller,
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -864,6 +928,122 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     _minPriceController.dispose();
     _maxPriceController.dispose();
     super.dispose();
+  }
+}
+
+class _FeaturedBusinessCard extends StatelessWidget {
+  final Map<String, dynamic> seller;
+
+  const _FeaturedBusinessCard({
+    required this.seller,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final logo = seller['company_logo_url']?.toString().trim();
+    final profile = seller['profile_image_url']?.toString().trim();
+
+    final imageUrl = logo != null && logo.isNotEmpty
+        ? logo
+        : profile != null && profile.isNotEmpty
+            ? profile
+            : null;
+
+    final rating = double.tryParse(
+          seller['average_rating']?.toString() ?? '0',
+        ) ??
+        0;
+
+    final adCount = int.tryParse(
+          seller['active_ad_count']?.toString() ?? '0',
+        ) ??
+        0;
+
+    final sellerId = seller['seller_id']?.toString();
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: sellerId == null
+            ? null
+            : () => context.push(
+                  '/marketplace/sellers/$sellerId',
+                ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  CircleAvatar(
+                    radius: 34,
+                    backgroundColor: AppTheme.primaryColor.withValues(
+                      alpha: 0.1,
+                    ),
+                    backgroundImage:
+                        imageUrl == null ? null : NetworkImage(imageUrl),
+                    child: imageUrl == null
+                        ? const Icon(
+                            Icons.storefront_outlined,
+                            size: 30,
+                          )
+                        : null,
+                  ),
+                  const Positioned(
+                    right: -2,
+                    bottom: -1,
+                    child: Icon(
+                      Icons.verified,
+                      size: 20,
+                      color: Colors.blue,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 9),
+              Text(
+                seller['company_name']?.toString() ?? 'Featured Business',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '$adCount active ad${adCount == 1 ? '' : 's'}',
+                style: TextStyle(
+                  color: context.appSecondaryText,
+                  fontSize: 10,
+                ),
+              ),
+              if (rating > 0)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.star,
+                      size: 12,
+                      color: Color(0xFFFFB300),
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      rating.toStringAsFixed(1),
+                      style: TextStyle(
+                        color: context.appSecondaryText,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

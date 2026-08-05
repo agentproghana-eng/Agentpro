@@ -102,69 +102,288 @@ export function CompaniesPage() {
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [updatingId, setUpdatingId] = useState(null);
 
   const load = async () => {
+    setLoading(true);
+
     try {
-      const res = await API.get('/users?role=business_owner&limit=100');
-      setCompanies(res.data.data || []);
+      const response = await API.get(
+        '/admin/marketplace-businesses',
+      );
+
+      setCompanies(response.data.data || []);
     } catch (_) {
       toast.error('Failed to load companies');
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   };
-  useEffect(() => { load(); }, []);
 
-  const filtered = companies.filter(c =>
-    !search || c.company_name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.email?.toLowerCase().includes(search.toLowerCase())
-  );
+  useEffect(() => {
+    load();
+  }, []);
+
+  const filtered = companies.filter((company) => {
+    const term = search.trim().toLowerCase();
+
+    if (!term) return true;
+
+    return (
+      company.company_name?.toLowerCase().includes(term) ||
+      company.email?.toLowerCase().includes(term) ||
+      company.company_email?.toLowerCase().includes(term)
+    );
+  });
 
   const toggleStatus = async (userId, currentStatus) => {
-    const newStatus = currentStatus === 'active' ? 'suspended' : 'active';
+    const newStatus =
+      currentStatus === 'active' ? 'suspended' : 'active';
+
     try {
-      await API.patch(`/users/${userId}`, { status: newStatus });
+      await API.patch(`/users/${userId}`, {
+        status: newStatus,
+      });
+
       toast.success(`User ${newStatus}`);
-      load();
-    } catch (_) { toast.error('Action failed'); }
+      await load();
+    } catch (_) {
+      toast.error('Action failed');
+    }
+  };
+
+  const toggleVerification = async (company) => {
+    setUpdatingId(company.company_id);
+
+    try {
+      const response = await API.patch(
+        `/admin/marketplace-businesses/${company.company_id}/verification`,
+        {
+          verified: !company.marketplace_verified,
+        },
+      );
+
+      toast.success(response.data.message);
+      await load();
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message ||
+          'Verification could not be updated.',
+      );
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const toggleFeatured = async (company) => {
+    let priority = company.marketplace_featured_priority || 0;
+
+    if (!company.marketplace_featured) {
+      const entered = window.prompt(
+        'Featured priority (higher numbers appear first):',
+        String(priority || 10),
+      );
+
+      if (entered === null) return;
+
+      priority = Number(entered);
+
+      if (
+        !Number.isInteger(priority) ||
+        priority < 0 ||
+        priority > 10000
+      ) {
+        toast.error(
+          'Priority must be an integer between 0 and 10000.',
+        );
+        return;
+      }
+    }
+
+    setUpdatingId(company.company_id);
+
+    try {
+      const response = await API.patch(
+        `/admin/marketplace-businesses/${company.company_id}/featured`,
+        {
+          featured: !company.marketplace_featured,
+          priority,
+        },
+      );
+
+      toast.success(response.data.message);
+      await load();
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message ||
+          'Featured placement could not be updated.',
+      );
+    } finally {
+      setUpdatingId(null);
+    }
   };
 
   return (
     <div>
-      <PageHeader title="Companies" subtitle="All registered business owners"
+      <PageHeader
+        title="Companies"
+        subtitle="Manage registered businesses and marketplace trust"
         action={
-          <input value={search} onChange={e => setSearch(e.target.value)}
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
             placeholder="Search companies..."
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary w-64" />
-        } />
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+            className="w-64 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+        }
+      />
+
+      <div className="overflow-hidden rounded-xl bg-white shadow-sm">
         <Table
           loading={loading}
           data={filtered}
           emptyMsg="No companies found"
           columns={[
-            { key: 'company_name', label: 'Company' },
-            { key: 'email', label: 'Email' },
-            { key: 'phone', label: 'Phone' },
-            { key: 'subscription_plan', label: 'Plan',
-              render: r => <Badge status={r.subscription_plan || 'free'} /> },
-            { key: 'subscription_status', label: 'Sub Status',
-              render: r => <Badge status={r.subscription_status || 'pending'} /> },
-            { key: 'status', label: 'Account',
-              render: r => <Badge status={r.status} /> },
-            { key: 'created_at', label: 'Joined',
-              render: r => r.created_at ? new Date(r.created_at).toLocaleDateString() : '—' },
-            { key: 'actions', label: '',
-              render: r => (
-                <button onClick={(e) => { e.stopPropagation(); toggleStatus(r.id, r.status); }}
-                  className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
-                    r.status === 'active'
-                      ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200'
-                      : 'bg-green-50 text-green-600 hover:bg-green-100 border border-green-200'
-                  }`}>
-                  {r.status === 'active' ? 'Suspend' : 'Activate'}
+            {
+              key: 'company_name',
+              label: 'Company',
+              render: (row) => (
+                <div>
+                  <p className="font-semibold text-gray-900">
+                    {row.company_name || '—'}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {row.active_ad_count || 0} active ads
+                    {' · '}
+                    {Number(row.average_rating || 0).toFixed(1)}
+                    {' rating'}
+                  </p>
+                </div>
+              ),
+            },
+            {
+              key: 'email',
+              label: 'Owner',
+              render: (row) => (
+                <div>
+                  <p>
+                    {row.first_name} {row.last_name}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {row.email || '—'}
+                  </p>
+                </div>
+              ),
+            },
+            {
+              key: 'subscription_plan',
+              label: 'Plan',
+              render: (row) => (
+                <Badge
+                  status={row.subscription_plan || 'free'}
+                />
+              ),
+            },
+            {
+              key: 'marketplace_verified',
+              label: 'Verified',
+              render: (row) =>
+                row.marketplace_verified ? (
+                  <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700">
+                    ✓ Verified
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">
+                    Not verified
+                  </span>
+                ),
+            },
+            {
+              key: 'marketplace_featured',
+              label: 'Featured',
+              render: (row) =>
+                row.marketplace_featured ? (
+                  <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
+                    ★ Priority{' '}
+                    {row.marketplace_featured_priority || 0}
+                  </span>
+                ) : (
+                  <span className="text-xs text-gray-400">—</span>
+                ),
+            },
+            {
+              key: 'status',
+              label: 'Account',
+              render: (row) => <Badge status={row.status} />,
+            },
+            {
+              key: 'marketplace_actions',
+              label: 'Marketplace Actions',
+              render: (row) => (
+                <div
+                  className="flex flex-wrap gap-2"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    disabled={updatingId === row.company_id}
+                    onClick={() => toggleVerification(row)}
+                    className={[
+                      'rounded-lg border px-3 py-1.5 text-xs font-medium disabled:opacity-50',
+                      row.marketplace_verified
+                        ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                        : 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100',
+                    ].join(' ')}
+                  >
+                    {row.marketplace_verified
+                      ? 'Remove verification'
+                      : 'Verify'}
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={updatingId === row.company_id}
+                    onClick={() => toggleFeatured(row)}
+                    className={[
+                      'rounded-lg border px-3 py-1.5 text-xs font-medium disabled:opacity-50',
+                      row.marketplace_featured
+                        ? 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100'
+                        : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50',
+                    ].join(' ')}
+                  >
+                    {row.marketplace_featured
+                      ? 'Remove featured'
+                      : 'Feature'}
+                  </button>
+                </div>
+              ),
+            },
+            {
+              key: 'account_action',
+              label: '',
+              render: (row) => (
+                <button
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    toggleStatus(row.owner_user_id, row.status);
+                  }}
+                  className={[
+                    'rounded-lg border px-3 py-1.5 text-xs font-medium transition',
+                    row.status === 'active'
+                      ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100'
+                      : 'border-green-200 bg-green-50 text-green-600 hover:bg-green-100',
+                  ].join(' ')}
+                >
+                  {row.status === 'active'
+                    ? 'Suspend'
+                    : 'Activate'}
                 </button>
-              )},
+              ),
+            },
           ]}
-          onRowClick={r => navigate(`/companies/${r.company_id}`)}
+          onRowClick={(row) =>
+            navigate(`/companies/${row.company_id}`)
+          }
         />
       </div>
     </div>
