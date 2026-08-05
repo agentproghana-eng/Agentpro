@@ -10,7 +10,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 import 'home_tab.dart';
 import '../community/community_feed_screen.dart';
-import '../business/business_hub_screen.dart';
+import '../marketplace/marketplace_screen.dart';
 import '../../shared/widgets/more_tile.dart';
 
 class OwnerDashboard extends StatefulWidget {
@@ -63,7 +63,7 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
         children: [
           HomeTab(user: user),
           const CommunityFeedScreen(),
-          const BusinessHubScreen(),
+          const MarketplaceScreen(),
           _OwnerMoreTab(),
         ],
       ),
@@ -269,10 +269,8 @@ class _AnalyticsTab extends StatelessWidget {
                           child: BarChart(
                             BarChartData(
                               alignment: BarChartAlignment.spaceAround,
-                              maxY:
-                                  commissions.fold(0.0, (max, c) {
-                                    final v =
-                                        double.tryParse(
+                              maxY: commissions.fold(0.0, (max, c) {
+                                    final v = double.tryParse(
                                           c['total_net']?.toString() ?? '0',
                                         ) ??
                                         0;
@@ -285,28 +283,24 @@ class _AnalyticsTab extends StatelessWidget {
                                   .asMap()
                                   .entries
                                   .map((e) {
-                                    final net =
-                                        double.tryParse(
-                                          e.value['total_net']?.toString() ??
-                                              '0',
-                                        ) ??
-                                        0;
-                                    return BarChartGroupData(
-                                      x: e.key,
-                                      barRods: [
-                                        BarChartRodData(
-                                          toY: net,
-                                          color: AppTheme.primaryColor,
-                                          width: 18,
-                                          borderRadius:
-                                              const BorderRadius.vertical(
-                                                top: Radius.circular(4),
-                                              ),
-                                        ),
-                                      ],
-                                    );
-                                  })
-                                  .toList(),
+                                final net = double.tryParse(
+                                      e.value['total_net']?.toString() ?? '0',
+                                    ) ??
+                                    0;
+                                return BarChartGroupData(
+                                  x: e.key,
+                                  barRods: [
+                                    BarChartRodData(
+                                      toY: net,
+                                      color: AppTheme.primaryColor,
+                                      width: 18,
+                                      borderRadius: const BorderRadius.vertical(
+                                        top: Radius.circular(4),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }).toList(),
                               titlesData: FlTitlesData(
                                 show: true,
                                 leftTitles: const AxisTitles(
@@ -364,8 +358,7 @@ class _AnalyticsTab extends StatelessWidget {
                             (f['provider'] ?? '').toString().toUpperCase(),
                           ),
                           trailing: GhsAmount(
-                            amount:
-                                double.tryParse(
+                            amount: double.tryParse(
                                   f['total']?.toString() ?? '0',
                                 ) ??
                                 0,
@@ -410,8 +403,8 @@ class _AnalyticsTab extends StatelessWidget {
   }
 
   String _fmt(dynamic v) => NumberFormat(
-    '#,##0.00',
-  ).format(double.tryParse(v?.toString() ?? '0') ?? 0);
+        '#,##0.00',
+      ).format(double.tryParse(v?.toString() ?? '0') ?? 0);
 }
 
 // ── Branches Tab ──────────────────────────────────────────────
@@ -428,83 +421,86 @@ class _BranchesTab extends StatelessWidget {
       body: loading
           ? const Center(child: CircularProgressIndicator())
           : branches.isEmpty
-          ? EmptyState(
-              icon: Icons.store_outlined,
-              title: 'No branches yet',
-              subtitle: 'Add your first branch to get started',
-              actionLabel: 'Add Branch',
-              onAction: () => _showAddBranch(context),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(8),
-              itemCount: branches.length,
-              itemBuilder: (_, i) {
-                final b = branches[i] as Map<String, dynamic>;
-                final float =
-                    double.tryParse(b['total_float']?.toString() ?? '0') ?? 0;
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ExpansionTile(
-                    leading: CircleAvatar(
-                      backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
-                      child: const Icon(
-                        Icons.store,
-                        color: AppTheme.primaryColor,
-                      ),
-                    ),
-                    title: Text(
-                      b['name'] ?? '',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: Text(
-                      b['location'] ?? '',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    trailing: GhsAmount(amount: float, fontSize: 13),
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _Row('Agents', '${b['agent_count'] ?? 0}'),
-                            _Row('Managers', '${b['manager_count'] ?? 0}'),
-                            _Row('Status', (b['status'] ?? '').toUpperCase()),
-                            const SizedBox(height: 8),
-                            Row(
+              ? EmptyState(
+                  icon: Icons.store_outlined,
+                  title: 'No branches yet',
+                  subtitle: 'Add your first branch to get started',
+                  actionLabel: 'Add Branch',
+                  onAction: () => _showAddBranch(context),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(8),
+                  itemCount: branches.length,
+                  itemBuilder: (_, i) {
+                    final b = branches[i] as Map<String, dynamic>;
+                    final float =
+                        double.tryParse(b['total_float']?.toString() ?? '0') ??
+                            0;
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ExpansionTile(
+                        leading: CircleAvatar(
+                          backgroundColor:
+                              AppTheme.primaryColor.withOpacity(0.1),
+                          child: const Icon(
+                            Icons.store,
+                            color: AppTheme.primaryColor,
+                          ),
+                        ),
+                        title: Text(
+                          b['name'] ?? '',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text(
+                          b['location'] ?? '',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        trailing: GhsAmount(amount: float, fontSize: 13),
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                Expanded(
-                                  child: OutlinedButton.icon(
-                                    onPressed: () => context.push('/float'),
-                                    icon: const Icon(
-                                      Icons.account_balance_wallet,
-                                      size: 16,
+                                _Row('Agents', '${b['agent_count'] ?? 0}'),
+                                _Row('Managers', '${b['manager_count'] ?? 0}'),
+                                _Row('Status',
+                                    (b['status'] ?? '').toUpperCase()),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        onPressed: () => context.push('/float'),
+                                        icon: const Icon(
+                                          Icons.account_balance_wallet,
+                                          size: 16,
+                                        ),
+                                        label: const Text('Float'),
+                                      ),
                                     ),
-                                    label: const Text('Float'),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: OutlinedButton.icon(
-                                    onPressed: () =>
-                                        context.push('/transactions/history'),
-                                    icon: const Icon(
-                                      Icons.receipt_long,
-                                      size: 16,
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        onPressed: () => context
+                                            .push('/transactions/history'),
+                                        icon: const Icon(
+                                          Icons.receipt_long,
+                                          size: 16,
+                                        ),
+                                        label: const Text('Transactions'),
+                                      ),
                                     ),
-                                    label: const Text('Transactions'),
-                                  ),
+                                  ],
                                 ),
                               ],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                );
-              },
-            ),
+                    );
+                  },
+                ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showAddBranch(context),
         icon: const Icon(Icons.add),
@@ -692,7 +688,6 @@ class _OwnerMoreTab extends StatelessWidget {
             'Custom USSD Flows',
             () => context.push('/ussd-flows'),
           ),
-
           const MoreGroupLabel('Business'),
           MoreTile(
             Icons.people_outlined,
@@ -709,7 +704,6 @@ class _OwnerMoreTab extends StatelessWidget {
             'Subscription',
             () => context.push('/subscription'),
           ),
-
           const MoreGroupLabel('Help'),
           MoreTile(
             Icons.support_agent_outlined,

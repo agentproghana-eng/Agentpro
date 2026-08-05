@@ -74,7 +74,7 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Business Hub'),
+        title: const Text('Business Tools'),
         actions: [
           IconButton(
             tooltip: 'Refresh',
@@ -120,10 +120,10 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
             ),
             const SizedBox(height: 12),
             _HubCard(
-              icon: Icons.storefront_outlined,
-              title: 'Browse Marketplace',
-              subtitle: 'Find products and services from businesses',
-              onTap: () => context.push('/marketplace'),
+              icon: Icons.favorite_outline,
+              title: 'Saved Ads',
+              subtitle: 'View advertisements you have saved',
+              onTap: () => context.push('/marketplace/saved'),
             ),
             _HubCard(
               icon: Icons.inventory_2_outlined,

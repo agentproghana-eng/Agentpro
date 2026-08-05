@@ -6,7 +6,7 @@ import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import 'home_tab.dart';
 import '../community/community_feed_screen.dart';
-import '../business/business_hub_screen.dart';
+import '../marketplace/marketplace_screen.dart';
 import '../../shared/widgets/more_tile.dart';
 
 class ManagerDashboard extends StatefulWidget {
@@ -28,7 +28,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         children: [
           HomeTab(user: user),
           const CommunityFeedScreen(),
-          const BusinessHubScreen(),
+          const MarketplaceScreen(),
           _ManagerMoreTab(),
         ],
       ),
@@ -93,7 +93,6 @@ class _ManagerMoreTab extends StatelessWidget {
             'USSD Automation',
             () => context.push('/ussd-settings'),
           ),
-
           const MoreGroupLabel('Business'),
           MoreTile(
             Icons.people_outlined,
@@ -105,7 +104,6 @@ class _ManagerMoreTab extends StatelessWidget {
             'My Branches',
             () => context.push('/branches'),
           ),
-
           const MoreGroupLabel('Help'),
           MoreTile(
             Icons.support_agent_outlined,

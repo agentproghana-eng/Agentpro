@@ -44,6 +44,7 @@ import '../../features/community/post_moderation_screen.dart';
 import '../../features/reports/reports_screen.dart';
 import '../../features/ai_assistant/ai_assistant_screen.dart';
 import '../../features/subscription/subscription_screen.dart';
+import '../../features/business/business_hub_screen.dart';
 import '../../features/marketplace/marketplace_screen.dart';
 import '../../features/marketplace/post_ad_screen.dart';
 import '../../features/marketplace/my_ads_screen.dart';
@@ -268,6 +269,9 @@ class AppRouter {
         GoRoute(
             path: '/marketplace',
             builder: (_, __) => const MarketplaceScreen()),
+        GoRoute(
+            path: '/marketplace/more',
+            builder: (_, __) => const BusinessHubScreen()),
         GoRoute(
             path: '/marketplace/post',
             builder: (_, __) => const PostAdScreen()),

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'personal_home_screen.dart';
 import 'personal_more_tab.dart';
 import '../personal_community/personal_community_feed_screen.dart';
-import '../business/business_hub_screen.dart';
+import '../marketplace/marketplace_screen.dart';
 
 /// Personal's equivalent of AgentDashboard/OwnerDashboard - same
 /// IndexedStack + bottom NavigationBar shell (Home/Community/Business
@@ -28,7 +28,7 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
         children: const [
           PersonalHomeScreen(),
           PersonalCommunityFeedScreen(),
-          BusinessHubScreen(),
+          const MarketplaceScreen(),
           PersonalMoreTab(),
         ],
       ),

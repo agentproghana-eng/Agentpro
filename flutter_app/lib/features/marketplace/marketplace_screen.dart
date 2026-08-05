@@ -436,6 +436,11 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         title: const Text('Business Hub'),
         actions: [
           IconButton(
+            tooltip: 'More',
+            onPressed: () => context.push('/marketplace/more'),
+            icon: const Icon(Icons.more_horiz),
+          ),
+          IconButton(
             tooltip: 'Saved Ads',
             onPressed: () async {
               await context.push('/marketplace/saved');
