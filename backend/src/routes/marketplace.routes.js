@@ -880,6 +880,127 @@ mpRouter.delete('/:ad_id/save', async (req, res) => {
   }
 });
 
+// Recently viewed active advertisements for the current user.
+mpRouter.get('/recently-viewed', async (req, res) => {
+  const requestedLimit = parseInt(req.query.limit, 10) || 10;
+  const limit = Math.min(Math.max(requestedLimit, 1), 30);
+
+  try {
+    const result = await query(
+      `SELECT
+         a.*,
+         ac.name AS category_name,
+         recent.last_viewed_at,
+         COALESCE(AVG(ar.rating), 0)::float AS avg_rating,
+         COUNT(ar.id)::int AS rating_count
+       FROM (
+         SELECT
+           advertisement_id,
+           MAX(viewed_at) AS last_viewed_at
+         FROM advertisement_views
+         WHERE viewed_by = $1
+         GROUP BY advertisement_id
+       ) recent
+       INNER JOIN advertisements a
+         ON a.id = recent.advertisement_id
+        AND a.status = 'active'
+       LEFT JOIN ad_categories ac
+         ON ac.id = a.category_id
+       LEFT JOIN ad_ratings ar
+         ON ar.advertisement_id = a.id
+       GROUP BY a.id, ac.name, recent.last_viewed_at
+       ORDER BY recent.last_viewed_at DESC
+       LIMIT $2`,
+      [req.user.id, limit]
+    );
+
+    res.json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (e) {
+    console.error('GET /marketplace/recently-viewed error:', e);
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch recently viewed advertisements',
+    });
+  }
+});
+
+// Recommendations based on categories the user has viewed recently.
+// Falls back to popular active ads when there is not enough history.
+mpRouter.get('/recommendations', async (req, res) => {
+  const requestedLimit = parseInt(req.query.limit, 10) || 10;
+  const limit = Math.min(Math.max(requestedLimit, 1), 30);
+
+  try {
+    const result = await query(
+      `WITH viewed_categories AS (
+         SELECT
+           a.category_id,
+           COUNT(*)::int AS interest_score,
+           MAX(av.viewed_at) AS last_interest_at
+         FROM advertisement_views av
+         INNER JOIN advertisements a
+           ON a.id = av.advertisement_id
+         WHERE av.viewed_by = $1
+           AND a.category_id IS NOT NULL
+         GROUP BY a.category_id
+       ),
+       viewed_ads AS (
+         SELECT DISTINCT advertisement_id
+         FROM advertisement_views
+         WHERE viewed_by = $1
+       )
+       SELECT
+         a.*,
+         ac.name AS category_name,
+         COALESCE(vc.interest_score, 0)::int AS recommendation_score,
+         COALESCE(AVG(ar.rating), 0)::float AS avg_rating,
+         COUNT(ar.id)::int AS rating_count
+       FROM advertisements a
+       LEFT JOIN ad_categories ac
+         ON ac.id = a.category_id
+       LEFT JOIN viewed_categories vc
+         ON vc.category_id = a.category_id
+       LEFT JOIN ad_ratings ar
+         ON ar.advertisement_id = a.id
+       LEFT JOIN viewed_ads va
+         ON va.advertisement_id = a.id
+       WHERE a.status = 'active'
+         AND a.posted_by <> $1
+         AND va.advertisement_id IS NULL
+       GROUP BY
+         a.id,
+         ac.name,
+         vc.interest_score,
+         vc.last_interest_at
+       ORDER BY
+         CASE WHEN vc.interest_score IS NULL THEN 1 ELSE 0 END,
+         vc.interest_score DESC NULLS LAST,
+         vc.last_interest_at DESC NULLS LAST,
+         a.views_count DESC,
+         avg_rating DESC,
+         a.published_at DESC NULLS LAST
+       LIMIT $2`,
+      [req.user.id, limit]
+    );
+
+    res.json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (e) {
+    console.error('GET /marketplace/recommendations error:', e);
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch marketplace recommendations',
+    });
+  }
+});
+
 // Featured verified businesses for the Business Hub home.
 mpRouter.get('/featured-sellers', async (req, res) => {
   try {
@@ -1107,7 +1228,14 @@ mpRouter.get('/:ad_id', async (req, res) => {
         query(
           `INSERT INTO advertisement_views
              (advertisement_id, viewed_by)
-           VALUES ($1, $2)`,
+           SELECT $1, $2
+           WHERE NOT EXISTS (
+             SELECT 1
+             FROM advertisement_views
+             WHERE advertisement_id = $1
+               AND viewed_by = $2
+               AND viewed_at >= NOW() - INTERVAL '30 minutes'
+           )`,
           [req.params.ad_id, req.user.id]
         ),
       ]).catch(() => {});
