@@ -109,6 +109,191 @@ export function CompaniesPage() {
 
     try {
       const response = await API.get(
+        '/users?role=business_owner&limit=100',
+      );
+
+      setCompanies(response.data.data || []);
+    } catch (_) {
+      toast.error('Failed to load companies');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const filtered = companies.filter((company) => {
+    const term = search.trim().toLowerCase();
+
+    if (!term) return true;
+
+    return (
+      company.company_name?.toLowerCase().includes(term) ||
+      company.email?.toLowerCase().includes(term) ||
+      company.phone?.toLowerCase().includes(term)
+    );
+  });
+
+  const toggleStatus = async (company) => {
+    const newStatus =
+      company.status === 'active' ? 'suspended' : 'active';
+
+    setUpdatingId(company.id);
+
+    try {
+      await API.patch(`/users/${company.id}`, {
+        status: newStatus,
+      });
+
+      toast.success(
+        newStatus === 'active'
+          ? 'Business owner activated.'
+          : 'Business owner suspended.',
+      );
+
+      await load();
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message ||
+          'The account status could not be updated.',
+      );
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  return (
+    <div>
+      <PageHeader
+        title="Companies"
+        subtitle="Manage company accounts, subscriptions, owners, and staff"
+        action={
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search marketplace businesses..."
+            className="w-64 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+        }
+      />
+
+      <div className="overflow-hidden rounded-xl bg-white shadow-sm">
+        <Table
+          loading={loading}
+          data={filtered}
+          emptyMsg="No companies found"
+          columns={[
+            {
+              key: 'company_name',
+              label: 'Company',
+              render: (row) => (
+                <div>
+                  <p className="font-semibold text-gray-900">
+                    {row.company_name || '—'}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Owner: {row.first_name || '—'}{' '}
+                    {row.last_name || ''}
+                  </p>
+                </div>
+              ),
+            },
+            {
+              key: 'email',
+              label: 'Contact',
+              render: (row) => (
+                <div>
+                  <p>{row.email || '—'}</p>
+                  <p className="text-xs text-gray-500">
+                    {row.phone || '—'}
+                  </p>
+                </div>
+              ),
+            },
+            {
+              key: 'subscription_plan',
+              label: 'Plan',
+              render: (row) => (
+                <Badge
+                  status={row.subscription_plan || 'free'}
+                />
+              ),
+            },
+            {
+              key: 'subscription_status',
+              label: 'Subscription',
+              render: (row) => (
+                <Badge
+                  status={row.subscription_status || 'pending'}
+                />
+              ),
+            },
+            {
+              key: 'status',
+              label: 'Owner Account',
+              render: (row) => <Badge status={row.status} />,
+            },
+            {
+              key: 'created_at',
+              label: 'Joined',
+              render: (row) =>
+                row.created_at
+                  ? new Date(row.created_at).toLocaleDateString()
+                  : '—',
+            },
+            {
+              key: 'actions',
+              label: '',
+              render: (row) => (
+                <button
+                  type="button"
+                  disabled={updatingId === row.id}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    toggleStatus(row);
+                  }}
+                  className={[
+                    'rounded-lg border px-3 py-1.5 text-xs font-medium transition disabled:opacity-50',
+                    row.status === 'active'
+                      ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100'
+                      : 'border-green-200 bg-green-50 text-green-600 hover:bg-green-100',
+                  ].join(' ')}
+                >
+                  {updatingId === row.id
+                    ? 'Updating...'
+                    : row.status === 'active'
+                      ? 'Suspend'
+                      : 'Activate'}
+                </button>
+              ),
+            },
+          ]}
+          onRowClick={(row) =>
+            navigate(`/companies/${row.company_id}`)
+          }
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── Marketplace Businesses Page ───────────────────────────────
+
+
+export function MarketplaceBusinessesPage() {
+  const navigate = useNavigate();
+  const [companies, setCompanies] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [updatingId, setUpdatingId] = useState(null);
+
+  const load = async () => {
+    setLoading(true);
+
+    try {
+      const response = await API.get(
         '/admin/marketplace-businesses',
       );
 
@@ -226,8 +411,8 @@ export function CompaniesPage() {
   return (
     <div>
       <PageHeader
-        title="Companies"
-        subtitle="Manage registered businesses and marketplace trust"
+        title="Marketplace Businesses"
+        subtitle="Manage verification, featured placement, and seller trust"
         action={
           <input
             value={search}
