@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/widgets/app_network_image.dart';
 import '../../shared/widgets/app_widgets.dart';
 
 class SellerStorefrontScreen extends StatefulWidget {
@@ -478,10 +479,11 @@ class _StorefrontAdCard extends StatelessWidget {
                 width: double.infinity,
                 color: AppTheme.primaryColor.withValues(alpha: 0.08),
                 child: hasImage
-                    ? Image.network(
-                        images.first.toString(),
+                    ? AppNetworkImage(
+                        url: images.first.toString(),
                         fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => const Icon(
+                        memCacheWidth: 700,
+                        errorWidget: const Icon(
                           Icons.image_outlined,
                           size: 40,
                         ),

@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:intl/intl.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/widgets/app_network_image.dart';
 import '../../shared/widgets/app_widgets.dart';
 
 class AdDetailScreen extends StatefulWidget {
@@ -173,10 +174,11 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
                           borderRadius: BorderRadius.circular(12),
                           child: Container(
                             color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                            child: Image.network(
-                              url as String,
+                            child: AppNetworkImage(
+                              url: url.toString(),
                               fit: BoxFit.contain,
-                              errorBuilder: (_, __, ___) => Container(
+                              memCacheWidth: 1200,
+                              errorWidget: Container(
                                 color: AppTheme.primaryColor
                                     .withValues(alpha: 0.1),
                                 child: Center(

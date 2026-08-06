@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/widgets/app_network_image.dart';
 
 class SavedAdsScreen extends StatefulWidget {
   const SavedAdsScreen({super.key});
@@ -194,11 +195,11 @@ class _SavedAdsScreenState extends State<SavedAdsScreen> {
                                           color: AppTheme.primaryColor
                                               .withValues(alpha: 0.1),
                                           child: hasImage
-                                              ? Image.network(
-                                                  images.first.toString(),
+                                              ? AppNetworkImage(
+                                                  url: images.first.toString(),
                                                   fit: BoxFit.contain,
-                                                  errorBuilder: (_, __, ___) =>
-                                                      const Icon(
+                                                  memCacheWidth: 600,
+                                                  errorWidget: const Icon(
                                                     Icons.image_outlined,
                                                     size: 42,
                                                   ),
