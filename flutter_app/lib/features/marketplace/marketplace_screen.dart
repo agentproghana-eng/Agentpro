@@ -725,98 +725,124 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   }
 
   Widget _buildMarketplaceHome() {
+    final sections = <Widget>[
+      if (_featuredSellers.isNotEmpty) _buildFeaturedBusinesses(),
+      if (_recommendedAds.isNotEmpty)
+        _buildHorizontalSection(
+          title: 'Recommended for You',
+          subtitle: 'Suggestions based on your browsing',
+          icon: Icons.auto_awesome_outlined,
+          ads: _recommendedAds,
+          onViewAll: _showRecommendationsSheet,
+        ),
+      if (_recentlyViewedAds.isNotEmpty)
+        _buildHorizontalSection(
+          title: 'Recently Viewed',
+          subtitle: 'Continue exploring advertisements you opened',
+          icon: Icons.history,
+          ads: _recentlyViewedAds,
+          onViewAll: _showRecentlyViewedSheet,
+        ),
+      if (_topRatedAds.isNotEmpty)
+        _buildHorizontalSection(
+          title: 'Top Rated',
+          subtitle: 'Highly rated products and services',
+          icon: Icons.star_outline,
+          ads: _topRatedAds,
+          onViewAll: () {
+            setState(() => _sort = 'highest_rated');
+            _load();
+          },
+        ),
+      if (_trendingAds.isNotEmpty)
+        _buildHorizontalSection(
+          title: 'Trending Now',
+          subtitle: 'Advertisements receiving the most attention',
+          icon: Icons.trending_up,
+          ads: _trendingAds,
+          onViewAll: () {
+            setState(() => _sort = 'most_viewed');
+            _load();
+          },
+        ),
+    ];
+
     return RefreshIndicator(
       onRefresh: _load,
-      child: ListView(
+      child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.only(bottom: 96),
-        children: [
-          if (_featuredSellers.isNotEmpty) _buildFeaturedBusinesses(),
-          if (_recommendedAds.isNotEmpty)
-            _buildHorizontalSection(
-              title: 'Recommended for You',
-              subtitle: 'Suggestions based on your browsing',
-              icon: Icons.auto_awesome_outlined,
-              ads: _recommendedAds,
-              onViewAll: _showRecommendationsSheet,
-            ),
-          if (_recentlyViewedAds.isNotEmpty)
-            _buildHorizontalSection(
-              title: 'Recently Viewed',
-              subtitle: 'Continue exploring advertisements you opened',
-              icon: Icons.history,
-              ads: _recentlyViewedAds,
-              onViewAll: _showRecentlyViewedSheet,
-            ),
-          if (_topRatedAds.isNotEmpty)
-            _buildHorizontalSection(
-              title: 'Top Rated',
-              subtitle: 'Highly rated products and services',
-              icon: Icons.star_outline,
-              ads: _topRatedAds,
-              onViewAll: () {
-                setState(() => _sort = 'highest_rated');
-                _load();
+        slivers: [
+          if (sections.isNotEmpty)
+            SliverList.builder(
+              itemCount: sections.length,
+              itemBuilder: (context, index) {
+                return sections[index];
               },
             ),
-          if (_trendingAds.isNotEmpty)
-            _buildHorizontalSection(
-              title: 'Trending Now',
-              subtitle: 'Advertisements receiving the most attention',
-              icon: Icons.trending_up,
-              ads: _trendingAds,
-              onViewAll: () {
-                setState(() => _sort = 'most_viewed');
-                _load();
-              },
-            ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 22, 16, 10),
-            child: Row(
-              children: [
-                const Icon(Icons.new_releases_outlined),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text(
-                    'Latest Ads',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                16,
+                22,
+                16,
+                10,
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.new_releases_outlined,
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Latest Ads',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
-                ),
-                TextButton(
-                  onPressed: () {
-                    setState(() => _sort = 'newest');
-                    _load();
-                  },
-                  child: const Text('View all'),
-                ),
-              ],
+                  TextButton(
+                    onPressed: () {
+                      setState(() => _sort = 'newest');
+                      _load();
+                    },
+                    child: const Text('View all'),
+                  ),
+                ],
+              ),
             ),
           ),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 0.75,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12,
             ),
-            itemCount: _ads.length,
-            itemBuilder: (context, index) {
-              final ad = _ads[index];
-              final id = ad['id']?.toString() ?? '';
+            sliver: SliverGrid.builder(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                childAspectRatio: 0.75,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+              ),
+              itemCount: _ads.length,
+              itemBuilder: (context, index) {
+                final ad = _ads[index];
+                final id = ad['id']?.toString() ?? '';
 
-              return _AdCard(
-                ad: ad,
-                isSaved: _savedIds.contains(id),
-                isUpdating: _updatingIds.contains(id),
-                onToggleSaved: () => _toggleSaved(ad),
-              );
-            },
+                return _AdCard(
+                  key: ValueKey(
+                    id.isNotEmpty ? id : index,
+                  ),
+                  ad: ad,
+                  isSaved: _savedIds.contains(id),
+                  isUpdating: _updatingIds.contains(id),
+                  onToggleSaved: () => _toggleSaved(ad),
+                );
+              },
+            ),
+          ),
+          const SliverToBoxAdapter(
+            child: SizedBox(height: 96),
           ),
         ],
       ),
