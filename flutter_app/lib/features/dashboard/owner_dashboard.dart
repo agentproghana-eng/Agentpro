@@ -21,37 +21,6 @@ class OwnerDashboard extends StatefulWidget {
 
 class _OwnerDashboardState extends State<OwnerDashboard> {
   int _navIndex = 0;
-  Map<String, dynamic>? _summary;
-  List<dynamic> _branches = [];
-  List<dynamic> _commissions = [];
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadAll();
-  }
-
-  Future<void> _loadAll() async {
-    setState(() => _loading = true);
-    try {
-      final results = await Future.wait([
-        ApiClient.instance.get('/reports/dashboard'),
-        ApiClient.instance.get('/branches'),
-        ApiClient.instance.get('/commissions/summary?group_by=day'),
-      ]);
-      if (mounted) {
-        setState(() {
-          _summary = results[0].data['data'];
-          _branches = results[1].data['data'] ?? [];
-          _commissions = results[2].data['data'] ?? [];
-          _loading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
