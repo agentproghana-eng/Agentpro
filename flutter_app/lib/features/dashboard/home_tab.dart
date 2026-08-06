@@ -16,6 +16,7 @@ import "../ussd_settings/quick_action_customization_screen.dart";
 import "../../shared/widgets/offline_status_banner.dart";
 import "../../shared/widgets/dashboard_skeleton.dart";
 import "../../shared/widgets/dashboard_empty_state.dart";
+import 'widgets/dashboard_quick_actions_section.dart';
 
 class HomeTab extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -774,36 +775,10 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
                 ),
                 SliverToBoxAdapter(child: _buildShiftCard()),
                 SliverToBoxAdapter(
-                  child: Builder(
-                    builder: (context) {
-                      final quickActions = _quickActionTiles(context);
-
-                      if (quickActions.isEmpty) {
-                        return DashboardEmptyState(
-                          icon: Icons.grid_view_rounded,
-                          title: 'No quick actions available',
-                          message: 'No transaction actions are currently '
-                              'available for ${_providerLabel(_provider)}. '
-                              'You can choose different actions in Templates.',
-                          actionLabel: 'Customize Quick Actions',
-                          actionIcon: Icons.tune_rounded,
-                          onAction: () => context.push('/agent-quick-actions'),
-                        );
-                      }
-
-                      return Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-                        child: GridView.count(
-                          crossAxisCount: 3,
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          mainAxisSpacing: 6,
-                          crossAxisSpacing: 6,
-                          childAspectRatio: 0.9,
-                          children: quickActions,
-                        ),
-                      );
-                    },
+                  child: DashboardQuickActionsSection(
+                    providerLabel: _providerLabel(_provider),
+                    quickActions: _quickActionTiles(context),
+                    onCustomize: () => context.push('/agent-quick-actions'),
                   ),
                 ),
                 SliverPadding(
