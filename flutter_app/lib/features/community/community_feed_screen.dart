@@ -743,53 +743,97 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: _load,
-        child: ListView(
+        child: CustomScrollView(
           controller: _scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(14),
-          children: [
-            _buildFilters(),
-            const SizedBox(height: 12),
-            _buildComposer(),
-            const SizedBox(height: 14),
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(
+                14,
+                14,
+                14,
+                0,
+              ),
+              sliver: SliverList.list(
+                children: [
+                  _buildFilters(),
+                  const SizedBox(height: 12),
+                  _buildComposer(),
+                  const SizedBox(height: 14),
+                ],
+              ),
+            ),
             if (_loading)
-              const Padding(
-                padding: EdgeInsets.all(40),
+              const SliverFillRemaining(
+                hasScrollBody: false,
                 child: Center(
                   child: CircularProgressIndicator(),
                 ),
               )
             else if (_error != null)
-              _CommunityStateCard(
-                icon: Icons.cloud_off_outlined,
-                message: _error!,
-                actionLabel: 'Retry',
-                onAction: _load,
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                ),
+                sliver: SliverToBoxAdapter(
+                  child: _CommunityStateCard(
+                    icon: Icons.cloud_off_outlined,
+                    message: _error!,
+                    actionLabel: 'Retry',
+                    onAction: _load,
+                  ),
+                ),
               )
             else if (_posts.isEmpty)
-              const _CommunityStateCard(
-                icon: Icons.forum_outlined,
-                message: 'No posts are available in this category yet.',
+              const SliverPadding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: 14,
+                ),
+                sliver: SliverToBoxAdapter(
+                  child: _CommunityStateCard(
+                    icon: Icons.forum_outlined,
+                    message: 'No posts are available in this category yet.',
+                  ),
+                ),
               )
             else
-              for (final post in _posts)
-                _AgentCommunityPostCard(
-                  post: post,
-                  onReact: (type) => _toggleReaction(post, type),
-                  onOpen: () => context
-                      .push(
-                        '/community/post/${post['id']}',
-                      )
-                      .then((_) => _load()),
-                  onActions: () => _showPostActions(post),
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
                 ),
-            if (_loadingMore)
-              const Padding(
-                padding: EdgeInsets.all(18),
-                child: Center(
-                  child: CircularProgressIndicator(),
+                sliver: SliverList.builder(
+                  itemCount: _posts.length,
+                  itemBuilder: (context, index) {
+                    final post = _posts[index];
+
+                    return _AgentCommunityPostCard(
+                      key: ValueKey(
+                        post['id']?.toString() ?? index,
+                      ),
+                      post: post,
+                      onReact: (type) => _toggleReaction(post, type),
+                      onOpen: () async {
+                        await context.push(
+                          '/community/post/${post['id']}',
+                        );
+                      },
+                      onActions: () => _showPostActions(post),
+                    );
+                  },
                 ),
               ),
+            if (_loadingMore)
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.all(18),
+                  child: Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                ),
+              ),
+            const SliverToBoxAdapter(
+              child: SizedBox(height: 14),
+            ),
           ],
         ),
       ),
@@ -804,6 +848,7 @@ class _AgentCommunityPostCard extends StatelessWidget {
   final VoidCallback onActions;
 
   const _AgentCommunityPostCard({
+    super.key,
     required this.post,
     required this.onReact,
     required this.onOpen,

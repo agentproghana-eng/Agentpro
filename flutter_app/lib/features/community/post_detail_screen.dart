@@ -20,6 +20,7 @@ class PostDetailScreen extends StatefulWidget {
 class _PostDetailScreenState extends State<PostDetailScreen> {
   Map<String, dynamic>? _post;
   List<dynamic> _comments = [];
+  Map<String?, List<Map<String, dynamic>>> _commentsByParent = {};
   bool _loading = true;
   final _commentCtrl = TextEditingController();
   bool _sending = false;
@@ -53,9 +54,16 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       final allPosts = results[0].data['data'] as List;
       final match = allPosts.firstWhere((p) => p['id'] == widget.postId,
           orElse: () => null);
+      final comments = results[1].data['data'] is List
+          ? List<dynamic>.from(
+              results[1].data['data'] as List,
+            )
+          : <dynamic>[];
+
       setState(() {
         _post = match as Map<String, dynamic>?;
-        _comments = results[1].data['data'] ?? [];
+        _comments = comments;
+        _commentsByParent = _indexComments(comments);
         _loading = false;
       });
     } catch (e) {
@@ -63,15 +71,28 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     }
   }
 
-  List<Map<String, dynamic>> get _topLevelComments => _comments
-      .where((c) => c['parent_comment_id'] == null)
-      .cast<Map<String, dynamic>>()
-      .toList();
+  List<Map<String, dynamic>> get _topLevelComments =>
+      _commentsByParent[null] ?? const [];
 
-  List<Map<String, dynamic>> _repliesFor(String commentId) => _comments
-      .where((c) => c['parent_comment_id'] == commentId)
-      .cast<Map<String, dynamic>>()
-      .toList();
+  List<Map<String, dynamic>> _repliesFor(String commentId) =>
+      _commentsByParent[commentId] ?? const [];
+
+  Map<String?, List<Map<String, dynamic>>> _indexComments(
+    List<dynamic> comments,
+  ) {
+    final indexed = <String?, List<Map<String, dynamic>>>{};
+
+    for (final rawComment in comments) {
+      if (rawComment is! Map) continue;
+
+      final comment = Map<String, dynamic>.from(rawComment);
+      final parentId = comment['parent_comment_id']?.toString();
+
+      indexed.putIfAbsent(parentId, () => []).add(comment);
+    }
+
+    return indexed;
+  }
 
   String _relativeTime(String? dateStr) {
     if (dateStr == null) return '';
@@ -138,6 +159,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         'my_reaction': nextReaction,
         'reaction_counts': updatedCounts,
       };
+      _commentsByParent = _indexComments(_comments);
     });
 
     try {
@@ -154,6 +176,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           'my_reaction': previousReaction,
           'reaction_counts': previousCounts,
         };
+        _commentsByParent = _indexComments(_comments);
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
