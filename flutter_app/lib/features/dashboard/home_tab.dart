@@ -10,13 +10,13 @@ import "../../shared/theme/app_colors.dart";
 import "../../core/services/sim_card_service.dart";
 import "../../core/services/dashboard_refresh_service.dart";
 import "../../core/services/app_cache_service.dart";
-import "../../shared/utils/transaction_labels.dart";
 import "../../core/router/app_router.dart";
 import "../ussd_settings/quick_action_customization_screen.dart";
 import "../../shared/widgets/offline_status_banner.dart";
 import "../../shared/widgets/dashboard_skeleton.dart";
 import "../../shared/widgets/dashboard_empty_state.dart";
 import 'widgets/dashboard_quick_actions_section.dart';
+import 'widgets/dashboard_recent_transaction_item.dart';
 
 class HomeTab extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -832,8 +832,8 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
                           index: i,
                           child: _animateNewestTransaction(
                             isNewest: i == 0,
-                            child: _RecentTxItem(
-                              tx: _recent[i] as Map<String, dynamic>,
+                            child: DashboardRecentTransactionItem(
+                              transaction: _recent[i] as Map<String, dynamic>,
                             ),
                           ),
                         ),
@@ -1178,94 +1178,6 @@ class _QuickActionState extends State<_QuickAction> {
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RecentTxItem extends StatelessWidget {
-  final Map<String, dynamic> tx;
-  const _RecentTxItem({required this.tx});
-
-  @override
-  Widget build(BuildContext context) {
-    final type = (tx["transaction_type"] ?? "").toString();
-    final isCashIn = type == "cash_in";
-    final amount = double.tryParse(tx["amount"].toString()) ?? 0;
-    DateTime? created;
-    try {
-      created = DateTime.parse(tx["created_at"].toString());
-    } catch (e) {}
-    final timeStr =
-        created != null ? DateFormat("HH:mm").format(created.toLocal()) : "";
-
-    return GestureDetector(
-      onTap: () => context.push('/transactions/${tx["id"]}'),
-      child: Container(
-        padding: const EdgeInsets.all(11),
-        margin: const EdgeInsets.only(bottom: 8),
-        decoration: BoxDecoration(
-          color: context.appSurface,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 3),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: isCashIn
-                    ? context.appTileColor(const Color(0xFFE6F4F1))
-                    : context.appTileColor(const Color(0xFFFDF3DC)),
-                borderRadius: BorderRadius.circular(9),
-              ),
-              child: Icon(
-                isCashIn ? Icons.call_received : Icons.call_made,
-                size: 16,
-                color:
-                    isCashIn ? AppTheme.primaryColor : const Color(0xFFB87E00),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    transactionTypeLabel(
-                      type,
-                      (tx["provider"] ?? "").toString(),
-                    ),
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    "${tx["customer_phone"] ?? ""} · $timeStr",
-                    style: const TextStyle(
-                      fontSize: 10.5,
-                      color: Colors.grey,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Text(
-              "${isCashIn ? "+" : "-"}GH₵${amount.toStringAsFixed(2)}",
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.bold,
-                color:
-                    isCashIn ? AppTheme.primaryColor : const Color(0xFFB33F3F),
-              ),
-            ),
-          ],
         ),
       ),
     );
