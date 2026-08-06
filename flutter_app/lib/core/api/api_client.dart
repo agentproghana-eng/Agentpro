@@ -8,6 +8,8 @@ class ApiClient {
   // For local dev: 'http://10.0.2.2:3000/v1'
 
   static final Dio _dio = _createDio();
+  static Future<bool>? _refreshFuture;
+
   static Dio get instance => _dio;
 
   static Dio _createDio() {
@@ -32,21 +34,36 @@ class ApiClient {
           return handler.next(options);
         },
         onError: (DioException error, handler) async {
-          // Auto-refresh on 401
-          if (error.response?.statusCode == 401) {
+          final request = error.requestOptions;
+          final isUnauthorized = error.response?.statusCode == 401;
+          final alreadyRetried = request.extra['auth_refresh_retried'] == true;
+          final isAuthRequest = request.path.contains('/auth/login') ||
+              request.path.contains('/auth/register') ||
+              request.path.contains('/auth/refresh');
+
+          if (isUnauthorized && !alreadyRetried && !isAuthRequest) {
+            request.extra['auth_refresh_retried'] = true;
+
             final refreshed = await refreshToken();
+
             if (refreshed) {
-              // Retry original request with new token
               final token = await StorageService.getAccessToken();
-              error.requestOptions.headers['Authorization'] = 'Bearer $token';
-              try {
-                final response = await dio.fetch(error.requestOptions);
-                return handler.resolve(response);
-              } catch (_) {}
+
+              if (token != null && token.isNotEmpty) {
+                request.headers['Authorization'] = 'Bearer $token';
+
+                try {
+                  final response = await dio.fetch(request);
+                  return handler.resolve(response);
+                } on DioException catch (retryError) {
+                  return handler.next(retryError);
+                }
+              }
             }
-            // Refresh failed — force logout
+
             await StorageService.clearSession();
           }
+
           return handler.next(error);
         },
       ),
@@ -67,22 +84,76 @@ class ApiClient {
     return dio;
   }
 
-  static Future<bool> refreshToken() async {
-    try {
-      final token = StorageService.getCachedAccessToken() ??
-          await StorageService.getAccessToken();
-      if (refreshToken == null) return false;
+  static Future<bool> refreshToken() {
+    final existingRefresh = _refreshFuture;
 
-      final response = await Dio().post(
+    if (existingRefresh != null) {
+      return existingRefresh;
+    }
+
+    final refresh = _performTokenRefresh();
+    _refreshFuture = refresh;
+
+    return refresh.whenComplete(() {
+      if (identical(_refreshFuture, refresh)) {
+        _refreshFuture = null;
+      }
+    });
+  }
+
+  static Future<bool> _performTokenRefresh() async {
+    try {
+      final storedRefreshToken = await StorageService.getRefreshToken();
+
+      if (storedRefreshToken == null || storedRefreshToken.isEmpty) {
+        return false;
+      }
+
+      final response = await Dio(
+        BaseOptions(
+          connectTimeout: const Duration(seconds: 15),
+          receiveTimeout: const Duration(seconds: 30),
+          headers: {'Content-Type': 'application/json'},
+        ),
+      ).post(
         '$_baseUrl/auth/refresh',
-        data: {'refresh_token': refreshToken},
+        data: {'refresh_token': storedRefreshToken},
       );
 
-      if (response.statusCode == 200) {
-        final accessToken = response.data['data']['access_token'];
-        await StorageService.saveAccessToken(accessToken);
-        return true;
+      if (response.statusCode != 200) {
+        return false;
       }
+
+      final responseData = response.data;
+
+      if (responseData is! Map) {
+        return false;
+      }
+
+      final data = responseData['data'];
+
+      if (data is! Map) {
+        return false;
+      }
+
+      final accessToken = data['access_token'];
+
+      if (accessToken is! String || accessToken.isEmpty) {
+        return false;
+      }
+
+      await StorageService.saveAccessToken(accessToken);
+
+      final rotatedRefreshToken = data['refresh_token'];
+
+      if (rotatedRefreshToken is String && rotatedRefreshToken.isNotEmpty) {
+        await StorageService.saveRefreshToken(
+          rotatedRefreshToken,
+        );
+      }
+
+      return true;
+    } on DioException {
       return false;
     } catch (_) {
       return false;

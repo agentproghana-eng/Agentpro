@@ -135,6 +135,7 @@ class StorageService {
   /// instantly next time, without the backend logout call that would
   /// otherwise revoke the refresh token entirely.
   static Future<void> clearAccessTokenOnly() async {
+    _accessTokenCache = null;
     await _storage.delete(key: _keyAccessToken);
   }
 
