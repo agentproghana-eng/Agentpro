@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../auth/auth_bloc.dart';
@@ -30,8 +32,6 @@ import '../../features/subscription/personal_subscription_screen.dart';
 import '../../features/personal_community/personal_community_feed_screen.dart';
 import '../../features/personal_community/personal_post_detail_screen.dart';
 import '../../features/reports/personal_reports_screen.dart';
-import '../../features/transactions/personal_transaction_screen.dart'
-    show kPersonalTransactionLabels;
 import '../../features/transactions/personal_transaction_history_screen.dart';
 import '../../features/ussd_settings/ussd_settings_screen.dart';
 import '../../features/ussd_settings/quick_action_customization_screen.dart';
@@ -67,23 +67,63 @@ import '../../features/staff/staff_management_screen.dart';
 final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 
 class AppRouter {
-  static GoRouter createRouter(AuthState authState) {
+  static GoRouter createRouter(
+    AuthBloc authBloc, {
+    required Listenable refreshListenable,
+  }) {
     return GoRouter(
+      refreshListenable: refreshListenable,
+      errorBuilder: (context, state) => AppRouteErrorScreen(
+        message: state.error?.toString() ?? 'Page not found',
+        location: state.uri.toString(),
+      ),
       initialLocation: '/',
       observers: [routeObserver],
       redirect: (context, state) {
+        final authState = authBloc.state;
         final isLoggedIn = authState is AuthAuthenticated;
-        final isAuthRoute = state.matchedLocation.startsWith("/auth");
+        final isAuthRoute = state.matchedLocation.startsWith('/auth');
         final mustChangePassword =
-            isLoggedIn && authState.user["must_change_password"] == true;
+            isLoggedIn && authState.user['must_change_password'] == true;
         final isForcedChangeRoute =
-            state.matchedLocation == "/auth/change-password-required";
+            state.matchedLocation == '/auth/change-password-required';
 
-        if (!isLoggedIn && !isAuthRoute) return "/auth/login";
-        if (mustChangePassword && !isForcedChangeRoute)
-          return "/auth/change-password-required";
-        if (isLoggedIn && !mustChangePassword && isAuthRoute)
+        if (!isLoggedIn && !isAuthRoute) {
+          return '/auth/login';
+        }
+
+        if (mustChangePassword && !isForcedChangeRoute) {
+          return '/auth/change-password-required';
+        }
+
+        if (isLoggedIn && !mustChangePassword && isAuthRoute) {
           return _homeForRole(authState);
+        }
+
+        if (authState is AuthAuthenticated) {
+          final role = authState.user['role']?.toString();
+          final location = state.matchedLocation;
+
+          if (location == '/agent' && role != 'agent') {
+            return _homeForRole(authState);
+          }
+
+          if (location == '/manager' && role != 'manager') {
+            return _homeForRole(authState);
+          }
+
+          if (location == '/owner' &&
+              role != 'business_owner' &&
+              role != 'auditor') {
+            return _homeForRole(authState);
+          }
+
+          if ((location == '/users' || location == '/branches') &&
+              role != 'business_owner') {
+            return _homeForRole(authState);
+          }
+        }
+
         return null;
       },
       routes: [
@@ -138,12 +178,19 @@ class AppRouter {
         GoRoute(
           path: '/transactions/progress',
           builder: (_, state) {
-            final extra = state.extra as Map<String, dynamic>;
-            // Missing 'is_personal' key (the Agent path never sets it)
-            // evaluates to false here, so existing Agent behavior is
-            // completely unaffected.
+            final extra = state.extra;
+
+            if (extra is! Map<String, dynamic>) {
+              return const AppRouteErrorScreen(
+                message: 'Transaction details are missing.',
+                location: '/transactions/progress',
+              );
+            }
+
             return TransactionProgressScreen(
-                data: extra, isPersonal: extra['is_personal'] == true);
+              data: extra,
+              isPersonal: extra['is_personal'] == true,
+            );
           },
         ),
         GoRoute(
@@ -168,18 +215,48 @@ class AppRouter {
             path: '/my-balance', builder: (_, __) => const MyBalanceScreen()),
         GoRoute(
           path: '/balances/float-received',
-          builder: (_, state) => FloatReceivedScreen(
-              initialProvider: (state.extra as Map)['provider'] as String),
+          builder: (_, state) {
+            final provider = _providerFromExtra(state.extra);
+
+            if (provider == null) {
+              return const AppRouteErrorScreen(
+                message: 'A provider is required.',
+                location: '/balances/float-received',
+              );
+            }
+
+            return FloatReceivedScreen(initialProvider: provider);
+          },
         ),
         GoRoute(
           path: '/balances/commission-transfer',
-          builder: (_, state) => CommissionTransferScreen(
-              provider: (state.extra as Map)['provider'] as String),
+          builder: (_, state) {
+            final provider = _providerFromExtra(state.extra);
+
+            if (provider == null) {
+              return const AppRouteErrorScreen(
+                message: 'A provider is required.',
+                location: '/balances/commission-transfer',
+              );
+            }
+
+            return CommissionTransferScreen(provider: provider);
+          },
         ),
         GoRoute(
           path: '/balances/cash-adjustment',
-          builder: (_, state) => CashAdjustmentScreen(
-              provider: (state.extra as Map)['provider'] as String),
+          builder: (_, state) {
+            final provider = _providerFromExtra(state.extra);
+
+            if (provider == null) {
+              return const AppRouteErrorScreen(
+                message: 'A provider is required.',
+                location: '/balances/cash-adjustment',
+              );
+            }
+
+            return CashAdjustmentScreen(provider: provider);
+          },
         ),
         GoRoute(
             path: '/balances/pending-approvals',
@@ -326,14 +403,29 @@ class AppRouter {
             path: '/settings/sim-purpose',
             builder: (_, __) => const SimPurposeSettingsScreen()),
 
+        GoRoute(
+          path: '/unsupported-account',
+          builder: (_, __) => const AppRouteErrorScreen(
+            message: 'This account role is not supported by the mobile app. '
+                'Please contact Agent Pro Ghana support.',
+            location: '/unsupported-account',
+            showBackButton: false,
+          ),
+        ),
+
         // Root redirect
         GoRoute(
-            path: '/',
-            redirect: (context, state) {
-              if (authState is AuthAuthenticated)
-                return _homeForRole(authState);
-              return '/auth/login';
-            }),
+          path: '/',
+          redirect: (context, state) {
+            final authState = authBloc.state;
+
+            if (authState is AuthAuthenticated) {
+              return _homeForRole(authState);
+            }
+
+            return '/auth/login';
+          },
+        ),
       ],
     );
   }
@@ -351,7 +443,95 @@ class AppRouter {
       case 'customer':
         return '/personal-home';
       default:
-        return '/agent';
+        return '/unsupported-account';
     }
+  }
+}
+
+String? _providerFromExtra(Object? extra) {
+  if (extra is! Map) return null;
+
+  final provider = extra['provider'];
+
+  if (provider is! String || provider.trim().isEmpty) {
+    return null;
+  }
+
+  return provider.trim();
+}
+
+class AuthRouterRefreshNotifier extends ChangeNotifier {
+  AuthRouterRefreshNotifier(Stream<AuthState> stream) {
+    _subscription = stream.listen((_) {
+      notifyListeners();
+    });
+  }
+
+  late final StreamSubscription<AuthState> _subscription;
+
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
+  }
+}
+
+class AppRouteErrorScreen extends StatelessWidget {
+  const AppRouteErrorScreen({
+    super.key,
+    required this.message,
+    required this.location,
+    this.showBackButton = true,
+  });
+
+  final String message;
+  final String location;
+  final bool showBackButton;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        automaticallyImplyLeading: showBackButton,
+        title: const Text('Unable to open page'),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    size: 64,
+                    semanticLabel: 'Navigation error',
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    location,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 24),
+                  FilledButton(
+                    onPressed: () => context.go('/'),
+                    child: const Text('Go to home'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

@@ -1,92 +1,194 @@
 import 'dart:async';
+
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
-import 'core/api/api_client.dart';
 import 'core/auth/auth_bloc.dart';
-import 'core/services/storage_service.dart';
+import 'core/router/app_router.dart';
+import 'core/services/inactivity_service.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/permission_service.dart';
 import 'core/services/ussd_service.dart';
-import 'core/services/inactivity_service.dart';
-import 'core/router/app_router.dart';
-import 'shared/theme/app_theme.dart';
 import 'core/services/offline_queue_service.dart';
+import 'core/services/storage_service.dart';
+import 'shared/theme/app_theme.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // These don't depend on each other, so run them concurrently instead
-  // of one after another - total startup time becomes whichever one is
-  // slowest, not the sum of all of them. Jailbreak detection stays in
-  // this blocking group (unlike notifications below) since it decides
-  // which widget tree to even show - nothing should render until that's
-  // known.
   final results = await Future.wait<dynamic>([
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
     ]),
     StorageService.init(),
-    FlutterJailbreakDetection.jailbroken.catchError((_) => false),
+    FlutterJailbreakDetection.jailbroken
+        .timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => false,
+        )
+        .catchError((_) => false),
   ]);
 
   final isJailbroken = results[2] as bool;
 
   runApp(AgentProApp(isJailbroken: isJailbroken));
 
-  // Non-blocking startup tasks. The UI can appear immediately.
-  unawaited(Firebase.initializeApp());
-  unawaited(OfflineQueueService.init());
+  _runNonBlocking(
+    'Firebase',
+    Firebase.initializeApp(),
+  );
 
-  // Notification permission (a native OS prompt) and FCM setup don't
-  // need to block the very first frame - deferred until after the app
-  // is already visible, so a permission dialog is never the first
-  // thing a user sees on cold launch.
-  unawaited(NotificationService.init());
+  _runNonBlocking(
+    'Offline queue',
+    OfflineQueueService.init(),
+  );
 
-  // Same reasoning - READ_PHONE_STATE/CALL_PHONE (Permission.phone covers
-  // both together, Android doesn't allow requesting them separately) is
-  // asked for right after install rather than at the moment of the first
-  // USSD dial, so the agent isn't hit with a system permission dialog
-  // mid-transaction. transaction_progress_screen.dart still calls
-  // requestTelephonyPermissions() again before dialing as a safety net -
-  // this call is purely to surface the prompt earlier, not a replacement
-  // for that check (a user could still deny it here, or revoke it later
-  // in system settings).
-  unawaited(PermissionService.requestTelephonyPermissions());
+  _runNonBlocking(
+    'Notifications',
+    NotificationService.init(),
+  );
 
-  // Same reasoning - the AdMob SDK only matters once a Free Personal
-  // user actually reaches Personal Home, nowhere near the first frame.
-  unawaited(MobileAds.instance.initialize());
+  // Retained for the current agent workflow: requesting this early
+  // allows installed SIM cards to be detected promptly after startup.
+  // The transaction screen still performs its own permission check
+  // before dialing as a safety net.
+  _runNonBlocking(
+    'Telephony permissions',
+    PermissionService.requestTelephonyPermissions(),
+  );
+
+  _runNonBlocking(
+    'Mobile ads',
+    MobileAds.instance.initialize(),
+  );
 }
 
-class AgentProApp extends StatelessWidget {
+void _runNonBlocking(
+  String serviceName,
+  Future<dynamic> future,
+) {
+  unawaited(
+    future.catchError((Object error, StackTrace stackTrace) {
+      debugPrint(
+        '$serviceName initialization failed: $error\n$stackTrace',
+      );
+
+      return null;
+    }),
+  );
+}
+
+class AgentProApp extends StatefulWidget {
+  const AgentProApp({
+    super.key,
+    required this.isJailbroken,
+  });
+
   final bool isJailbroken;
 
-  const AgentProApp({super.key, required this.isJailbroken});
+  @override
+  State<AgentProApp> createState() => _AgentProAppState();
+}
+
+class _AgentProAppState extends State<AgentProApp> {
+  AuthBloc? _authBloc;
+  AuthRouterRefreshNotifier? _routerRefreshNotifier;
+  GoRouter? _router;
+
+  @override
+  void initState() {
+    super.initState();
+
+    if (!widget.isJailbroken) {
+      final authBloc = AuthBloc()..add(AuthCheckEvent());
+      final refreshNotifier = AuthRouterRefreshNotifier(
+        authBloc.stream,
+      );
+
+      _authBloc = authBloc;
+      _routerRefreshNotifier = refreshNotifier;
+      _router = AppRouter.createRouter(
+        authBloc,
+        refreshListenable: refreshNotifier,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _router?.dispose();
+    _routerRefreshNotifier?.dispose();
+    _authBloc?.close();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (isJailbroken) {
-      return MaterialApp(
+    if (widget.isJailbroken) {
+      return const _CompromisedDeviceApp();
+    }
+
+    final authBloc = _authBloc;
+    final router = _router;
+
+    if (authBloc == null || router == null) {
+      return const SizedBox.shrink();
+    }
+
+    return BlocProvider.value(
+      value: authBloc,
+      child: MaterialApp.router(
+        title: 'Agent Pro Ghana',
         debugShowCheckedModeBanner: false,
-        home: Scaffold(
-          backgroundColor: Colors.red[900],
-          body: const Center(
-            child: Padding(
+        theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: ThemeMode.system,
+        routerConfig: router,
+        builder: (context, child) {
+          return InactivityDetector(
+            timeout: const Duration(minutes: 5),
+            child: _AccessibilityGate(
+              child: child ?? const SizedBox.shrink(),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _CompromisedDeviceApp extends StatelessWidget {
+  const _CompromisedDeviceApp();
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: Colors.red.shade900,
+        body: const SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
               padding: EdgeInsets.all(32),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.security, size: 80, color: Colors.white),
+                  Icon(
+                    Icons.security,
+                    size: 80,
+                    color: Colors.white,
+                    semanticLabel: 'Security warning',
+                  ),
                   SizedBox(height: 24),
                   Text(
                     'Security Alert',
+                    textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 28,
@@ -95,47 +197,21 @@ class AgentProApp extends StatelessWidget {
                   ),
                   SizedBox(height: 16),
                   Text(
-                    'Agent Pro Ghana cannot run on a rooted or compromised device.\n\n'
-                    'This policy protects your financial data and mobile money transactions.',
+                    'Agent Pro Ghana cannot run on a rooted or '
+                    'compromised device.\n\n'
+                    'This policy protects your financial data and '
+                    'mobile money transactions.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white70, fontSize: 16),
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 16,
+                    ),
                   ),
                 ],
               ),
             ),
           ),
         ),
-      );
-    }
-
-    return MultiBlocProvider(
-      providers: [
-        BlocProvider(create: (_) => AuthBloc()..add(AuthCheckEvent())),
-      ],
-      child: BlocBuilder<AuthBloc, AuthState>(
-        builder: (context, authState) {
-          final router = AppRouter.createRouter(authState);
-          return MaterialApp.router(
-            title: 'Agent Pro Ghana',
-            debugShowCheckedModeBanner: false,
-            theme: AppTheme.lightTheme,
-            darkTheme: AppTheme.darkTheme,
-            themeMode: ThemeMode.system,
-            routerConfig: router,
-            builder: (context, child) {
-              // Wrapped here (inside MaterialApp, below the Navigator) rather
-              // than outside MaterialApp.router, so that ScaffoldMessenger
-              // and Navigator ancestors are available when the inactivity
-              // timeout fires and needs to show a SnackBar.
-              return InactivityDetector(
-                timeout: const Duration(minutes: 5),
-                child: _AccessibilityGate(
-                  child: child ?? const SizedBox.shrink(),
-                ),
-              );
-            },
-          );
-        },
       ),
     );
   }
