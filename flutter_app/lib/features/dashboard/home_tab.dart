@@ -17,6 +17,7 @@ import "../../shared/widgets/dashboard_skeleton.dart";
 import "../../shared/widgets/dashboard_empty_state.dart";
 import 'widgets/dashboard_quick_actions_section.dart';
 import 'widgets/dashboard_recent_transaction_item.dart';
+import 'widgets/dashboard_header.dart';
 
 class HomeTab extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -656,95 +657,8 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Fixed header - deliberately OUTSIDE the CustomScrollView below,
-        // not a SliverAppBar. The previous SliverAppBar had pinned: true,
-        // but that only keeps an empty bar SHAPE pinned once collapsed -
-        // the actual logo/name/company/role content still scrolled away
-        // and disappeared. Living outside the scrollable area entirely is
-        // what makes it genuinely frozen. SafeArea(bottom: false) handles
-        // the status bar instead of a hardcoded top padding guess.
-        SafeArea(
-          bottom: false,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [AppTheme.primaryColor, Color(0xFF004D43)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Center(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Image.asset(
-                        "assets/images/agentpro-icon.png",
-                        height: 26,
-                      ),
-                      const SizedBox(width: 8),
-                      const Text.rich(
-                        TextSpan(
-                          children: [
-                            TextSpan(
-                              text: "Agent",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 17,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            TextSpan(
-                              text: "Pro",
-                              style: TextStyle(
-                                color: AppTheme.secondaryColor,
-                                fontSize: 17,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  "${widget.user["first_name"] ?? ""} ${widget.user["last_name"] ?? ""}",
-                  style: const TextStyle(
-                    color: AppTheme.secondaryColor,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                Text(
-                  widget.user["company_name"] ?? "",
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  (widget.user["role"] ?? "")
-                      .toString()
-                      .replaceAll("_", " ")
-                      .toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white60,
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.8,
-                  ),
-                ),
-              ],
-            ),
-          ),
+        DashboardHeader(
+          user: widget.user,
         ),
         Expanded(
           child: RefreshIndicator(
