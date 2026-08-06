@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/api/api_cache.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_theme.dart';
@@ -84,21 +85,34 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
   Future<void> _loadCategories() async {
     try {
-      final response = await ApiClient.instance.get('/marketplace/categories');
-      final raw = response.data['data'];
+      final categories = await ApiCache.getOrLoad<List<Map<String, dynamic>>>(
+        key: 'marketplace:categories',
+        ttl: const Duration(hours: 1),
+        loader: () async {
+          final response = await ApiClient.instance.get(
+            '/marketplace/categories',
+          );
+
+          final raw = response.data['data'];
+
+          return raw is List
+              ? raw
+                  .whereType<Map>()
+                  .map(
+                    (item) => Map<String, dynamic>.from(item),
+                  )
+                  .toList()
+              : <Map<String, dynamic>>[];
+        },
+      );
 
       if (!mounted) return;
 
       setState(() {
-        _categories = raw is List
-            ? raw
-                .whereType<Map>()
-                .map((item) => Map<String, dynamic>.from(item))
-                .toList()
-            : [];
+        _categories = categories;
       });
     } catch (_) {
-      // Categories are useful but not critical enough to block ad browsing.
+      // Categories are useful but not critical enough to block browsing.
     }
   }
 
@@ -126,7 +140,29 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     return parameters;
   }
 
-  Future<void> _load() async {
+  Future<dynamic> _cachedMarketplaceGet(
+    String key,
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Duration ttl = const Duration(minutes: 3),
+    bool forceRefresh = false,
+  }) {
+    return ApiCache.getOrLoad<dynamic>(
+      key: key,
+      ttl: ttl,
+      forceRefresh: forceRefresh,
+      loader: () async {
+        final response = await ApiClient.instance.get(
+          path,
+          queryParameters: queryParameters,
+        );
+
+        return response.data['data'];
+      },
+    );
+  }
+
+  Future<void> _load({bool forceRefresh = false}) async {
     if (mounted) {
       setState(() {
         _loading = true;
@@ -137,46 +173,65 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     try {
       if (_showHomeSections) {
         final responses = await Future.wait([
-          ApiClient.instance.get(
+          _cachedMarketplaceGet(
+            'marketplace:home:latest',
             '/marketplace',
             queryParameters: {
               'sort': 'newest',
               'limit': 20,
             },
+            forceRefresh: forceRefresh,
           ),
-          ApiClient.instance.get(
+          _cachedMarketplaceGet(
+            'marketplace:home:top-rated',
             '/marketplace',
             queryParameters: {
               'sort': 'highest_rated',
               'limit': 8,
             },
+            forceRefresh: forceRefresh,
           ),
-          ApiClient.instance.get(
+          _cachedMarketplaceGet(
+            'marketplace:home:trending',
             '/marketplace',
             queryParameters: {
               'sort': 'most_viewed',
               'limit': 8,
             },
+            forceRefresh: forceRefresh,
           ),
-          ApiClient.instance.get('/marketplace/featured-sellers'),
-          ApiClient.instance.get(
+          _cachedMarketplaceGet(
+            'marketplace:home:featured-sellers',
+            '/marketplace/featured-sellers',
+            forceRefresh: forceRefresh,
+          ),
+          _cachedMarketplaceGet(
+            'marketplace:home:recommendations',
             '/marketplace/recommendations',
             queryParameters: {'limit': 8},
+            forceRefresh: forceRefresh,
           ),
-          ApiClient.instance.get(
+          _cachedMarketplaceGet(
+            'marketplace:home:recently-viewed',
             '/marketplace/recently-viewed',
             queryParameters: {'limit': 8},
+            forceRefresh: forceRefresh,
           ),
-          ApiClient.instance.get('/marketplace/saved/ids'),
+          _cachedMarketplaceGet(
+            'marketplace:saved-ids',
+            '/marketplace/saved/ids',
+            ttl: const Duration(minutes: 1),
+            forceRefresh: forceRefresh,
+          ),
         ]);
 
-        final rawLatest = responses[0].data['data'];
-        final rawTopRated = responses[1].data['data'];
-        final rawTrending = responses[2].data['data'];
-        final rawFeaturedSellers = responses[3].data['data'];
-        final rawRecommendations = responses[4].data['data'];
-        final rawRecentlyViewed = responses[5].data['data'];
-        final rawSavedIds = responses[6].data['data'];
+        final rawLatest = responses[0];
+        final rawTopRated = responses[1];
+        final rawTrending = responses[2];
+        final rawFeaturedSellers = responses[3];
+        final rawRecommendations = responses[4];
+        final rawRecentlyViewed = responses[5];
+        final rawSavedIds = responses[6];
 
         if (!mounted) return;
 
@@ -283,6 +338,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       } else {
         await ApiClient.instance.post('/marketplace/$id/save');
       }
+
+      ApiCache.invalidate('marketplace:saved-ids');
     } on DioException catch (e) {
       if (!mounted) return;
 
@@ -695,7 +752,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     }
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => _load(forceRefresh: true),
       child: GridView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(12),
@@ -768,7 +825,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     ];
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => _load(forceRefresh: true),
       child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
