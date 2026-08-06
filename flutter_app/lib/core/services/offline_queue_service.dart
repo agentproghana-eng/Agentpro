@@ -1,11 +1,14 @@
-import "dart:convert";
-import "package:hive_flutter/hive_flutter.dart";
-import "package:uuid/uuid.dart";
-import "../api/api_client.dart";
+import 'dart:convert';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:uuid/uuid.dart';
+import '../api/api_client.dart';
 
 class OfflineQueueService {
-  static const _boxName = "offline_transaction_queue";
-  static const _templateBoxName = "cached_ussd_templates";
+  static const _boxName = 'offline_transaction_queue';
+  static const _templateBoxName = 'cached_ussd_templates';
+  static const int _maxSyncAttempts = 10;
+
+  static Future<Map<String, int>>? _activeSync;
 
   static Future<void> init() async {
     await Hive.initFlutter();
@@ -17,7 +20,7 @@ class OfflineQueueService {
   static Box get _templateBox => Hive.box(_templateBoxName);
 
   static String _templateKey(String provider, String type) =>
-      "${provider}_$type";
+      '${provider}_$type';
 
   static Future<void> cacheTemplate(
     String provider,
@@ -40,7 +43,7 @@ class OfflineQueueService {
   }
 
   static String _flowKey(String provider, String type) =>
-      "flow_${provider}_$type";
+      'flow_${provider}_$type';
 
   // Caches the Flow Builder resolve() result (dial_code, steps,
   // success/failure markers) - the actual automation source for any
@@ -77,29 +80,54 @@ class OfflineQueueService {
     required List<Map<String, dynamic>> sessionLog,
     bool isPersonal = false,
   }) async {
-    final localId = "local_${const Uuid().v4()}";
+    final localId = 'local_${const Uuid().v4()}';
     await _box.put(
       localId,
       jsonEncode({
-        "local_id": localId,
-        "request_fields": requestFields,
-        "status": status,
-        "network_reference": networkReference,
-        "failure_reason": failureReason,
-        "session_log": sessionLog,
-        "is_personal": isPersonal,
-        "queued_at": DateTime.now().toIso8601String(),
-        "synced": false,
+        'local_id': localId,
+        'request_fields': requestFields,
+        'status': status,
+        'network_reference': networkReference,
+        'failure_reason': failureReason,
+        'session_log': sessionLog,
+        'is_personal': isPersonal,
+        'queued_at': DateTime.now().toIso8601String(),
+        'retry_count': 0,
+        'last_attempt_at': null,
+        'last_error': null,
+        'dead_letter': false,
+        'synced': false,
       }),
     );
     return localId;
   }
 
   static List<Map<String, dynamic>> getPendingTransactions() {
-    return _box.values
-        .map((raw) => jsonDecode(raw as String) as Map<String, dynamic>)
-        .where((tx) => tx["synced"] != true)
+    final transactions = _box.values
+        .map(
+          (raw) => jsonDecode(raw as String) as Map<String, dynamic>,
+        )
+        .where(
+          (tx) => tx['synced'] != true && tx['dead_letter'] != true,
+        )
         .toList();
+
+    transactions.sort((a, b) {
+      final aQueued = DateTime.tryParse(
+        a['queued_at']?.toString() ?? '',
+      );
+      final bQueued = DateTime.tryParse(
+        b['queued_at']?.toString() ?? '',
+      );
+
+      if (aQueued == null && bQueued == null) return 0;
+      if (aQueued == null) return 1;
+      if (bQueued == null) return -1;
+
+      return aQueued.compareTo(bQueued);
+    });
+
+    return transactions;
   }
 
   static int get pendingCount => getPendingTransactions().length;
@@ -108,55 +136,94 @@ class OfflineQueueService {
     final raw = _box.get(localId);
     if (raw == null) return;
     final tx = jsonDecode(raw as String) as Map<String, dynamic>;
-    tx["synced"] = true;
+    tx['synced'] = true;
     await _box.put(localId, jsonEncode(tx));
   }
 
-  static Future<Map<String, int>> syncNow() async {
+  static Future<Map<String, int>> syncNow() {
+    final existingSync = _activeSync;
+
+    if (existingSync != null) {
+      return existingSync;
+    }
+
+    final sync = _performSync();
+    _activeSync = sync;
+
+    return sync.whenComplete(() {
+      if (identical(_activeSync, sync)) {
+        _activeSync = null;
+      }
+    });
+  }
+
+  static Future<Map<String, int>> _performSync() async {
     final pending = getPendingTransactions();
     var succeeded = 0;
     var failed = 0;
 
     for (final tx in pending) {
-      final localId = tx["local_id"] as String;
+      final localId = tx['local_id'] as String;
       try {
         String transactionId;
-        final existingRemoteId = tx["remote_transaction_id"] as String?;
-        final isPersonal = tx["is_personal"] == true;
-        final basePath = isPersonal
-            ? "/personal-transactions"
-            : "/transactions";
+        final existingRemoteId = tx['remote_transaction_id'] as String?;
+        final isPersonal = tx['is_personal'] == true;
+        final basePath =
+            isPersonal ? '/personal-transactions' : '/transactions';
 
         if (existingRemoteId != null) {
           transactionId = existingRemoteId;
         } else {
-          final fields = Map<String, dynamic>.from(tx["request_fields"] as Map);
+          final fields = Map<String, dynamic>.from(tx['request_fields'] as Map);
           final initiateRes = await ApiClient.instance.post(
             basePath,
             data: fields,
           );
-          transactionId = initiateRes.data["data"]["transaction_id"] as String;
+          transactionId = initiateRes.data['data']['transaction_id'] as String;
           await _saveRemoteId(localId, transactionId);
         }
 
         await ApiClient.instance.patch(
-          "$basePath/$transactionId/complete",
+          '$basePath/$transactionId/complete',
           data: {
-            "status": tx["status"],
-            "network_reference": tx["network_reference"],
-            "failure_reason": tx["failure_reason"],
-            "ussd_session_log": tx["session_log"],
+            'status': tx['status'],
+            'network_reference': tx['network_reference'],
+            'failure_reason': tx['failure_reason'],
+            'ussd_session_log': tx['session_log'],
           },
         );
 
         await _markSynced(localId);
         succeeded++;
-      } catch (_) {
+      } catch (error) {
+        await _recordSyncFailure(
+          localId,
+          error.toString(),
+        );
         failed++;
       }
     }
 
-    return {"succeeded": succeeded, "failed": failed};
+    return {'succeeded': succeeded, 'failed': failed};
+  }
+
+  static Future<void> _recordSyncFailure(
+    String localId,
+    String error,
+  ) async {
+    final raw = _box.get(localId);
+    if (raw == null) return;
+
+    final tx = jsonDecode(raw as String) as Map<String, dynamic>;
+    final retryCount = (tx['retry_count'] as num?)?.toInt() ?? 0;
+    final nextRetryCount = retryCount + 1;
+
+    tx['retry_count'] = nextRetryCount;
+    tx['last_attempt_at'] = DateTime.now().toIso8601String();
+    tx['last_error'] = error.length > 500 ? error.substring(0, 500) : error;
+    tx['dead_letter'] = nextRetryCount >= _maxSyncAttempts;
+
+    await _box.put(localId, jsonEncode(tx));
   }
 
   static Future<void> _saveRemoteId(
@@ -166,7 +233,7 @@ class OfflineQueueService {
     final raw = _box.get(localId);
     if (raw == null) return;
     final tx = jsonDecode(raw as String) as Map<String, dynamic>;
-    tx["remote_transaction_id"] = transactionId;
+    tx['remote_transaction_id'] = transactionId;
     await _box.put(localId, jsonEncode(tx));
   }
 
@@ -183,19 +250,23 @@ class OfflineQueueService {
     required List<Map<String, dynamic>> sessionLog,
     bool isPersonal = false,
   }) async {
-    final localId = "local_${const Uuid().v4()}";
+    final localId = 'local_${const Uuid().v4()}';
     await _box.put(
       localId,
       jsonEncode({
-        "local_id": localId,
-        "remote_transaction_id": transactionId,
-        "status": status,
-        "network_reference": networkReference,
-        "failure_reason": failureReason,
-        "session_log": sessionLog,
-        "is_personal": isPersonal,
-        "queued_at": DateTime.now().toIso8601String(),
-        "synced": false,
+        'local_id': localId,
+        'remote_transaction_id': transactionId,
+        'status': status,
+        'network_reference': networkReference,
+        'failure_reason': failureReason,
+        'session_log': sessionLog,
+        'is_personal': isPersonal,
+        'queued_at': DateTime.now().toIso8601String(),
+        'retry_count': 0,
+        'last_attempt_at': null,
+        'last_error': null,
+        'dead_letter': false,
+        'synced': false,
       }),
     );
     return localId;

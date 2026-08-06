@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/material.dart';
@@ -12,11 +14,28 @@ class NotificationService {
   static final _messaging = FirebaseMessaging.instance;
   static final _localNotifications = FlutterLocalNotificationsPlugin();
 
+  static bool _initialized = false;
+  static StreamSubscription<RemoteMessage>? _foregroundSubscription;
+  static StreamSubscription<RemoteMessage>? _openedAppSubscription;
+
   static const _channelId = 'agentpro_notifications';
   static const _channelName = 'Agent Pro Ghana';
-  static const _channelDesc = 'Transactions, float alerts, and subscription updates';
+  static const _channelDesc =
+      'Transactions, float alerts, and subscription updates';
 
   static Future<void> init() async {
+    if (_initialized) return;
+    _initialized = true;
+
+    try {
+      await _initialize();
+    } catch (_) {
+      _initialized = false;
+      rethrow;
+    }
+  }
+
+  static Future<void> _initialize() async {
     // Request permission via Firebase's cross-platform API.
     await _messaging.requestPermission(
       alert: true,
@@ -29,7 +48,8 @@ class NotificationService {
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
     // Initialize local notifications
-    const androidSettings = AndroidInitializationSettings('@drawable/ic_notification');
+    const androidSettings =
+        AndroidInitializationSettings('@drawable/ic_notification');
     const initSettings = InitializationSettings(android: androidSettings);
     await _localNotifications.initialize(
       initSettings,
@@ -44,7 +64,8 @@ class NotificationService {
     // 13+ system dialog on its own, while this is the officially
     // supported, Android-specific path for that exact purpose.
     await _localNotifications
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
         ?.requestNotificationsPermission();
 
     // Create notification channel (Android 8+)
@@ -57,14 +78,28 @@ class NotificationService {
       enableVibration: true,
     );
     await _localNotifications
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(channel);
 
-    // Handle foreground messages
-    FirebaseMessaging.onMessage.listen(_onForegroundMessage);
+    // Handle foreground messages.
+    await _foregroundSubscription?.cancel();
+    _foregroundSubscription =
+        FirebaseMessaging.onMessage.listen(_onForegroundMessage);
 
-    // Handle notification tap when app is in background
-    FirebaseMessaging.onMessageOpenedApp.listen(_onMessageOpenedApp);
+    // Handle notification taps when the app is in the background.
+    await _openedAppSubscription?.cancel();
+    _openedAppSubscription = FirebaseMessaging.onMessageOpenedApp.listen(
+      _onMessageOpenedApp,
+    );
+
+    // Handle a notification that launched the app from a fully
+    // terminated state.
+    final initialMessage = await _messaging.getInitialMessage();
+
+    if (initialMessage != null) {
+      _onMessageOpenedApp(initialMessage);
+    }
   }
 
   static Future<void> _onForegroundMessage(RemoteMessage message) async {
