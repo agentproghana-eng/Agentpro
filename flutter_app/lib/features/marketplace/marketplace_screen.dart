@@ -533,10 +533,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           ),
           IconButton(
             tooltip: 'Saved Ads',
-            onPressed: () async {
-              await context.push('/marketplace/saved');
-              if (mounted) _load();
-            },
+            onPressed: () => context.push('/marketplace/saved'),
             icon: const Icon(Icons.favorite_outline),
           ),
           TextButton.icon(
@@ -714,6 +711,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           final id = ad['id']?.toString() ?? '';
 
           return _AdCard(
+            key: ValueKey(
+              id.isNotEmpty ? id : index,
+            ),
             ad: ad,
             isSaved: _savedIds.contains(id),
             isUpdating: _updatingIds.contains(id),
@@ -1307,6 +1307,7 @@ class _AdCard extends StatelessWidget {
   final VoidCallback onToggleSaved;
 
   const _AdCard({
+    super.key,
     required this.ad,
     required this.isSaved,
     required this.isUpdating,
