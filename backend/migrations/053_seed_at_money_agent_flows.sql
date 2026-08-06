@@ -4,9 +4,6 @@
 -- Confirm these screen-text match markers against a live AT Money
 -- Agent SIM before enabling for production use.
 
-ALTER TYPE transaction_type
-  ADD VALUE IF NOT EXISTS 'cash_out_commission';
-
 -- ============================================================
 -- 1. Deposit
 -- *110# -> 1 Agent Transaction -> 1 Deposit
