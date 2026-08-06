@@ -165,14 +165,55 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
     Map<String, dynamic> post,
     String reactionType,
   ) async {
+    final previousReaction = post['my_reaction']?.toString();
+
+    final previousCounts = post['reaction_counts'] is Map
+        ? Map<String, dynamic>.from(
+            post['reaction_counts'] as Map,
+          )
+        : <String, dynamic>{};
+
+    final updatedCounts = Map<String, dynamic>.from(previousCounts);
+
+    void changeCount(String type, int change) {
+      final current = int.tryParse(updatedCounts[type]?.toString() ?? '') ?? 0;
+      final updated = current + change;
+
+      if (updated <= 0) {
+        updatedCounts.remove(type);
+      } else {
+        updatedCounts[type] = updated;
+      }
+    }
+
+    final nextReaction = previousReaction == reactionType ? null : reactionType;
+
+    if (previousReaction != null) {
+      changeCount(previousReaction, -1);
+    }
+
+    if (nextReaction != null) {
+      changeCount(nextReaction, 1);
+    }
+
+    setState(() {
+      post['my_reaction'] = nextReaction;
+      post['reaction_counts'] = updatedCounts;
+    });
+
     try {
       await ApiClient.instance.post(
         '/agent-posts/${post['id']}/like',
         data: {'reaction_type': reactionType},
       );
-
-      await _load();
     } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        post['my_reaction'] = previousReaction;
+        post['reaction_counts'] = previousCounts;
+      });
+
       _showMessage(
         'Subscription required to react to posts.',
         error: true,
