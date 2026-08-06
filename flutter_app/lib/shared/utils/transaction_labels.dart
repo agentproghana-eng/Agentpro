@@ -22,6 +22,7 @@ String transactionTypeLabel(String type, String provider) {
     case 'balance_enquiry': return 'Check Balance';
     case 'commission_balance': return 'Commission Balance';
     case 'cash_in_commission': return 'Cash In Commission';
+    case 'cash_out_commission': return 'Cash Out Commission';
     case 'commission_transfer': return 'Commission to Float';
     case 'working_to_float': return 'M-PESA to Float';
     case 'float_to_working': return 'Float to M-PESA';

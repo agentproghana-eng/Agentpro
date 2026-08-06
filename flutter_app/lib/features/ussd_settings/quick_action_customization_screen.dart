@@ -171,6 +171,8 @@ const Map<String, Set<String>> kAgentQuickActionSupport = {
     'airtime',
     'data_bundle',
     'balance_enquiry',
+    'cash_in_commission',
+    'cash_out_commission',
   },
 };
 
@@ -234,11 +236,11 @@ const Map<String, List<String>> kAgentQuickActionDefaults = {
     'cash_in',
     'cash_out',
     'send_money',
-    'merchant_payment',
-    'bill_payment',
     'airtime',
     'data_bundle',
     'balance_enquiry',
+    'cash_in_commission',
+    'cash_out_commission',
   ],
 };
 
