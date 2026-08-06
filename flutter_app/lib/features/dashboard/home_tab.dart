@@ -3,6 +3,7 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:go_router/go_router.dart";
 import "package:intl/intl.dart";
+import "../../core/api/api_cache.dart";
 import "../../core/api/api_client.dart";
 import "../../shared/theme/app_theme.dart";
 import "../../shared/theme/app_colors.dart";
@@ -86,7 +87,10 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
       setState(() => _provider = event.provider);
     }
 
-    await Future.wait([_load(), _loadCurrentShift()]);
+    await Future.wait([
+      _load(forceRefresh: true),
+      _loadCurrentShift(),
+    ]);
 
     if (!mounted || _recent.isEmpty) return;
 
@@ -151,10 +155,8 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
 
       for (final entry in raw.entries) {
         if (entry.value is List) {
-          result[entry.key.toString()] = (entry.value as List)
-              .map((e) => e.toString())
-              .take(9)
-              .toList();
+          result[entry.key.toString()] =
+              (entry.value as List).map((e) => e.toString()).take(9).toList();
         }
       }
 
@@ -334,22 +336,20 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
               style: TextStyle(
                 fontWeight: FontWeight.w600,
                 fontSize: 13,
-                color: isOpen
-                    ? AppTheme.primaryColor
-                    : context.appSecondaryText,
+                color:
+                    isOpen ? AppTheme.primaryColor : context.appSecondaryText,
               ),
             ),
           ),
           ElevatedButton(
             onPressed: isOpen
                 ? () => context
-                      .push("/shifts/close/${_currentShift!['id']}")
-                      .then((_) => _loadCurrentShift())
+                    .push("/shifts/close/${_currentShift!['id']}")
+                    .then((_) => _loadCurrentShift())
                 : _openShift,
             style: ElevatedButton.styleFrom(
-              backgroundColor: isOpen
-                  ? AppTheme.errorColor
-                  : AppTheme.primaryColor,
+              backgroundColor:
+                  isOpen ? AppTheme.errorColor : AppTheme.primaryColor,
               minimumSize: const Size(0, 38),
               padding: const EdgeInsets.symmetric(horizontal: 16),
               elevation: 1,
@@ -466,12 +466,12 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
       iconColor: disabled ? Colors.grey : iconColor,
       onTap: disabled
           ? () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  "This feature has been temporarily disabled by your administrator.",
+                const SnackBar(
+                  content: Text(
+                    "This feature has been temporarily disabled by your administrator.",
+                  ),
                 ),
-              ),
-            )
+              )
           : onTap,
     );
   }
@@ -524,9 +524,9 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
     final providers = _simMap == null
         ? ["mtn", "telecel", "at_money"]
         : _simMap!.entries
-              .where((e) => e.value != null)
-              .map((e) => e.key)
-              .toList();
+            .where((e) => e.value != null)
+            .map((e) => e.key)
+            .toList();
 
     if (providers.isEmpty) {
       return [
@@ -601,18 +601,52 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
     }
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
-    try {
-      final res = await ApiClient.instance.get(
-        "/transactions",
-        queryParameters: {"limit": 5, "provider": _provider},
-      );
+  Future<void> _load({
+    bool forceRefresh = false,
+  }) async {
+    final provider = _provider;
+    final cacheKey = 'dashboard:recent-transactions:$provider';
+
+    final cached = ApiCache.get<List<dynamic>>(cacheKey);
+
+    if (cached != null && mounted) {
       setState(() {
-        _recent = res.data["data"] ?? [];
+        _recent = List<dynamic>.from(cached);
         _loading = false;
       });
-    } catch (e) {
+    } else if (mounted) {
+      setState(() => _loading = true);
+    }
+
+    try {
+      final recent = await ApiCache.getOrLoad<List<dynamic>>(
+        key: cacheKey,
+        ttl: const Duration(seconds: 45),
+        forceRefresh: forceRefresh,
+        loader: () async {
+          final response = await ApiClient.instance.get(
+            '/transactions',
+            queryParameters: {
+              'limit': 5,
+              'provider': provider,
+            },
+          );
+
+          final raw = response.data['data'];
+
+          return raw is List ? List<dynamic>.from(raw) : <dynamic>[];
+        },
+      );
+
+      if (!mounted || provider != _provider) return;
+
+      setState(() {
+        _recent = recent;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted || provider != _provider) return;
+
       setState(() => _loading = false);
     }
   }
@@ -713,7 +747,9 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
         ),
         Expanded(
           child: RefreshIndicator(
-            onRefresh: _load,
+            onRefresh: () => _load(
+              forceRefresh: true,
+            ),
             child: CustomScrollView(
               slivers: [
                 const SliverToBoxAdapter(child: OfflineStatusBanner()),
@@ -746,8 +782,7 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
                         return DashboardEmptyState(
                           icon: Icons.grid_view_rounded,
                           title: 'No quick actions available',
-                          message:
-                              'No transaction actions are currently '
+                          message: 'No transaction actions are currently '
                               'available for ${_providerLabel(_provider)}. '
                               'You can choose different actions in Templates.',
                           actionLabel: 'Customize Quick Actions',
@@ -806,8 +841,7 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
                     child: DashboardEmptyState(
                       icon: Icons.receipt_long_outlined,
                       title: 'No recent transactions',
-                      message:
-                          'Transactions completed on '
+                      message: 'Transactions completed on '
                           '${_providerLabel(_provider)} will appear here.',
                       actionLabel: 'Refresh Activity',
                       actionIcon: Icons.refresh_rounded,
@@ -1059,8 +1093,8 @@ class _ProviderTab extends StatelessWidget {
             fontWeight: FontWeight.bold,
             color: selected
                 ? (color == const Color(0xFFFFCC00)
-                      ? Colors.black
-                      : Colors.white)
+                    ? Colors.black
+                    : Colors.white)
                 : context.appSecondaryText,
           ),
         ),
@@ -1188,9 +1222,8 @@ class _RecentTxItem extends StatelessWidget {
     try {
       created = DateTime.parse(tx["created_at"].toString());
     } catch (e) {}
-    final timeStr = created != null
-        ? DateFormat("HH:mm").format(created.toLocal())
-        : "";
+    final timeStr =
+        created != null ? DateFormat("HH:mm").format(created.toLocal()) : "";
 
     return GestureDetector(
       onTap: () => context.push('/transactions/${tx["id"]}'),
@@ -1218,9 +1251,8 @@ class _RecentTxItem extends StatelessWidget {
               child: Icon(
                 isCashIn ? Icons.call_received : Icons.call_made,
                 size: 16,
-                color: isCashIn
-                    ? AppTheme.primaryColor
-                    : const Color(0xFFB87E00),
+                color:
+                    isCashIn ? AppTheme.primaryColor : const Color(0xFFB87E00),
               ),
             ),
             const SizedBox(width: 10),
@@ -1254,9 +1286,8 @@ class _RecentTxItem extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.bold,
-                color: isCashIn
-                    ? AppTheme.primaryColor
-                    : const Color(0xFFB33F3F),
+                color:
+                    isCashIn ? AppTheme.primaryColor : const Color(0xFFB33F3F),
               ),
             ),
           ],
