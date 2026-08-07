@@ -141,8 +141,10 @@ class _CustomerReviewsScreenState extends State<CustomerReviewsScreen> {
               Text(
                 '${_reviews.length} review${_reviews.length == 1 ? '' : 's'}',
                 style: TextStyle(
-                  color:
-                      Theme.of(context).colorScheme.onSurface.withOpacity(0.65),
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.65),
                 ),
               ),
               const SizedBox(height: 8),
@@ -173,7 +175,7 @@ class _CustomerReviewsScreenState extends State<CustomerReviewsScreen> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String?>(
-              value: _selectedAdId,
+              initialValue: _selectedAdId,
               isExpanded: true,
               decoration: const InputDecoration(
                 labelText: 'Advertisement',
@@ -203,7 +205,7 @@ class _CustomerReviewsScreenState extends State<CustomerReviewsScreen> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<int?>(
-              value: _selectedRating,
+              initialValue: _selectedRating,
               decoration: const InputDecoration(
                 labelText: 'Rating',
                 border: OutlineInputBorder(),
@@ -304,7 +306,7 @@ class _ReviewCard extends StatelessWidget {
                           color: Theme.of(context)
                               .colorScheme
                               .onSurface
-                              .withOpacity(0.65),
+                              .withValues(alpha: 0.65),
                         ),
                       ),
                     ],
@@ -318,7 +320,7 @@ class _ReviewCard extends StatelessWidget {
                       color: Theme.of(context)
                           .colorScheme
                           .onSurface
-                          .withOpacity(0.55),
+                          .withValues(alpha: 0.55),
                     ),
                   ),
               ],

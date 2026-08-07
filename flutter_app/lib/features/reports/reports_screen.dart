@@ -223,15 +223,25 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
-              for (final option in _sortOptions)
-                RadioListTile<String>(
-                  value: option['value']!,
-                  groupValue: tempSortBy,
-                  title: Text(option['label']!),
-                  onChanged: (v) => setSheetState(() => tempSortBy = v!),
-                  activeColor: AppTheme.primaryColor,
-                  dense: true,
+              RadioGroup<String>(
+                groupValue: tempSortBy,
+                onChanged: (value) {
+                  if (value != null) {
+                    setSheetState(() => tempSortBy = value);
+                  }
+                },
+                child: Column(
+                  children: [
+                    for (final option in _sortOptions)
+                      RadioListTile<String>(
+                        value: option['value']!,
+                        title: Text(option['label']!),
+                        activeColor: AppTheme.primaryColor,
+                        dense: true,
+                      ),
+                  ],
                 ),
+              ),
               const SizedBox(height: 8),
               const Text(
                 'Direction',
@@ -246,7 +256,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       selected: tempSortOrder == 'asc',
                       onSelected: (_) =>
                           setSheetState(() => tempSortOrder = 'asc'),
-                      selectedColor: AppTheme.primaryColor.withOpacity(0.15),
+                      selectedColor:
+                          AppTheme.primaryColor.withValues(alpha: 0.15),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -256,7 +267,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       selected: tempSortOrder == 'desc',
                       onSelected: (_) =>
                           setSheetState(() => tempSortOrder = 'desc'),
-                      selectedColor: AppTheme.primaryColor.withOpacity(0.15),
+                      selectedColor:
+                          AppTheme.primaryColor.withValues(alpha: 0.15),
                     ),
                   ),
                 ],
@@ -387,22 +399,23 @@ class _ReportsScreenState extends State<ReportsScreen> {
       await file.writeAsBytes(res.data);
       await OpenFile.open(file.path);
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Failed to generate report'),
             backgroundColor: AppTheme.errorColor,
           ),
         );
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
   Widget _sectionLabel(String text) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Text(text, style: const TextStyle(fontWeight: FontWeight.w600)),
-  );
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text(text, style: const TextStyle(fontWeight: FontWeight.w600)),
+      );
 
   Widget _chipRow(
     List<Map<String, String>> options,
@@ -531,7 +544,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
       decoration: BoxDecoration(
         color: context.appSurface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: context.appSecondaryText.withOpacity(0.12)),
+        border:
+            Border.all(color: context.appSecondaryText.withValues(alpha: 0.12)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -572,8 +586,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final visibleProviders = _simMap == null
         ? _providers
         : _providers
-              .where((p) => p['value'] == 'all' || _simMap![p['value']] != null)
-              .toList();
+            .where((p) => p['value'] == 'all' || _simMap![p['value']] != null)
+            .toList();
     final showSimFilter = _isAgent && _simCards.length >= 2;
 
     return Scaffold(
@@ -604,11 +618,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-
                     _sectionLabel('Type'),
                     _multiChipRow(_types, _typeFilters),
                     const SizedBox(height: 16),
-
                     _sectionLabel('Provider'),
                     if (noSimsDetected)
                       Text(
@@ -621,7 +633,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     else
                       _multiChipRow(visibleProviders, _providerFilters),
                     const SizedBox(height: 16),
-
                     if (showSimFilter) ...[
                       _sectionLabel('SIM'),
                       _chipRow(
@@ -641,15 +652,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       ),
                       const SizedBox(height: 16),
                     ],
-
                     _sectionLabel('Status'),
                     _multiChipRow(_statuses, _statusFilters),
                     const SizedBox(height: 16),
-
                     if (showAgentPicker) ...[
                       _sectionLabel('Agent'),
                       DropdownButtonFormField<String?>(
-                        value: _agentId,
+                        initialValue: _agentId,
                         decoration: InputDecoration(
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(
@@ -679,11 +688,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       ),
                       const SizedBox(height: 16),
                     ],
-
                     if (showBranchPicker) ...[
                       _sectionLabel('Branch'),
                       DropdownButtonFormField<String?>(
-                        value: _branchId,
+                        initialValue: _branchId,
                         decoration: InputDecoration(
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(
@@ -710,7 +718,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       ),
                       const SizedBox(height: 16),
                     ],
-
                     _sectionLabel('Sort'),
                     InkWell(
                       onTap: _showSortSheet,
@@ -722,7 +729,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         ),
                         decoration: BoxDecoration(
                           border: Border.all(
-                            color: Colors.grey.withOpacity(0.3),
+                            color: Colors.grey.withValues(alpha: 0.3),
                           ),
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -736,7 +743,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-
                     _sectionLabel('Format'),
                     Wrap(
                       spacing: 8,
@@ -785,7 +791,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 color: context.appSurface,
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: context.appSecondaryText.withOpacity(0.12),
+                  color: context.appSecondaryText.withValues(alpha: 0.12),
                 ),
               ),
               child: Row(
@@ -800,10 +806,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       _loadingMatchCount
                           ? 'Checking matching transactions...'
                           : _matchingTransactionCount == null
-                          ? 'Matching count unavailable'
-                          : '$_matchingTransactionCount '
-                                '${_matchingTransactionCount == 1 ? 'transaction' : 'transactions'} '
-                                'match your filters',
+                              ? 'Matching count unavailable'
+                              : '$_matchingTransactionCount '
+                                  '${_matchingTransactionCount == 1 ? 'transaction' : 'transactions'} '
+                                  'match your filters',
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
@@ -860,7 +866,7 @@ class _ReportTile extends StatelessWidget {
     return Card(
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: color.withOpacity(0.1),
+          backgroundColor: color.withValues(alpha: 0.1),
           child: Icon(icon, color: color),
         ),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),

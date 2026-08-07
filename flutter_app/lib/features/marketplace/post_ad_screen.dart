@@ -253,7 +253,7 @@ class _PostAdScreenState extends State<PostAdScreen> {
                   const SizedBox(height: 14),
                   if (_categories.isNotEmpty) ...[
                     DropdownButtonFormField<String>(
-                      value: _categoryId,
+                      initialValue: _categoryId,
                       decoration: InputDecoration(
                         labelText: 'Category',
                         prefixIcon: const Icon(Icons.category_outlined),

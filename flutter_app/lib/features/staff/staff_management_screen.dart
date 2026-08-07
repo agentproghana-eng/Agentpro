@@ -28,12 +28,16 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _roles.length + 1, vsync: this); // +1 for "All"
+    _tabController =
+        TabController(length: _roles.length + 1, vsync: this); // +1 for "All"
     _load();
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final results = await Future.wait([
         ApiClient.instance.get('/users', queryParameters: {'limit': 100}),
@@ -59,7 +63,10 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
   List<dynamic> _filteredStaff(String? role) {
     // Staff list already excludes the owner themself server-side scoping by company,
     // but the owner record itself may appear since /users returns all company roles.
-    final base = _staff.where((u) => u['role'] != 'business_owner' && u['status'] != 'deactivated').toList();
+    final base = _staff
+        .where((u) =>
+            u['role'] != 'business_owner' && u['status'] != 'deactivated')
+        .toList();
     if (role == null) return base;
     return base.where((u) => u['role'] == role).toList();
   }
@@ -67,10 +74,13 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
   Future<void> _toggleStatus(Map<String, dynamic> user) async {
     final newStatus = user['status'] == 'active' ? 'suspended' : 'active';
     try {
-      await ApiClient.instance.patch('/users/${user['id']}', data: {'status': newStatus});
+      await ApiClient.instance
+          .patch('/users/${user['id']}', data: {'status': newStatus});
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${user['first_name']} ${newStatus == 'active' ? 'activated' : 'suspended'}')),
+          SnackBar(
+              content: Text(
+                  '${user['first_name']} ${newStatus == 'active' ? 'activated' : 'suspended'}')),
         );
       }
       _load();
@@ -90,15 +100,18 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("Delete Staff Member"),
+        title: const Text('Delete Staff Member'),
         content: Text(
-          "Remove ${user['first_name']} ${user['last_name']} from your company? "
-          "Their transaction history will be preserved, but they will no longer be able to log in."),
+            "Remove ${user['first_name']} ${user['last_name']} from your company? "
+            'Their transaction history will be preserved, but they will no longer be able to log in.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text("Delete", style: TextStyle(color: AppTheme.errorColor)),
+            child: const Text('Delete',
+                style: TextStyle(color: AppTheme.errorColor)),
           ),
         ],
       ),
@@ -106,7 +119,8 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
     if (confirmed != true) return;
 
     try {
-      await ApiClient.instance.patch("/users/${user['id']}", data: {"status": "deactivated"});
+      await ApiClient.instance
+          .patch("/users/${user['id']}", data: {'status': 'deactivated'});
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("${user['first_name']} removed")),
@@ -117,7 +131,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e.response?.data?["message"] ?? "Action failed"),
+            content: Text(e.response?.data?['message'] ?? 'Action failed'),
             backgroundColor: AppTheme.errorColor,
           ),
         );
@@ -126,37 +140,49 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
   }
 
   Future<void> _reassignBranch(Map<String, dynamic> user) async {
-    String? selectedBranchId = user["branch_id"];
+    String? selectedBranchId = user['branch_id'];
     final confirmed = await showDialog<String>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           title: Text("Reassign ${user["first_name"]} ${user["last_name"]}"),
           content: DropdownButtonFormField<String>(
-            value: selectedBranchId,
-            items: _branches.map<DropdownMenuItem<String>>((b) => DropdownMenuItem(
-              value: b["id"] as String,
-              child: Text(b["name"] ?? ""),
-            )).toList(),
+            initialValue: selectedBranchId,
+            items: _branches
+                .map<DropdownMenuItem<String>>((b) => DropdownMenuItem(
+                      value: b['id'] as String,
+                      child: Text(b['name'] ?? ''),
+                    ))
+                .toList(),
             onChanged: (v) => setDialogState(() => selectedBranchId = v),
-            decoration: const InputDecoration(labelText: "Branch"),
+            decoration: const InputDecoration(labelText: 'Branch'),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
-            TextButton(onPressed: () => Navigator.pop(ctx, selectedBranchId), child: const Text("Reassign")),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, selectedBranchId),
+                child: const Text('Reassign')),
           ],
         ),
       ),
     );
     if (confirmed == null) return;
     try {
-      await ApiClient.instance.patch("/users/${user["id"]}/reassign-branch", data: {"branch_id": confirmed});
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Branch reassigned")));
+      await ApiClient.instance.patch("/users/${user["id"]}/reassign-branch",
+          data: {'branch_id': confirmed});
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Branch reassigned')));
+      }
       _load();
     } on DioException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.response?.data?["message"] ?? "Failed to reassign"), backgroundColor: AppTheme.errorColor));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(e.response?.data?['message'] ?? 'Failed to reassign'),
+            backgroundColor: AppTheme.errorColor));
+      }
     }
   }
 
@@ -164,7 +190,8 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => _AddStaffSheet(branches: _branches, onCreated: _load),
     );
   }
@@ -175,7 +202,8 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
     // them to agents in branches they manage) but cannot create, suspend,
     // delete, or reassign - those routes are owner/superuser only. Rather
     // than show controls that silently fail with a 403, hide them entirely.
-    final role = (context.read<AuthBloc>().state as AuthAuthenticated).user['role'];
+    final role =
+        (context.read<AuthBloc>().state as AuthAuthenticated).user['role'];
     final isReadOnly = role == 'manager';
 
     return Scaffold(
@@ -208,10 +236,34 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
               : TabBarView(
                   controller: _tabController,
                   children: [
-                    _StaffList(staff: _filteredStaff(null), onToggle: _toggleStatus, onDelete: _deactivateStaff, onReassign: _reassignBranch, onRefresh: _load, isReadOnly: isReadOnly),
-                    _StaffList(staff: _filteredStaff('manager'), onToggle: _toggleStatus, onDelete: _deactivateStaff, onReassign: _reassignBranch, onRefresh: _load, isReadOnly: isReadOnly),
-                    _StaffList(staff: _filteredStaff('agent'), onToggle: _toggleStatus, onDelete: _deactivateStaff, onReassign: _reassignBranch, onRefresh: _load, isReadOnly: isReadOnly),
-                    _StaffList(staff: _filteredStaff('auditor'), onToggle: _toggleStatus, onDelete: _deactivateStaff, onReassign: _reassignBranch, onRefresh: _load, isReadOnly: isReadOnly),
+                    _StaffList(
+                        staff: _filteredStaff(null),
+                        onToggle: _toggleStatus,
+                        onDelete: _deactivateStaff,
+                        onReassign: _reassignBranch,
+                        onRefresh: _load,
+                        isReadOnly: isReadOnly),
+                    _StaffList(
+                        staff: _filteredStaff('manager'),
+                        onToggle: _toggleStatus,
+                        onDelete: _deactivateStaff,
+                        onReassign: _reassignBranch,
+                        onRefresh: _load,
+                        isReadOnly: isReadOnly),
+                    _StaffList(
+                        staff: _filteredStaff('agent'),
+                        onToggle: _toggleStatus,
+                        onDelete: _deactivateStaff,
+                        onReassign: _reassignBranch,
+                        onRefresh: _load,
+                        isReadOnly: isReadOnly),
+                    _StaffList(
+                        staff: _filteredStaff('auditor'),
+                        onToggle: _toggleStatus,
+                        onDelete: _deactivateStaff,
+                        onReassign: _reassignBranch,
+                        onRefresh: _load,
+                        isReadOnly: isReadOnly),
                   ],
                 ),
       floatingActionButton: isReadOnly
@@ -243,7 +295,13 @@ class _StaffList extends StatelessWidget {
   final Future<void> Function() onRefresh;
   final bool isReadOnly;
 
-  const _StaffList({required this.staff, required this.onToggle, required this.onDelete, required this.onReassign, required this.onRefresh, this.isReadOnly = false});
+  const _StaffList(
+      {required this.staff,
+      required this.onToggle,
+      required this.onDelete,
+      required this.onReassign,
+      required this.onRefresh,
+      this.isReadOnly = false});
 
   @override
   Widget build(BuildContext context) {
@@ -270,26 +328,32 @@ class _StaffList extends StatelessWidget {
                 context,
                 MaterialPageRoute(
                   builder: (_) => StaffWorkHistoryScreen(
-                    userId: u["id"],
+                    userId: u['id'],
                     userName: "${u['first_name']} ${u['last_name']}",
                   ),
                 ),
               ),
               leading: CircleAvatar(
-                backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+                backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
                 child: Text(
                   ((u['first_name'] as String?) ?? '?')[0].toUpperCase(),
-                  style: const TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                      color: AppTheme.primaryColor,
+                      fontWeight: FontWeight.bold),
                 ),
               ),
               title: Text('${u['first_name']} ${u['last_name']}',
-                style: const TextStyle(fontWeight: FontWeight.w600)),
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(u['phone'] ?? u['email'] ?? '', style: const TextStyle(fontSize: 12)),
+                  Text(u['phone'] ?? u['email'] ?? '',
+                      style: const TextStyle(fontSize: 12)),
                   Text((u['role'] ?? '').toString().toUpperCase(),
-                    style: TextStyle(fontSize: 10, color: context.appSecondaryText, letterSpacing: 0.5)),
+                      style: TextStyle(
+                          fontSize: 10,
+                          color: context.appSecondaryText,
+                          letterSpacing: 0.5)),
                 ],
               ),
               isThreeLine: true,
@@ -303,22 +367,23 @@ class _StaffList extends StatelessWidget {
                         PopupMenuButton<String>(
                           icon: const Icon(Icons.more_vert, size: 20),
                           onSelected: (value) {
-                            if (value == "toggle") onToggle(u);
-                            if (value == "delete") onDelete(u);
-                            if (value == "reassign") onReassign(u);
+                            if (value == 'toggle') onToggle(u);
+                            if (value == 'delete') onDelete(u);
+                            if (value == 'reassign') onReassign(u);
                           },
                           itemBuilder: (_) => [
                             PopupMenuItem(
-                              value: "toggle",
-                              child: Text(isActive ? "Suspend" : "Activate"),
+                              value: 'toggle',
+                              child: Text(isActive ? 'Suspend' : 'Activate'),
                             ),
-                            PopupMenuItem(
-                              value: "delete",
-                              child: Text("Delete", style: TextStyle(color: AppTheme.errorColor)),
+                            const PopupMenuItem(
+                              value: 'delete',
+                              child: Text('Delete',
+                                  style: TextStyle(color: AppTheme.errorColor)),
                             ),
-                            PopupMenuItem(
-                              value: "reassign",
-                              child: Text("Reassign Branch"),
+                            const PopupMenuItem(
+                              value: 'reassign',
+                              child: Text('Reassign Branch'),
                             ),
                           ],
                         ),
@@ -358,7 +423,7 @@ class _AddStaffSheetState extends State<_AddStaffSheet> {
     if (!_formKey.currentState!.validate()) return;
     if (_role != 'auditor' && _branchId == null && widget.branches.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a branch')));
+          const SnackBar(content: Text('Please select a branch')));
       return;
     }
 
@@ -376,13 +441,15 @@ class _AddStaffSheetState extends State<_AddStaffSheet> {
       if (mounted) {
         Navigator.pop(context);
         widget.onCreated();
-        final message = res.data['message'] as String? ?? 'Staff account created.';
+        final message =
+            res.data['message'] as String? ?? 'Staff account created.';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(message)),
         );
       }
     } on DioException catch (e) {
-      final msg = e.response?.data?['message'] ?? 'Failed to create staff account';
+      final msg =
+          e.response?.data?['message'] ?? 'Failed to create staff account';
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor),
@@ -396,7 +463,8 @@ class _AddStaffSheetState extends State<_AddStaffSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+      padding: EdgeInsets.fromLTRB(
+          16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
       child: Form(
         key: _formKey,
         child: SingleChildScrollView(
@@ -404,10 +472,11 @@ class _AddStaffSheetState extends State<_AddStaffSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('Add Staff Member', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Text('Add Staff Member',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
-
-              const Text('Role', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              const Text('Role',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -417,12 +486,12 @@ class _AddStaffSheetState extends State<_AddStaffSheet> {
                     label: Text(r[0].toUpperCase() + r.substring(1)),
                     selected: selected,
                     onSelected: (_) => setState(() => _role = r),
-                    selectedColor: AppTheme.primaryColor.withOpacity(0.15),
+                    selectedColor:
+                        AppTheme.primaryColor.withValues(alpha: 0.15),
                   );
                 }).toList(),
               ),
               const SizedBox(height: 16),
-
               Row(children: [
                 Expanded(
                   child: AppTextField(
@@ -441,16 +510,15 @@ class _AddStaffSheetState extends State<_AddStaffSheet> {
                 ),
               ]),
               const SizedBox(height: 14),
-
               AppTextField(
                 controller: _emailCtrl,
                 label: 'Email Address',
                 keyboardType: TextInputType.emailAddress,
                 prefixIcon: Icons.email_outlined,
-                validator: (v) => !v!.contains('@') ? 'Enter a valid email' : null,
+                validator: (v) =>
+                    !v!.contains('@') ? 'Enter a valid email' : null,
               ),
               const SizedBox(height: 14),
-
               AppTextField(
                 controller: _phoneCtrl,
                 label: 'Phone Number',
@@ -459,26 +527,30 @@ class _AddStaffSheetState extends State<_AddStaffSheet> {
                 validator: (v) => v!.isEmpty ? 'Required' : null,
               ),
               const SizedBox(height: 14),
-
               if (_role != 'auditor' && widget.branches.isNotEmpty) ...[
                 DropdownButtonFormField<String>(
-                  value: _branchId,
+                  initialValue: _branchId,
                   decoration: InputDecoration(
                     labelText: 'Assign to Branch',
                     prefixIcon: const Icon(Icons.store_outlined),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
-                  items: widget.branches.map<DropdownMenuItem<String>>((b) => DropdownMenuItem(
-                    value: b['id'] as String,
-                    child: Text(b['name'] as String),
-                  )).toList(),
+                  items: widget.branches
+                      .map<DropdownMenuItem<String>>((b) => DropdownMenuItem(
+                            value: b['id'] as String,
+                            child: Text(b['name'] as String),
+                          ))
+                      .toList(),
                   onChanged: (v) => setState(() => _branchId = v),
                 ),
                 const SizedBox(height: 8),
               ],
-
               const SizedBox(height: 8),
-              AppButton(label: 'Create Account', onPressed: _submit, isLoading: _loading),
+              AppButton(
+                  label: 'Create Account',
+                  onPressed: _submit,
+                  isLoading: _loading),
             ],
           ),
         ),
