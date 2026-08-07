@@ -24,15 +24,25 @@ class _MyAdsScreenState extends State<MyAdsScreen> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final res = await ApiClient.instance.get('/marketplace/mine');
-      if (mounted) setState(() { _ads = res.data['data'] ?? []; _loading = false; });
+      if (mounted) {
+        setState(() {
+          _ads = res.data['data'] ?? [];
+          _loading = false;
+        });
+      }
     } on DioException catch (e) {
-      if (mounted) setState(() {
-        _error = e.response?.data?['message'] ?? 'Failed to load your ads';
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = e.response?.data?['message'] ?? 'Failed to load your ads';
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -54,7 +64,8 @@ class _MyAdsScreenState extends State<MyAdsScreen> {
                   ? EmptyState(
                       icon: Icons.storefront_outlined,
                       title: 'No ads yet',
-                      subtitle: 'Post your first ad to reach customers on Agent Pro Ghana.',
+                      subtitle:
+                          'Post your first ad to reach customers on Agent Pro Ghana.',
                       actionLabel: 'Post an Ad',
                       onAction: () => context.push('/marketplace/post'),
                     )
@@ -73,21 +84,31 @@ class _MyAdsScreenState extends State<MyAdsScreen> {
                           final needsAction = status == 'pending_payment';
                           return Card(
                             margin: const EdgeInsets.only(bottom: 6),
-                            color: needsAction ? AppTheme.secondaryColor.withOpacity(0.05) : null,
+                            color: needsAction
+                                ? AppTheme.secondaryColor
+                                    .withValues(alpha: 0.05)
+                                : null,
                             child: ListTile(
                               leading: CircleAvatar(
                                 backgroundColor: needsAction
-                                    ? AppTheme.secondaryColor.withOpacity(0.2)
-                                    : AppTheme.primaryColor.withOpacity(0.08),
+                                    ? AppTheme.secondaryColor
+                                        .withValues(alpha: 0.2)
+                                    : AppTheme.primaryColor
+                                        .withValues(alpha: 0.08),
                                 child: Icon(
-                                  needsAction ? Icons.payment : Icons.storefront_outlined,
-                                  color: needsAction ? AppTheme.secondaryColor : AppTheme.primaryColor,
+                                  needsAction
+                                      ? Icons.payment
+                                      : Icons.storefront_outlined,
+                                  color: needsAction
+                                      ? AppTheme.secondaryColor
+                                      : AppTheme.primaryColor,
                                   size: 20,
                                 ),
                               ),
                               title: Text(
                                 ad['title'] ?? '',
-                                style: const TextStyle(fontWeight: FontWeight.w600),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -98,15 +119,20 @@ class _MyAdsScreenState extends State<MyAdsScreen> {
                                     GhsAmount(amount: price, fontSize: 12)
                                   else
                                     Text('Contact for price',
-                                        style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                                        style: TextStyle(
+                                            color: Colors.grey[500],
+                                            fontSize: 12)),
                                   if (status == 'active') ...[
                                     const SizedBox(height: 2),
                                     Row(children: [
-                                      Icon(Icons.visibility_outlined, size: 12, color: Colors.grey[500]),
+                                      Icon(Icons.visibility_outlined,
+                                          size: 12, color: Colors.grey[500]),
                                       const SizedBox(width: 3),
                                       Text(
                                         '${ad['views_count'] ?? 0} view${(ad['views_count'] ?? 0) == 1 ? '' : 's'}',
-                                        style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                                        style: TextStyle(
+                                            color: Colors.grey[500],
+                                            fontSize: 11),
                                       ),
                                     ]),
                                   ],
@@ -120,7 +146,8 @@ class _MyAdsScreenState extends State<MyAdsScreen> {
                               ),
                               isThreeLine: needsAction,
                               trailing: StatusBadge(status: status),
-                              onTap: () => context.push('/marketplace/ads/${ad['id']}'),
+                              onTap: () =>
+                                  context.push('/marketplace/ads/${ad['id']}'),
                             ),
                           );
                         },

@@ -29,14 +29,18 @@ class AppButton extends StatelessWidget {
       return OutlinedButton.icon(
         onPressed: isLoading ? null : onPressed,
         icon: isLoading
-            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2))
             : (icon != null ? Icon(icon) : const SizedBox.shrink()),
         label: Text(label),
         style: OutlinedButton.styleFrom(
           foregroundColor: bg,
           side: BorderSide(color: bg, width: 1.5),
           minimumSize: const Size(double.infinity, 52),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       );
     }
@@ -48,17 +52,24 @@ class AppButton extends StatelessWidget {
         foregroundColor: Colors.white,
         minimumSize: const Size(double.infinity, 52),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        disabledBackgroundColor: bg.withOpacity(0.6),
+        disabledBackgroundColor: bg.withValues(alpha: 0.6),
       ),
       child: isLoading
           ? const SizedBox(
-              height: 20, width: 20,
-              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+              height: 20,
+              width: 20,
+              child: CircularProgressIndicator(
+                  color: Colors.white, strokeWidth: 2))
           : Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (icon != null) ...[Icon(icon, size: 20), const SizedBox(width: 8)],
-                Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                if (icon != null) ...[
+                  Icon(icon, size: 20),
+                  const SizedBox(width: 8)
+                ],
+                Text(label,
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w600)),
               ],
             ),
     );
@@ -132,7 +143,7 @@ class StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: AppTheme.statusColor(status).withOpacity(0.12),
+        color: AppTheme.statusColor(status).withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
@@ -155,11 +166,11 @@ class ProviderBadge extends StatelessWidget {
   const ProviderBadge({super.key, required this.provider});
 
   String get _label => switch (provider) {
-    'mtn' => 'MTN',
-    'telecel' => 'Telecel',
-    'at_money' => 'AT Money',
-    _ => provider.toUpperCase(),
-  };
+        'mtn' => 'MTN',
+        'telecel' => 'Telecel',
+        'at_money' => 'AT Money',
+        _ => provider.toUpperCase(),
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -167,8 +178,11 @@ class ProviderBadge extends StatelessWidget {
     final textColor = provider == 'mtn' ? Colors.black : Colors.white;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(6)),
-      child: Text(_label, style: TextStyle(color: textColor, fontSize: 11, fontWeight: FontWeight.bold)),
+      decoration:
+          BoxDecoration(color: color, borderRadius: BorderRadius.circular(6)),
+      child: Text(_label,
+          style: TextStyle(
+              color: textColor, fontSize: 11, fontWeight: FontWeight.bold)),
     );
   }
 }
@@ -209,24 +223,32 @@ class InfoCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: (iconColor ?? AppTheme.primaryColor).withOpacity(0.1),
+                      color: (iconColor ?? AppTheme.primaryColor)
+                          .withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(icon, color: iconColor ?? AppTheme.primaryColor, size: 20),
+                    child: Icon(icon,
+                        color: iconColor ?? AppTheme.primaryColor, size: 20),
                   ),
                   const Spacer(),
                   if (onTap != null)
-                    Icon(Icons.chevron_right, color: Colors.grey[400], size: 20),
+                    Icon(Icons.chevron_right,
+                        color: Colors.grey[400], size: 20),
                 ],
               ),
               const SizedBox(height: 12),
               Text(value,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 2),
-              Text(title, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+              Text(title,
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12)),
               if (subtitle != null) ...[
                 const SizedBox(height: 2),
-                Text(subtitle!, style: TextStyle(color: Colors.grey[400], fontSize: 11)),
+                Text(subtitle!,
+                    style: TextStyle(color: Colors.grey[400], fontSize: 11)),
               ],
             ],
           ),
@@ -257,16 +279,18 @@ class LoadingOverlay extends StatelessWidget {
         child,
         if (isLoading)
           Container(
-            color: Colors.black.withOpacity(0.4),
+            color: Colors.black.withValues(alpha: 0.4),
             child: Center(
               child: Card(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
                 child: Padding(
                   padding: const EdgeInsets.all(32),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const CircularProgressIndicator(color: AppTheme.primaryColor),
+                      const CircularProgressIndicator(
+                          color: AppTheme.primaryColor),
                       if (message != null) ...[
                         const SizedBox(height: 16),
                         Text(message!, textAlign: TextAlign.center),
@@ -311,13 +335,13 @@ class EmptyState extends StatelessWidget {
             Icon(icon, size: 64, color: Colors.grey[300]),
             const SizedBox(height: 16),
             Text(title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600, color: Colors.grey[600])),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600, color: Colors.grey[600])),
             if (subtitle != null) ...[
               const SizedBox(height: 8),
               Text(subtitle!,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey[400], fontSize: 14)),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey[400], fontSize: 14)),
             ],
             if (actionLabel != null && onAction != null) ...[
               const SizedBox(height: 24),
@@ -337,15 +361,16 @@ class SectionHeader extends StatelessWidget {
   final String? actionLabel;
   final VoidCallback? onAction;
 
-  const SectionHeader({super.key, required this.title, this.actionLabel, this.onAction});
+  const SectionHeader(
+      {super.key, required this.title, this.actionLabel, this.onAction});
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
         Text(title,
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.bold, color: Colors.grey[700])),
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.bold, color: Colors.grey[700])),
         const Spacer(),
         if (actionLabel != null)
           TextButton(onPressed: onAction, child: Text(actionLabel!)),
@@ -362,8 +387,12 @@ class GhsAmount extends StatelessWidget {
   final Color? color;
   final bool bold;
 
-  const GhsAmount({super.key, required this.amount, this.fontSize = 16,
-    this.color, this.bold = true});
+  const GhsAmount(
+      {super.key,
+      required this.amount,
+      this.fontSize = 16,
+      this.color,
+      this.bold = true});
 
   @override
   Widget build(BuildContext context) {

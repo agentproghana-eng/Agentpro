@@ -100,7 +100,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
         borderRadius: BorderRadius.circular(13),
         border: Border.all(
           color: _highlightNewestTransaction
-              ? AppTheme.primaryColor.withOpacity(0.42)
+              ? AppTheme.primaryColor.withValues(alpha: 0.42)
               : Colors.transparent,
         ),
       ),
@@ -140,11 +140,10 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
   List<QuickActionDefinition> get _visibleQuickActions {
     final saved = _personalQuickActions[_provider];
 
-    final types = saved != null
-        ? saved
-        : List<String>.from(
-            kPersonalQuickActionDefaults[_provider] ?? const <String>[],
-          );
+    final types = saved ??
+        List<String>.from(
+          kPersonalQuickActionDefaults[_provider] ?? const <String>[],
+        );
 
     final result = <QuickActionDefinition>[];
 
@@ -180,11 +179,12 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
         '/personal-transactions',
         queryParameters: {'limit': 5, 'provider': _provider},
       );
-      if (mounted)
+      if (mounted) {
         setState(() {
           _recent = res.data['data'] ?? [];
           _loadingRecent = false;
         });
+      }
     } catch (_) {
       if (mounted) setState(() => _loadingRecent = false);
     }
@@ -408,7 +408,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                                 borderRadius: BorderRadius.circular(12),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.06),
+                                    color: Colors.black.withValues(alpha: 0.06),
                                     blurRadius: 3,
                                   ),
                                 ],
@@ -449,8 +449,8 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                                           boxShadow: selected
                                               ? [
                                                   BoxShadow(
-                                                    color: color.withOpacity(
-                                                      0.20,
+                                                    color: color.withValues(
+                                                      alpha: 0.20,
                                                     ),
                                                     blurRadius: 7,
                                                     offset: const Offset(0, 2),
@@ -661,12 +661,13 @@ class _QuickActionTileState extends State<_QuickActionTile> {
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
                 color: _pressed
-                    ? AppTheme.primaryColor.withOpacity(0.24)
-                    : context.appSecondaryText.withOpacity(0.07),
+                    ? AppTheme.primaryColor.withValues(alpha: 0.24)
+                    : context.appSecondaryText.withValues(alpha: 0.07),
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(_pressed ? 0.025 : 0.055),
+                  color:
+                      Colors.black.withValues(alpha: _pressed ? 0.025 : 0.055),
                   blurRadius: _pressed ? 4 : 9,
                   offset: Offset(0, _pressed ? 1 : 3),
                 ),
@@ -684,8 +685,8 @@ class _QuickActionTileState extends State<_QuickActionTile> {
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withOpacity(
-                        context.isDarkMode ? 0.20 : 0.10,
+                      color: AppTheme.primaryColor.withValues(
+                        alpha: context.isDarkMode ? 0.20 : 0.10,
                       ),
                       borderRadius: BorderRadius.circular(11),
                     ),

@@ -23,8 +23,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           data: {'email': _emailCtrl.text.trim()});
       if (mounted) setState(() => _sent = true);
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(() => _sent = true); // Always show success (security)
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }

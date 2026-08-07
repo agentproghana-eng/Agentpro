@@ -13,7 +13,8 @@ class PersonalPostDetailScreen extends StatefulWidget {
   const PersonalPostDetailScreen({super.key, required this.postId});
 
   @override
-  State<PersonalPostDetailScreen> createState() => _PersonalPostDetailScreenState();
+  State<PersonalPostDetailScreen> createState() =>
+      _PersonalPostDetailScreenState();
 }
 
 class _PersonalPostDetailScreenState extends State<PersonalPostDetailScreen> {
@@ -43,7 +44,8 @@ class _PersonalPostDetailScreenState extends State<PersonalPostDetailScreen> {
 
   bool get _isPaid {
     final state = context.read<AuthBloc>().state;
-    return state is AuthAuthenticated && state.user['personal_subscription_plan'] == 'paid';
+    return state is AuthAuthenticated &&
+        state.user['personal_subscription_plan'] == 'paid';
   }
 
   Future<void> _load() async {
@@ -51,10 +53,12 @@ class _PersonalPostDetailScreenState extends State<PersonalPostDetailScreen> {
     try {
       final results = await Future.wait([
         ApiClient.instance.get('/personal-community/feed'),
-        ApiClient.instance.get('/personal-community/posts/${widget.postId}/comments'),
+        ApiClient.instance
+            .get('/personal-community/posts/${widget.postId}/comments'),
       ]);
       final allPosts = results[0].data['data'] as List;
-      final match = allPosts.firstWhere((p) => p['id'] == widget.postId, orElse: () => null);
+      final match = allPosts.firstWhere((p) => p['id'] == widget.postId,
+          orElse: () => null);
       setState(() {
         _post = match as Map<String, dynamic>?;
         _comments = results[1].data['data'] ?? [];
@@ -86,14 +90,18 @@ class _PersonalPostDetailScreenState extends State<PersonalPostDetailScreen> {
     return 'just now';
   }
 
-  Future<void> _toggleCommentReaction(String commentId, String reactionType) async {
+  Future<void> _toggleCommentReaction(
+      String commentId, String reactionType) async {
     try {
-      await ApiClient.instance.post('/personal-community/comments/$commentId/react', data: {'reaction_type': reactionType});
+      await ApiClient.instance.post(
+          '/personal-community/comments/$commentId/react',
+          data: {'reaction_type': reactionType});
       _load();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to react'), backgroundColor: AppTheme.errorColor));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Failed to react'),
+            backgroundColor: AppTheme.errorColor));
       }
     }
   }
@@ -118,7 +126,8 @@ class _PersonalPostDetailScreenState extends State<PersonalPostDetailScreen> {
 
     setState(() => _sending = true);
     try {
-      await ApiClient.instance.post('/personal-community/posts/${widget.postId}/comments', data: {
+      await ApiClient.instance
+          .post('/personal-community/posts/${widget.postId}/comments', data: {
         'content': text,
         if (_replyingToId != null) 'parent_comment_id': _replyingToId,
       });
@@ -127,8 +136,9 @@ class _PersonalPostDetailScreenState extends State<PersonalPostDetailScreen> {
       _load();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to comment'), backgroundColor: AppTheme.errorColor));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Failed to comment'),
+            backgroundColor: AppTheme.errorColor));
       }
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -154,10 +164,14 @@ class _PersonalPostDetailScreenState extends State<PersonalPostDetailScreen> {
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            Text(name.isEmpty ? '—' : name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5)),
+            Text(name.isEmpty ? '—' : name,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 11.5)),
             if (time.isNotEmpty) ...[
               const SizedBox(width: 6),
-              Text(time, style: TextStyle(fontSize: 10, color: context.appSecondaryText)),
+              Text(time,
+                  style:
+                      TextStyle(fontSize: 10, color: context.appSecondaryText)),
             ],
           ]),
           const SizedBox(height: 3),
@@ -168,21 +182,29 @@ class _PersonalPostDetailScreenState extends State<PersonalPostDetailScreen> {
             ReactionButton(
               myReaction: c['my_reaction'] as String?,
               totalCount: c['reaction_counts'] is Map
-                  ? (c['reaction_counts'] as Map).values.fold<int>(0, (sum, v) => sum + (int.tryParse(v.toString()) ?? 0))
+                  ? (c['reaction_counts'] as Map).values.fold<int>(
+                      0, (sum, v) => sum + (int.tryParse(v.toString()) ?? 0))
                   : 0,
-              onReact: (type) => _toggleCommentReaction(c['id'] as String, type),
+              onReact: (type) =>
+                  _toggleCommentReaction(c['id'] as String, type),
               iconSize: 15,
             ),
             const SizedBox(width: 14),
             if (_isPaid)
               GestureDetector(
-                onTap: () => _startReply(c['id'] as String, name.isEmpty ? 'them' : name),
-                child: const Text('Reply', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
+                onTap: () => _startReply(
+                    c['id'] as String, name.isEmpty ? 'them' : name),
+                child: const Text('Reply',
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.primaryColor)),
               ),
           ]),
         ]),
       ),
-      for (final r in _repliesFor(c['id'] as String)) _commentTile(r, depth: depth + 1),
+      for (final r in _repliesFor(c['id'] as String))
+        _commentTile(r, depth: depth + 1),
     ]);
   }
 
@@ -190,11 +212,16 @@ class _PersonalPostDetailScreenState extends State<PersonalPostDetailScreen> {
     if (!_isPaid) {
       return Container(
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: context.appSurface, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 4)]),
+        decoration: BoxDecoration(color: context.appSurface, boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 4)
+        ]),
         child: Row(children: [
-          const Icon(Icons.lock_outline, color: AppTheme.primaryColor, size: 18),
+          const Icon(Icons.lock_outline,
+              color: AppTheme.primaryColor, size: 18),
           const SizedBox(width: 8),
-          const Expanded(child: Text('Upgrade to Paid to comment', style: TextStyle(fontSize: 12))),
+          const Expanded(
+              child: Text('Upgrade to Paid to comment',
+                  style: TextStyle(fontSize: 12))),
           TextButton(
             onPressed: () => context.push('/personal-subscription'),
             child: const Text('Upgrade'),
@@ -205,21 +232,40 @@ class _PersonalPostDetailScreenState extends State<PersonalPostDetailScreen> {
 
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: context.appSurface, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 4)]),
+      decoration: BoxDecoration(color: context.appSurface, boxShadow: [
+        BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 4)
+      ]),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         if (_replyingToId != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 6),
             child: Row(children: [
-              Expanded(child: Text('Replying to $_replyingToName', style: TextStyle(fontSize: 11, color: context.appSecondaryText))),
-              GestureDetector(onTap: _cancelReply, child: Icon(Icons.close, size: 16, color: context.appSecondaryText)),
+              Expanded(
+                  child: Text('Replying to $_replyingToName',
+                      style: TextStyle(
+                          fontSize: 11, color: context.appSecondaryText))),
+              GestureDetector(
+                  onTap: _cancelReply,
+                  child: Icon(Icons.close,
+                      size: 16, color: context.appSecondaryText)),
             ]),
           ),
         Row(children: [
-          Expanded(child: TextField(controller: _commentCtrl,
-            decoration: InputDecoration(hintText: _replyingToId != null ? 'Write a reply...' : 'Write a comment...', border: const OutlineInputBorder()))),
+          Expanded(
+              child: TextField(
+                  controller: _commentCtrl,
+                  decoration: InputDecoration(
+                      hintText: _replyingToId != null
+                          ? 'Write a reply...'
+                          : 'Write a comment...',
+                      border: const OutlineInputBorder()))),
           IconButton(
-            icon: _sending ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send, color: AppTheme.primaryColor),
+            icon: _sending
+                ? const SizedBox(
+                    height: 18,
+                    width: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.send, color: AppTheme.primaryColor),
             onPressed: _sending ? null : _sendComment,
           ),
         ]),
@@ -242,18 +288,33 @@ class _PersonalPostDetailScreenState extends State<PersonalPostDetailScreen> {
                       children: [
                         Container(
                           padding: const EdgeInsets.all(13),
-                          decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(14),
-                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 4)]),
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text('${_post!['first_name'] ?? ''} ${_post!['last_name'] ?? ''}',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                            const SizedBox(height: 6),
-                            if (_post!['content'] != null && (_post!['content'] as String).isNotEmpty)
-                              Text(_post!['content'], style: const TextStyle(fontSize: 13)),
-                          ]),
+                          decoration: BoxDecoration(
+                              color: context.appSurface,
+                              borderRadius: BorderRadius.circular(14),
+                              boxShadow: [
+                                BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.06),
+                                    blurRadius: 4)
+                              ]),
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                    '${_post!['first_name'] ?? ''} ${_post!['last_name'] ?? ''}',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13)),
+                                const SizedBox(height: 6),
+                                if (_post!['content'] != null &&
+                                    (_post!['content'] as String).isNotEmpty)
+                                  Text(_post!['content'],
+                                      style: const TextStyle(fontSize: 13)),
+                              ]),
                         ),
                         const SizedBox(height: 16),
-                        const Text('Comments', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        const Text('Comments',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 13)),
                         const SizedBox(height: 8),
                         for (final c in _topLevelComments) _commentTile(c),
                       ],

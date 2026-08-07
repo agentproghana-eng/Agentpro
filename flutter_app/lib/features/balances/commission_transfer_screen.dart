@@ -1,15 +1,16 @@
-import "package:flutter/material.dart";
-import "package:go_router/go_router.dart";
-import "../../core/api/api_client.dart";
-import "../../shared/theme/app_theme.dart";
-import "../../shared/theme/app_colors.dart";
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import '../../core/api/api_client.dart';
+import '../../shared/theme/app_theme.dart';
+import '../../shared/theme/app_colors.dart';
 
 class CommissionTransferScreen extends StatefulWidget {
   final String provider;
   const CommissionTransferScreen({super.key, required this.provider});
 
   @override
-  State<CommissionTransferScreen> createState() => _CommissionTransferScreenState();
+  State<CommissionTransferScreen> createState() =>
+      _CommissionTransferScreenState();
 }
 
 class _CommissionTransferScreenState extends State<CommissionTransferScreen> {
@@ -27,11 +28,14 @@ class _CommissionTransferScreenState extends State<CommissionTransferScreen> {
 
   Future<void> _loadBalance() async {
     try {
-      final res = await ApiClient.instance.get("/balances");
-      final list = res.data["data"] as List;
-      final match = list.firstWhere((b) => b["provider"] == widget.provider, orElse: () => null);
+      final res = await ApiClient.instance.get('/balances');
+      final list = res.data['data'] as List;
+      final match = list.firstWhere((b) => b['provider'] == widget.provider,
+          orElse: () => null);
       setState(() {
-        _available = match != null ? (double.tryParse(match["commission_balance"].toString()) ?? 0) : 0;
+        _available = match != null
+            ? (double.tryParse(match['commission_balance'].toString()) ?? 0)
+            : 0;
         _loadingBalance = false;
       });
     } catch (e) {
@@ -48,7 +52,7 @@ class _CommissionTransferScreenState extends State<CommissionTransferScreen> {
   Future<void> _submit() async {
     final amount = double.tryParse(_amountCtrl.text);
     if (amount == null || amount <= 0) {
-      setState(() => _error = "Enter a valid amount");
+      setState(() => _error = 'Enter a valid amount');
       return;
     }
     // Deliberately does NOT block on amount > _available. That figure
@@ -58,7 +62,10 @@ class _CommissionTransferScreenState extends State<CommissionTransferScreen> {
     // the actual source of truth and will reject an invalid transfer
     // via its own USSD response, which the automation already detects
     // as a failure.
-    setState(() { _submitting = true; _error = null; });
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
     try {
       final res = await ApiClient.instance.post('/transactions', data: {
         'provider': widget.provider,
@@ -84,14 +91,17 @@ class _CommissionTransferScreenState extends State<CommissionTransferScreen> {
         'customer_name': '',
       });
     } catch (e) {
-      setState(() { _error = "Failed to start commission transfer"; _submitting = false; });
+      setState(() {
+        _error = 'Failed to start commission transfer';
+        _submitting = false;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Transfer Commission to e-Float")),
+      appBar: AppBar(title: const Text('Transfer Commission to e-Float')),
       body: _loadingBalance
           ? const Center(child: CircularProgressIndicator())
           : Padding(
@@ -99,38 +109,69 @@ class _CommissionTransferScreenState extends State<CommissionTransferScreen> {
               child: ListView(children: [
                 Container(
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 4)]),
+                  decoration: BoxDecoration(
+                      color: context.appSurface,
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.06),
+                            blurRadius: 4)
+                      ]),
                   child: Column(children: [
-                    Text("Available to Transfer", style: TextStyle(fontSize: 11, color: context.appSecondaryText, fontWeight: FontWeight.bold)),
+                    Text('Available to Transfer',
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: context.appSecondaryText,
+                            fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
-                    Text("GH₵ ${_available.toStringAsFixed(2)}", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: context.isDarkMode ? const Color(0xFF9B8BC4) : const Color(0xFF5B4B8A))),
+                    Text('GH₵ ${_available.toStringAsFixed(2)}',
+                        style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: context.isDarkMode
+                                ? const Color(0xFF9B8BC4)
+                                : const Color(0xFF5B4B8A))),
                   ]),
                 ),
                 const SizedBox(height: 20),
                 TextField(
                   controller: _amountCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: "Amount to Transfer", prefixText: "GH₵ ", border: OutlineInputBorder()),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                      labelText: 'Amount to Transfer',
+                      prefixText: 'GH₵ ',
+                      border: OutlineInputBorder()),
                 ),
                 const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: context.appTileColor(const Color(0xFFE6F4F1)), borderRadius: BorderRadius.circular(10)),
+                  decoration: BoxDecoration(
+                      color: context.appTileColor(const Color(0xFFE6F4F1)),
+                      borderRadius: BorderRadius.circular(10)),
                   child: Text(
                     "This dials your network's own USSD commission-transfer code directly. You will enter your MoMo PIN only on the official network screen.",
-                    style: TextStyle(fontSize: 11, color: context.isDarkMode ? AppTheme.primaryLight : AppTheme.primaryColor),
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: context.isDarkMode
+                            ? AppTheme.primaryLight
+                            : AppTheme.primaryColor),
                   ),
                 ),
                 if (_error != null) ...[
                   const SizedBox(height: 12),
-                  Text(_error!, style: const TextStyle(color: AppTheme.errorColor)),
+                  Text(_error!,
+                      style: const TextStyle(color: AppTheme.errorColor)),
                 ],
                 const SizedBox(height: 20),
                 ElevatedButton(
                   onPressed: _submitting ? null : _submit,
                   child: _submitting
-                      ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Text("Dial to Transfer"),
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Dial to Transfer'),
                 ),
               ]),
             ),

@@ -15,10 +15,12 @@ import '../../shared/widgets/personal_transaction_item.dart';
 class PersonalTransactionHistoryScreen extends StatefulWidget {
   const PersonalTransactionHistoryScreen({super.key});
   @override
-  State<PersonalTransactionHistoryScreen> createState() => _PersonalTransactionHistoryScreenState();
+  State<PersonalTransactionHistoryScreen> createState() =>
+      _PersonalTransactionHistoryScreenState();
 }
 
-class _PersonalTransactionHistoryScreenState extends State<PersonalTransactionHistoryScreen> {
+class _PersonalTransactionHistoryScreenState
+    extends State<PersonalTransactionHistoryScreen> {
   List<dynamic> _transactions = [];
   int _page = 1;
   int _totalPages = 1;
@@ -27,7 +29,8 @@ class _PersonalTransactionHistoryScreenState extends State<PersonalTransactionHi
 
   bool get _isPaid {
     final state = context.read<AuthBloc>().state;
-    return state is AuthAuthenticated && state.user['personal_subscription_plan'] == 'paid';
+    return state is AuthAuthenticated &&
+        state.user['personal_subscription_plan'] == 'paid';
   }
 
   @override
@@ -40,7 +43,8 @@ class _PersonalTransactionHistoryScreenState extends State<PersonalTransactionHi
     setState(() => loadMore ? _loadingMore = true : _loading = true);
     try {
       final nextPage = loadMore ? _page + 1 : 1;
-      final res = await ApiClient.instance.get('/personal-transactions', queryParameters: {'page': nextPage, 'limit': 20});
+      final res = await ApiClient.instance.get('/personal-transactions',
+          queryParameters: {'page': nextPage, 'limit': 20});
       final data = (res.data['data'] as List?) ?? [];
       final meta = res.data['meta'] as Map<String, dynamic>?;
       if (mounted) {
@@ -53,7 +57,12 @@ class _PersonalTransactionHistoryScreenState extends State<PersonalTransactionHi
         });
       }
     } catch (_) {
-      if (mounted) setState(() { _loading = false; _loadingMore = false; });
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _loadingMore = false;
+        });
+      }
     }
   }
 
@@ -65,15 +74,22 @@ class _PersonalTransactionHistoryScreenState extends State<PersonalTransactionHi
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
-            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              const Icon(Icons.lock_outline, size: 48, color: AppTheme.primaryColor),
+            child:
+                Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              const Icon(Icons.lock_outline,
+                  size: 48, color: AppTheme.primaryColor),
               const SizedBox(height: 16),
-              const Text('Full history is a Paid feature', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const Text('Full history is a Paid feature',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              const Text('Upgrade your Personal plan to see your complete transaction history.',
-                textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+              const Text(
+                  'Upgrade your Personal plan to see your complete transaction history.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey)),
               const SizedBox(height: 20),
-              AppButton(label: 'Upgrade to Paid', onPressed: () => context.push('/personal-subscription')),
+              AppButton(
+                  label: 'Upgrade to Paid',
+                  onPressed: () => context.push('/personal-subscription')),
             ]),
           ),
         ),
@@ -90,7 +106,8 @@ class _PersonalTransactionHistoryScreenState extends State<PersonalTransactionHi
                   onRefresh: () => _load(),
                   child: ListView.builder(
                     padding: const EdgeInsets.all(16),
-                    itemCount: _transactions.length + (_page < _totalPages ? 1 : 0),
+                    itemCount:
+                        _transactions.length + (_page < _totalPages ? 1 : 0),
                     itemBuilder: (context, i) {
                       if (i == _transactions.length) {
                         return Padding(
@@ -98,11 +115,14 @@ class _PersonalTransactionHistoryScreenState extends State<PersonalTransactionHi
                           child: Center(
                             child: _loadingMore
                                 ? const CircularProgressIndicator()
-                                : TextButton(onPressed: () => _load(loadMore: true), child: const Text('Load More')),
+                                : TextButton(
+                                    onPressed: () => _load(loadMore: true),
+                                    child: const Text('Load More')),
                           ),
                         );
                       }
-                      return PersonalTransactionItem(tx: _transactions[i] as Map<String, dynamic>);
+                      return PersonalTransactionItem(
+                          tx: _transactions[i] as Map<String, dynamic>);
                     },
                   ),
                 ),

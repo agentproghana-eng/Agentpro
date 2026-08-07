@@ -46,7 +46,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
         context: context,
         barrierDismissible: false,
         builder: (_) => AlertDialog(
-          icon: const Icon(Icons.check_circle, color: AppTheme.successColor, size: 48),
+          icon: const Icon(Icons.check_circle,
+              color: AppTheme.successColor, size: 48),
           title: const Text('Registration Submitted!'),
           content: const Text(
             'Your account is pending approval. Once our team verifies your '
@@ -56,17 +57,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
           actions: [
             ElevatedButton(
-              onPressed: () { Navigator.pop(context); context.go('/auth/login'); },
+              onPressed: () {
+                Navigator.pop(context);
+                context.go('/auth/login');
+              },
               child: const Text('Back to Login'),
             ),
           ],
         ),
       );
     } on DioException catch (e) {
-      final msg = e.response?.data?['message'] ?? 'Registration failed. Please try again.';
+      final msg = e.response?.data?['message'] ??
+          'Registration failed. Please try again.';
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor));
+            SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -85,12 +90,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
         child: Stepper(
           currentStep: _step,
           onStepContinue: () {
-            if (_step < 2) setState(() => _step++);
-            else _submit();
+            if (_step < 2) {
+              setState(() => _step++);
+            } else {
+              _submit();
+            }
           },
           onStepCancel: () {
-            if (_step > 0) setState(() => _step--);
-            else context.pop();
+            if (_step > 0) {
+              setState(() => _step--);
+            } else {
+              context.pop();
+            }
           },
           controlsBuilder: (context, details) => Padding(
             padding: const EdgeInsets.only(top: 16),
@@ -150,22 +161,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
               state: _step > 1 ? StepState.complete : StepState.indexed,
               content: Column(children: [
                 Row(children: [
-                  Expanded(child: AppTextField(controller: _firstNameCtrl, label: 'First Name',
-                    validator: (v) => v!.isEmpty ? 'Required' : null)),
+                  Expanded(
+                      child: AppTextField(
+                          controller: _firstNameCtrl,
+                          label: 'First Name',
+                          validator: (v) => v!.isEmpty ? 'Required' : null)),
                   const SizedBox(width: 12),
-                  Expanded(child: AppTextField(controller: _lastNameCtrl, label: 'Last Name',
-                    validator: (v) => v!.isEmpty ? 'Required' : null)),
+                  Expanded(
+                      child: AppTextField(
+                          controller: _lastNameCtrl,
+                          label: 'Last Name',
+                          validator: (v) => v!.isEmpty ? 'Required' : null)),
                 ]),
                 const SizedBox(height: 14),
                 AppTextField(
-                  controller: _emailCtrl, label: 'Email Address',
-                  keyboardType: TextInputType.emailAddress, prefixIcon: Icons.email_outlined,
-                  validator: (v) => !v!.contains('@') ? 'Enter valid email' : null,
+                  controller: _emailCtrl,
+                  label: 'Email Address',
+                  keyboardType: TextInputType.emailAddress,
+                  prefixIcon: Icons.email_outlined,
+                  validator: (v) =>
+                      !v!.contains('@') ? 'Enter valid email' : null,
                 ),
                 const SizedBox(height: 14),
                 AppTextField(
-                  controller: _phoneCtrl, label: 'Your Phone (MTN MoMo number)',
-                  keyboardType: TextInputType.phone, prefixIcon: Icons.phone_outlined,
+                  controller: _phoneCtrl,
+                  label: 'Your Phone (MTN MoMo number)',
+                  keyboardType: TextInputType.phone,
+                  prefixIcon: Icons.phone_outlined,
                   validator: (v) => v!.isEmpty ? 'Required' : null,
                 ),
               ]),
@@ -177,52 +199,80 @@ class _RegisterScreenState extends State<RegisterScreen> {
               isActive: _step >= 2,
               content: Column(children: [
                 AppTextField(
-                  controller: _passwordCtrl, label: 'Password', obscureText: _obscure,
+                  controller: _passwordCtrl,
+                  label: 'Password',
+                  obscureText: _obscure,
                   prefixIcon: Icons.lock_outline,
                   suffixIcon: IconButton(
-                    icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                    icon: Icon(_obscure
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined),
                     onPressed: () => setState(() => _obscure = !_obscure),
                   ),
                   validator: (v) {
                     if (v!.length < 8) return 'Min 8 characters';
-                    if (!v.contains(RegExp(r'[A-Z]'))) return 'Include an uppercase letter';
-                    if (!v.contains(RegExp(r'[0-9]'))) return 'Include a number';
+                    if (!v.contains(RegExp(r'[A-Z]'))) {
+                      return 'Include an uppercase letter';
+                    }
+                    if (!v.contains(RegExp(r'[0-9]'))) {
+                      return 'Include a number';
+                    }
                     return null;
                   },
                 ),
                 const SizedBox(height: 14),
                 AppTextField(
-                  controller: _confirmCtrl, label: 'Confirm Password',
-                  obscureText: _obscureConfirm, prefixIcon: Icons.lock_outline,
+                  controller: _confirmCtrl,
+                  label: 'Confirm Password',
+                  obscureText: _obscureConfirm,
+                  prefixIcon: Icons.lock_outline,
                   suffixIcon: IconButton(
-                    icon: Icon(_obscureConfirm ? Icons.visibility_outlined : Icons.visibility_off_outlined),
-                    onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                    icon: Icon(_obscureConfirm
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined),
+                    onPressed: () =>
+                        setState(() => _obscureConfirm = !_obscureConfirm),
                   ),
-                  validator: (v) => v != _passwordCtrl.text ? 'Passwords do not match' : null,
+                  validator: (v) =>
+                      v != _passwordCtrl.text ? 'Passwords do not match' : null,
                 ),
                 const SizedBox(height: 16),
-                Builder(builder: (context) => Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: context.isDarkMode ? const Color(0xFF332B15) : Colors.amber[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: context.isDarkMode ? const Color(0xFF7A6A2E) : Colors.amber[200]!),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.info_outline, color: context.isDarkMode ? AppTheme.secondaryColor : Colors.amber[800], size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'After registration, pay GH₵10 via MTN MoMo to activate your '
-                          'Business Plan. Our team will verify and activate your account within 24 hours.',
-                          style: TextStyle(fontSize: 12, color: context.isDarkMode ? AppTheme.secondaryColor : const Color(0xFF7A5B00)),
-                        ),
-                      ),
-                    ],
-                  ),
-                )),
+                Builder(
+                    builder: (context) => Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: context.isDarkMode
+                                ? const Color(0xFF332B15)
+                                : Colors.amber[50],
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                                color: context.isDarkMode
+                                    ? const Color(0xFF7A6A2E)
+                                    : Colors.amber[200]!),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(Icons.info_outline,
+                                  color: context.isDarkMode
+                                      ? AppTheme.secondaryColor
+                                      : Colors.amber[800],
+                                  size: 18),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'After registration, pay GH₵10 via MTN MoMo to activate your '
+                                  'Business Plan. Our team will verify and activate your account within 24 hours.',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: context.isDarkMode
+                                          ? AppTheme.secondaryColor
+                                          : const Color(0xFF7A5B00)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )),
               ]),
             ),
           ],
@@ -233,8 +283,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   void dispose() {
-    for (final c in [_companyNameCtrl, _regNumberCtrl, _firstNameCtrl, _lastNameCtrl,
-      _emailCtrl, _phoneCtrl, _companyPhoneCtrl, _passwordCtrl, _confirmCtrl]) {
+    for (final c in [
+      _companyNameCtrl,
+      _regNumberCtrl,
+      _firstNameCtrl,
+      _lastNameCtrl,
+      _emailCtrl,
+      _phoneCtrl,
+      _companyPhoneCtrl,
+      _passwordCtrl,
+      _confirmCtrl
+    ]) {
       c.dispose();
     }
     super.dispose();

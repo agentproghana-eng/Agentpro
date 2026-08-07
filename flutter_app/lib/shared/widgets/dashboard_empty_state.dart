@@ -30,10 +30,11 @@ class DashboardEmptyState extends StatelessWidget {
       decoration: BoxDecoration(
         color: context.appSurface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: context.appSecondaryText.withOpacity(0.08)),
+        border:
+            Border.all(color: context.appSecondaryText.withValues(alpha: 0.08)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 9,
             offset: const Offset(0, 3),
           ),
@@ -45,8 +46,8 @@ class DashboardEmptyState extends StatelessWidget {
             width: 58,
             height: 58,
             decoration: BoxDecoration(
-              color: AppTheme.primaryColor.withOpacity(
-                context.isDarkMode ? 0.20 : 0.09,
+              color: AppTheme.primaryColor.withValues(
+                alpha: context.isDarkMode ? 0.20 : 0.09,
               ),
               shape: BoxShape.circle,
             ),
@@ -77,7 +78,7 @@ class DashboardEmptyState extends StatelessWidget {
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppTheme.primaryColor,
                 side: BorderSide(
-                  color: AppTheme.primaryColor.withOpacity(0.35),
+                  color: AppTheme.primaryColor.withValues(alpha: 0.35),
                 ),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 18,
@@ -118,8 +119,8 @@ class DashboardListEntrance extends StatelessWidget {
         final adjusted = delay.inMilliseconds == 0
             ? value
             : ((value * 320 - delay.inMilliseconds) /
-                      (320 - delay.inMilliseconds))
-                  .clamp(0.0, 1.0);
+                    (320 - delay.inMilliseconds))
+                .clamp(0.0, 1.0);
 
         return Opacity(
           opacity: adjusted,

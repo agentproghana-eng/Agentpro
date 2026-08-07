@@ -237,15 +237,15 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 24),
 
                         // Provider logos
-                        Row(
+                        const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             _ProviderBadge(
                                 'MTN', AppTheme.mtnColor, Colors.black),
-                            const SizedBox(width: 8),
+                            SizedBox(width: 8),
                             _ProviderBadge(
                                 'Telecel', AppTheme.telecelColor, Colors.white),
-                            const SizedBox(width: 8),
+                            SizedBox(width: 8),
                             _ProviderBadge(
                                 'AT Money', AppTheme.atColor, Colors.white),
                           ],
@@ -266,10 +266,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 if (!snapshot.hasData) return const SizedBox.shrink();
                 final info = snapshot.data!;
                 return Text(
-                  "v${info.version}+${info.buildNumber}",
+                  'v${info.version}+${info.buildNumber}',
                   style: TextStyle(
                       fontSize: 10,
-                      color: context.appSecondaryText.withOpacity(0.6)),
+                      color: context.appSecondaryText.withValues(alpha: 0.6)),
                 );
               },
             ),

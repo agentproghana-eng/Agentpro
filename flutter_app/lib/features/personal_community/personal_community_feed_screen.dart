@@ -25,10 +25,12 @@ import '../../shared/widgets/audio_player_bubble.dart';
 class PersonalCommunityFeedScreen extends StatefulWidget {
   const PersonalCommunityFeedScreen({super.key});
   @override
-  State<PersonalCommunityFeedScreen> createState() => _PersonalCommunityFeedScreenState();
+  State<PersonalCommunityFeedScreen> createState() =>
+      _PersonalCommunityFeedScreenState();
 }
 
-class _PersonalCommunityFeedScreenState extends State<PersonalCommunityFeedScreen> {
+class _PersonalCommunityFeedScreenState
+    extends State<PersonalCommunityFeedScreen> {
   List<dynamic> _posts = [];
   bool _loading = true;
   final _composerCtrl = TextEditingController();
@@ -57,7 +59,8 @@ class _PersonalCommunityFeedScreenState extends State<PersonalCommunityFeedScree
 
   bool get _isPaid {
     final state = context.read<AuthBloc>().state;
-    return state is AuthAuthenticated && state.user['personal_subscription_plan'] == 'paid';
+    return state is AuthAuthenticated &&
+        state.user['personal_subscription_plan'] == 'paid';
   }
 
   Future<void> _load() async {
@@ -75,25 +78,32 @@ class _PersonalCommunityFeedScreenState extends State<PersonalCommunityFeedScree
 
   Future<void> _toggleLike(String postId, String reactionType) async {
     try {
-      await ApiClient.instance.post('/personal-community/posts/$postId/react', data: {'reaction_type': reactionType});
+      await ApiClient.instance.post('/personal-community/posts/$postId/react',
+          data: {'reaction_type': reactionType});
       _load();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to react'), backgroundColor: AppTheme.errorColor));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Failed to react'),
+            backgroundColor: AppTheme.errorColor));
       }
     }
   }
 
   Future<void> _startRecording() async {
     if (!await _recorder.hasPermission()) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Microphone permission is required to record a voice note')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'Microphone permission is required to record a voice note')));
+      }
       return;
     }
     final dir = await getTemporaryDirectory();
-    final path = '${dir.path}/personal_voice_note_${DateTime.now().millisecondsSinceEpoch}.m4a';
-    await _recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc), path: path);
+    final path =
+        '${dir.path}/personal_voice_note_${DateTime.now().millisecondsSinceEpoch}.m4a';
+    await _recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc),
+        path: path);
     setState(() {
       _isRecording = true;
       _hasRecording = false;
@@ -122,7 +132,8 @@ class _PersonalCommunityFeedScreenState extends State<PersonalCommunityFeedScree
     });
   }
 
-  String _formatSeconds(int s) => '${(s ~/ 60).toString().padLeft(2, '0')}:${(s % 60).toString().padLeft(2, '0')}';
+  String _formatSeconds(int s) =>
+      '${(s ~/ 60).toString().padLeft(2, '0')}:${(s % 60).toString().padLeft(2, '0')}';
 
   Future<void> _submitPost() async {
     final text = _composerCtrl.text.trim();
@@ -133,20 +144,23 @@ class _PersonalCommunityFeedScreenState extends State<PersonalCommunityFeedScree
       final formData = FormData.fromMap({
         if (text.isNotEmpty) 'content': text,
         if (_hasRecording && _recordedPath != null)
-          'audio': await MultipartFile.fromFile(_recordedPath!, filename: 'voice_note.m4a'),
+          'audio': await MultipartFile.fromFile(_recordedPath!,
+              filename: 'voice_note.m4a'),
       });
-      final res = await ApiClient.instance.post('/personal-community/posts', data: formData);
+      final res = await ApiClient.instance
+          .post('/personal-community/posts', data: formData);
       _composerCtrl.clear();
       _discardRecording();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(res.data['message'] ?? 'Posted')));
+            SnackBar(content: Text(res.data['message'] ?? 'Posted')));
       }
       _load();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to post'), backgroundColor: AppTheme.errorColor));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Failed to post'),
+            backgroundColor: AppTheme.errorColor));
       }
     } finally {
       if (mounted) setState(() => _posting = false);
@@ -157,12 +171,20 @@ class _PersonalCommunityFeedScreenState extends State<PersonalCommunityFeedScree
     if (!_isPaid) {
       return Container(
         padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(14),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)]),
+        decoration: BoxDecoration(
+            color: context.appSurface,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05), blurRadius: 4)
+            ]),
         child: Row(children: [
-          const Icon(Icons.lock_outline, color: AppTheme.primaryColor, size: 18),
+          const Icon(Icons.lock_outline,
+              color: AppTheme.primaryColor, size: 18),
           const SizedBox(width: 8),
-          const Expanded(child: Text('Upgrade to Paid to post in the community', style: TextStyle(fontSize: 12))),
+          const Expanded(
+              child: Text('Upgrade to Paid to post in the community',
+                  style: TextStyle(fontSize: 12))),
           TextButton(
             onPressed: () => context.push('/personal-subscription'),
             child: const Text('Upgrade'),
@@ -174,13 +196,22 @@ class _PersonalCommunityFeedScreenState extends State<PersonalCommunityFeedScree
     if (_isRecording) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)]),
+        decoration: BoxDecoration(
+            color: context.appSurface,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05), blurRadius: 4)
+            ]),
         child: Row(children: [
           const Icon(Icons.fiber_manual_record, color: Colors.red, size: 14),
           const SizedBox(width: 8),
-          Text('Recording... ${_formatSeconds(_recordSeconds)}', style: const TextStyle(fontSize: 12)),
+          Text('Recording... ${_formatSeconds(_recordSeconds)}',
+              style: const TextStyle(fontSize: 12)),
           const Spacer(),
-          IconButton(icon: const Icon(Icons.stop_circle, color: AppTheme.errorColor), onPressed: _stopRecording),
+          IconButton(
+              icon: const Icon(Icons.stop_circle, color: AppTheme.errorColor),
+              onPressed: _stopRecording),
         ]),
       );
     }
@@ -188,15 +219,29 @@ class _PersonalCommunityFeedScreenState extends State<PersonalCommunityFeedScree
     if (_hasRecording) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)]),
+        decoration: BoxDecoration(
+            color: context.appSurface,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05), blurRadius: 4)
+            ]),
         child: Row(children: [
           const Icon(Icons.mic, color: AppTheme.primaryColor, size: 18),
           const SizedBox(width: 8),
-          Text('Voice note ready (${_formatSeconds(_recordSeconds)})', style: const TextStyle(fontSize: 12)),
+          Text('Voice note ready (${_formatSeconds(_recordSeconds)})',
+              style: const TextStyle(fontSize: 12)),
           const Spacer(),
-          IconButton(icon: Icon(Icons.close, color: context.appSecondaryText), onPressed: _discardRecording),
           IconButton(
-            icon: _posting ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send, color: AppTheme.primaryColor),
+              icon: Icon(Icons.close, color: context.appSecondaryText),
+              onPressed: _discardRecording),
+          IconButton(
+            icon: _posting
+                ? const SizedBox(
+                    height: 18,
+                    width: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.send, color: AppTheme.primaryColor),
             onPressed: _posting ? null : _submitPost,
           ),
         ]),
@@ -205,14 +250,29 @@ class _PersonalCommunityFeedScreenState extends State<PersonalCommunityFeedScree
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-      decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(14),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)]),
+      decoration: BoxDecoration(
+          color: context.appSurface,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05), blurRadius: 4)
+          ]),
       child: Row(children: [
-        Expanded(child: TextField(controller: _composerCtrl,
-          decoration: const InputDecoration(hintText: 'Share something...', border: InputBorder.none))),
-        IconButton(icon: const Icon(Icons.mic_none, color: AppTheme.primaryColor), onPressed: _startRecording),
+        Expanded(
+            child: TextField(
+                controller: _composerCtrl,
+                decoration: const InputDecoration(
+                    hintText: 'Share something...', border: InputBorder.none))),
         IconButton(
-          icon: _posting ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send, color: AppTheme.primaryColor),
+            icon: const Icon(Icons.mic_none, color: AppTheme.primaryColor),
+            onPressed: _startRecording),
+        IconButton(
+          icon: _posting
+              ? const SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.send, color: AppTheme.primaryColor),
           onPressed: _posting ? null : _submitPost,
         ),
       ]),
@@ -236,7 +296,9 @@ class _PersonalCommunityFeedScreenState extends State<PersonalCommunityFeedScree
                     _PersonalPostCard(
                       post: p,
                       onLike: (type) => _toggleLike(p['id'], type),
-                      onOpen: () => context.push('/personal-community/post/${p['id']}').then((_) => _load()),
+                      onOpen: () => context
+                          .push('/personal-community/post/${p['id']}')
+                          .then((_) => _load()),
                     ),
                 ],
               ),
@@ -250,7 +312,8 @@ class _PersonalPostCard extends StatelessWidget {
   final void Function(String reactionType) onLike;
   final VoidCallback onOpen;
 
-  const _PersonalPostCard({required this.post, required this.onLike, required this.onOpen});
+  const _PersonalPostCard(
+      {required this.post, required this.onLike, required this.onOpen});
 
   String _formatPostTime(String? createdAt) {
     if (createdAt == null) return '';
@@ -261,7 +324,20 @@ class _PersonalPostCard extends StatelessWidget {
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     if (diff.inDays < 7) return '${diff.inDays}d ago';
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 
@@ -275,16 +351,25 @@ class _PersonalPostCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(13),
         margin: const EdgeInsets.only(bottom: 10),
-        decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(14),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 4)]),
+        decoration: BoxDecoration(
+            color: context.appSurface,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06), blurRadius: 4)
+            ]),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            CircleAvatar(backgroundColor: AppTheme.primaryColor,
-              child: Text(((post['first_name'] as String?) ?? 'U')[0].toUpperCase(),
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+            CircleAvatar(
+                backgroundColor: AppTheme.primaryColor,
+                child: Text(
+                    ((post['first_name'] as String?) ?? 'U')[0].toUpperCase(),
+                    style: const TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.bold))),
             const SizedBox(width: 8),
             Text('${post['first_name'] ?? ''} ${post['last_name'] ?? ''}',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 12.5)),
           ]),
           const SizedBox(height: 8),
           if (isPending)
@@ -292,41 +377,54 @@ class _PersonalPostCard extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: context.isDarkMode ? const Color(0xFF332B15) : const Color(0xFFFFF4D9),
-                borderRadius: BorderRadius.circular(8)),
+                  color: context.isDarkMode
+                      ? const Color(0xFF332B15)
+                      : const Color(0xFFFFF4D9),
+                  borderRadius: BorderRadius.circular(8)),
               child: Text('Under Review — only you can see this',
-                style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold,
-                  color: context.isDarkMode ? AppTheme.secondaryColor : const Color(0xFF7A5B00))),
+                  style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.bold,
+                      color: context.isDarkMode
+                          ? AppTheme.secondaryColor
+                          : const Color(0xFF7A5B00))),
             ),
           if (post['content'] != null && (post['content'] as String).isNotEmpty)
             Text(post['content'], style: const TextStyle(fontSize: 12.5)),
           if (audioUrl != null) ...[
-            if (post['content'] != null && (post['content'] as String).isNotEmpty) const SizedBox(height: 8),
+            if (post['content'] != null &&
+                (post['content'] as String).isNotEmpty)
+              const SizedBox(height: 8),
             AudioPlayerBubble(url: audioUrl),
           ],
           const SizedBox(height: 6),
           Text(_formatPostTime(post['created_at'] as String?),
-            style: TextStyle(fontSize: 10.5, color: context.appSecondaryText)),
+              style:
+                  TextStyle(fontSize: 10.5, color: context.appSecondaryText)),
           const SizedBox(height: 10),
           Row(children: [
             ReactionButton(
               myReaction: post['my_reaction'] as String?,
               totalCount: post['reaction_counts'] is Map
-                  ? (post['reaction_counts'] as Map).values.fold<int>(0, (sum, v) => sum + (int.tryParse(v.toString()) ?? 0))
+                  ? (post['reaction_counts'] as Map).values.fold<int>(
+                      0, (sum, v) => sum + (int.tryParse(v.toString()) ?? 0))
                   : 0,
               onReact: onLike,
               iconSize: 20,
             ),
             const SizedBox(width: 18),
             Row(children: [
-              Icon(Icons.chat_bubble_outline, size: 20, color: context.appSecondaryText),
+              Icon(Icons.chat_bubble_outline,
+                  size: 20, color: context.appSecondaryText),
               const SizedBox(width: 4),
-              Text('${post['comment_count'] ?? 0}', style: const TextStyle(fontSize: 13)),
+              Text('${post['comment_count'] ?? 0}',
+                  style: const TextStyle(fontSize: 13)),
             ]),
             const SizedBox(width: 18),
             InkWell(
               onTap: () => Share.share('${post['content'] ?? 'Voice note'}'),
-              child: Icon(Icons.share_outlined, size: 20, color: context.appSecondaryText),
+              child: Icon(Icons.share_outlined,
+                  size: 20, color: context.appSecondaryText),
             ),
           ]),
         ]),

@@ -64,7 +64,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       if (mounted) {
         setState(() {
           _conversationId = data['conversation_id'];
-          _messages.add(_ChatMessage(role: 'assistant', content: data['message']));
+          _messages
+              .add(_ChatMessage(role: 'assistant', content: data['message']));
           _loading = false;
         });
         _scroll();
@@ -74,7 +75,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
         setState(() {
           _messages.add(const _ChatMessage(
             role: 'assistant',
-            content: 'Sorry, I\'m having trouble connecting right now. Please try again.',
+            content:
+                'Sorry, I\'m having trouble connecting right now. Please try again.',
             isError: true,
           ));
           _loading = false;
@@ -87,7 +89,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     Future.delayed(const Duration(milliseconds: 100), () {
       if (_scrollCtrl.hasClients) {
         _scrollCtrl.animateTo(_scrollCtrl.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+            duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
       }
     });
   }
@@ -100,18 +102,24 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
           CircleAvatar(
             backgroundColor: Colors.white,
             radius: 16,
-            child: Icon(Icons.smart_toy, color: AppTheme.primaryColor, size: 18),
+            child:
+                Icon(Icons.smart_toy, color: AppTheme.primaryColor, size: 18),
           ),
           SizedBox(width: 10),
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('AI Assistant', style: TextStyle(fontSize: 15)),
-            Text('Powered by Claude', style: TextStyle(fontSize: 10, color: Colors.white70)),
+            Text('Powered by Claude',
+                style: TextStyle(fontSize: 10, color: Colors.white70)),
           ]),
         ]),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () => setState(() { _messages.clear(); _conversationId = null; _addWelcome(); }),
+            onPressed: () => setState(() {
+              _messages.clear();
+              _conversationId = null;
+              _addWelcome();
+            }),
             tooltip: 'New conversation',
           ),
         ],
@@ -141,10 +149,13 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                 itemCount: _suggestions.length,
                 separatorBuilder: (_, __) => const SizedBox(width: 8),
                 itemBuilder: (_, i) => ActionChip(
-                  label: Text(_suggestions[i], style: const TextStyle(fontSize: 12)),
+                  label: Text(_suggestions[i],
+                      style: const TextStyle(fontSize: 12)),
                   onPressed: () => _send(_suggestions[i]),
-                  backgroundColor: AppTheme.primaryColor.withOpacity(0.08),
-                  side: BorderSide(color: AppTheme.primaryColor.withOpacity(0.3)),
+                  backgroundColor:
+                      AppTheme.primaryColor.withValues(alpha: 0.08),
+                  side: BorderSide(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.3)),
                 ),
               ),
             ),
@@ -165,8 +176,10 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                     onSubmitted: (_) => _send(),
                     decoration: InputDecoration(
                       hintText: 'Ask me anything...',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(24)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
                       isDense: true,
                     ),
                   ),
@@ -188,13 +201,18 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   }
 
   @override
-  void dispose() { _msgCtrl.dispose(); _scrollCtrl.dispose(); super.dispose(); }
+  void dispose() {
+    _msgCtrl.dispose();
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
 }
 
 class _ChatMessage {
   final String role, content;
   final bool isError;
-  const _ChatMessage({required this.role, required this.content, this.isError = false});
+  const _ChatMessage(
+      {required this.role, required this.content, this.isError = false});
 }
 
 class _MessageBubble extends StatelessWidget {
@@ -208,13 +226,15 @@ class _MessageBubble extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment:
+            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         children: [
           if (!isUser) ...[
             CircleAvatar(
               radius: 16,
-              backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
-              child: const Icon(Icons.smart_toy, color: AppTheme.primaryColor, size: 16),
+              backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+              child: const Icon(Icons.smart_toy,
+                  color: AppTheme.primaryColor, size: 16),
             ),
             const SizedBox(width: 8),
           ],
@@ -224,7 +244,9 @@ class _MessageBubble extends StatelessWidget {
               decoration: BoxDecoration(
                 color: isUser
                     ? AppTheme.primaryColor
-                    : message.isError ? AppTheme.errorColor.withOpacity(0.1) : context.appSurface,
+                    : message.isError
+                        ? AppTheme.errorColor.withValues(alpha: 0.1)
+                        : context.appSurface,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(16),
                   topRight: const Radius.circular(16),
@@ -235,7 +257,11 @@ class _MessageBubble extends StatelessWidget {
               child: Text(
                 message.content,
                 style: TextStyle(
-                  color: isUser ? Colors.white : message.isError ? AppTheme.errorColor : context.appPrimaryText,
+                  color: isUser
+                      ? Colors.white
+                      : message.isError
+                          ? AppTheme.errorColor
+                          : context.appPrimaryText,
                   fontSize: 14,
                   height: 1.4,
                 ),
@@ -255,33 +281,52 @@ class _TypingIndicator extends StatefulWidget {
   State<_TypingIndicator> createState() => _TypingIndicatorState();
 }
 
-class _TypingIndicatorState extends State<_TypingIndicator> with SingleTickerProviderStateMixin {
+class _TypingIndicatorState extends State<_TypingIndicator>
+    with SingleTickerProviderStateMixin {
   late AnimationController _ctrl;
   @override
-  void initState() { super.initState(); _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 600))..repeat(reverse: true); }
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 600))
+      ..repeat(reverse: true);
+  }
+
   @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Row(children: [
-      CircleAvatar(radius: 16, backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
-        child: const Icon(Icons.smart_toy, color: AppTheme.primaryColor, size: 16)),
+      CircleAvatar(
+          radius: 16,
+          backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+          child: const Icon(Icons.smart_toy,
+              color: AppTheme.primaryColor, size: 16)),
       const SizedBox(width: 8),
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(16)),
+        decoration: BoxDecoration(
+            color: context.appSurface, borderRadius: BorderRadius.circular(16)),
         child: AnimatedBuilder(
           animation: _ctrl,
-          builder: (_, __) => Row(mainAxisSize: MainAxisSize.min, children: List.generate(3, (i) =>
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 2),
-              width: 6, height: 6,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppTheme.primaryColor.withOpacity(0.3 + (i == 1 ? _ctrl.value * 0.7 : 0)),
-              ),
-            )
-          )),
+          builder: (_, __) => Row(
+              mainAxisSize: MainAxisSize.min,
+              children: List.generate(
+                  3,
+                  (i) => Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 2),
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppTheme.primaryColor.withValues(
+                              alpha: 0.3 + (i == 1 ? _ctrl.value * 0.7 : 0)),
+                        ),
+                      ))),
         ),
       ),
     ]);

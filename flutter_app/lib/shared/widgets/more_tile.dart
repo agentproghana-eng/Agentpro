@@ -11,10 +11,14 @@ class MoreGroupLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
-    child: Text(label.toUpperCase(),
-        style: TextStyle(fontSize: 11, color: context.appSecondaryText, fontWeight: FontWeight.bold, letterSpacing: 1)),
-  );
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
+        child: Text(label.toUpperCase(),
+            style: TextStyle(
+                fontSize: 11,
+                color: context.appSecondaryText,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1)),
+      );
 }
 
 /// Shared More-tab list tile, consolidating what used to be three
@@ -31,7 +35,8 @@ class MoreTile extends StatefulWidget {
   final VoidCallback onTap;
   final Color? color;
   final String? newFeatureKey;
-  const MoreTile(this.icon, this.label, this.onTap, {super.key, this.color, this.newFeatureKey});
+  const MoreTile(this.icon, this.label, this.onTap,
+      {super.key, this.color, this.newFeatureKey});
 
   @override
   State<MoreTile> createState() => _MoreTileState();
@@ -58,20 +63,28 @@ class _MoreTileState extends State<MoreTile> {
 
   @override
   Widget build(BuildContext context) => ListTile(
-    leading: Icon(widget.icon, color: widget.color ?? AppTheme.primaryColor),
-    title: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(widget.label, style: TextStyle(color: widget.color)),
-        if (_showNew) Container(
-          margin: const EdgeInsets.only(left: 6),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(color: AppTheme.secondaryColor, borderRadius: BorderRadius.circular(6)),
-          child: const Text('NEW', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.black)),
+        leading:
+            Icon(widget.icon, color: widget.color ?? AppTheme.primaryColor),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(widget.label, style: TextStyle(color: widget.color)),
+            if (_showNew)
+              Container(
+                margin: const EdgeInsets.only(left: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                    color: AppTheme.secondaryColor,
+                    borderRadius: BorderRadius.circular(6)),
+                child: const Text('NEW',
+                    style: TextStyle(
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black)),
+              ),
+          ],
         ),
-      ],
-    ),
-    trailing: Icon(Icons.chevron_right, color: context.appSecondaryText),
-    onTap: widget.onTap,
-  );
+        trailing: Icon(Icons.chevron_right, color: context.appSecondaryText),
+        onTap: widget.onTap,
+      );
 }

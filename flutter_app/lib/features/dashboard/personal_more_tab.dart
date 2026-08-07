@@ -40,9 +40,8 @@ class PersonalMoreTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
-    final user = authState is AuthAuthenticated
-        ? authState.user
-        : <String, dynamic>{};
+    final user =
+        authState is AuthAuthenticated ? authState.user : <String, dynamic>{};
     final hasBusinessRole = user['company_id'] != null;
     final isPaid = user['personal_subscription_plan'] == 'paid';
 

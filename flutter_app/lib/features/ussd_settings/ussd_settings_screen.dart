@@ -1,10 +1,10 @@
-import "package:flutter/material.dart";
-import "package:flutter_bloc/flutter_bloc.dart";
-import "package:go_router/go_router.dart";
-import "../../core/api/api_client.dart";
-import "../../core/auth/auth_bloc.dart";
-import "../../shared/theme/app_theme.dart";
-import "../../shared/theme/app_colors.dart";
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
+import '../../core/api/api_client.dart';
+import '../../core/auth/auth_bloc.dart';
+import '../../shared/theme/app_theme.dart';
+import '../../shared/theme/app_colors.dart';
 
 class UssdSettingsScreen extends StatefulWidget {
   // Reused for Personal (Paid subscribers) too - the backend endpoint
@@ -26,7 +26,7 @@ class UssdSettingsScreen extends StatefulWidget {
 }
 
 class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
-  String _provider = "mtn";
+  String _provider = 'mtn';
   late String _transactionType;
   final _patternCtrl = TextEditingController();
   final _operatorIdCtrl = TextEditingController();
@@ -36,11 +36,11 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
   bool _savingOperatorId = false;
 
   static const _agentTypes = [
-    "cash_in",
-    "cash_out",
-    "send_money",
-    "airtime",
-    "data_bundle"
+    'cash_in',
+    'cash_out',
+    'send_money',
+    'airtime',
+    'data_bundle'
   ];
   late final List<String> _types = widget.transactionTypes ?? _agentTypes;
 
@@ -62,9 +62,9 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final res = await ApiClient.instance.get("/ussd-overrides");
+      final res = await ApiClient.instance.get('/ussd-overrides');
       setState(() {
-        _overrides = res.data["data"] ?? [];
+        _overrides = res.data['data'] ?? [];
         _loading = false;
         _syncPatternField();
       });
@@ -76,39 +76,41 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
   Map<String, dynamic>? get _currentOverride =>
       _overrides.cast<Map<String, dynamic>?>().firstWhere(
             (o) =>
-                o!["provider"] == _provider &&
-                o["transaction_type"] == _transactionType,
+                o!['provider'] == _provider &&
+                o['transaction_type'] == _transactionType,
             orElse: () => null,
           );
 
   void _syncPatternField() {
     final existing = _currentOverride;
-    _patternCtrl.text = existing != null ? existing["ussd_string_pattern"] : "";
+    _patternCtrl.text = existing != null ? existing['ussd_string_pattern'] : '';
   }
 
   Future<void> _save() async {
     final pattern = _patternCtrl.text.trim();
-    if (!pattern.startsWith("*") || !pattern.endsWith("#")) {
+    if (!pattern.startsWith('*') || !pattern.endsWith('#')) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text("Pattern must start with * and end with #")));
+          content: Text('Pattern must start with * and end with #')));
       return;
     }
     setState(() => _saving = true);
     try {
-      await ApiClient.instance.put("/ussd-overrides", data: {
-        "provider": _provider,
-        "transaction_type": _transactionType,
-        "ussd_string_pattern": pattern,
+      await ApiClient.instance.put('/ussd-overrides', data: {
+        'provider': _provider,
+        'transaction_type': _transactionType,
+        'ussd_string_pattern': pattern,
       });
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Custom pattern saved")));
+            const SnackBar(content: Text('Custom pattern saved')));
+      }
       _load();
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text("Failed to save pattern"),
+            content: Text('Failed to save pattern'),
             backgroundColor: AppTheme.errorColor));
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -120,15 +122,17 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
     setState(() => _saving = true);
     try {
       await ApiClient.instance.delete("/ussd-overrides/${existing["id"]}");
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Reset to company default")));
+            const SnackBar(content: Text('Reset to company default')));
+      }
       _load();
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text("Failed to reset"),
+            content: Text('Failed to reset'),
             backgroundColor: AppTheme.errorColor));
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -143,26 +147,27 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
     final value = _operatorIdCtrl.text.trim();
     if (value.isEmpty) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text("Enter an Operator ID")));
+          .showSnackBar(const SnackBar(content: Text('Enter an Operator ID')));
       return;
     }
     setState(() => _savingOperatorId = true);
     try {
-      await ApiClient.instance.patch("/users/me/settings", data: {
-        "telecel_operator_id": value,
+      await ApiClient.instance.patch('/users/me/settings', data: {
+        'telecel_operator_id': value,
       });
       if (mounted) {
         context
             .read<AuthBloc>()
-            .add(AuthUpdateUserEvent({"telecel_operator_id": value}));
+            .add(AuthUpdateUserEvent({'telecel_operator_id': value}));
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text("Operator ID saved")));
+            .showSnackBar(const SnackBar(content: Text('Operator ID saved')));
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text("Failed to save Operator ID"),
+            content: Text('Failed to save Operator ID'),
             backgroundColor: AppTheme.errorColor));
+      }
     } finally {
       if (mounted) setState(() => _savingOperatorId = false);
     }
@@ -170,58 +175,59 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading)
+    if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     return Scaffold(
-      appBar: AppBar(title: const Text("USSD Automation")),
+      appBar: AppBar(title: const Text('USSD Automation')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
-        const Text("Provider",
+        const Text('Provider',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
         const SizedBox(height: 8),
         Row(children: [
           _ProviderPill(
-              label: "MTN",
-              value: "mtn",
-              selected: _provider == "mtn",
-              color: AppTheme.providerColor("mtn"),
+              label: 'MTN',
+              value: 'mtn',
+              selected: _provider == 'mtn',
+              color: AppTheme.providerColor('mtn'),
               onTap: (v) => setState(() {
                     _provider = v;
                     _syncPatternField();
                   })),
           const SizedBox(width: 6),
           _ProviderPill(
-              label: "Telecel",
-              value: "telecel",
-              selected: _provider == "telecel",
-              color: AppTheme.providerColor("telecel"),
+              label: 'Telecel',
+              value: 'telecel',
+              selected: _provider == 'telecel',
+              color: AppTheme.providerColor('telecel'),
               onTap: (v) => setState(() {
                     _provider = v;
                     _syncPatternField();
                   })),
           const SizedBox(width: 6),
           _ProviderPill(
-              label: "AirtelTigo",
-              value: "at_money",
-              selected: _provider == "at_money",
-              color: AppTheme.providerColor("at_money"),
+              label: 'AirtelTigo',
+              value: 'at_money',
+              selected: _provider == 'at_money',
+              color: AppTheme.providerColor('at_money'),
               onTap: (v) => setState(() {
                     _provider = v;
                     _syncPatternField();
                   })),
         ]),
-        if (_provider == "telecel") ...[
+        if (_provider == 'telecel') ...[
           const SizedBox(height: 16),
-          const Text("Telecel Operator ID",
+          const Text('Telecel Operator ID',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
           const SizedBox(height: 4),
-          Text("The same value is used for every Telecel transaction.",
+          Text('The same value is used for every Telecel transaction.',
               style: TextStyle(fontSize: 9.5, color: context.appSecondaryText)),
           const SizedBox(height: 8),
           TextField(
             controller: _operatorIdCtrl,
             keyboardType: TextInputType.number,
             decoration: const InputDecoration(
-                hintText: "e.g. 8284", border: OutlineInputBorder()),
+                hintText: 'e.g. 8284', border: OutlineInputBorder()),
           ),
           const SizedBox(height: 8),
           ElevatedButton(
@@ -231,7 +237,7 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
                     height: 18,
                     width: 18,
                     child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text("Save Operator ID"),
+                : const Text('Save Operator ID'),
           ),
         ],
         const SizedBox(height: 18),
@@ -253,7 +259,7 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                "Choose and reorder up to 9 dashboard actions in a 3×3 grid.",
+                'Choose and reorder up to 9 dashboard actions in a 3×3 grid.',
                 style: TextStyle(
                   fontSize: 10.5,
                   color: context.appSecondaryText,
@@ -263,17 +269,17 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
               OutlinedButton.icon(
                 onPressed: () => context.push(
                   widget.isPersonal
-                      ? "/personal-quick-actions"
-                      : "/agent-quick-actions",
+                      ? '/personal-quick-actions'
+                      : '/agent-quick-actions',
                 ),
                 icon: const Icon(Icons.grid_view_outlined),
-                label: const Text("Customize Quick Actions"),
+                label: const Text('Customize Quick Actions'),
               ),
             ],
           ),
         ),
         const SizedBox(height: 16),
-        const Text("Transaction Type",
+        const Text('Transaction Type',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
         const SizedBox(height: 8),
         Container(
@@ -287,7 +293,7 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
               isExpanded: true,
               items: _types
                   .map((t) => DropdownMenuItem(
-                      value: t, child: Text(t.replaceAll("_", " "))))
+                      value: t, child: Text(t.replaceAll('_', ' '))))
                   .toList(),
               onChanged: (v) => setState(() {
                 _transactionType = v!;
@@ -297,19 +303,19 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        const Text("Your USSD Pattern",
+        const Text('Your USSD Pattern',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
         const SizedBox(height: 8),
         TextField(
           controller: _patternCtrl,
-          style: const TextStyle(fontFamily: "monospace"),
+          style: const TextStyle(fontFamily: 'monospace'),
           decoration: const InputDecoration(
-              hintText: "*170*1*2*{customer_phone}*{amount}#",
+              hintText: '*170*1*2*{customer_phone}*{amount}#',
               border: OutlineInputBorder()),
         ),
         Padding(
           padding: const EdgeInsets.only(top: 4),
-          child: Text("Placeholders: {customer_phone}, {amount}, {reference}",
+          child: Text('Placeholders: {customer_phone}, {amount}, {reference}',
               style: TextStyle(fontSize: 9.5, color: context.appSecondaryText)),
         ),
         const SizedBox(height: 12),
@@ -333,7 +339,7 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
           Center(
               child: TextButton(
                   onPressed: _saving ? null : _reset,
-                  child: const Text("Reset to Company Default"))),
+                  child: const Text('Reset to Company Default'))),
         const SizedBox(height: 8),
         ElevatedButton(
           onPressed: _saving ? null : _save,
@@ -342,7 +348,7 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
                   height: 18,
                   width: 18,
                   child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text("Save Custom Pattern"),
+              : const Text('Save Custom Pattern'),
         ),
       ]),
     );
@@ -381,7 +387,7 @@ class _ProviderPill extends StatelessWidget {
                   fontSize: 11,
                   fontWeight: FontWeight.bold,
                   color: selected
-                      ? (value == "mtn" ? Colors.black : Colors.white)
+                      ? (value == 'mtn' ? Colors.black : Colors.white)
                       : context.appSecondaryText)),
         ),
       ),

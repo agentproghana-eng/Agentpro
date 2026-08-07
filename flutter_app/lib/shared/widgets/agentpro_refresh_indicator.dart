@@ -16,8 +16,7 @@ class AgentProRefreshIndicator extends StatefulWidget {
       _AgentProRefreshIndicatorState();
 }
 
-class _AgentProRefreshIndicatorState
-    extends State<AgentProRefreshIndicator>
+class _AgentProRefreshIndicatorState extends State<AgentProRefreshIndicator>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 

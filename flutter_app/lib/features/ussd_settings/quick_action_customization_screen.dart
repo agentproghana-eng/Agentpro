@@ -303,28 +303,23 @@ class _QuickActionCustomizationScreenState
     'at_money': <String>[],
   };
 
-  List<QuickActionDefinition> get _definitions =>
-      widget.isPersonal
-          ? kPersonalQuickActionDefinitions
-          : kAgentQuickActionDefinitions;
+  List<QuickActionDefinition> get _definitions => widget.isPersonal
+      ? kPersonalQuickActionDefinitions
+      : kAgentQuickActionDefinitions;
 
-  Map<String, List<String>> get _defaults =>
-      widget.isPersonal
-          ? kPersonalQuickActionDefaults
-          : kAgentQuickActionDefaults;
+  Map<String, List<String>> get _defaults => widget.isPersonal
+      ? kPersonalQuickActionDefaults
+      : kAgentQuickActionDefaults;
 
-  Map<String, Set<String>> get _support =>
-      widget.isPersonal
-          ? kPersonalQuickActionSupport
-          : kAgentQuickActionSupport;
+  Map<String, Set<String>> get _support => widget.isPersonal
+      ? kPersonalQuickActionSupport
+      : kAgentQuickActionSupport;
 
-  Set<String> get _supportedTypes =>
-      _support[_provider] ?? const <String>{};
+  Set<String> get _supportedTypes => _support[_provider] ?? const <String>{};
 
-  List<QuickActionDefinition> get _availableDefinitions =>
-      _definitions
-          .where((definition) => _supportedTypes.contains(definition.type))
-          .toList();
+  List<QuickActionDefinition> get _availableDefinitions => _definitions
+      .where((definition) => _supportedTypes.contains(definition.type))
+      .toList();
 
   List<String> get _selected => _preferences[_provider] ?? <String>[];
 
@@ -360,21 +355,18 @@ class _QuickActionCustomizationScreenState
         final providerValue = saved[provider];
 
         if (providerValue is List) {
-          final supported =
-              _support[provider] ?? const <String>{};
+          final supported = _support[provider] ?? const <String>{};
 
           parsed[provider] = providerValue
               .whereType<String>()
               .where(
                 (type) =>
-                    _definitionFor(type) != null &&
-                    supported.contains(type),
+                    _definitionFor(type) != null && supported.contains(type),
               )
               .take(9)
               .toList();
         } else {
-          parsed[provider] =
-              List<String>.from(_defaults[provider] ?? const []);
+          parsed[provider] = List<String>.from(_defaults[provider] ?? const []);
         }
       }
 
@@ -469,9 +461,8 @@ class _QuickActionCustomizationScreenState
     setState(() => _saving = true);
 
     try {
-      final field = widget.isPersonal
-          ? 'personal_quick_actions'
-          : 'agent_quick_actions';
+      final field =
+          widget.isPersonal ? 'personal_quick_actions' : 'agent_quick_actions';
 
       await ApiClient.instance.patch(
         '/users/me/quick-actions',
@@ -623,12 +614,9 @@ class _QuickActionCustomizationScreenState
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: _selected.length,
-                    onReorder: (oldIndex, newIndex) {
+                    onReorderItem: (oldIndex, newIndex) {
                       setState(() {
                         final items = List<String>.from(_selected);
-
-                        if (newIndex > oldIndex) newIndex--;
-
                         final item = items.removeAt(oldIndex);
                         items.insert(newIndex, item);
                         _preferences[_provider] = items;
@@ -790,7 +778,7 @@ class _QuickActionPreview extends StatelessWidget {
               color: context.appSurface,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: AppTheme.primaryColor.withOpacity(0.16),
+                color: AppTheme.primaryColor.withValues(alpha: 0.16),
               ),
             ),
             padding: const EdgeInsets.all(7),
@@ -821,15 +809,15 @@ class _QuickActionPreview extends StatelessWidget {
         previewItems.add(
           Container(
             decoration: BoxDecoration(
-              color: context.appSurface.withOpacity(0.45),
+              color: context.appSurface.withValues(alpha: 0.45),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: context.appSecondaryText.withOpacity(0.12),
+                color: context.appSecondaryText.withValues(alpha: 0.12),
               ),
             ),
             child: Icon(
               Icons.add,
-              color: context.appSecondaryText.withOpacity(0.35),
+              color: context.appSecondaryText.withValues(alpha: 0.35),
             ),
           ),
         );

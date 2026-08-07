@@ -28,7 +28,7 @@ class _PersonalDashboardState extends State<PersonalDashboard> {
         children: const [
           PersonalHomeScreen(),
           PersonalCommunityFeedScreen(),
-          const MarketplaceScreen(),
+          MarketplaceScreen(),
           PersonalMoreTab(),
         ],
       ),

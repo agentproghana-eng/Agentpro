@@ -41,17 +41,23 @@ class ReactionButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF2A2A2A) : Colors.white,
           borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 10)],
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.15), blurRadius: 10)
+          ],
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: kReactionEmoji.entries.map((entry) => GestureDetector(
-            onTap: () {
-              Navigator.pop(ctx);
-              onReact(entry.key);
-            },
-            child: Text(entry.value, style: const TextStyle(fontSize: 26)),
-          )).toList(),
+          children: kReactionEmoji.entries
+              .map((entry) => GestureDetector(
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      onReact(entry.key);
+                    },
+                    child:
+                        Text(entry.value, style: const TextStyle(fontSize: 26)),
+                  ))
+              .toList(),
         ),
       ),
     );
@@ -66,7 +72,8 @@ class ReactionButton extends StatelessWidget {
       child: Row(children: [
         displayEmoji != null
             ? Text(displayEmoji, style: TextStyle(fontSize: iconSize))
-            : Icon(Icons.thumb_up_outlined, size: iconSize, color: AppTheme.primaryColor),
+            : Icon(Icons.thumb_up_outlined,
+                size: iconSize, color: AppTheme.primaryColor),
         const SizedBox(width: 4),
         Text('$totalCount', style: const TextStyle(fontSize: 13)),
       ]),

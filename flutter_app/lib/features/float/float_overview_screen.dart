@@ -48,25 +48,40 @@ class _FloatOverviewScreenState extends State<FloatOverviewScreen> {
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : _accounts.isEmpty
-                ? const EmptyState(icon: Icons.account_balance_wallet_outlined, title: 'No float accounts')
+                ? const EmptyState(
+                    icon: Icons.account_balance_wallet_outlined,
+                    title: 'No float accounts')
                 : ListView.builder(
                     padding: const EdgeInsets.all(8),
                     itemCount: _accounts.length,
                     itemBuilder: (_, i) {
                       final acc = _accounts[i] as Map<String, dynamic>;
-                      final balance = double.tryParse(acc['current_balance']?.toString() ?? '0') ?? 0;
-                      final threshold = double.tryParse(acc['low_balance_threshold']?.toString() ?? '500') ?? 500;
+                      final balance = double.tryParse(
+                              acc['current_balance']?.toString() ?? '0') ??
+                          0;
+                      final threshold = double.tryParse(
+                              acc['low_balance_threshold']?.toString() ??
+                                  '500') ??
+                          500;
                       final isLow = balance <= threshold;
                       return Card(
                         margin: const EdgeInsets.only(bottom: 6),
                         child: ListTile(
-                          leading: ProviderBadge(provider: acc['provider'] ?? ''),
+                          leading:
+                              ProviderBadge(provider: acc['provider'] ?? ''),
                           title: Text(acc['branch_name'] ?? '',
-                            style: const TextStyle(fontWeight: FontWeight.w600)),
-                          subtitle: Text(isLow ? '⚠️ Low float alert' : 'Normal',
-                            style: TextStyle(color: isLow ? AppTheme.errorColor : AppTheme.successColor, fontSize: 12)),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w600)),
+                          subtitle: Text(
+                              isLow ? '⚠️ Low float alert' : 'Normal',
+                              style: TextStyle(
+                                  color: isLow
+                                      ? AppTheme.errorColor
+                                      : AppTheme.successColor,
+                                  fontSize: 12)),
                           trailing: GhsAmount(
-                            amount: balance, fontSize: 15,
+                            amount: balance,
+                            fontSize: 15,
                             color: isLow ? AppTheme.errorColor : null,
                           ),
                         ),

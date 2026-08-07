@@ -100,8 +100,10 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
             Text(
               'Track the reach and status of your advertisements.',
               style: TextStyle(
-                color:
-                    Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.65),
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                    .withValues(alpha: 0.65),
               ),
             ),
             const SizedBox(height: 14),
@@ -233,8 +235,10 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
               'Daily views recorded since analytics tracking began.',
               style: TextStyle(
                 fontSize: 11,
-                color:
-                    Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.65),
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                    .withValues(alpha: 0.65),
               ),
             ),
             const SizedBox(height: 18),

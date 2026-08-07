@@ -64,8 +64,8 @@ class SkeletonBox extends StatelessWidget {
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: context.appSecondaryText.withOpacity(
-          context.isDarkMode ? 0.18 : 0.11,
+        color: context.appSecondaryText.withValues(
+          alpha: context.isDarkMode ? 0.18 : 0.11,
         ),
         borderRadius: BorderRadius.circular(radius),
       ),
@@ -85,7 +85,8 @@ class ShiftCardSkeleton extends StatelessWidget {
         decoration: BoxDecoration(
           color: context.appSurface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: context.appSecondaryText.withOpacity(0.07)),
+          border: Border.all(
+              color: context.appSecondaryText.withValues(alpha: 0.07)),
         ),
         child: const Row(
           children: [
@@ -121,7 +122,7 @@ class RecentTransactionsSkeleton extends StatelessWidget {
                 color: context.appSurface,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: context.appSecondaryText.withOpacity(0.06),
+                  color: context.appSecondaryText.withValues(alpha: 0.06),
                 ),
               ),
               child: const Row(

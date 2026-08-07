@@ -34,7 +34,12 @@ class _AudioPlayerBubbleState extends State<AudioPlayerBubble> {
       if (mounted) setState(() => _position = p);
     });
     _completeSub = _player.onPlayerComplete.listen((_) {
-      if (mounted) setState(() { _isPlaying = false; _position = Duration.zero; });
+      if (mounted) {
+        setState(() {
+          _isPlaying = false;
+          _position = Duration.zero;
+        });
+      }
     });
   }
 
@@ -48,7 +53,8 @@ class _AudioPlayerBubbleState extends State<AudioPlayerBubble> {
     }
   }
 
-  String _fmt(Duration d) => "${d.inMinutes.toString().padLeft(2, '0')}:${(d.inSeconds % 60).toString().padLeft(2, '0')}";
+  String _fmt(Duration d) =>
+      "${d.inMinutes.toString().padLeft(2, '0')}:${(d.inSeconds % 60).toString().padLeft(2, '0')}";
 
   @override
   void dispose() {
@@ -63,17 +69,24 @@ class _AudioPlayerBubbleState extends State<AudioPlayerBubble> {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.06), borderRadius: BorderRadius.circular(10)),
+      decoration: BoxDecoration(
+          color: AppTheme.primaryColor.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(10)),
       child: Row(children: [
         IconButton(
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(),
-          icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled, color: AppTheme.primaryColor, size: 28),
+          icon: Icon(
+              _isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
+              color: AppTheme.primaryColor,
+              size: 28),
           onPressed: _toggle,
         ),
         const SizedBox(width: 8),
         Text(
-          _duration == Duration.zero ? "Voice note" : "${_fmt(_position)} / ${_fmt(_duration)}",
+          _duration == Duration.zero
+              ? 'Voice note'
+              : '${_fmt(_position)} / ${_fmt(_duration)}',
           style: const TextStyle(fontSize: 11, color: AppTheme.primaryColor),
         ),
       ]),

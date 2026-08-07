@@ -18,13 +18,18 @@ class _StepDraft {
     actionValueCtrl.text = map['action_value'] ?? '';
   }
 
-  bool get needsActionValue => ['send_digit', 'send_literal', 'auto_confirm_once'].contains(action);
+  bool get needsActionValue =>
+      ['send_digit', 'send_literal', 'auto_confirm_once'].contains(action);
 
   Map<String, dynamic> toMap() => {
-    'match_all': matchAllCtrl.text.split(',').map((s) => s.trim().toLowerCase()).where((s) => s.isNotEmpty).toList(),
-    'action': action,
-    if (needsActionValue) 'action_value': actionValueCtrl.text.trim(),
-  };
+        'match_all': matchAllCtrl.text
+            .split(',')
+            .map((s) => s.trim().toLowerCase())
+            .where((s) => s.isNotEmpty)
+            .toList(),
+        'action': action,
+        if (needsActionValue) 'action_value': actionValueCtrl.text.trim(),
+      };
 
   void dispose() {
     matchAllCtrl.dispose();
@@ -65,7 +70,15 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
   final List<_StepDraft> _steps = [];
   bool _saving = false;
 
-  static const _agentTypes = ['cash_in', 'cash_out', 'send_money', 'airtime', 'data_bundle', 'balance_enquiry', 'commission'];
+  static const _agentTypes = [
+    'cash_in',
+    'cash_out',
+    'send_money',
+    'airtime',
+    'data_bundle',
+    'balance_enquiry',
+    'commission'
+  ];
   late final List<String> _types = widget.transactionTypes ?? _agentTypes;
   final _actions = const [
     {'value': 'send_digit', 'label': 'Send Digit'},
@@ -88,8 +101,10 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
       _provider = flow['provider'] ?? 'mtn';
       _transactionType = flow['transaction_type'] ?? _types.first;
       _dialCodeCtrl.text = flow['dial_code'] ?? '';
-      _successMarkersCtrl.text = (flow['success_markers'] as List?)?.join(', ') ?? '';
-      _failureMarkersCtrl.text = (flow['failure_markers'] as List?)?.join(', ') ?? '';
+      _successMarkersCtrl.text =
+          (flow['success_markers'] as List?)?.join(', ') ?? '';
+      _failureMarkersCtrl.text =
+          (flow['failure_markers'] as List?)?.join(', ') ?? '';
       final existingSteps = (flow['steps'] as List?) ?? [];
       for (final s in existingSteps) {
         _steps.add(_StepDraft.fromMap(s as Map<String, dynamic>));
@@ -109,13 +124,13 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
 
   Future<void> _save() async {
     if (_dialCodeCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Dial code is required')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Dial code is required')));
       return;
     }
     if (_steps.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('At least one step is required')));
+          const SnackBar(content: Text('At least one step is required')));
       return;
     }
 
@@ -124,26 +139,39 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
       'provider': _provider,
       'transaction_type': _transactionType,
       'dial_code': _dialCodeCtrl.text.trim(),
-      'success_markers': _successMarkersCtrl.text.split(',').map((s) => s.trim().toLowerCase()).where((s) => s.isNotEmpty).toList(),
-      'failure_markers': _failureMarkersCtrl.text.split(',').map((s) => s.trim().toLowerCase()).where((s) => s.isNotEmpty).toList(),
+      'success_markers': _successMarkersCtrl.text
+          .split(',')
+          .map((s) => s.trim().toLowerCase())
+          .where((s) => s.isNotEmpty)
+          .toList(),
+      'failure_markers': _failureMarkersCtrl.text
+          .split(',')
+          .map((s) => s.trim().toLowerCase())
+          .where((s) => s.isNotEmpty)
+          .toList(),
       'steps': _steps.map((s) => s.toMap()).toList(),
     };
 
     try {
       if (_isEditing) {
-        await ApiClient.instance.patch('${widget.apiBasePath}/${widget.existingFlow!['id']}', data: payload);
+        await ApiClient.instance.patch(
+            '${widget.apiBasePath}/${widget.existingFlow!['id']}',
+            data: payload);
       } else {
         await ApiClient.instance.post(widget.apiBasePath, data: payload);
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_isEditing ? 'Flow updated' : 'Flow created')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(_isEditing ? 'Flow updated' : 'Flow created')));
         context.pop(true);
       }
     } on DioException catch (e) {
       final msg = e.response?.data?['message'] ?? 'Failed to save flow';
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg.toString()), backgroundColor: AppTheme.errorColor));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(msg.toString()),
+            backgroundColor: AppTheme.errorColor));
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -156,9 +184,14 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('PROVIDER', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.appSecondaryText)),
+          Text('PROVIDER',
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: context.appSecondaryText)),
           const SizedBox(height: 8),
-          Row(children: ['mtn', 'telecel', 'at_money'].map((p) {
+          Row(
+              children: ['mtn', 'telecel', 'at_money'].map((p) {
             final selected = _provider == p;
             final color = AppTheme.providerColor(p);
             return Expanded(
@@ -172,60 +205,92 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
                     borderRadius: BorderRadius.circular(9),
                   ),
                   child: Text(
-                    {'mtn': 'MTN', 'telecel': 'Telecel', 'at_money': 'AT Money'}[p]!,
+                    {
+                      'mtn': 'MTN',
+                      'telecel': 'Telecel',
+                      'at_money': 'AT Money'
+                    }[p]!,
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: selected ? (p == 'mtn' ? Colors.black : Colors.white) : context.appSecondaryText),
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: selected
+                            ? (p == 'mtn' ? Colors.black : Colors.white)
+                            : context.appSecondaryText),
                   ),
                 ),
               ),
             );
           }).toList()),
-
           const SizedBox(height: 16),
-          Text('TRANSACTION TYPE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.appSecondaryText)),
+          Text('TRANSACTION TYPE',
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: context.appSecondaryText)),
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(
+                color: context.appSurface,
+                borderRadius: BorderRadius.circular(10)),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
                 value: _transactionType,
                 isExpanded: true,
-                items: _types.map((t) => DropdownMenuItem(value: t, child: Text(t.replaceAll('_', ' ')))).toList(),
+                items: _types
+                    .map((t) => DropdownMenuItem(
+                        value: t, child: Text(t.replaceAll('_', ' '))))
+                    .toList(),
                 onChanged: (v) => setState(() => _transactionType = v!),
               ),
             ),
           ),
-
           const SizedBox(height: 16),
-          Text('DIAL CODE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.appSecondaryText)),
+          Text('DIAL CODE',
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: context.appSecondaryText)),
           const SizedBox(height: 8),
           TextField(
             controller: _dialCodeCtrl,
             style: const TextStyle(fontFamily: 'monospace'),
-            decoration: const InputDecoration(hintText: '*100#', border: OutlineInputBorder()),
+            decoration: const InputDecoration(
+                hintText: '*100#', border: OutlineInputBorder()),
           ),
-
           const SizedBox(height: 16),
-          Text('SUCCESS MARKERS (comma-separated)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.appSecondaryText)),
+          Text('SUCCESS MARKERS (comma-separated)',
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: context.appSecondaryText)),
           const SizedBox(height: 8),
           TextField(
             controller: _successMarkersCtrl,
-            decoration: const InputDecoration(hintText: 'successful, approved', border: OutlineInputBorder()),
+            decoration: const InputDecoration(
+                hintText: 'successful, approved', border: OutlineInputBorder()),
           ),
-
           const SizedBox(height: 16),
-          Text('FAILURE MARKERS (comma-separated)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.appSecondaryText)),
+          Text('FAILURE MARKERS (comma-separated)',
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: context.appSecondaryText)),
           const SizedBox(height: 8),
           TextField(
             controller: _failureMarkersCtrl,
-            decoration: const InputDecoration(hintText: 'failed, insufficient, invalid', border: OutlineInputBorder()),
+            decoration: const InputDecoration(
+                hintText: 'failed, insufficient, invalid',
+                border: OutlineInputBorder()),
           ),
-
           const SizedBox(height: 20),
-          Text('STEPS (in order)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: context.appSecondaryText)),
+          Text('STEPS (in order)',
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: context.appSecondaryText)),
           const SizedBox(height: 8),
-
           ..._steps.asMap().entries.map((entry) {
             final i = entry.key;
             final step = entry.value;
@@ -239,9 +304,12 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Step ${i + 1}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        Text('Step ${i + 1}',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 12)),
                         IconButton(
-                          icon: Icon(Icons.close, size: 18, color: context.appSecondaryText),
+                          icon: Icon(Icons.close,
+                              size: 18, color: context.appSecondaryText),
                           onPressed: () => _removeStep(i),
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
@@ -249,37 +317,56 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
                       ],
                     ),
                     const SizedBox(height: 6),
-                    Text('Match if screen contains (comma-separated, ALL must match)', style: TextStyle(fontSize: 9.5, color: context.appSecondaryText)),
+                    Text(
+                        'Match if screen contains (comma-separated, ALL must match)',
+                        style: TextStyle(
+                            fontSize: 9.5, color: context.appSecondaryText)),
                     const SizedBox(height: 4),
                     TextField(
                       controller: step.matchAllCtrl,
                       style: const TextStyle(fontSize: 12),
-                      decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), hintText: 'enter phone no'),
+                      decoration: const InputDecoration(
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                          hintText: 'enter phone no'),
                     ),
                     const SizedBox(height: 8),
-                    Text('Action', style: TextStyle(fontSize: 9.5, color: context.appSecondaryText)),
+                    Text('Action',
+                        style: TextStyle(
+                            fontSize: 9.5, color: context.appSecondaryText)),
                     const SizedBox(height: 4),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10),
-                      decoration: BoxDecoration(border: Border.all(color: context.appDivider), borderRadius: BorderRadius.circular(6)),
+                      decoration: BoxDecoration(
+                          border: Border.all(color: context.appDivider),
+                          borderRadius: BorderRadius.circular(6)),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
                           value: step.action,
                           isExpanded: true,
-                          style: TextStyle(fontSize: 12, color: context.appPrimaryText),
-                          items: _actions.map((a) => DropdownMenuItem(value: a['value'], child: Text(a['label']!))).toList(),
+                          style: TextStyle(
+                              fontSize: 12, color: context.appPrimaryText),
+                          items: _actions
+                              .map((a) => DropdownMenuItem(
+                                  value: a['value'], child: Text(a['label']!)))
+                              .toList(),
                           onChanged: (v) => setState(() => step.action = v!),
                         ),
                       ),
                     ),
                     if (step.needsActionValue) ...[
                       const SizedBox(height: 8),
-                      Text('Value to send', style: TextStyle(fontSize: 9.5, color: context.appSecondaryText)),
+                      Text('Value to send',
+                          style: TextStyle(
+                              fontSize: 9.5, color: context.appSecondaryText)),
                       const SizedBox(height: 4),
                       TextField(
                         controller: step.actionValueCtrl,
                         style: const TextStyle(fontSize: 12),
-                        decoration: const InputDecoration(isDense: true, border: OutlineInputBorder(), hintText: 'e.g. 1'),
+                        decoration: const InputDecoration(
+                            isDense: true,
+                            border: OutlineInputBorder(),
+                            hintText: 'e.g. 1'),
                       ),
                     ],
                   ],
@@ -287,18 +374,20 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
               ),
             );
           }),
-
           OutlinedButton.icon(
             onPressed: _addStep,
             icon: const Icon(Icons.add),
             label: const Text('Add Step'),
           ),
-
           const SizedBox(height: 20),
           ElevatedButton(
             onPressed: _saving ? null : _save,
             child: _saving
-                ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                ? const SizedBox(
+                    height: 18,
+                    width: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white))
                 : Text(_isEditing ? 'Save Changes' : 'Create Flow'),
           ),
         ],

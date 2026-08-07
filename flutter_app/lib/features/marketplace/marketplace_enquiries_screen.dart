@@ -87,8 +87,8 @@ class _MarketplaceEnquiriesScreenState
         onRefresh: _load,
         child: _loading
             ? ListView(
-                physics: AlwaysScrollableScrollPhysics(),
-                children: [
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: const [
                   SizedBox(height: 180),
                   Center(child: CircularProgressIndicator()),
                 ],
@@ -114,9 +114,9 @@ class _MarketplaceEnquiriesScreenState
                   )
                 : _conversations.isEmpty
                     ? ListView(
-                        physics: AlwaysScrollableScrollPhysics(),
-                        padding: EdgeInsets.all(24),
-                        children: [
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(24),
+                        children: const [
                           SizedBox(height: 100),
                           Icon(Icons.mark_chat_unread_outlined, size: 56),
                           SizedBox(height: 12),

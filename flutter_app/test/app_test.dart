@@ -8,7 +8,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   group('Commission Calculations', () {
     test('calculates 2% commission correctly', () {
-      final gross = 500.0 * 0.02;
+      const gross = 500.0 * 0.02;
       expect(gross, closeTo(10.0, 0.001));
     });
 
@@ -73,12 +73,12 @@ void main() {
 
     test('session log never contains the PIN, only a fixed safe placeholder',
         () async {
-      final template = USSDTemplate(
+      const template = USSDTemplate(
         id: 'test-template',
         ussdStringPattern: '*170*1*2*{customer_phone}*{amount}#',
-        pinPromptStrings: const ['pin'],
-        successStrings: const ['successful'],
-        failureStrings: const ['failed', 'insufficient'],
+        pinPromptStrings: ['pin'],
+        successStrings: ['successful'],
+        failureStrings: ['failed', 'insufficient'],
         timeoutSeconds: 5,
         retryCount: 0,
       );
@@ -130,12 +130,12 @@ void main() {
         return null;
       });
 
-      final template = USSDTemplate(
+      const template = USSDTemplate(
         id: 'test-template',
         ussdStringPattern: '*170*1*2*{customer_phone}*{amount}#',
-        pinPromptStrings: const ['pin'],
-        successStrings: const ['successful'],
-        failureStrings: const ['failed'],
+        pinPromptStrings: ['pin'],
+        successStrings: ['successful'],
+        failureStrings: ['failed'],
         timeoutSeconds: 5,
         retryCount: 0,
       );
@@ -169,12 +169,12 @@ void main() {
         return null;
       });
 
-      final template = USSDTemplate(
+      const template = USSDTemplate(
         id: 'test-template',
         ussdStringPattern: '*170*1*6*1#',
-        pinPromptStrings: const ['pin'],
-        successStrings: const ['balance'],
-        failureStrings: const ['failed'],
+        pinPromptStrings: ['pin'],
+        successStrings: ['balance'],
+        failureStrings: ['failed'],
         timeoutSeconds: 5,
         retryCount: 0, // no retries, to keep this test deterministic
       );

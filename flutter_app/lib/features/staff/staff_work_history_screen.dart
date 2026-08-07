@@ -1,7 +1,7 @@
-import "package:flutter/material.dart";
-import "../../core/api/api_client.dart";
-import "../../shared/widgets/app_widgets.dart";
-import "../transactions/transaction_detail_screen.dart";
+import 'package:flutter/material.dart';
+import '../../core/api/api_client.dart';
+import '../../shared/widgets/app_widgets.dart';
+import '../transactions/transaction_detail_screen.dart';
 
 class StaffWorkHistoryScreen extends StatefulWidget {
   final String userId;
@@ -30,15 +30,15 @@ class _StaffWorkHistoryScreenState extends State<StaffWorkHistoryScreen> {
       _error = null;
     });
     try {
-      final res = await ApiClient.instance.get("/transactions",
-          queryParameters: {"agent_id": widget.userId, "limit": 50});
+      final res = await ApiClient.instance.get('/transactions',
+          queryParameters: {'agent_id': widget.userId, 'limit': 50});
       setState(() {
-        _transactions = res.data["data"] ?? [];
+        _transactions = res.data['data'] ?? [];
         _loading = false;
       });
     } catch (e) {
       setState(() {
-        _error = "Could not load transaction history";
+        _error = 'Could not load transaction history';
         _loading = false;
       });
     }
@@ -47,7 +47,7 @@ class _StaffWorkHistoryScreenState extends State<StaffWorkHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("${widget.userName} - Work History")),
+      appBar: AppBar(title: Text('${widget.userName} - Work History')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -55,9 +55,9 @@ class _StaffWorkHistoryScreenState extends State<StaffWorkHistoryScreen> {
               : _transactions.isEmpty
                   ? const EmptyState(
                       icon: Icons.receipt_long_outlined,
-                      title: "No transactions yet",
+                      title: 'No transactions yet',
                       subtitle:
-                          "This person has not processed any transactions",
+                          'This person has not processed any transactions',
                     )
                   : RefreshIndicator(
                       onRefresh: _load,
@@ -73,14 +73,14 @@ class _StaffWorkHistoryScreenState extends State<StaffWorkHistoryScreen> {
                                 context,
                                 MaterialPageRoute(
                                   builder: (_) => TransactionDetailScreen(
-                                      transactionId: tx["id"]),
+                                      transactionId: tx['id']),
                                 ),
                               ),
                               title: Text(
                                   "${(tx["transaction_type"] ?? "").toString().toUpperCase()} - GH₵${tx["amount"] ?? "0.00"}"),
                               subtitle: Text(
                                   "${tx["provider"] ?? ""} - ${tx["branch_name"] ?? ""} - ${(tx["created_at"] ?? "").toString().split("T").first}"),
-                              trailing: StatusBadge(status: tx["status"] ?? ""),
+                              trailing: StatusBadge(status: tx['status'] ?? ''),
                             ),
                           );
                         },

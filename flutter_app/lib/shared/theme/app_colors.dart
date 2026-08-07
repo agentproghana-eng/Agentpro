@@ -10,14 +10,19 @@ import 'app_theme.dart';
 extension AppColors on BuildContext {
   bool get isDarkMode => Theme.of(this).brightness == Brightness.dark;
 
-  Color get appScaffoldBg => isDarkMode ? AppTheme.darkScaffoldBg : const Color(0xFFF5F5F5);
+  Color get appScaffoldBg =>
+      isDarkMode ? AppTheme.darkScaffoldBg : const Color(0xFFF5F5F5);
   Color get appSurface => isDarkMode ? AppTheme.darkSurface : Colors.white;
-  Color get appPrimaryText => isDarkMode ? AppTheme.darkPrimaryText : Colors.black87;
-  Color get appSecondaryText => isDarkMode ? AppTheme.darkSecondaryText : Colors.grey;
-  Color get appDivider => isDarkMode ? AppTheme.darkDivider : Colors.grey.shade200;
+  Color get appPrimaryText =>
+      isDarkMode ? AppTheme.darkPrimaryText : Colors.black87;
+  Color get appSecondaryText =>
+      isDarkMode ? AppTheme.darkSecondaryText : Colors.grey;
+  Color get appDivider =>
+      isDarkMode ? AppTheme.darkDivider : Colors.grey.shade200;
 
   // For the app's specific pastel tile backgrounds (Home screen quick
   // actions, etc.) - pass the existing light-mode Color literal in,
   // get back the right one for the current theme.
-  Color appTileColor(Color lightColor) => isDarkMode ? AppTheme.darkTileColor(lightColor) : lightColor;
+  Color appTileColor(Color lightColor) =>
+      isDarkMode ? AppTheme.darkTileColor(lightColor) : lightColor;
 }

@@ -3,7 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   // Agent Pro Ghana Brand Colors
-  static const Color primaryColor = Color(0xFF006B5E); // Deep Teal (Ghana forest)
+  static const Color primaryColor =
+      Color(0xFF006B5E); // Deep Teal (Ghana forest)
   static const Color primaryLight = Color(0xFF4DB6A9);
   static const Color secondaryColor = Color(0xFFFFB300); // Gold (Ghana flag)
   static const Color errorColor = Color(0xFFBA1A1A);
@@ -84,7 +85,8 @@ class AppTheme {
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: errorColor),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
       cardTheme: CardThemeData(
         elevation: 0,
@@ -95,8 +97,9 @@ class AppTheme {
         color: Colors.white,
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: primaryColor.withOpacity(0.1),
-        labelStyle: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500),
+        backgroundColor: primaryColor.withValues(alpha: 0.1),
+        labelStyle:
+            GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
@@ -198,7 +201,8 @@ class AppTheme {
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: darkErrorColor),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
       cardTheme: CardThemeData(
         elevation: 0,
@@ -209,12 +213,13 @@ class AppTheme {
         color: darkSurface,
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: primaryLight.withOpacity(0.15),
-        labelStyle: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500, color: darkPrimaryText),
+        backgroundColor: primaryLight.withValues(alpha: 0.15),
+        labelStyle: GoogleFonts.inter(
+            fontSize: 12, fontWeight: FontWeight.w500, color: darkPrimaryText),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
-      bottomNavigationBarTheme: BottomNavigationBarThemeData(
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: darkSurface,
         selectedItemColor: primaryLight,
         unselectedItemColor: darkSecondaryText,
@@ -248,28 +253,38 @@ class AppTheme {
       0xFFDFF3EE: Color(0xFF193029), // light green -> deep green
       0xFFFBE6EC: Color(0xFF2E1B21), // light pink -> deep rose
     };
-    return map[light.value] ?? darkSurface;
+    return map[light.toARGB32()] ?? darkSurface;
   }
 
   // Transaction status colors
   static Color statusColor(String status) {
     switch (status) {
-      case 'success': return successColor;
-      case 'failed': return errorColor;
-      case 'processing': return warningColor;
-      case 'pending_confirmation': return warningColor;
-      case 'reversed': return Colors.purple;
-      default: return Colors.grey;
+      case 'success':
+        return successColor;
+      case 'failed':
+        return errorColor;
+      case 'processing':
+        return warningColor;
+      case 'pending_confirmation':
+        return warningColor;
+      case 'reversed':
+        return Colors.purple;
+      default:
+        return Colors.grey;
     }
   }
 
   // Provider colors
   static Color providerColor(String provider) {
     switch (provider) {
-      case 'mtn': return mtnColor;
-      case 'telecel': return telecelColor;
-      case 'at_money': return atColor;
-      default: return primaryColor;
+      case 'mtn':
+        return mtnColor;
+      case 'telecel':
+        return telecelColor;
+      case 'at_money':
+        return atColor;
+      default:
+        return primaryColor;
     }
   }
 }

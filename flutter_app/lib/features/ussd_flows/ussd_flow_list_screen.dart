@@ -3,7 +3,8 @@ import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
 import 'ussd_flow_editor_screen.dart';
-import '../transactions/personal_transaction_screen.dart' show kPersonalTransactionLabels;
+import '../transactions/personal_transaction_screen.dart'
+    show kPersonalTransactionLabels;
 
 // Lists USSD flows: global (superuser-owned, shared by every company,
 // read-only here) and this company's own flows (editable). Business
@@ -33,9 +34,13 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
-      final res = await ApiClient.instance.get(widget.isPersonal ? '/personal-ussd-flows' : '/ussd-flows');
+      final res = await ApiClient.instance
+          .get(widget.isPersonal ? '/personal-ussd-flows' : '/ussd-flows');
       setState(() {
         _flows = res.data['data'] ?? [];
         _loading = false;
@@ -49,26 +54,31 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
   }
 
   String _providerLabel(String p) => switch (p) {
-    'mtn' => 'MTN',
-    'telecel' => 'Telecel',
-    'at_money' => 'AT Money',
-    _ => p,
-  };
+        'mtn' => 'MTN',
+        'telecel' => 'Telecel',
+        'at_money' => 'AT Money',
+        _ => p,
+      };
 
   Future<void> _openFlow(Map<String, dynamic> flow) async {
     final isGlobal = !widget.isPersonal && flow['company_id'] == null;
     if (isGlobal) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Global flows are managed centrally and are read-only here.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'Global flows are managed centrally and are read-only here.')));
       return;
     }
     final result = await Navigator.push<bool>(
       context,
-      MaterialPageRoute(builder: (_) => UssdFlowEditorScreen(
-        existingFlow: flow,
-        apiBasePath: widget.isPersonal ? '/personal-ussd-flows' : '/ussd-flows',
-        transactionTypes: widget.isPersonal ? kPersonalTransactionLabels.keys.toList() : null,
-      )),
+      MaterialPageRoute(
+          builder: (_) => UssdFlowEditorScreen(
+                existingFlow: flow,
+                apiBasePath:
+                    widget.isPersonal ? '/personal-ussd-flows' : '/ussd-flows',
+                transactionTypes: widget.isPersonal
+                    ? kPersonalTransactionLabels.keys.toList()
+                    : null,
+              )),
     );
     if (result == true) _load();
   }
@@ -76,10 +86,14 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
   Future<void> _createFlow() async {
     final result = await Navigator.push<bool>(
       context,
-      MaterialPageRoute(builder: (_) => UssdFlowEditorScreen(
-        apiBasePath: widget.isPersonal ? '/personal-ussd-flows' : '/ussd-flows',
-        transactionTypes: widget.isPersonal ? kPersonalTransactionLabels.keys.toList() : null,
-      )),
+      MaterialPageRoute(
+          builder: (_) => UssdFlowEditorScreen(
+                apiBasePath:
+                    widget.isPersonal ? '/personal-ussd-flows' : '/ussd-flows',
+                transactionTypes: widget.isPersonal
+                    ? kPersonalTransactionLabels.keys.toList()
+                    : null,
+              )),
     );
     if (result == true) _load();
   }
@@ -93,7 +107,9 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
           : _error != null
               ? Center(child: Text(_error!))
               : _flows.isEmpty
-                  ? const Center(child: Text('No USSD flows yet.\nTap + to create one.', textAlign: TextAlign.center))
+                  ? const Center(
+                      child: Text('No USSD flows yet.\nTap + to create one.',
+                          textAlign: TextAlign.center))
                   : RefreshIndicator(
                       onRefresh: _load,
                       child: ListView.builder(
@@ -101,33 +117,44 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
                         itemCount: _flows.length,
                         itemBuilder: (_, i) {
                           final flow = _flows[i] as Map<String, dynamic>;
-                          final isGlobal = !widget.isPersonal && flow['company_id'] == null;
+                          final isGlobal =
+                              !widget.isPersonal && flow['company_id'] == null;
                           return Card(
                             margin: const EdgeInsets.only(bottom: 8),
                             child: ListTile(
                               title: Text(
                                 '${_providerLabel(flow['provider'] ?? '')} · ${(flow['transaction_type'] ?? '').toString().replaceAll('_', ' ')}',
-                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600, fontSize: 13),
                               ),
                               subtitle: Text(
                                 '${flow['dial_code'] ?? ''} · ${isGlobal ? 'Managed centrally' : 'Your company'}',
                                 style: const TextStyle(fontSize: 11),
                               ),
                               trailing: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
                                 decoration: BoxDecoration(
                                   color: isGlobal
-                                      ? (context.isDarkMode ? const Color(0xFF2A1F45) : const Color(0xFFE8E0FF))
-                                      : context.appTileColor(const Color(0xFFE6F4F1)),
+                                      ? (context.isDarkMode
+                                          ? const Color(0xFF2A1F45)
+                                          : const Color(0xFFE8E0FF))
+                                      : context.appTileColor(
+                                          const Color(0xFFE6F4F1)),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
                                   isGlobal ? 'GLOBAL' : 'MY COMPANY',
                                   style: TextStyle(
-                                    fontSize: 8, fontWeight: FontWeight.w800,
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.w800,
                                     color: isGlobal
-                                        ? (context.isDarkMode ? const Color(0xFFB39DDB) : const Color(0xFF5B3FA0))
-                                        : (context.isDarkMode ? AppTheme.primaryLight : AppTheme.primaryColor),
+                                        ? (context.isDarkMode
+                                            ? const Color(0xFFB39DDB)
+                                            : const Color(0xFF5B3FA0))
+                                        : (context.isDarkMode
+                                            ? AppTheme.primaryLight
+                                            : AppTheme.primaryColor),
                                   ),
                                 ),
                               ),

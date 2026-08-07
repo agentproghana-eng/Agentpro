@@ -48,13 +48,19 @@ class _ShiftHistoryScreenState extends State<ShiftHistoryScreen> {
           _shifts = loadMore ? [..._shifts, ...data] : data;
           _page = nextPage;
           _totalPages = meta?['total_pages'] ?? 1;
-          _threshold = double.tryParse(meta?['threshold']?.toString() ?? '') ?? 20.00;
+          _threshold =
+              double.tryParse(meta?['threshold']?.toString() ?? '') ?? 20.00;
           _loading = false;
           _loadingMore = false;
         });
       }
     } catch (_) {
-      if (mounted) setState(() { _loading = false; _loadingMore = false; });
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _loadingMore = false;
+        });
+      }
     }
   }
 
@@ -66,15 +72,19 @@ class _ShiftHistoryScreenState extends State<ShiftHistoryScreen> {
         Padding(
           padding: const EdgeInsets.all(12),
           child: Row(children: [
-            Expanded(child: Text(
+            Expanded(
+                child: Text(
               'Threshold for flagging: GH₵${_threshold.toStringAsFixed(2)}',
               style: TextStyle(fontSize: 11, color: context.appSecondaryText),
             )),
             FilterChip(
               label: const Text('Flagged only'),
               selected: _flaggedOnly,
-              onSelected: (v) { setState(() => _flaggedOnly = v); _load(); },
-              selectedColor: AppTheme.errorColor.withOpacity(0.15),
+              onSelected: (v) {
+                setState(() => _flaggedOnly = v);
+                _load();
+              },
+              selectedColor: AppTheme.errorColor.withValues(alpha: 0.15),
               checkmarkColor: AppTheme.errorColor,
             ),
           ]),
@@ -83,12 +93,16 @@ class _ShiftHistoryScreenState extends State<ShiftHistoryScreen> {
           child: _loading
               ? const Center(child: CircularProgressIndicator())
               : _shifts.isEmpty
-                  ? Center(child: Text(_flaggedOnly ? 'No flagged shifts' : 'No closed shifts yet'))
+                  ? Center(
+                      child: Text(_flaggedOnly
+                          ? 'No flagged shifts'
+                          : 'No closed shifts yet'))
                   : RefreshIndicator(
                       onRefresh: () => _load(),
                       child: ListView.builder(
                         padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                        itemCount: _shifts.length + (_page < _totalPages ? 1 : 0),
+                        itemCount:
+                            _shifts.length + (_page < _totalPages ? 1 : 0),
                         itemBuilder: (context, i) {
                           if (i == _shifts.length) {
                             return Padding(
@@ -96,11 +110,14 @@ class _ShiftHistoryScreenState extends State<ShiftHistoryScreen> {
                               child: Center(
                                 child: _loadingMore
                                     ? const CircularProgressIndicator()
-                                    : TextButton(onPressed: () => _load(loadMore: true), child: const Text('Load More')),
+                                    : TextButton(
+                                        onPressed: () => _load(loadMore: true),
+                                        child: const Text('Load More')),
                               ),
                             );
                           }
-                          return _ShiftCard(shift: _shifts[i] as Map<String, dynamic>);
+                          return _ShiftCard(
+                              shift: _shifts[i] as Map<String, dynamic>);
                         },
                       ),
                     ),
@@ -118,11 +135,16 @@ class _ShiftCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final variance = double.tryParse(shift['variance']?.toString() ?? '') ?? 0;
     final flagged = shift['flagged'] == true;
-    final name = '${shift['first_name'] ?? ''} ${shift['last_name'] ?? ''}'.trim();
+    final name =
+        '${shift['first_name'] ?? ''} ${shift['last_name'] ?? ''}'.trim();
     final branch = shift['branch_name'] ?? 'No branch';
     DateTime? closedAt;
-    try { closedAt = DateTime.parse(shift['closed_at'].toString()); } catch (_) {}
-    final closedStr = closedAt != null ? DateFormat('MMM d, HH:mm').format(closedAt.toLocal()) : '';
+    try {
+      closedAt = DateTime.parse(shift['closed_at'].toString());
+    } catch (_) {}
+    final closedStr = closedAt != null
+        ? DateFormat('MMM d, HH:mm').format(closedAt.toLocal())
+        : '';
     final color = flagged ? AppTheme.errorColor : AppTheme.primaryColor;
     final varianceLabel = variance == 0
         ? 'Exact match'
@@ -135,14 +157,28 @@ class _ShiftCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Row(children: [
-          Icon(flagged ? Icons.warning_amber_rounded : Icons.check_circle_outline, color: color, size: 28),
+          Icon(
+              flagged
+                  ? Icons.warning_amber_rounded
+                  : Icons.check_circle_outline,
+              color: color,
+              size: 28),
           const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(name.isEmpty ? 'Unknown agent' : name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-            Text('$branch \u00b7 $closedStr \u00b7 ${shift['transaction_count'] ?? 0} txns',
-              style: TextStyle(fontSize: 10.5, color: context.appSecondaryText)),
-          ])),
-          Text(varianceLabel, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: color)),
+          Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text(name.isEmpty ? 'Unknown agent' : name,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 13)),
+                Text(
+                    '$branch \u00b7 $closedStr \u00b7 ${shift['transaction_count'] ?? 0} txns',
+                    style: TextStyle(
+                        fontSize: 10.5, color: context.appSecondaryText)),
+              ])),
+          Text(varianceLabel,
+              style: TextStyle(
+                  fontWeight: FontWeight.bold, fontSize: 12, color: color)),
         ]),
       ),
     );

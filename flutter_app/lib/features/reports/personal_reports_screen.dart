@@ -32,8 +32,18 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
   String _statusFilter = 'all';
   bool _loading = false;
 
-  static const _periods = {'today': 'Today', 'week': 'This Week', 'month': 'This Month', 'year': 'This Year'};
-  static const _providers = {'all': 'All Providers', 'mtn': 'MTN', 'telecel': 'Telecel', 'at_money': 'AT Money'};
+  static const _periods = {
+    'today': 'Today',
+    'week': 'This Week',
+    'month': 'This Month',
+    'year': 'This Year'
+  };
+  static const _providers = {
+    'all': 'All Providers',
+    'mtn': 'MTN',
+    'telecel': 'Telecel',
+    'at_money': 'AT Money'
+  };
   static const _types = {
     'all': 'All Types',
     'send_money_same_network': 'Send Money (Same Network)',
@@ -44,11 +54,17 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
     'check_momo_balance': 'Check MoMo Balance',
     'check_airtime_balance': 'Check Airtime Balance',
   };
-  static const _statuses = {'all': 'All Statuses', 'success': 'Success', 'failed': 'Failed', 'pending_confirmation': 'Pending'};
+  static const _statuses = {
+    'all': 'All Statuses',
+    'success': 'Success',
+    'failed': 'Failed',
+    'pending_confirmation': 'Pending'
+  };
 
   bool get _isPaid {
     final state = context.read<AuthBloc>().state;
-    return state is AuthAuthenticated && state.user['personal_subscription_plan'] == 'paid';
+    return state is AuthAuthenticated &&
+        state.user['personal_subscription_plan'] == 'paid';
   }
 
   Future<void> _download() async {
@@ -66,27 +82,35 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
         options: Options(responseType: ResponseType.bytes),
       );
       final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/my_transactions_${DateTime.now().millisecondsSinceEpoch}.$_format');
+      final file = File(
+          '${dir.path}/my_transactions_${DateTime.now().millisecondsSinceEpoch}.$_format');
       await file.writeAsBytes(res.data);
       await OpenFile.open(file.path);
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to generate report'), backgroundColor: AppTheme.errorColor));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Failed to generate report'),
+            backgroundColor: AppTheme.errorColor));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  Widget _dropdown(String label, String value, Map<String, String> options, void Function(String) onChanged) {
+  Widget _dropdown(String label, String value, Map<String, String> options,
+      void Function(String) onChanged) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: DropdownButtonFormField<String>(
         initialValue: value,
-        decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
-        items: options.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
-        onChanged: (v) { if (v != null) onChanged(v); },
+        decoration: InputDecoration(
+            labelText: label, border: const OutlineInputBorder()),
+        items: options.entries
+            .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+            .toList(),
+        onChanged: (v) {
+          if (v != null) onChanged(v);
+        },
       ),
     );
   }
@@ -99,15 +123,22 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
-            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              const Icon(Icons.lock_outline, size: 48, color: AppTheme.primaryColor),
+            child:
+                Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              const Icon(Icons.lock_outline,
+                  size: 48, color: AppTheme.primaryColor),
               const SizedBox(height: 16),
-              const Text('Reports are a Paid feature', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const Text('Reports are a Paid feature',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              const Text('Upgrade your Personal plan to download PDF and CSV transaction reports.',
-                textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+              const Text(
+                  'Upgrade your Personal plan to download PDF and CSV transaction reports.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey)),
               const SizedBox(height: 20),
-              AppButton(label: 'Upgrade to Paid', onPressed: () => context.push('/personal-subscription')),
+              AppButton(
+                  label: 'Upgrade to Paid',
+                  onPressed: () => context.push('/personal-subscription')),
             ]),
           ),
         ),
@@ -120,28 +151,39 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
         padding: const EdgeInsets.all(20),
         child: ListView(
           children: [
-            _dropdown('Period', _period, _periods, (v) => setState(() => _period = v)),
-            _dropdown('Provider', _providerFilter, _providers, (v) => setState(() => _providerFilter = v)),
-            _dropdown('Transaction Type', _typeFilter, _types, (v) => setState(() => _typeFilter = v)),
-            _dropdown('Status', _statusFilter, _statuses, (v) => setState(() => _statusFilter = v)),
+            _dropdown('Period', _period, _periods,
+                (v) => setState(() => _period = v)),
+            _dropdown('Provider', _providerFilter, _providers,
+                (v) => setState(() => _providerFilter = v)),
+            _dropdown('Transaction Type', _typeFilter, _types,
+                (v) => setState(() => _typeFilter = v)),
+            _dropdown('Status', _statusFilter, _statuses,
+                (v) => setState(() => _statusFilter = v)),
             const SizedBox(height: 8),
-            const Text('Format', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const Text('Format',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             const SizedBox(height: 8),
             Row(children: [
-              Expanded(child: ChoiceChip(
+              Expanded(
+                  child: ChoiceChip(
                 label: const Text('PDF'),
                 selected: _format == 'pdf',
                 onSelected: (_) => setState(() => _format = 'pdf'),
               )),
               const SizedBox(width: 10),
-              Expanded(child: ChoiceChip(
+              Expanded(
+                  child: ChoiceChip(
                 label: const Text('CSV'),
                 selected: _format == 'csv',
                 onSelected: (_) => setState(() => _format = 'csv'),
               )),
             ]),
             const SizedBox(height: 24),
-            AppButton(label: 'Generate Report', icon: Icons.download, onPressed: _download, isLoading: _loading),
+            AppButton(
+                label: 'Generate Report',
+                icon: Icons.download,
+                onPressed: _download,
+                isLoading: _loading),
           ],
         ),
       ),

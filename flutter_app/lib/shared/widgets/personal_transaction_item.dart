@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_colors.dart';
-import '../../features/transactions/personal_transaction_screen.dart' show kPersonalTransactionLabels;
+import '../../features/transactions/personal_transaction_screen.dart'
+    show kPersonalTransactionLabels;
 
 /// Shared between Personal Home's Recent Transactions preview and the
 /// full Personal Transaction History screen. Status-colored rather
@@ -28,9 +29,12 @@ class PersonalTransactionItem extends StatelessWidget {
 
   Color _statusColor(String status) {
     switch (status) {
-      case 'success': return AppTheme.primaryColor;
-      case 'failed': return const Color(0xFFB33F3F);
-      default: return const Color(0xFFB87E00);
+      case 'success':
+        return AppTheme.primaryColor;
+      case 'failed':
+        return const Color(0xFFB33F3F);
+      default:
+        return const Color(0xFFB87E00);
     }
   }
 
@@ -38,29 +42,58 @@ class PersonalTransactionItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final type = (tx['transaction_type'] ?? '').toString();
     final status = (tx['status'] ?? '').toString();
-    final amount = tx['amount'] != null ? double.tryParse(tx['amount'].toString()) : null;
+    final amount =
+        tx['amount'] != null ? double.tryParse(tx['amount'].toString()) : null;
     DateTime? created;
-    try { created = DateTime.parse(tx['created_at'].toString()); } catch (_) {}
-    final timeStr = created != null ? DateFormat('HH:mm').format(created.toLocal()) : '';
+    try {
+      created = DateTime.parse(tx['created_at'].toString());
+    } catch (_) {}
+    final timeStr =
+        created != null ? DateFormat('HH:mm').format(created.toLocal()) : '';
 
     return Container(
       padding: const EdgeInsets.all(11),
       margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(color: context.appSurface, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 3)]),
+      decoration: BoxDecoration(
+          color: context.appSurface,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05), blurRadius: 3)
+          ]),
       child: Row(children: [
         Container(
-          width: 34, height: 34,
-          decoration: BoxDecoration(color: context.appTileColor(const Color(0xFFE6F4F1)), borderRadius: BorderRadius.circular(9)),
-          child: Icon(_icons[type] ?? Icons.receipt_long_outlined, size: 16, color: AppTheme.primaryColor),
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+              color: context.appTileColor(const Color(0xFFE6F4F1)),
+              borderRadius: BorderRadius.circular(9)),
+          child: Icon(_icons[type] ?? Icons.receipt_long_outlined,
+              size: 16, color: AppTheme.primaryColor),
         ),
         const SizedBox(width: 10),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(kPersonalTransactionLabels[type] ?? type, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
-          Text('${tx['recipient_phone'] ?? ''} \u00b7 $timeStr', style: const TextStyle(fontSize: 10.5, color: Colors.grey, fontWeight: FontWeight.w700)),
+        Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(kPersonalTransactionLabels[type] ?? type,
+              style:
+                  const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+          Text('${tx['recipient_phone'] ?? ''} \u00b7 $timeStr',
+              style: const TextStyle(
+                  fontSize: 10.5,
+                  color: Colors.grey,
+                  fontWeight: FontWeight.w700)),
         ])),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          if (amount != null) Text('GH\u20b5${amount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
-          Text(status.toUpperCase(), style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: _statusColor(status))),
+          if (amount != null)
+            Text('GH\u20b5${amount.toStringAsFixed(2)}',
+                style: const TextStyle(
+                    fontSize: 12.5, fontWeight: FontWeight.bold)),
+          Text(status.toUpperCase(),
+              style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  color: _statusColor(status))),
         ]),
       ]),
     );

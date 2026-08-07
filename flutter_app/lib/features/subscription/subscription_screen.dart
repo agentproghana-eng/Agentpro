@@ -28,11 +28,12 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   Future<void> _load() async {
     try {
       final res = await ApiClient.instance.get('/subscriptions/status');
-      if (mounted)
+      if (mounted) {
         setState(() {
           _data = res.data['data'];
           _loading = false;
         });
+      }
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
@@ -53,10 +54,11 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         _load();
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('Submission failed'),
             backgroundColor: AppTheme.errorColor));
+      }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -77,8 +79,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               // Status Card
               Card(
                 color: status == 'active'
-                    ? AppTheme.successColor.withOpacity(0.1)
-                    : AppTheme.errorColor.withOpacity(0.1),
+                    ? AppTheme.successColor.withValues(alpha: 0.1)
+                    : AppTheme.errorColor.withValues(alpha: 0.1),
                 child: Padding(
                     padding: const EdgeInsets.all(20),
                     child: Column(children: [

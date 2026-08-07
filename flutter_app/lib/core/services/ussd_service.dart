@@ -67,7 +67,8 @@ class USSDTemplate {
     return USSDTemplate(
       id: map['id'] ?? '',
       ussdStringPattern: map['ussd_string_pattern'] ?? '',
-      pinPromptStrings: List<String>.from(map['pin_prompt_strings'] ?? const ['pin']),
+      pinPromptStrings:
+          List<String>.from(map['pin_prompt_strings'] ?? const ['pin']),
       successStrings: List<String>.from(map['success_strings'] ?? const []),
       failureStrings: List<String>.from(map['failure_strings'] ?? const []),
       timeoutSeconds: map['timeout_seconds'] ?? 30,
@@ -136,7 +137,8 @@ class USSDEngine {
     if (resolvedCode.isEmpty || !_allPlaceholdersResolved(resolvedCode)) {
       return USSDResult(
         outcome: USSDStatus.failed,
-        failureReason: 'USSD template is misconfigured for this transaction type. '
+        failureReason:
+            'USSD template is misconfigured for this transaction type. '
             'Please contact support.',
         sessionLog: _sessionLog,
       );
@@ -148,28 +150,34 @@ class USSDEngine {
       try {
         _emitProgress(
           USSDStatus.dialing,
-          attempt == 1 ? 'Dialing network...' : 'Dialing network... (attempt $attempt of $maxAttempts)',
+          attempt == 1
+              ? 'Dialing network...'
+              : 'Dialing network... (attempt $attempt of $maxAttempts)',
         );
 
         final sessionId = await _dialUSSD(resolvedCode);
         _logStep('dial', resolvedCode);
 
         _emitProgress(USSDStatus.processing, 'Processing transaction...');
-        final firstResponse = await _waitForUSSDResponse(sessionId, template.timeoutSeconds);
+        final firstResponse =
+            await _waitForUSSDResponse(sessionId, template.timeoutSeconds);
         _logStep('response', null, firstResponse);
 
-        final gotNoResponseAtAll = firstResponse.isEmpty || firstResponse == 'TIMEOUT';
+        final gotNoResponseAtAll =
+            firstResponse.isEmpty || firstResponse == 'TIMEOUT';
 
         if (gotNoResponseAtAll) {
           // Nothing engaged with this dial at all — safe to retry, since
           // no money could plausibly have moved. Only retry if attempts remain.
           if (attempt < maxAttempts) {
-            _logStep('retry', null, 'No response — retrying (attempt $attempt of $maxAttempts)');
+            _logStep('retry', null,
+                'No response — retrying (attempt $attempt of $maxAttempts)');
             continue;
           }
           return USSDResult(
             outcome: USSDStatus.failed,
-            failureReason: 'No response received from the network after $maxAttempts attempt(s). '
+            failureReason:
+                'No response received from the network after $maxAttempts attempt(s). '
                 'Please check network signal and try again.',
             sessionLog: _sessionLog,
           );
@@ -247,7 +255,8 @@ class USSDEngine {
       USSDStatus.awaitingPIN,
       'Enter your PIN on the network screen to complete this transaction.',
     );
-    _logStep('pin_prompt_seen', null, '[PIN ENTRY — NOT LOGGED, NOT APP-VISIBLE]');
+    _logStep(
+        'pin_prompt_seen', null, '[PIN ENTRY — NOT LOGGED, NOT APP-VISIBLE]');
 
     // Extended wait: give the user real time to enter their PIN.
     // We deliberately do NOT know whether a second callback is
@@ -313,7 +322,8 @@ class USSDEngine {
     });
   }
 
-  Future<String> _waitForUSSDResponse(String sessionId, int timeoutSeconds) async {
+  Future<String> _waitForUSSDResponse(
+      String sessionId, int timeoutSeconds) async {
     final result = await _channel.invokeMethod('waitForResponse', {
       'session_id': sessionId,
       'timeout_seconds': timeoutSeconds,
@@ -394,7 +404,8 @@ class USSDEngine {
 /// service reports the PIN prompt was reached, the agent completes it
 /// on the same visible system dialog themselves.
 class UssdAccessibilityEngine {
-  static const _channel = MethodChannel("com.agentpro.ghana/ussd_accessibility");
+  static const _channel =
+      MethodChannel('com.agentpro.ghana/ussd_accessibility');
 
   final _progressController = StreamController<USSDProgress>.broadcast();
   Stream<USSDProgress> get progressStream => _progressController.stream;
@@ -407,20 +418,22 @@ class UssdAccessibilityEngine {
 
   Future<dynamic> _handleNativeCall(MethodCall call) async {
     switch (call.method) {
-      case "onPinPromptReached":
+      case 'onPinPromptReached':
         _progressController.add(const USSDProgress(
           status: USSDStatus.awaitingPIN,
-          message: "Enter your Mobile Money PIN on the dialer screen to continue.",
+          message:
+              'Enter your Mobile Money PIN on the dialer screen to continue.',
         ));
         break;
-      case "onResult":
+      case 'onResult':
         final args = call.arguments as Map;
-        final outcome = args["outcome"] as String? ?? "failure";
-        final success = outcome == "success";
-        final message = args["message"] as String? ?? "";
+        final outcome = args['outcome'] as String? ?? 'failure';
+        final success = outcome == 'success';
+        final message = args['message'] as String? ?? '';
         _resultCompleter?.complete(USSDResult(
           outcome: success ? USSDStatus.success : USSDStatus.failed,
-          failureReason: success ? null : "Transaction did not complete: $message",
+          failureReason:
+              success ? null : 'Transaction did not complete: $message',
           sessionLog: const [],
         ));
         break;
@@ -428,42 +441,56 @@ class UssdAccessibilityEngine {
   }
 
   Future<bool> isServiceEnabled() async {
-    final result = await _channel.invokeMethod<bool>("isServiceEnabled");
+    final result = await _channel.invokeMethod<bool>('isServiceEnabled');
     return result ?? false;
   }
 
   Future<void> openAccessibilitySettings() async {
-    await _channel.invokeMethod("openAccessibilitySettings");
+    await _channel.invokeMethod('openAccessibilitySettings');
   }
 
   /// No client-side timeout here deliberately - the agent may take any
   /// amount of time to type their PIN on the native dialog. The native
   /// side (UssdAccessibilityService) is the sole source of truth for
   /// when this session actually ends.
-  Future<USSDResult> execute({required String customerPhone, required String amount, required String transactionType, required String provider, String? operatorId, String? reference, String? merchantId, int? simSlot, String? dialCode, List<Map<String, dynamic>>? steps, List<String>? successMarkers, List<String>? failureMarkers, Map<String, String>? selections}) async {
+  Future<USSDResult> execute(
+      {required String customerPhone,
+      required String amount,
+      required String transactionType,
+      required String provider,
+      String? operatorId,
+      String? reference,
+      String? merchantId,
+      int? simSlot,
+      String? dialCode,
+      List<Map<String, dynamic>>? steps,
+      List<String>? successMarkers,
+      List<String>? failureMarkers,
+      Map<String, String>? selections}) async {
     _resultCompleter = Completer<USSDResult>();
-    _progressController.add(const USSDProgress(status: USSDStatus.dialing, message: "Dialing network..."));
+    _progressController.add(const USSDProgress(
+        status: USSDStatus.dialing, message: 'Dialing network...'));
 
     try {
-      await _channel.invokeMethod("startAutomation", {
-        "customer_phone": customerPhone,
-        "amount": amount,
-        "transaction_type": transactionType,
-        "provider": provider,
-        if (operatorId != null) "operator_id": operatorId,
-        if (reference != null) "reference": reference,
-        if (merchantId != null) "merchant_id": merchantId,
-        if (simSlot != null) "sim_slot": simSlot,
-        if (dialCode != null) "dial_code": dialCode,
-        if (steps != null) "steps": steps,
-        if (successMarkers != null) "success_markers": successMarkers,
-        if (failureMarkers != null) "failure_markers": failureMarkers,
-        if (selections != null) "selections": selections,
+      await _channel.invokeMethod('startAutomation', {
+        'customer_phone': customerPhone,
+        'amount': amount,
+        'transaction_type': transactionType,
+        'provider': provider,
+        if (operatorId != null) 'operator_id': operatorId,
+        if (reference != null) 'reference': reference,
+        if (merchantId != null) 'merchant_id': merchantId,
+        if (simSlot != null) 'sim_slot': simSlot,
+        if (dialCode != null) 'dial_code': dialCode,
+        if (steps != null) 'steps': steps,
+        if (successMarkers != null) 'success_markers': successMarkers,
+        if (failureMarkers != null) 'failure_markers': failureMarkers,
+        if (selections != null) 'selections': selections,
       });
     } catch (e) {
       return USSDResult(
         outcome: USSDStatus.failed,
-        failureReason: "Failed to start automation: $e",
+        failureReason: 'Failed to start automation: $e',
         sessionLog: const [],
       );
     }

@@ -13,7 +13,8 @@ import '../../shared/widgets/app_widgets.dart';
 class SimPurposeSettingsScreen extends StatefulWidget {
   const SimPurposeSettingsScreen({super.key});
   @override
-  State<SimPurposeSettingsScreen> createState() => _SimPurposeSettingsScreenState();
+  State<SimPurposeSettingsScreen> createState() =>
+      _SimPurposeSettingsScreenState();
 }
 
 class _SimPurposeSettingsScreenState extends State<SimPurposeSettingsScreen> {
@@ -30,7 +31,10 @@ class _SimPurposeSettingsScreenState extends State<SimPurposeSettingsScreen> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final cards = await SimCardService.getSimCards();
       final res = await ApiClient.instance.get('/user-sim-purposes');
@@ -47,27 +51,36 @@ class _SimPurposeSettingsScreenState extends State<SimPurposeSettingsScreen> {
         });
       }
     } catch (_) {
-      if (mounted) setState(() { _error = 'Failed to load SIM information'; _loading = false; });
+      if (mounted) {
+        setState(() {
+          _error = 'Failed to load SIM information';
+          _loading = false;
+        });
+      }
     }
   }
 
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      final assignments = _simCards.map((c) => {
-        'sim_slot': c.slot,
-        'sim_iccid': c.iccid.isNotEmpty ? c.iccid : null,
-        'purpose': _purposes[c.slot] ?? 'agent',
-      }).toList();
-      await ApiClient.instance.put('/user-sim-purposes', data: {'assignments': assignments});
+      final assignments = _simCards
+          .map((c) => {
+                'sim_slot': c.slot,
+                'sim_iccid': c.iccid.isNotEmpty ? c.iccid : null,
+                'purpose': _purposes[c.slot] ?? 'agent',
+              })
+          .toList();
+      await ApiClient.instance
+          .put('/user-sim-purposes', data: {'assignments': assignments});
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('SIM assignments saved ✅')));
+            const SnackBar(content: Text('SIM assignments saved ✅')));
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to save'), backgroundColor: AppTheme.errorColor));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Failed to save'),
+            backgroundColor: AppTheme.errorColor));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -76,10 +89,14 @@ class _SimPurposeSettingsScreenState extends State<SimPurposeSettingsScreen> {
 
   String _networkLabel(String network) {
     switch (network) {
-      case 'mtn': return 'MTN';
-      case 'telecel': return 'Telecel';
-      case 'at_money': return 'AT Money';
-      default: return 'Unknown';
+      case 'mtn':
+        return 'MTN';
+      case 'telecel':
+        return 'Telecel';
+      case 'at_money':
+        return 'AT Money';
+      default:
+        return 'Unknown';
     }
   }
 
@@ -92,26 +109,41 @@ class _SimPurposeSettingsScreenState extends State<SimPurposeSettingsScreen> {
           : _error != null
               ? Center(child: Text(_error!))
               : _simCards.isEmpty
-                  ? const EmptyState(icon: Icons.sim_card_alert, title: 'No SIM cards detected')
+                  ? const EmptyState(
+                      icon: Icons.sim_card_alert,
+                      title: 'No SIM cards detected')
                   : ListView(
                       padding: const EdgeInsets.all(16),
                       children: [
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: context.isDarkMode ? const Color(0xFF1A2B45) : Colors.blue[50],
+                            color: context.isDarkMode
+                                ? const Color(0xFF1A2B45)
+                                : Colors.blue[50],
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: context.isDarkMode ? const Color(0xFF3A5B8F) : Colors.blue[200]!),
+                            border: Border.all(
+                                color: context.isDarkMode
+                                    ? const Color(0xFF3A5B8F)
+                                    : Colors.blue[200]!),
                           ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Icon(Icons.info_outline, color: context.isDarkMode ? const Color(0xFF8FB8E8) : Colors.blue, size: 18),
+                              Icon(Icons.info_outline,
+                                  color: context.isDarkMode
+                                      ? const Color(0xFF8FB8E8)
+                                      : Colors.blue,
+                                  size: 18),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
                                   'Tell the app which SIM is for your Business (Agent) work and which is for your own Personal use.',
-                                  style: TextStyle(fontSize: 12, color: context.isDarkMode ? const Color(0xFF8FB8E8) : Colors.blue),
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: context.isDarkMode
+                                          ? const Color(0xFF8FB8E8)
+                                          : Colors.blue),
                                 ),
                               ),
                             ],
@@ -125,25 +157,36 @@ class _SimPurposeSettingsScreenState extends State<SimPurposeSettingsScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('SIM ${card.slot + 1} \u00b7 ${_networkLabel(card.network)}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                  Text(
+                                      'SIM ${card.slot + 1} \u00b7 ${_networkLabel(card.network)}',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 15)),
                                   const SizedBox(height: 12),
                                   Row(children: [
                                     Expanded(
                                       child: ChoiceChip(
                                         label: const Text('Agent'),
-                                        selected: (_purposes[card.slot] ?? 'agent') == 'agent',
-                                        onSelected: (_) => setState(() => _purposes[card.slot] = 'agent'),
-                                        selectedColor: AppTheme.primaryColor.withOpacity(0.2),
+                                        selected:
+                                            (_purposes[card.slot] ?? 'agent') ==
+                                                'agent',
+                                        onSelected: (_) => setState(() =>
+                                            _purposes[card.slot] = 'agent'),
+                                        selectedColor: AppTheme.primaryColor
+                                            .withValues(alpha: 0.2),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: ChoiceChip(
                                         label: const Text('Personal'),
-                                        selected: (_purposes[card.slot] ?? 'agent') == 'personal',
-                                        onSelected: (_) => setState(() => _purposes[card.slot] = 'personal'),
-                                        selectedColor: AppTheme.primaryColor.withOpacity(0.2),
+                                        selected:
+                                            (_purposes[card.slot] ?? 'agent') ==
+                                                'personal',
+                                        onSelected: (_) => setState(() =>
+                                            _purposes[card.slot] = 'personal'),
+                                        selectedColor: AppTheme.primaryColor
+                                            .withValues(alpha: 0.2),
                                       ),
                                     ),
                                   ]),
@@ -154,7 +197,10 @@ class _SimPurposeSettingsScreenState extends State<SimPurposeSettingsScreen> {
                           const SizedBox(height: 12),
                         ],
                         const SizedBox(height: 12),
-                        AppButton(label: 'Save', onPressed: _save, isLoading: _saving),
+                        AppButton(
+                            label: 'Save',
+                            onPressed: _save,
+                            isLoading: _saving),
                       ],
                     ),
     );

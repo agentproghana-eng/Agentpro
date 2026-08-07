@@ -95,17 +95,22 @@ class SimCard {
 
   String get displayName {
     switch (network) {
-      case 'mtn': return 'MTN Mobile Money';
-      case 'telecel': return 'Telecel Cash';
-      case 'at_money': return 'AT Money';
-      default: return carrierName.isNotEmpty ? carrierName : 'Unknown Network';
+      case 'mtn':
+        return 'MTN Mobile Money';
+      case 'telecel':
+        return 'Telecel Cash';
+      case 'at_money':
+        return 'AT Money';
+      default:
+        return carrierName.isNotEmpty ? carrierName : 'Unknown Network';
     }
   }
 
   bool get isMoMoSupported => ['mtn', 'telecel', 'at_money'].contains(network);
 
   @override
-  String toString() => 'SimCard(slot: $slot, network: $network, carrier: $carrierName)';
+  String toString() =>
+      'SimCard(slot: $slot, network: $network, carrier: $carrierName)';
 }
 
 class SimPermissionException implements Exception {
