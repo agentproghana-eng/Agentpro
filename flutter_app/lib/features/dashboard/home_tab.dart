@@ -1,11 +1,11 @@
-import "dart:async";
-import "package:flutter/material.dart";
-import "../../core/api/api_client.dart";
-import "../../core/services/sim_card_service.dart";
-import "../../core/services/dashboard_refresh_service.dart";
-import "../../core/services/app_cache_service.dart";
-import "../../core/router/app_router.dart";
-import "../../shared/widgets/offline_status_banner.dart";
+import 'dart:async';
+import 'package:flutter/material.dart';
+import '../../core/api/api_client.dart';
+import '../../core/services/sim_card_service.dart';
+import '../../core/services/dashboard_refresh_service.dart';
+import '../../core/services/app_cache_service.dart';
+import '../../core/router/app_router.dart';
+import '../../shared/widgets/offline_status_banner.dart';
 import 'widgets/dashboard_quick_actions_section.dart';
 import 'widgets/dashboard_header.dart';
 import 'widgets/dashboard_owner_glance.dart';
@@ -22,7 +22,7 @@ class HomeTab extends StatefulWidget {
 }
 
 class _HomeTabState extends State<HomeTab> with RouteAware {
-  String _provider = "mtn";
+  String _provider = 'mtn';
   Map<String, SimCard?>? _simMap;
   bool _simDetectionComplete = false;
   bool _simPermissionDenied = false;
@@ -86,14 +86,14 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   }
 
   Future<void> _loadQuickActions() async {
-    const cacheKey = "dashboard_quick_actions";
+    const cacheKey = 'dashboard_quick_actions';
 
     Map<String, List<String>> parseProfile(dynamic raw) {
       final result = <String, List<String>>{};
 
       if (raw is! Map) return result;
 
-      for (final provider in ["mtn", "telecel", "at_money"]) {
+      for (final provider in ['mtn', 'telecel', 'at_money']) {
         final value = raw[provider];
 
         if (value is List) {
@@ -122,8 +122,8 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
     final cached = AppCacheService.get(cacheKey);
 
     if (cached is Map && mounted) {
-      final agent = parseCachedProfile(cached["agent"]);
-      final personal = parseCachedProfile(cached["personal"]);
+      final agent = parseCachedProfile(cached['agent']);
+      final personal = parseCachedProfile(cached['personal']);
 
       if (agent.isNotEmpty || personal.isNotEmpty) {
         setState(() {
@@ -134,15 +134,15 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
     }
 
     try {
-      final response = await ApiClient.instance.get("/users/me/quick-actions");
+      final response = await ApiClient.instance.get('/users/me/quick-actions');
 
       final data =
-          response.data["data"] as Map<String, dynamic>? ?? <String, dynamic>{};
+          response.data['data'] as Map<String, dynamic>? ?? <String, dynamic>{};
 
-      final agent = parseProfile(data["agent"]);
-      final personal = parseProfile(data["personal"]);
+      final agent = parseProfile(data['agent']);
+      final personal = parseProfile(data['personal']);
 
-      AppCacheService.set(cacheKey, {"agent": agent, "personal": personal});
+      AppCacheService.set(cacheKey, {'agent': agent, 'personal': personal});
 
       if (!mounted) return;
 
@@ -168,7 +168,7 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   // dashboard. Fails silently, same as feature flags - a pure Agent
   // account (no purposes ever saved) simply never triggers this.
   Future<void> _loadSimPurposes() async {
-    const cacheKey = "dashboard_sim_purposes";
+    const cacheKey = 'dashboard_sim_purposes';
 
     final cached = AppCacheService.get(cacheKey);
 
@@ -199,7 +199,7 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   }
 
   Future<void> _loadFeatureFlags() async {
-    const cacheKey = "dashboard_feature_flags";
+    const cacheKey = 'dashboard_feature_flags';
 
     final cached = AppCacheService.get(cacheKey);
 
@@ -210,10 +210,10 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
     }
 
     try {
-      final res = await ApiClient.instance.get("/users/me/feature-flags");
+      final res = await ApiClient.instance.get('/users/me/feature-flags');
 
       final list =
-          (res.data["data"]["disabled_transaction_types"] as List?) ?? [];
+          (res.data['data']['disabled_transaction_types'] as List?) ?? [];
 
       final disabled = list.map((e) => e.toString()).toList();
 
