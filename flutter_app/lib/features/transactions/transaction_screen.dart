@@ -432,6 +432,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
           "amount": _amountCtrl.text,
           "customer_phone": _customerPhoneCtrl.text.trim(),
           "customer_name": "",
+          "sim_slot": _selectedSim?.slot,
+          "sim_iccid": _selectedSim?.iccid,
           "selections_in_order":
               _isTelecelDataBundle && _selectedTelecelBundle != null
                   ? <String>[_selectedTelecelBundle!.digit]
@@ -483,6 +485,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'amount': _amountCtrl.text,
         'customer_phone': _customerPhoneCtrl.text.trim(),
         'customer_name': '',
+        'sim_slot': _selectedSim?.slot,
+        'sim_iccid': _selectedSim?.iccid,
         'selections_in_order':
             _isTelecelDataBundle && _selectedTelecelBundle != null
                 ? <String>[_selectedTelecelBundle!.digit]

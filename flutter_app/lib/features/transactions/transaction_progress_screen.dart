@@ -20,8 +20,8 @@ class _USSDDevicePreparation {
   final bool permissionPermanentlyDenied;
 
   const _USSDDevicePreparation.ready(this.simSlot)
-    : failureReason = null,
-      permissionPermanentlyDenied = false;
+      : failureReason = null,
+        permissionPermanentlyDenied = false;
 
   const _USSDDevicePreparation.failed(
     this.failureReason, {
@@ -62,19 +62,17 @@ class _ProgressTimelineRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final activeColor = highlightPIN
-        ? AppTheme.secondaryColor
-        : AppTheme.primaryColor;
+    final activeColor =
+        highlightPIN ? AppTheme.secondaryColor : AppTheme.primaryColor;
 
     final circleColor = completed
         ? AppTheme.successColor
         : active
-        ? activeColor
-        : context.appSecondaryText.withOpacity(0.18);
+            ? activeColor
+            : context.appSecondaryText.withOpacity(0.18);
 
-    final textColor = pending
-        ? context.appSecondaryText.withOpacity(0.68)
-        : null;
+    final textColor =
+        pending ? context.appSecondaryText.withOpacity(0.68) : null;
 
     return IntrinsicHeight(
       child: Row(
@@ -104,8 +102,8 @@ class _ProgressTimelineRow extends StatelessWidget {
                     completed
                         ? Icons.check
                         : highlightPIN && active
-                        ? Icons.lock_outline
-                        : item.icon,
+                            ? Icons.lock_outline
+                            : item.icon,
                     size: 16,
                     color: completed || active
                         ? Colors.white
@@ -145,8 +143,8 @@ class _ProgressTimelineRow extends StatelessWidget {
                     completed
                         ? 'Completed'
                         : active
-                        ? item.subtitle
-                        : item.subtitle,
+                            ? item.subtitle
+                            : item.subtitle,
                     style: TextStyle(
                       fontSize: 10.5,
                       color: completed
@@ -233,9 +231,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       devicePreparation = results[1] as _USSDDevicePreparation;
     } on DioException catch (error) {
       final responseData = error.response?.data;
-      final message = responseData is Map
-          ? responseData['message']?.toString()
-          : null;
+      final message =
+          responseData is Map ? responseData['message']?.toString() : null;
 
       _showStartupFailure(message ?? 'Failed to initiate transaction.');
       return;
@@ -257,8 +254,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     }
 
     if (!devicePreparation.isReady) {
-      final reason =
-          devicePreparation.failureReason ??
+      final reason = devicePreparation.failureReason ??
           'The phone could not be prepared for USSD.';
 
       if (mounted) {
@@ -282,9 +278,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
     final simSlot = devicePreparation.simSlot!;
     final rawTemplate = transaction['ussd_template'];
-    final template = rawTemplate is Map
-        ? Map<String, dynamic>.from(rawTemplate)
-        : null;
+    final template =
+        rawTemplate is Map ? Map<String, dynamic>.from(rawTemplate) : null;
 
     final rawAutomationParams = transaction['automation_params'];
 
@@ -302,8 +297,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     // is deliberately NOT included here - it's a manual-entry transaction
     // (money already moved peer-to-peer to the agent's SIM), never a
     // USSD dial at all.
-    final transactionType =
-        widget.data["transaction_type"]?.toString() ??
+    final transactionType = widget.data["transaction_type"]?.toString() ??
         transaction["transaction_type"]?.toString();
 
     if (transactionType == null || transactionType.isEmpty) {
@@ -315,9 +309,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     final recipientMode = widget.data["recipient_mode"] as String?;
     final selectionsInOrder =
         (widget.data["selections_in_order"] as List?)?.cast<String>() ??
-        const [];
-    final isMtnAccessibilityFlow =
-        provider == "mtn" &&
+            const [];
+    final isMtnAccessibilityFlow = provider == "mtn" &&
         (transactionType == "cash_in" ||
             transactionType == "cash_out" ||
             transactionType == "send_money");
@@ -600,9 +593,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       throw const FormatException('Cached USSD flow is incomplete');
     }
 
-    final steps = rawSteps
-        .map((step) => Map<String, dynamic>.from(step as Map))
-        .toList();
+    final steps =
+        rawSteps.map((step) => Map<String, dynamic>.from(step as Map)).toList();
 
     final successMarkers = (flowData['success_markers'] as List?)
         ?.map((value) => value.toString())
@@ -695,8 +687,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     // phone number gets credited - the recipient's, not the customer's.
     final nativeTransactionType =
         (provider == "mtn" && transactionType == "send_money")
-        ? "cash_in"
-        : transactionType;
+            ? "cash_in"
+            : transactionType;
     final phoneForAutomation = (transactionType == "send_money")
         ? (automationParams["recipient_phone"] ?? "")
         : (automationParams["customer_phone"] ?? "");
@@ -705,8 +697,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
     final enabled = await accessEngine.isServiceEnabled();
     if (!enabled) {
-      const reason =
-          "Accessibility permission is required for automated "
+      const reason = "Accessibility permission is required for automated "
           "USSD transactions. Enable Agent Pro Ghana under Settings > "
           "Accessibility, then try again.";
       if (mounted) setState(() => _simWarning = reason);
@@ -752,11 +743,11 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
   }
 
   String _providerLabel(String provider) => switch (provider) {
-    'mtn' => 'MTN',
-    'telecel' => 'Telecel',
-    'at_money' => 'AT Money',
-    _ => provider.toUpperCase(),
-  };
+        'mtn' => 'MTN',
+        'telecel' => 'Telecel',
+        'at_money' => 'AT Money',
+        _ => provider.toUpperCase(),
+      };
 
   void _maybeStartConfirmTimer(USSDStatus status) {
     if (status != USSDStatus.awaitingPIN || _confirmTimer != null) return;
@@ -793,8 +784,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     if (outcome == null) return;
     _wasManuallyConfirmed = true;
 
-    final transaction =
-        _resolvedTransaction ??
+    final transaction = _resolvedTransaction ??
         (widget.data["transaction"] is Map
             ? Map<String, dynamic>.from(widget.data["transaction"] as Map)
             : null);
@@ -911,8 +901,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         setState(() {
           _completed = true;
           _outcome = result.outcome;
-          _failureReason =
-              result.failureReason ??
+          _failureReason = result.failureReason ??
               (e.response?.data?['message'] as String? ??
                   'Could not sync with server');
         });
@@ -960,37 +949,37 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
   }
 
   List<_ProgressTimelineItem> get _progressItems => const [
-    _ProgressTimelineItem(
-      title: 'Preparing transaction',
-      subtitle: 'Checking permissions and transaction details',
-      icon: Icons.verified_user_outlined,
-    ),
-    _ProgressTimelineItem(
-      title: 'Detecting network SIM',
-      subtitle: 'Selecting the correct SIM card',
-      icon: Icons.sim_card_outlined,
-    ),
-    _ProgressTimelineItem(
-      title: 'Loading automation',
-      subtitle: 'Preparing the provider USSD flow',
-      icon: Icons.account_tree_outlined,
-    ),
-    _ProgressTimelineItem(
-      title: 'Running USSD',
-      subtitle: 'Navigating the network menu securely',
-      icon: Icons.dialpad_outlined,
-    ),
-    _ProgressTimelineItem(
-      title: 'Waiting for PIN',
-      subtitle: 'Manual authorization on the network screen',
-      icon: Icons.lock_outline,
-    ),
-    _ProgressTimelineItem(
-      title: 'Confirming result',
-      subtitle: 'Waiting for the provider response',
-      icon: Icons.receipt_long_outlined,
-    ),
-  ];
+        _ProgressTimelineItem(
+          title: 'Preparing transaction',
+          subtitle: 'Checking permissions and transaction details',
+          icon: Icons.verified_user_outlined,
+        ),
+        _ProgressTimelineItem(
+          title: 'Detecting network SIM',
+          subtitle: 'Selecting the correct SIM card',
+          icon: Icons.sim_card_outlined,
+        ),
+        _ProgressTimelineItem(
+          title: 'Loading automation',
+          subtitle: 'Preparing the provider USSD flow',
+          icon: Icons.account_tree_outlined,
+        ),
+        _ProgressTimelineItem(
+          title: 'Running USSD',
+          subtitle: 'Navigating the network menu securely',
+          icon: Icons.dialpad_outlined,
+        ),
+        _ProgressTimelineItem(
+          title: 'Waiting for PIN',
+          subtitle: 'Manual authorization on the network screen',
+          icon: Icons.lock_outline,
+        ),
+        _ProgressTimelineItem(
+          title: 'Confirming result',
+          subtitle: 'Waiting for the provider response',
+          icon: Icons.receipt_long_outlined,
+        ),
+      ];
 
   Widget _buildProgress() {
     final isAwaitingPIN = _status == USSDStatus.awaitingPIN;
@@ -1092,15 +1081,12 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
               ],
             ),
           ),
-
           const SizedBox(height: 22),
-
           const Text(
             'Transaction progress',
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 12),
-
           Container(
             padding: const EdgeInsets.fromLTRB(15, 16, 15, 8),
             decoration: BoxDecoration(
@@ -1132,7 +1118,6 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
               }),
             ),
           ),
-
           if (isAwaitingPIN) ...[
             const SizedBox(height: 18),
             Container(
@@ -1202,7 +1187,6 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
               ),
             ),
           ],
-
           if (_showConfirmButton) ...[
             const SizedBox(height: 18),
             Container(
@@ -1240,9 +1224,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
               ),
             ),
           ],
-
           const SizedBox(height: 20),
-
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -1289,8 +1271,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     final hour = now.hour == 0
         ? 12
         : now.hour > 12
-        ? now.hour - 12
-        : now.hour;
+            ? now.hour - 12
+            : now.hour;
     final minute = now.minute.toString().padLeft(2, '0');
     final period = now.hour >= 12 ? 'PM' : 'AM';
 
@@ -1557,9 +1539,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
               ],
             ),
           ),
-
           const SizedBox(height: 18),
-
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 6),
             decoration: BoxDecoration(
@@ -1585,8 +1565,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
                   const Divider(height: 1),
                   _resultDetailRow(
                     icon: Icons.phone_outlined,
-                    label:
-                        rawType == 'business_deposit' ||
+                    label: rawType == 'business_deposit' ||
                             rawType == 'business_withdrawal'
                         ? 'Agent Short Code'
                         : 'Customer Number',
@@ -1618,38 +1597,32 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
               ],
             ),
           ),
-
           if (_wasManuallyConfirmed) ...[
             const SizedBox(height: 14),
             _resultNotice(
               icon: Icons.fact_check_outlined,
               title: 'Manually confirmed',
-              message:
-                  'This result was confirmed manually after checking '
+              message: 'This result was confirmed manually after checking '
                   'the network response.',
               color: AppTheme.warningColor,
             ),
           ],
-
           if (isOfflinePending) ...[
             const SizedBox(height: 14),
             _resultNotice(
               icon: Icons.cloud_upload_outlined,
               title: 'Waiting to sync',
-              message:
-                  'The transaction result is saved safely on this device '
+              message: 'The transaction result is saved safely on this device '
                   'and will sync when internet access returns.',
               color: AppTheme.primaryColor,
             ),
           ],
-
           if (isPending) ...[
             const SizedBox(height: 14),
             _resultNotice(
               icon: Icons.warning_amber_rounded,
               title: 'Check before retrying',
-              message:
-                  _failureReason ??
+              message: _failureReason ??
                   'Check the network message, customer balance, or '
                       'transaction history before trying again. A retry '
                       'could duplicate a transaction that already succeeded.',
@@ -1665,9 +1638,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
               color: AppTheme.errorColor,
             ),
           ],
-
           const SizedBox(height: 22),
-
           if (_permissionPermanentlyDenied) ...[
             AppButton(
               label: 'Open App Settings',
@@ -1676,7 +1647,6 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             ),
             const SizedBox(height: 12),
           ],
-
           if (isSuccess) ...[
             AppButton(
               label: 'New Transaction',
@@ -1719,7 +1689,6 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
               outlined: true,
             ),
           ],
-
           if (!widget.isPersonal &&
               transactionId != null &&
               transactionId.isNotEmpty) ...[
