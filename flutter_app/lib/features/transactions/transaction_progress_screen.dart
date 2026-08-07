@@ -443,10 +443,10 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       if (mounted) setState(() => _simWarning = reason);
       await _reportResult(
         transactionId,
-        USSDResult(
+        const USSDResult(
           outcome: USSDStatus.failed,
           failureReason: reason,
-          sessionLog: const [],
+          sessionLog: [],
         ),
       );
       return;
@@ -663,10 +663,10 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       await accessEngine.openAccessibilitySettings();
       await _reportResult(
         transactionId,
-        USSDResult(
+        const USSDResult(
           outcome: USSDStatus.failed,
           failureReason: reason,
-          sessionLog: const [],
+          sessionLog: [],
         ),
       );
       return;
@@ -1096,14 +1096,14 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
+                  const Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.shield_outlined,
                         color: AppTheme.secondaryColor,
                       ),
-                      const SizedBox(width: 9),
-                      const Expanded(
+                      SizedBox(width: 9),
+                      Expanded(
                         child: Text(
                           'Your PIN stays private',
                           style: TextStyle(
@@ -1602,7 +1602,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
           ],
           const SizedBox(height: 22),
           if (_permissionPermanentlyDenied) ...[
-            AppButton(
+            const AppButton(
               label: 'Open App Settings',
               icon: Icons.settings_outlined,
               onPressed: PermissionService.openSettings,
