@@ -216,20 +216,21 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
       );
       final data = (res.data['data'] as List?) ?? [];
       final meta = res.data['meta'] as Map<String, dynamic>?;
-      if (mounted)
+      if (mounted) {
         setState(() {
           _transactions = data;
           _loading = false;
-          _hasMore =
-              meta != null &&
+          _hasMore = meta != null &&
               (meta['page'] as int) < (meta['total_pages'] as int);
         });
+      }
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _error = 'Failed to load transactions';
           _loading = false;
         });
+      }
     }
   }
 
@@ -244,15 +245,15 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
       );
       final data = (res.data['data'] as List?) ?? [];
       final meta = res.data['meta'] as Map<String, dynamic>?;
-      if (mounted)
+      if (mounted) {
         setState(() {
           _transactions.addAll(data);
           _page = nextPage;
           _loadingMore = false;
-          _hasMore =
-              meta != null &&
+          _hasMore = meta != null &&
               (meta['page'] as int) < (meta['total_pages'] as int);
         });
+      }
     } catch (_) {
       if (mounted) setState(() => _loadingMore = false);
     }
@@ -380,7 +381,8 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                         selected: selected,
                         onSelected: (_) =>
                             setSheetState(() => tempStatus = status['value']!),
-                        selectedColor: AppTheme.primaryColor.withOpacity(0.16),
+                        selectedColor:
+                            AppTheme.primaryColor.withValues(alpha: 0.16),
                       );
                     }).toList(),
                   ),
@@ -403,7 +405,8 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                         color: context.appSurface,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: context.appSecondaryText.withOpacity(0.16),
+                          color:
+                              context.appSecondaryText.withValues(alpha: 0.16),
                         ),
                       ),
                       child: Row(
@@ -418,8 +421,8 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                               tempRange == null
                                   ? 'Any date'
                                   : '${DateFormat('dd MMM yyyy').format(tempRange!.start)}'
-                                        ' – '
-                                        '${DateFormat('dd MMM yyyy').format(tempRange!.end)}',
+                                      ' – '
+                                      '${DateFormat('dd MMM yyyy').format(tempRange!.end)}',
                               style: const TextStyle(
                                 fontWeight: FontWeight.w600,
                               ),
@@ -481,15 +484,25 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
-              for (final option in _sortOptions)
-                RadioListTile<String>(
-                  value: option['value']!,
-                  groupValue: tempSortBy,
-                  title: Text(option['label']!),
-                  onChanged: (v) => setSheetState(() => tempSortBy = v!),
-                  activeColor: AppTheme.primaryColor,
-                  dense: true,
+              RadioGroup<String>(
+                groupValue: tempSortBy,
+                onChanged: (value) {
+                  if (value != null) {
+                    setSheetState(() => tempSortBy = value);
+                  }
+                },
+                child: Column(
+                  children: [
+                    for (final option in _sortOptions)
+                      RadioListTile<String>(
+                        value: option['value']!,
+                        title: Text(option['label']!),
+                        activeColor: AppTheme.primaryColor,
+                        dense: true,
+                      ),
+                  ],
                 ),
+              ),
               const SizedBox(height: 8),
               const Text(
                 'Direction',
@@ -504,7 +517,8 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                       selected: tempSortOrder == 'asc',
                       onSelected: (_) =>
                           setSheetState(() => tempSortOrder = 'asc'),
-                      selectedColor: AppTheme.primaryColor.withOpacity(0.15),
+                      selectedColor:
+                          AppTheme.primaryColor.withValues(alpha: 0.15),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -514,7 +528,8 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                       selected: tempSortOrder == 'desc',
                       onSelected: (_) =>
                           setSheetState(() => tempSortOrder = 'desc'),
-                      selectedColor: AppTheme.primaryColor.withOpacity(0.15),
+                      selectedColor:
+                          AppTheme.primaryColor.withValues(alpha: 0.15),
                     ),
                   ),
                 ],
@@ -570,9 +585,8 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     return Row(
       children: options.map((opt) {
         final selected = current == opt['value'];
-        final color = colorFor != null
-            ? colorFor(opt['value']!)
-            : AppTheme.primaryColor;
+        final color =
+            colorFor != null ? colorFor(opt['value']!) : AppTheme.primaryColor;
         return Expanded(
           child: GestureDetector(
             onTap: () => onSelect(opt['value']!),
@@ -591,8 +605,8 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                   fontWeight: FontWeight.bold,
                   color: selected
                       ? (color == AppTheme.mtnColor
-                            ? Colors.black
-                            : Colors.white)
+                          ? Colors.black
+                          : Colors.white)
                       : context.appSecondaryText,
                 ),
               ),
@@ -604,17 +618,17 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
   }
 
   Widget _filterSectionLabel(String text) => Padding(
-    padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-    child: Text(
-      text,
-      style: TextStyle(
-        fontSize: 9,
-        fontWeight: FontWeight.bold,
-        color: context.appSecondaryText,
-        letterSpacing: 0.5,
-      ),
-    ),
-  );
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.bold,
+            color: context.appSecondaryText,
+            letterSpacing: 0.5,
+          ),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -652,7 +666,6 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
               ),
             ),
           ),
-
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
             child: Row(
@@ -688,7 +701,6 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
               ],
             ),
           ),
-
           if (_statusFilter != 'all' || _dateRange != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 2, 12, 4),
@@ -722,7 +734,6 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                 ),
               ),
             ),
-
           _filterSectionLabel('TYPE'),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -731,7 +742,6 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
               _load();
             }),
           ),
-
           _filterSectionLabel('PROVIDER'),
           if (_simMap != null && _simMap!.values.every((v) => v == null))
             Padding(
@@ -748,12 +758,12 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                 _simMap == null
                     ? _providers
                     : _providers
-                          .where(
-                            (p) =>
-                                p['value'] == 'all' ||
-                                _simMap![p['value']] != null,
-                          )
-                          .toList(),
+                        .where(
+                          (p) =>
+                              p['value'] == 'all' ||
+                              _simMap![p['value']] != null,
+                        )
+                        .toList(),
                 _providerFilter,
                 (v) {
                   setState(() => _providerFilter = v);
@@ -762,7 +772,6 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                 colorFor: AppTheme.providerColor,
               ),
             ),
-
           if (_isAgent && _simCards.length >= 2) ...[
             _filterSectionLabel('SIM'),
             Padding(
@@ -785,7 +794,6 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
               ),
             ),
           ],
-
           if (_showBranchFilter && _branches.isNotEmpty) ...[
             _filterSectionLabel('BRANCH'),
             Padding(
@@ -830,35 +838,36 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
               ),
             ),
           ],
-
           const SizedBox(height: 8),
           const Divider(height: 1),
-
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _error != null
-                ? Center(child: Text(_error!))
-                : _transactions.isEmpty
-                ? const Center(child: Text('No transactions found'))
-                : RefreshIndicator(
-                    onRefresh: _load,
-                    child: ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.all(12),
-                      itemCount: _transactions.length + (_hasMore ? 1 : 0),
-                      itemBuilder: (_, i) {
-                        if (i >= _transactions.length) {
-                          return const Padding(
-                            padding: EdgeInsets.all(16),
-                            child: Center(child: CircularProgressIndicator()),
-                          );
-                        }
-                        final tx = _transactions[i] as Map<String, dynamic>;
-                        return _TransactionRow(tx: tx);
-                      },
-                    ),
-                  ),
+                    ? Center(child: Text(_error!))
+                    : _transactions.isEmpty
+                        ? const Center(child: Text('No transactions found'))
+                        : RefreshIndicator(
+                            onRefresh: _load,
+                            child: ListView.builder(
+                              controller: _scrollController,
+                              padding: const EdgeInsets.all(12),
+                              itemCount:
+                                  _transactions.length + (_hasMore ? 1 : 0),
+                              itemBuilder: (_, i) {
+                                if (i >= _transactions.length) {
+                                  return const Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: Center(
+                                        child: CircularProgressIndicator()),
+                                  );
+                                }
+                                final tx =
+                                    _transactions[i] as Map<String, dynamic>;
+                                return _TransactionRow(tx: tx);
+                              },
+                            ),
+                          ),
           ),
         ],
       ),
@@ -878,9 +887,8 @@ class _TransactionRow extends StatelessWidget {
     final commission = tx['net_commission'] != null
         ? double.tryParse(tx['net_commission'].toString())
         : null;
-    final fee = tx['fee'] != null
-        ? double.tryParse(tx['fee'].toString())
-        : null;
+    final fee =
+        tx['fee'] != null ? double.tryParse(tx['fee'].toString()) : null;
     DateTime? created;
     try {
       created = DateTime.parse(tx['created_at'].toString());
@@ -890,13 +898,16 @@ class _TransactionRow extends StatelessWidget {
         : '';
 
     final subParts = <String>[];
-    if (tx['customer_phone'] != null)
+    if (tx['customer_phone'] != null) {
       subParts.add(tx['customer_phone'].toString());
+    }
     subParts.add(dateStr);
-    if (commission != null && commission > 0)
+    if (commission != null && commission > 0) {
       subParts.add('Comm. GH₵${commission.toStringAsFixed(2)}');
-    if (fee != null && fee > 0)
+    }
+    if (fee != null && fee > 0) {
       subParts.add('Charge GH₵${fee.toStringAsFixed(2)}');
+    }
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -904,7 +915,7 @@ class _TransactionRow extends StatelessWidget {
         leading: CircleAvatar(
           backgroundColor: AppTheme.providerColor(
             tx['provider'] ?? '',
-          ).withOpacity(0.15),
+          ).withValues(alpha: 0.15),
           child: Icon(
             isCashIn ? Icons.call_received : Icons.call_made,
             color: AppTheme.providerColor(tx['provider'] ?? ''),
