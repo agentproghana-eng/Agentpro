@@ -3,9 +3,10 @@ import 'package:pretty_dio_logger/pretty_dio_logger.dart';
 import '../services/storage_service.dart';
 
 class ApiClient {
-  static const String _baseUrl =
-      'https://agentpro-api-izi3.onrender.com/api/v1';
-  // For local dev: 'http://10.0.2.2:3000/v1'
+  static const String _baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://agentpro-api-izi3.onrender.com/api/v1',
+  );
 
   static final Dio _dio = _createDio();
   static Future<bool>? _refreshFuture;
