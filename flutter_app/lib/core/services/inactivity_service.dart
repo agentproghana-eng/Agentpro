@@ -1,9 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../auth/auth_bloc.dart';
-import 'storage_service.dart';
 
 /// Monitors user inactivity and logs out after timeout.
 /// Wraps the entire app to detect any touch/interaction.
@@ -26,7 +24,6 @@ class InactivityDetector extends StatefulWidget {
 class _InactivityDetectorState extends State<InactivityDetector>
     with WidgetsBindingObserver {
   Timer? _timer;
-  bool _appInBackground = false;
 
   @override
   void initState() {
@@ -38,11 +35,9 @@ class _InactivityDetectorState extends State<InactivityDetector>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
-      _appInBackground = true;
       // Start countdown when app goes to background
       _startBackgroundTimer();
     } else if (state == AppLifecycleState.resumed) {
-      _appInBackground = false;
       _resetTimer();
     }
   }

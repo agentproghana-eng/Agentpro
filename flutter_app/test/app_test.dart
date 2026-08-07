@@ -1,7 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:agent_pro_ghana/core/services/ussd_service.dart';
 
 // ── Commission calculation tests (pure Dart, no Flutter needed) ──
@@ -39,7 +37,8 @@ void main() {
     });
   });
 
-  group('USSD Engine — PIN safety (end-to-end via mocked platform channel)', () {
+  group('USSD Engine — PIN safety (end-to-end via mocked platform channel)',
+      () {
     // These tests mock the native MethodChannel so execute() runs through
     // its REAL code path (including the private _logStep/_handlePinPrompt
     // methods, which can't be called directly from outside the library
@@ -57,8 +56,11 @@ void main() {
         if (call.method == 'waitForResponse') {
           // First call returns a PIN prompt; second call (the post-PIN
           // wait) returns the final success message.
-          final waitCalls = log.where((c) => c.method == 'waitForResponse').length;
-          return waitCalls == 1 ? 'Enter your PIN' : 'Cash out successful. Ref: AB12345678';
+          final waitCalls =
+              log.where((c) => c.method == 'waitForResponse').length;
+          return waitCalls == 1
+              ? 'Enter your PIN'
+              : 'Cash out successful. Ref: AB12345678';
         }
         return null;
       });
@@ -69,7 +71,8 @@ void main() {
           .setMockMethodCallHandler(channel, null);
     });
 
-    test('session log never contains the PIN, only a fixed safe placeholder', () async {
+    test('session log never contains the PIN, only a fixed safe placeholder',
+        () async {
       final template = USSDTemplate(
         id: 'test-template',
         ussdStringPattern: '*170*1*2*{customer_phone}*{amount}#',
@@ -82,7 +85,10 @@ void main() {
 
       final engine = USSDEngine(
         template: template,
-        automationParams: const {'customer_phone': '0241234567', 'amount': '250'},
+        automationParams: const {
+          'customer_phone': '0241234567',
+          'amount': '250'
+        },
         provider: 'mtn',
         simSlot: 0,
       );
@@ -91,27 +97,33 @@ void main() {
 
       expect(result.outcome, USSDStatus.success);
 
-      final pinEntries = result.sessionLog.where((e) => e['type'] == 'pin_prompt_seen').toList();
+      final pinEntries = result.sessionLog
+          .where((e) => e['type'] == 'pin_prompt_seen')
+          .toList();
       expect(pinEntries.length, 1);
       // The ONLY acceptable content here is the fixed placeholder —
       // never the actual PIN, never the raw network prompt text.
-      expect(pinEntries.first['response'], '[PIN ENTRY — NOT LOGGED, NOT APP-VISIBLE]');
+      expect(pinEntries.first['response'],
+          '[PIN ENTRY — NOT LOGGED, NOT APP-VISIBLE]');
       expect(pinEntries.first.containsKey('input'), isFalse);
 
       // The dialed string itself must never contain anything PIN-shaped —
       // confirms automationParams (built from real transaction fields)
       // never carries a PIN value into the resolved USSD string.
-      final dialEntry = result.sessionLog.firstWhere((e) => e['type'] == 'dial');
+      final dialEntry =
+          result.sessionLog.firstWhere((e) => e['type'] == 'dial');
       expect(dialEntry['dialed'], '*170*1*2*0241234567*250#');
     });
 
-    test('pendingConfirmation when no response ever arrives after a PIN prompt', () async {
+    test('pendingConfirmation when no response ever arrives after a PIN prompt',
+        () async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
         log.add(call);
         if (call.method == 'dialUSSD') return 'mock-session-id';
         if (call.method == 'waitForResponse') {
-          final waitCalls = log.where((c) => c.method == 'waitForResponse').length;
+          final waitCalls =
+              log.where((c) => c.method == 'waitForResponse').length;
           // First call: PIN prompt. Second call: network never responds again.
           return waitCalls == 1 ? 'Enter your PIN' : 'TIMEOUT';
         }
@@ -130,7 +142,10 @@ void main() {
 
       final engine = USSDEngine(
         template: template,
-        automationParams: const {'customer_phone': '0241234567', 'amount': '250'},
+        automationParams: const {
+          'customer_phone': '0241234567',
+          'amount': '250'
+        },
         provider: 'mtn',
         simSlot: 0,
       );
@@ -143,7 +158,9 @@ void main() {
       expect(result.outcome, USSDStatus.pendingConfirmation);
     });
 
-    test('a clean no-response timeout (no PIN prompt seen) is a definite failure, not pendingConfirmation', () async {
+    test(
+        'a clean no-response timeout (no PIN prompt seen) is a definite failure, not pendingConfirmation',
+        () async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
         log.add(call);
@@ -194,9 +211,9 @@ void main() {
 
     test('rejects invalid phone numbers', () {
       expect(isValidGhanaPhone('1234567890'), isFalse);
-      expect(isValidGhanaPhone('024123456'), isFalse);   // too short
+      expect(isValidGhanaPhone('024123456'), isFalse); // too short
       expect(isValidGhanaPhone('02412345678'), isFalse); // too long
-      expect(isValidGhanaPhone('0341234567'), isFalse);  // wrong prefix
+      expect(isValidGhanaPhone('0341234567'), isFalse); // wrong prefix
     });
 
     bool isValidAmount(double amount) => amount > 0 && amount <= 10000;
@@ -244,9 +261,16 @@ void main() {
 
     test('transaction types are all defined', () {
       const types = [
-        'cash_in', 'cash_out', 'send_money', 'merchant_payment',
-        'bill_payment', 'airtime', 'data_bundle',
-        'balance_enquiry', 'mini_statement', 'reversal',
+        'cash_in',
+        'cash_out',
+        'send_money',
+        'merchant_payment',
+        'bill_payment',
+        'airtime',
+        'data_bundle',
+        'balance_enquiry',
+        'mini_statement',
+        'reversal',
       ];
       expect(types.length, equals(10));
       expect(types.contains('cash_in'), isTrue);

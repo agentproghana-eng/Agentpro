@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/auth/auth_bloc.dart';
-import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import 'home_tab.dart';
 import '../community/community_feed_screen.dart';

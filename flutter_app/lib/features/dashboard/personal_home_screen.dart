@@ -4,14 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import '../../core/auth/auth_bloc.dart';
 import '../../core/api/api_client.dart';
 import '../../core/services/sim_card_service.dart';
 import '../../core/services/dashboard_refresh_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
-import '../../shared/widgets/app_widgets.dart';
 import '../../shared/widgets/personal_ad_banner.dart';
 import '../../shared/widgets/personal_transaction_item.dart';
 import '../ussd_settings/quick_action_customization_screen.dart';
@@ -273,9 +271,8 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
-    final user = authState is AuthAuthenticated
-        ? authState.user
-        : <String, dynamic>{};
+    final user =
+        authState is AuthAuthenticated ? authState.user : <String, dynamic>{};
     final firstName = user['first_name'] ?? '';
     final isPaid = user['personal_subscription_plan'] == 'paid';
 
@@ -469,8 +466,8 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                                             fontSize: 12,
                                             color: selected
                                                 ? (p['value'] == 'mtn'
-                                                      ? Colors.black
-                                                      : Colors.white)
+                                                    ? Colors.black
+                                                    : Colors.white)
                                                 : context.appSecondaryText,
                                           ),
                                         ),
@@ -487,8 +484,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                         ? DashboardEmptyState(
                             icon: Icons.grid_view_rounded,
                             title: 'No quick actions available',
-                            message:
-                                'No personal transaction actions are '
+                            message: 'No personal transaction actions are '
                                 'currently available for '
                                 '${_providerLabel(_provider)}.',
                             actionLabel: 'Customize Quick Actions',
@@ -576,8 +572,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                       child: DashboardEmptyState(
                         icon: Icons.account_balance_wallet_outlined,
                         title: 'No personal transactions yet',
-                        message:
-                            'Buy airtime, data, or send money and your '
+                        message: 'Buy airtime, data, or send money and your '
                             'recent activity will appear here.',
                         actionLabel: 'Refresh Activity',
                         actionIcon: Icons.refresh_rounded,

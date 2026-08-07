@@ -35,14 +35,14 @@ class _PostAdScreenState extends State<PostAdScreen> {
   String? _categoryId;
   bool _loadingCategories = true;
   bool _submitting = false;
-  double? _feePercent;
 
   final _picker = ImagePicker();
   final List<XFile> _selectedImages = [];
 
   Future<void> _pickImage() async {
     if (_selectedImages.length >= 3) return;
-    final image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    final image =
+        await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
     if (image != null && mounted) setState(() => _selectedImages.add(image));
   }
 
@@ -81,7 +81,9 @@ class _PostAdScreenState extends State<PostAdScreen> {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedImages.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please add at least one photo of what you\'re offering')),
+        const SnackBar(
+            content:
+                Text('Please add at least one photo of what you\'re offering')),
       );
       return;
     }
@@ -97,7 +99,8 @@ class _PostAdScreenState extends State<PostAdScreen> {
         'location': _locationCtrl.text.trim(),
         'contact_phone': _phoneCtrl.text.trim(),
         'images': await Future.wait(_selectedImages.map(
-          (img) async => await MultipartFile.fromFile(img.path, filename: img.name),
+          (img) async =>
+              await MultipartFile.fromFile(img.path, filename: img.name),
         )),
       });
       final res = await ApiClient.instance.post('/marketplace', data: formData);
@@ -110,7 +113,8 @@ class _PostAdScreenState extends State<PostAdScreen> {
       // step is almost always to track this ad's review status.
       context.pushReplacement('/marketplace/ads/${ad['id']}');
     } on DioException catch (e) {
-      final msg = e.response?.data?['message'] ?? 'Failed to submit ad. Please try again.';
+      final msg = e.response?.data?['message'] ??
+          'Failed to submit ad. Please try again.';
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor),
@@ -132,122 +136,158 @@ class _PostAdScreenState extends State<PostAdScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  Builder(builder: (context) => Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: context.isDarkMode ? const Color(0xFF1A2B45) : Colors.blue[50],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: context.isDarkMode ? const Color(0xFF3A5B8F) : Colors.blue[200]!),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.info_outline, color: context.isDarkMode ? const Color(0xFF8FB8E8) : Colors.blue, size: 18),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Ads are reviewed before going live. Once approved, '
-                            'you\'ll pay a small publishing fee via MTN MoMo to '
-                            'publish for 30 days.',
-                            style: TextStyle(fontSize: 12, color: context.isDarkMode ? const Color(0xFF8FB8E8) : Colors.blue),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )),
+                  Builder(
+                      builder: (context) => Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: context.isDarkMode
+                                  ? const Color(0xFF1A2B45)
+                                  : Colors.blue[50],
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                  color: context.isDarkMode
+                                      ? const Color(0xFF3A5B8F)
+                                      : Colors.blue[200]!),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(Icons.info_outline,
+                                    color: context.isDarkMode
+                                        ? const Color(0xFF8FB8E8)
+                                        : Colors.blue,
+                                    size: 18),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Ads are reviewed before going live. Once approved, '
+                                    'you\'ll pay a small publishing fee via MTN MoMo to '
+                                    'publish for 30 days.',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: context.isDarkMode
+                                            ? const Color(0xFF8FB8E8)
+                                            : Colors.blue),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )),
                   const SizedBox(height: 20),
-
                   AppTextField(
                     controller: _titleCtrl,
                     label: 'Ad Title',
                     hint: 'e.g. iPhone 13 Pro Max, Excellent Condition',
                     prefixIcon: Icons.title,
-                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Title is required' : null,
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? 'Title is required'
+                        : null,
                   ),
                   const SizedBox(height: 14),
-
                   AppTextField(
                     controller: _descriptionCtrl,
                     label: 'Description',
                     hint: 'Describe what you\'re offering...',
                     maxLines: 5,
-                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Description is required' : null,
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? 'Description is required'
+                        : null,
                   ),
                   const SizedBox(height: 14),
-
-                  const Text('Photos (1–3 required)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const Text('Photos (1–3 required)',
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                   const SizedBox(height: 8),
                   SizedBox(
                     height: 90,
                     child: ListView(
                       scrollDirection: Axis.horizontal,
                       children: [
-                        ..._selectedImages.asMap().entries.map((entry) => Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: Stack(children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.file(File(entry.value.path), width: 80, height: 80, fit: BoxFit.cover),
-                            ),
-                            Positioned(
-                              top: 2, right: 2,
-                              child: GestureDetector(
-                                onTap: () => _removeImage(entry.key),
-                                child: Container(
-                                  decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
-                                  padding: const EdgeInsets.all(2),
-                                  child: const Icon(Icons.close, size: 14, color: Colors.white),
-                                ),
-                              ),
-                            ),
-                          ]),
-                        )),
+                        ..._selectedImages
+                            .asMap()
+                            .entries
+                            .map((entry) => Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: Stack(children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Image.file(File(entry.value.path),
+                                          width: 80,
+                                          height: 80,
+                                          fit: BoxFit.cover),
+                                    ),
+                                    Positioned(
+                                      top: 2,
+                                      right: 2,
+                                      child: GestureDetector(
+                                        onTap: () => _removeImage(entry.key),
+                                        child: Container(
+                                          decoration: const BoxDecoration(
+                                              color: Colors.black54,
+                                              shape: BoxShape.circle),
+                                          padding: const EdgeInsets.all(2),
+                                          child: const Icon(Icons.close,
+                                              size: 14, color: Colors.white),
+                                        ),
+                                      ),
+                                    ),
+                                  ]),
+                                )),
                         if (_selectedImages.length < 3)
                           GestureDetector(
                             onTap: _pickImage,
                             child: Container(
-                              width: 80, height: 80,
+                              width: 80,
+                              height: 80,
                               decoration: BoxDecoration(
                                 border: Border.all(color: Colors.grey[300]!),
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: Icon(Icons.add_a_photo_outlined, color: Colors.grey[500]),
+                              child: Icon(Icons.add_a_photo_outlined,
+                                  color: Colors.grey[500]),
                             ),
                           ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 14),
-
                   if (_categories.isNotEmpty) ...[
                     DropdownButtonFormField<String>(
                       value: _categoryId,
                       decoration: InputDecoration(
                         labelText: 'Category',
                         prefixIcon: const Icon(Icons.category_outlined),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12)),
                       ),
-                      items: _categories.map<DropdownMenuItem<String>>((c) => DropdownMenuItem(
-                        value: c['id'] as String,
-                        child: Text(c['name'] as String),
-                      )).toList(),
+                      items: _categories
+                          .map<DropdownMenuItem<String>>(
+                              (c) => DropdownMenuItem(
+                                    value: c['id'] as String,
+                                    child: Text(c['name'] as String),
+                                  ))
+                          .toList(),
                       onChanged: (v) => setState(() => _categoryId = v),
-                      validator: (v) => v == null ? 'Please select a category' : null,
+                      validator: (v) =>
+                          v == null ? 'Please select a category' : null,
                     ),
                     const SizedBox(height: 14),
                   ],
-
                   TextFormField(
                     controller: _priceCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
+                    ],
                     onChanged: (_) => setState(() {}), // refresh fee preview
                     decoration: InputDecoration(
                       labelText: 'Price (optional)',
                       hintText: '0.00',
                       prefixIcon: const Icon(Icons.sell_outlined),
                       prefixText: 'GH₵  ',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12)),
                       helperText: _priceCtrl.text.isNotEmpty
                           ? 'Estimated publishing fee: GH₵ ${_estimatedFee.toStringAsFixed(2)} (1% of price)'
                           : 'Leave blank for "Contact for price" listings — no fee applies',
@@ -255,7 +295,6 @@ class _PostAdScreenState extends State<PostAdScreen> {
                     ),
                   ),
                   const SizedBox(height: 14),
-
                   AppTextField(
                     controller: _locationCtrl,
                     label: 'Location',
@@ -263,16 +302,16 @@ class _PostAdScreenState extends State<PostAdScreen> {
                     prefixIcon: Icons.location_on_outlined,
                   ),
                   const SizedBox(height: 14),
-
                   AppTextField(
                     controller: _phoneCtrl,
                     label: 'Contact Phone',
                     keyboardType: TextInputType.phone,
                     prefixIcon: Icons.phone_outlined,
-                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Contact phone is required' : null,
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? 'Contact phone is required'
+                        : null,
                   ),
                   const SizedBox(height: 24),
-
                   AppButton(
                     label: 'Submit for Review',
                     icon: Icons.send_outlined,
@@ -287,7 +326,13 @@ class _PostAdScreenState extends State<PostAdScreen> {
 
   @override
   void dispose() {
-    for (final c in [_titleCtrl, _descriptionCtrl, _priceCtrl, _locationCtrl, _phoneCtrl]) {
+    for (final c in [
+      _titleCtrl,
+      _descriptionCtrl,
+      _priceCtrl,
+      _locationCtrl,
+      _phoneCtrl
+    ]) {
       c.dispose();
     }
     super.dispose();

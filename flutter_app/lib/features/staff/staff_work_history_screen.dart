@@ -1,13 +1,13 @@
 import "package:flutter/material.dart";
 import "../../core/api/api_client.dart";
-import "../../shared/theme/app_theme.dart";
 import "../../shared/widgets/app_widgets.dart";
 import "../transactions/transaction_detail_screen.dart";
 
 class StaffWorkHistoryScreen extends StatefulWidget {
   final String userId;
   final String userName;
-  const StaffWorkHistoryScreen({super.key, required this.userId, required this.userName});
+  const StaffWorkHistoryScreen(
+      {super.key, required this.userId, required this.userName});
 
   @override
   State<StaffWorkHistoryScreen> createState() => _StaffWorkHistoryScreenState();
@@ -25,7 +25,10 @@ class _StaffWorkHistoryScreenState extends State<StaffWorkHistoryScreen> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final res = await ApiClient.instance.get("/transactions",
           queryParameters: {"agent_id": widget.userId, "limit": 50});
@@ -34,7 +37,10 @@ class _StaffWorkHistoryScreenState extends State<StaffWorkHistoryScreen> {
         _loading = false;
       });
     } catch (e) {
-      setState(() { _error = "Could not load transaction history"; _loading = false; });
+      setState(() {
+        _error = "Could not load transaction history";
+        _loading = false;
+      });
     }
   }
 
@@ -50,7 +56,8 @@ class _StaffWorkHistoryScreenState extends State<StaffWorkHistoryScreen> {
                   ? const EmptyState(
                       icon: Icons.receipt_long_outlined,
                       title: "No transactions yet",
-                      subtitle: "This person has not processed any transactions",
+                      subtitle:
+                          "This person has not processed any transactions",
                     )
                   : RefreshIndicator(
                       onRefresh: _load,
@@ -65,13 +72,14 @@ class _StaffWorkHistoryScreenState extends State<StaffWorkHistoryScreen> {
                               onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => TransactionDetailScreen(transactionId: tx["id"]),
+                                  builder: (_) => TransactionDetailScreen(
+                                      transactionId: tx["id"]),
                                 ),
                               ),
                               title: Text(
-                                "${(tx["transaction_type"] ?? "").toString().toUpperCase()} - GH₵${tx["amount"] ?? "0.00"}"),
+                                  "${(tx["transaction_type"] ?? "").toString().toUpperCase()} - GH₵${tx["amount"] ?? "0.00"}"),
                               subtitle: Text(
-                                "${tx["provider"] ?? ""} - ${tx["branch_name"] ?? ""} - ${(tx["created_at"] ?? "").toString().split("T").first}"),
+                                  "${tx["provider"] ?? ""} - ${tx["branch_name"] ?? ""} - ${(tx["created_at"] ?? "").toString().split("T").first}"),
                               trailing: StatusBadge(status: tx["status"] ?? ""),
                             ),
                           );

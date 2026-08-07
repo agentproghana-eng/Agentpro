@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:dio/dio.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
@@ -20,10 +19,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
     try {
-      await ApiClient.instance.post('/auth/forgot-password', data: {'email': _emailCtrl.text.trim()});
+      await ApiClient.instance.post('/auth/forgot-password',
+          data: {'email': _emailCtrl.text.trim()});
       if (mounted) setState(() => _sent = true);
     } catch (_) {
-      if (mounted) setState(() => _sent = true); // Always show success (security)
+      if (mounted)
+        setState(() => _sent = true); // Always show success (security)
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -49,10 +50,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           const Icon(Icons.lock_reset, size: 64, color: AppTheme.primaryColor),
           const SizedBox(height: 24),
           Text('Forgot your password?',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+              style: Theme.of(context)
+                  .textTheme
+                  .headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Text('Enter your email and we\'ll send you a reset link.',
-            style: TextStyle(color: Colors.grey[600])),
+              style: TextStyle(color: Colors.grey[600])),
           const SizedBox(height: 32),
           AppTextField(
             controller: _emailCtrl,
@@ -62,9 +66,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             validator: (v) => !v!.contains('@') ? 'Enter a valid email' : null,
           ),
           const SizedBox(height: 24),
-          AppButton(label: 'Send Reset Link', onPressed: _submit, isLoading: _loading),
+          AppButton(
+              label: 'Send Reset Link',
+              onPressed: _submit,
+              isLoading: _loading),
           const SizedBox(height: 16),
-          TextButton(onPressed: () => context.pop(), child: const Text('Back to Login')),
+          TextButton(
+              onPressed: () => context.pop(),
+              child: const Text('Back to Login')),
         ],
       ),
     );
@@ -75,10 +84,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Icon(Icons.mark_email_read, size: 80, color: AppTheme.successColor),
+        const Icon(Icons.mark_email_read,
+            size: 80, color: AppTheme.successColor),
         const SizedBox(height: 24),
-        Text('Check your email', textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+        Text('Check your email',
+            textAlign: TextAlign.center,
+            style: Theme.of(context)
+                .textTheme
+                .headlineSmall
+                ?.copyWith(fontWeight: FontWeight.bold)),
         const SizedBox(height: 12),
         Text(
           'If ${_emailCtrl.text} is registered, you\'ll receive a password reset link shortly.\n\n'
@@ -87,11 +101,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           style: TextStyle(color: Colors.grey[600]),
         ),
         const SizedBox(height: 32),
-        AppButton(label: 'Back to Login', onPressed: () => context.go('/auth/login')),
+        AppButton(
+            label: 'Back to Login', onPressed: () => context.go('/auth/login')),
       ],
     );
   }
 
   @override
-  void dispose() { _emailCtrl.dispose(); super.dispose(); }
+  void dispose() {
+    _emailCtrl.dispose();
+    super.dispose();
+  }
 }
