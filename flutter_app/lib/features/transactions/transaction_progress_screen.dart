@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
 import '../../core/api/api_client.dart';
 import '../../core/services/ussd_service.dart';
-import '../../core/services/sim_card_service.dart';
+import '../../core/services/transaction_device_preparation_service.dart';
 import '../../core/services/permission_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
@@ -13,23 +13,6 @@ import '../../core/services/offline_queue_service.dart';
 import '../../core/services/dashboard_refresh_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/auth/auth_bloc.dart';
-
-class _USSDDevicePreparation {
-  final int? simSlot;
-  final String? failureReason;
-  final bool permissionPermanentlyDenied;
-
-  const _USSDDevicePreparation.ready(this.simSlot)
-      : failureReason = null,
-        permissionPermanentlyDenied = false;
-
-  const _USSDDevicePreparation.failed(
-    this.failureReason, {
-    this.permissionPermanentlyDenied = false,
-  }) : simSlot = null;
-
-  bool get isReady => simSlot != null && failureReason == null;
-}
 
 class _ProgressTimelineItem {
   final String title;
@@ -214,11 +197,23 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
     // Backend validation/creation and local device preparation begin
     // together. Dialing remains blocked until both have succeeded.
+    final requestedSimSlot = _parseSimSlot(widget.data['sim_slot']);
+    final requestedSimIccid = widget.data['sim_iccid']?.toString();
+
     final transactionFuture = _resolveTransactionData();
-    final deviceFuture = _prepareUSSDDevice(provider);
+    final deviceFuture = TransactionDevicePreparationService.prepare(
+      provider: provider,
+      requestedSimSlot: requestedSimSlot,
+      requestedSimIccid: requestedSimIccid,
+      onStatus: (message) {
+        if (mounted) {
+          setState(() => _statusMessage = message);
+        }
+      },
+    );
 
     late Map<String, dynamic> transaction;
-    late _USSDDevicePreparation devicePreparation;
+    late TransactionDevicePreparation devicePreparation;
 
     try {
       final results = await Future.wait<Object>([
@@ -228,7 +223,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
       transaction = results[0] as Map<String, dynamic>;
       _resolvedTransaction = transaction;
-      devicePreparation = results[1] as _USSDDevicePreparation;
+      devicePreparation = results[1] as TransactionDevicePreparation;
     } on DioException catch (error) {
       final responseData = error.response?.data;
       final message =
@@ -331,6 +326,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     // layer doesn't need to duplicate that logic or guess in advance.
     String? telecelOperatorId;
     if (provider == "telecel") {
+      if (!mounted) return;
+
       final authState = context.read<AuthBloc>().state;
       telecelOperatorId = authState is AuthAuthenticated
           ? authState.user['telecel_operator_id'] as String?
@@ -341,7 +338,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       await _startAccessibilityAutomation(
         transactionId,
         automationParams,
-        transactionType!,
+        transactionType,
         provider,
         telecelOperatorId,
         simSlot: simSlot,
@@ -358,7 +355,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     final suppliedCachedFlow = transaction['cached_flow'];
     final cachedFlow = suppliedCachedFlow is Map
         ? Map<String, dynamic>.from(suppliedCachedFlow)
-        : OfflineQueueService.getCachedFlow(provider, transactionType!);
+        : OfflineQueueService.getCachedFlow(provider, transactionType);
 
     if (cachedFlow != null) {
       unawaited(
@@ -373,7 +370,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       await _startResolvedFlow(
         transactionId: transactionId,
         automationParams: Map<String, String>.from(automationParams),
-        transactionType: transactionType!,
+        transactionType: transactionType,
         provider: provider,
         telecelOperatorId: telecelOperatorId,
         simSlot: simSlot,
@@ -407,13 +404,13 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       final flowData = Map<String, dynamic>.from(rawFlowData);
 
       unawaited(
-        OfflineQueueService.cacheFlow(provider, transactionType!, flowData),
+        OfflineQueueService.cacheFlow(provider, transactionType, flowData),
       );
 
       await _startResolvedFlow(
         transactionId: transactionId,
         automationParams: Map<String, String>.from(automationParams),
-        transactionType: transactionType!,
+        transactionType: transactionType,
         provider: provider,
         telecelOperatorId: telecelOperatorId,
         simSlot: simSlot,
@@ -421,7 +418,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         selectionsInOrder: selectionsInOrder,
       );
       return;
-    } on DioException catch (e) {
+    } on DioException {
       // 404 just means no custom flow exists for this combo - fall
       // through to the single-dial path below, same as always. Any
       // other error also falls through rather than blocking the
@@ -479,6 +476,18 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     await _reportResult(transactionId, result);
   }
 
+  int? _parseSimSlot(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+
+    if (value is num) {
+      return value.toInt();
+    }
+
+    return int.tryParse(value?.toString() ?? '');
+  }
+
   Future<Map<String, dynamic>> _resolveTransactionData() async {
     final existingTransaction = widget.data['transaction'];
 
@@ -501,62 +510,6 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     }
 
     throw const FormatException('Missing transaction initiation data');
-  }
-
-  Future<_USSDDevicePreparation> _prepareUSSDDevice(String provider) async {
-    if (mounted) {
-      setState(() => _statusMessage = 'Checking phone permissions...');
-    }
-
-    PermissionResult permissionResult;
-
-    try {
-      permissionResult = await PermissionService.requestTelephonyPermissions()
-          .timeout(const Duration(seconds: 10));
-    } on Exception {
-      return const _USSDDevicePreparation.failed(
-        'Timed out checking phone permissions. Please try again.',
-      );
-    }
-
-    if (permissionResult != PermissionResult.granted) {
-      final permanentlyDenied =
-          permissionResult == PermissionResult.permanentlyDenied;
-
-      return _USSDDevicePreparation.failed(
-        permanentlyDenied
-            ? 'Phone permission was denied. Enable it in Settings to process transactions.'
-            : 'Phone permission is required to process Mobile Money transactions.',
-        permissionPermanentlyDenied: permanentlyDenied,
-      );
-    }
-
-    if (mounted) {
-      setState(() => _statusMessage = 'Detecting SIM card...');
-    }
-
-    try {
-      final simCards = await SimCardService.getSimCards();
-
-      for (final sim in simCards) {
-        if (sim.network == provider) {
-          return _USSDDevicePreparation.ready(sim.slot);
-        }
-      }
-
-      return _USSDDevicePreparation.failed(
-        'No ${_providerLabel(provider)} SIM card was detected on this device.',
-      );
-    } on SimPermissionException {
-      return const _USSDDevicePreparation.failed(
-        'Phone permission is required to detect SIM cards.',
-        permissionPermanentlyDenied: true,
-      );
-    } catch (_) {
-      // Preserve the existing fallback behavior for unexpected SIM
-      // detection failures.
-      return const _USSDDevicePreparation.ready(0);
-    }
   }
 
   void _showStartupFailure(String message) {
@@ -1710,30 +1663,5 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     _confirmTimer?.cancel();
     _engine?.dispose();
     super.dispose();
-  }
-}
-
-class _RefRow extends StatelessWidget {
-  final String label, value;
-  const _RefRow(this.label, this.value);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Text(
-            label,
-            style: TextStyle(color: context.appSecondaryText, fontSize: 12),
-          ),
-          const Spacer(),
-          Text(
-            value,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
-          ),
-        ],
-      ),
-    );
   }
 }
