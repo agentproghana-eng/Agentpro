@@ -33,6 +33,8 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   List<dynamic> _recent = [];
   bool _loading = true;
   Map<String, SimCard?>? _simMap;
+  bool _simDetectionComplete = false;
+  bool _simPermissionDenied = false;
   Set<String> _disabledTypes = {};
   Map<int, String> _simPurposes = {};
   Map<String, dynamic>? _currentShift;
@@ -62,6 +64,7 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   void didPopNext() {
     _loadSimPurposes();
     _loadQuickActions();
+    _loadSimMap();
   }
 
   @override
@@ -480,40 +483,74 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   }
 
   Future<void> _loadSimMap() async {
+    if (mounted) {
+      setState(() {
+        _simDetectionComplete = false;
+        _simPermissionDenied = false;
+      });
+    }
+
     try {
       var map = await SimCardService.getNetworkSimMap();
-      // Android's telephony state can briefly report "no SIMs" right at
-      // cold app launch or just after a permission grant, before the
-      // OS has fully settled - getSimCards() also swallows some
-      // non-permission platform errors into an empty list rather than
-      // throwing. If every provider comes back null, treat that as
-      // suspicious rather than final: retry once after a short delay.
-      // _simMap stays null the whole time (UI shows all 3 tabs, never
-      // "Insert SIM") until we're confident the result is real.
-      if (map.values.every((v) => v == null)) {
+
+      // Android telephony can briefly report no subscriptions directly
+      // after launch or a permission change. Retry once before treating
+      // the empty result as final.
+      if (map.values.every((sim) => sim == null)) {
         await Future.delayed(const Duration(milliseconds: 1200));
+
         if (!mounted) return;
+
         map = await SimCardService.getNetworkSimMap();
       }
+
       if (!mounted) return;
+
+      final availableProviders = map.entries
+          .where((entry) => entry.value != null)
+          .map((entry) => entry.key)
+          .toList();
+
       setState(() {
         _simMap = map;
-        // If the currently-selected provider has no detected SIM, switch
-        // to the first one that does, so the tab row never opens on a
-        // tab that is about to disappear.
-        if (map[_provider] == null) {
-          final firstAvailable = map.entries
-              .firstWhere(
-                (e) => e.value != null,
-                orElse: () => map.entries.first,
-              )
-              .key;
-          _provider = firstAvailable;
+        _simDetectionComplete = true;
+        _simPermissionDenied = false;
+
+        if (availableProviders.isNotEmpty &&
+            !availableProviders.contains(_provider)) {
+          _provider = availableProviders.first;
         }
       });
+
+      // Reload transaction data if SIM detection changed the provider.
+      if (availableProviders.isNotEmpty) {
+        await _load();
+      }
+    } on SimPermissionException {
+      if (!mounted) return;
+
+      setState(() {
+        _simMap = const {
+          'mtn': null,
+          'telecel': null,
+          'at_money': null,
+        };
+        _simDetectionComplete = true;
+        _simPermissionDenied = true;
+      });
     } catch (_) {
-      // Permission denied or detection failed - leave _simMap null so
-      // the UI falls back to showing all three tabs rather than none.
+      if (!mounted) return;
+
+      // Never invent providers when SIM detection fails.
+      setState(() {
+        _simMap = const {
+          'mtn': null,
+          'telecel': null,
+          'at_money': null,
+        };
+        _simDetectionComplete = true;
+        _simPermissionDenied = false;
+      });
     }
   }
 
@@ -524,30 +561,24 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   // shows an Insert SIM message instead of an empty or misleading tab
   // row.
   List<Widget> _buildProviderTabRow() {
-    final providers = _simMap == null
-        ? ["mtn", "telecel", "at_money"]
-        : _simMap!.entries
-            .where((e) => e.value != null)
-            .map((e) => e.key)
-            .toList();
-
-    if (providers.isEmpty) {
-      return [
+    if (!_simDetectionComplete) {
+      return const [
         Expanded(
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
+            padding: EdgeInsets.symmetric(vertical: 10),
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.sim_card_alert_outlined,
-                  color: Colors.grey[500],
-                  size: 18,
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: 9),
                 Text(
-                  "Insert SIM",
+                  'Detecting SIMs…',
                   style: TextStyle(
-                    color: Colors.grey[600],
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -558,36 +589,97 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
       ];
     }
 
+    final providers = _simMap?.entries
+            .where((entry) => entry.value != null)
+            .map((entry) => entry.key)
+            .toList() ??
+        const <String>[];
+
+    if (providers.isEmpty) {
+      final message = _simPermissionDenied
+          ? 'Allow phone permission to detect SIMs'
+          : 'Insert a supported SIM';
+
+      final icon = _simPermissionDenied
+          ? Icons.sim_card_alert_outlined
+          : Icons.sim_card_outlined;
+
+      return [
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 8,
+              vertical: 11,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  color: context.appSecondaryText,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: context.appSecondaryText,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ];
+    }
+
     const labels = {
-      "mtn": "MTN",
-      "telecel": "Telecel",
-      "at_money": "AirtelTigo",
+      'mtn': 'MTN',
+      'telecel': 'Telecel',
+      'at_money': 'AT Money',
     };
+
     const colors = {
-      "mtn": Color(0xFFFFCC00),
-      "telecel": Color(0xFFE31837),
-      "at_money": Color(0xFF003087),
+      'mtn': Color(0xFFFFCC00),
+      'telecel': Color(0xFFE31837),
+      'at_money': Color(0xFF003087),
     };
 
     final widgets = <Widget>[];
+
     for (var i = 0; i < providers.length; i++) {
-      final p = providers[i];
+      final provider = providers[i];
+      final sim = _simMap?[provider];
+
       widgets.add(
         Expanded(
           child: _ProviderTab(
-            label: labels[p]!,
-            value: p,
-            selected: _provider == p,
-            color: colors[p]!,
-            onTap: (v) {
-              setState(() => _provider = v);
+            label: sim == null
+                ? labels[provider]!
+                : '${labels[provider]}  SIM ${sim.slot + 1}',
+            value: provider,
+            selected: _provider == provider,
+            color: colors[provider]!,
+            onTap: (value) {
+              if (_provider == value) return;
+
+              setState(() => _provider = value);
               _load();
             },
           ),
         ),
       );
-      if (i < providers.length - 1) widgets.add(const SizedBox(width: 4));
+
+      if (i < providers.length - 1) {
+        widgets.add(const SizedBox(width: 4));
+      }
     }
+
     return widgets;
   }
 
@@ -598,7 +690,7 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
       case 'telecel':
         return 'Telecel';
       case 'at_money':
-        return 'AirtelTigo';
+        return 'AT Money';
       default:
         return provider;
     }
