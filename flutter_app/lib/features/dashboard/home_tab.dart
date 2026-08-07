@@ -5,6 +5,7 @@ import '../../core/services/sim_card_service.dart';
 import '../../core/services/dashboard_refresh_service.dart';
 import '../../core/services/app_cache_service.dart';
 import '../../core/router/app_router.dart';
+import '../ussd_settings/quick_action_preference.dart';
 import '../../shared/widgets/offline_status_banner.dart';
 import 'widgets/dashboard_quick_actions_section.dart';
 import 'widgets/dashboard_header.dart';
@@ -28,8 +29,8 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   bool _simPermissionDenied = false;
   Set<String> _disabledTypes = {};
   Map<int, String> _simPurposes = {};
-  Map<String, List<String>> _agentQuickActions = {};
-  Map<String, List<String>> _personalQuickActions = {};
+  Map<String, List<QuickActionPreference>> _agentQuickActions = {};
+  Map<String, List<QuickActionPreference>> _personalQuickActions = {};
   StreamSubscription<DashboardRefreshEvent>? _dashboardRefreshSubscription;
   final DashboardRecentTransactionsController _recentTransactionsController =
       DashboardRecentTransactionsController();
@@ -88,42 +89,63 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   Future<void> _loadQuickActions() async {
     const cacheKey = 'dashboard_quick_actions';
 
-    Map<String, List<String>> parseProfile(dynamic raw) {
-      final result = <String, List<String>>{};
+    Map<String, List<QuickActionPreference>> parseProfile(dynamic raw) {
+      final result = <String, List<QuickActionPreference>>{};
 
       if (raw is! Map) return result;
 
       for (final provider in ['mtn', 'telecel', 'at_money']) {
         final value = raw[provider];
 
-        if (value is List) {
-          result[provider] = value.whereType<String>().take(9).toList();
+        if (value is! List) continue;
+
+        final items = <QuickActionPreference>[];
+
+        for (var index = 0; index < value.length; index++) {
+          try {
+            final preference = QuickActionPreference.fromDynamic(
+              value[index],
+              fallbackPosition: index,
+            );
+
+            if (preference.actionKey.trim().isEmpty) continue;
+
+            items.add(preference);
+          } catch (_) {
+            // Ignore malformed saved Quick Action records.
+          }
         }
+
+        items.sort((a, b) => a.position.compareTo(b.position));
+
+        result[provider] = items
+            .take(9)
+            .toList()
+            .asMap()
+            .entries
+            .map(
+              (entry) => entry.value.copyWith(position: entry.key),
+            )
+            .toList();
       }
 
       return result;
     }
 
-    Map<String, List<String>> parseCachedProfile(dynamic raw) {
-      final result = <String, List<String>>{};
-
-      if (raw is! Map) return result;
-
-      for (final entry in raw.entries) {
-        if (entry.value is List) {
-          result[entry.key.toString()] =
-              (entry.value as List).map((e) => e.toString()).take(9).toList();
-        }
-      }
-
-      return result;
+    Map<String, dynamic> serializeProfile(
+      Map<String, List<QuickActionPreference>> profile,
+    ) {
+      return {
+        for (final entry in profile.entries)
+          entry.key: entry.value.map((item) => item.toJson()).toList(),
+      };
     }
 
     final cached = AppCacheService.get(cacheKey);
 
     if (cached is Map && mounted) {
-      final agent = parseCachedProfile(cached['agent']);
-      final personal = parseCachedProfile(cached['personal']);
+      final agent = parseProfile(cached['agent']);
+      final personal = parseProfile(cached['personal']);
 
       if (agent.isNotEmpty || personal.isNotEmpty) {
         setState(() {
@@ -142,7 +164,10 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
       final agent = parseProfile(data['agent']);
       final personal = parseProfile(data['personal']);
 
-      AppCacheService.set(cacheKey, {'agent': agent, 'personal': personal});
+      AppCacheService.set(cacheKey, {
+        'agent': serializeProfile(agent),
+        'personal': serializeProfile(personal),
+      });
 
       if (!mounted) return;
 

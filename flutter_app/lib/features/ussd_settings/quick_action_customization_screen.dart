@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
+import 'quick_action_preference.dart';
 
 class QuickActionDefinition {
   final String type;
@@ -297,10 +298,10 @@ class _QuickActionCustomizationScreenState
   bool _saving = false;
   String? _error;
 
-  Map<String, List<String>> _preferences = {
-    'mtn': <String>[],
-    'telecel': <String>[],
-    'at_money': <String>[],
+  Map<String, List<QuickActionPreference>> _preferences = {
+    'mtn': <QuickActionPreference>[],
+    'telecel': <QuickActionPreference>[],
+    'at_money': <QuickActionPreference>[],
   };
 
   List<QuickActionDefinition> get _definitions => widget.isPersonal
@@ -321,7 +322,8 @@ class _QuickActionCustomizationScreenState
       .where((definition) => _supportedTypes.contains(definition.type))
       .toList();
 
-  List<String> get _selected => _preferences[_provider] ?? <String>[];
+  List<QuickActionPreference> get _selected =>
+      _preferences[_provider] ?? <QuickActionPreference>[];
 
   @override
   void initState() {
@@ -334,6 +336,21 @@ class _QuickActionCustomizationScreenState
       if (definition.type == type) return definition;
     }
     return null;
+  }
+
+  List<QuickActionPreference> _defaultPreferencesFor(String provider) {
+    final defaults = _defaults[provider] ?? const <String>[];
+
+    return defaults
+        .asMap()
+        .entries
+        .map(
+          (entry) => QuickActionPreference(
+            actionKey: entry.value,
+            position: entry.key,
+          ),
+        )
+        .toList();
   }
 
   Future<void> _load() async {
@@ -349,24 +366,48 @@ class _QuickActionCustomizationScreenState
       final saved =
           data[modeKey] as Map<String, dynamic>? ?? <String, dynamic>{};
 
-      final parsed = <String, List<String>>{};
+      final parsed = <String, List<QuickActionPreference>>{};
 
       for (final provider in ['mtn', 'telecel', 'at_money']) {
         final providerValue = saved[provider];
+        final supported = _support[provider] ?? const <String>{};
 
         if (providerValue is List) {
-          final supported = _support[provider] ?? const <String>{};
+          final items = <QuickActionPreference>[];
 
-          parsed[provider] = providerValue
-              .whereType<String>()
-              .where(
-                (type) =>
-                    _definitionFor(type) != null && supported.contains(type),
-              )
+          for (var index = 0; index < providerValue.length; index++) {
+            try {
+              final preference = QuickActionPreference.fromDynamic(
+                providerValue[index],
+                fallbackPosition: index,
+              );
+
+              if (preference.actionKey.isEmpty ||
+                  _definitionFor(preference.actionKey) == null ||
+                  !supported.contains(preference.actionKey)) {
+                continue;
+              }
+
+              items.add(preference);
+            } catch (_) {
+              // Ignore malformed individual records while keeping
+              // the rest of the user's saved configuration.
+            }
+          }
+
+          items.sort((a, b) => a.position.compareTo(b.position));
+
+          parsed[provider] = items
               .take(9)
+              .toList()
+              .asMap()
+              .entries
+              .map(
+                (entry) => entry.value.copyWith(position: entry.key),
+              )
               .toList();
         } else {
-          parsed[provider] = List<String>.from(_defaults[provider] ?? const []);
+          parsed[provider] = _defaultPreferencesFor(provider);
         }
       }
 
@@ -382,9 +423,7 @@ class _QuickActionCustomizationScreenState
       setState(() {
         _preferences = {
           for (final provider in ['mtn', 'telecel', 'at_money'])
-            provider: List<String>.from(
-              _defaults[provider] ?? const [],
-            ),
+            provider: _defaultPreferencesFor(provider),
         };
         _loading = false;
         _error = 'Could not load saved layout. Showing defaults.';
@@ -393,11 +432,12 @@ class _QuickActionCustomizationScreenState
   }
 
   void _toggle(String type) {
-    final selected = List<String>.from(_selected);
+    final selected = List<QuickActionPreference>.from(_selected);
+    final existingIndex = selected.indexWhere((item) => item.actionKey == type);
 
     setState(() {
-      if (selected.contains(type)) {
-        selected.remove(type);
+      if (existingIndex >= 0) {
+        selected.removeAt(existingIndex);
       } else {
         if (selected.length >= 9) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -408,18 +448,27 @@ class _QuickActionCustomizationScreenState
           return;
         }
 
-        selected.add(type);
+        selected.add(
+          QuickActionPreference(
+            actionKey: type,
+            position: selected.length,
+          ),
+        );
       }
 
-      _preferences[_provider] = selected;
+      _preferences[_provider] = selected
+          .asMap()
+          .entries
+          .map(
+            (entry) => entry.value.copyWith(position: entry.key),
+          )
+          .toList();
     });
   }
 
   void _restoreDefaults() {
     setState(() {
-      _preferences[_provider] = List<String>.from(
-        _defaults[_provider] ?? const [],
-      );
+      _preferences[_provider] = _defaultPreferencesFor(_provider);
     });
   }
 
@@ -450,9 +499,7 @@ class _QuickActionCustomizationScreenState
     setState(() {
       _preferences = {
         for (final provider in ['mtn', 'telecel', 'at_money'])
-          provider: List<String>.from(
-            _defaults[provider] ?? const [],
-          ),
+          provider: _defaultPreferencesFor(provider),
       };
     });
   }
@@ -464,10 +511,15 @@ class _QuickActionCustomizationScreenState
       final field =
           widget.isPersonal ? 'personal_quick_actions' : 'agent_quick_actions';
 
+      final payload = {
+        for (final entry in _preferences.entries)
+          entry.key: entry.value.map((item) => item.toJson()).toList(),
+      };
+
       await ApiClient.instance.patch(
         '/users/me/quick-actions',
         data: {
-          field: _preferences,
+          field: payload,
         },
       );
 
@@ -492,6 +544,201 @@ class _QuickActionCustomizationScreenState
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  void _updatePreference(
+    String actionKey,
+    QuickActionPreference Function(QuickActionPreference current) update,
+  ) {
+    final selected = List<QuickActionPreference>.from(_selected);
+    final index = selected.indexWhere((item) => item.actionKey == actionKey);
+
+    if (index < 0) return;
+
+    selected[index] = update(selected[index]);
+
+    setState(() {
+      _preferences[_provider] = selected;
+    });
+  }
+
+  Future<void> _renameAction(QuickActionPreference preference) async {
+    final definition = _definitionFor(preference.actionKey);
+    if (definition == null) return;
+
+    final controller = TextEditingController(
+      text: preference.customName ?? definition.label.replaceAll('\n', ' '),
+    );
+
+    final result = await showDialog<String?>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Rename Quick Action'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 25,
+          decoration: InputDecoration(
+            labelText: 'Custom name',
+            helperText: 'Original: ${definition.label.replaceAll('\n', ' ')}',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, ''),
+            child: const Text('Use Default'),
+          ),
+          ElevatedButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    controller.dispose();
+
+    if (result == null || !mounted) return;
+
+    if (result.isEmpty) {
+      _updatePreference(
+        preference.actionKey,
+        (current) => current.copyWith(clearCustomName: true),
+      );
+      return;
+    }
+
+    _updatePreference(
+      preference.actionKey,
+      (current) => current.copyWith(customName: result),
+    );
+  }
+
+  Future<void> _chooseIcon(QuickActionPreference preference) async {
+    final result = await showModalBottomSheet<String?>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: SizedBox(
+            height: MediaQuery.of(sheetContext).size.height * 0.65,
+            child: Column(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: Text(
+                    'Choose an icon',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 17,
+                    ),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () => Navigator.pop(sheetContext, ''),
+                  icon: const Icon(Icons.restart_alt),
+                  label: const Text('Use default icon'),
+                ),
+                const Divider(),
+                Expanded(
+                  child: GridView.builder(
+                    padding: const EdgeInsets.all(16),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 4,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 10,
+                      childAspectRatio: 0.9,
+                    ),
+                    itemCount: kQuickActionIconOptions.length,
+                    itemBuilder: (context, index) {
+                      final option = kQuickActionIconOptions[index];
+                      final selected = preference.iconKey == option.key;
+
+                      return InkWell(
+                        onTap: () => Navigator.pop(sheetContext, option.key),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: context.appSurface,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: selected
+                                  ? AppTheme.primaryColor
+                                  : context.appSecondaryText
+                                      .withValues(alpha: 0.12),
+                            ),
+                          ),
+                          padding: const EdgeInsets.all(8),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                option.icon,
+                                color: AppTheme.primaryColor,
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                option.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(fontSize: 9),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (result == null || !mounted) return;
+
+    if (result.isEmpty) {
+      _updatePreference(
+        preference.actionKey,
+        (current) => current.copyWith(clearIconKey: true),
+      );
+      return;
+    }
+
+    _updatePreference(
+      preference.actionKey,
+      (current) => current.copyWith(iconKey: result),
+    );
+  }
+
+  void _reorder(int oldIndex, int newIndex) {
+    final items = List<QuickActionPreference>.from(_selected);
+
+    if (newIndex > oldIndex) {
+      newIndex -= 1;
+    }
+
+    final item = items.removeAt(oldIndex);
+    items.insert(newIndex, item);
+
+    setState(() {
+      _preferences[_provider] = items
+          .asMap()
+          .entries
+          .map(
+            (entry) => entry.value.copyWith(position: entry.key),
+          )
+          .toList();
+    });
   }
 
   @override
@@ -614,36 +861,85 @@ class _QuickActionCustomizationScreenState
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: _selected.length,
-                    onReorderItem: (oldIndex, newIndex) {
-                      setState(() {
-                        final items = List<String>.from(_selected);
-                        final item = items.removeAt(oldIndex);
-                        items.insert(newIndex, item);
-                        _preferences[_provider] = items;
-                      });
-                    },
+                    onReorder: _reorder,
                     itemBuilder: (context, index) {
-                      final type = _selected[index];
-                      final definition = _definitionFor(type)!;
+                      final preference = _selected[index];
+                      final definition = _definitionFor(preference.actionKey)!;
+
+                      final icon = quickActionIconFromKey(preference.iconKey) ??
+                          definition.icon;
+
+                      final label = preference.resolvedLabel(
+                        definition.label.replaceAll('\n', ' '),
+                      );
 
                       return Card(
-                        key: ValueKey(type),
+                        key: ValueKey(preference.actionKey),
                         child: ListTile(
-                          leading: Icon(
-                            definition.icon,
-                            color: AppTheme.primaryColor,
+                          leading: InkWell(
+                            onTap: () => _chooseIcon(preference),
+                            borderRadius: BorderRadius.circular(24),
+                            child: Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: Icon(
+                                icon,
+                                color: AppTheme.primaryColor,
+                              ),
+                            ),
                           ),
-                          title: Text(definition.label.replaceAll('\n', ' ')),
-                          subtitle: Text(type),
+                          title: Text(label),
+                          subtitle: Text(
+                            preference.customName != null
+                                ? 'Original: ${definition.label.replaceAll('\n', ' ')}'
+                                : preference.actionKey,
+                          ),
+                          onTap: () => _renameAction(preference),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              IconButton(
-                                tooltip: 'Remove',
-                                onPressed: () => _toggle(type),
-                                icon: const Icon(Icons.close),
+                              Switch(
+                                value: preference.isVisible,
+                                onChanged: (value) {
+                                  _updatePreference(
+                                    preference.actionKey,
+                                    (current) => current.copyWith(
+                                      isVisible: value,
+                                    ),
+                                  );
+                                },
                               ),
-                              const Icon(Icons.drag_handle),
+                              PopupMenuButton<String>(
+                                onSelected: (value) {
+                                  if (value == 'rename') {
+                                    _renameAction(preference);
+                                  } else if (value == 'icon') {
+                                    _chooseIcon(preference);
+                                  } else if (value == 'remove') {
+                                    _toggle(preference.actionKey);
+                                  }
+                                },
+                                itemBuilder: (context) => const [
+                                  PopupMenuItem(
+                                    value: 'rename',
+                                    child: Text('Rename'),
+                                  ),
+                                  PopupMenuItem(
+                                    value: 'icon',
+                                    child: Text('Change icon'),
+                                  ),
+                                  PopupMenuItem(
+                                    value: 'remove',
+                                    child: Text('Remove'),
+                                  ),
+                                ],
+                              ),
+                              ReorderableDragStartListener(
+                                index: index,
+                                child: const Padding(
+                                  padding: EdgeInsets.all(8),
+                                  child: Icon(Icons.drag_handle),
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -660,7 +956,9 @@ class _QuickActionCustomizationScreenState
                 ),
                 const SizedBox(height: 8),
                 ..._availableDefinitions.map((definition) {
-                  final checked = _selected.contains(definition.type);
+                  final checked = _selected.any(
+                    (item) => item.actionKey == definition.type,
+                  );
 
                   return CheckboxListTile(
                     value: checked,
@@ -671,7 +969,9 @@ class _QuickActionCustomizationScreenState
                           ? AppTheme.primaryColor
                           : context.appSecondaryText,
                     ),
-                    title: Text(definition.label.replaceAll('\n', ' ')),
+                    title: Text(
+                      definition.label.replaceAll('\n', ' '),
+                    ),
                     subtitle: Text(definition.type),
                     controlAffinity: ListTileControlAffinity.trailing,
                     contentPadding: EdgeInsets.zero,
@@ -749,7 +1049,7 @@ class _ProviderButton extends StatelessWidget {
 }
 
 class _QuickActionPreview extends StatelessWidget {
-  final List<String> selected;
+  final List<QuickActionPreference> selected;
   final List<QuickActionDefinition> definitions;
 
   const _QuickActionPreview({
@@ -766,11 +1066,19 @@ class _QuickActionPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final visible = selected.where((item) => item.isVisible).toList();
     final previewItems = <Widget>[];
 
     for (var index = 0; index < 9; index++) {
-      if (index < selected.length) {
-        final definition = _find(selected[index]);
+      if (index < visible.length) {
+        final preference = visible[index];
+        final definition = _find(preference.actionKey);
+
+        final icon = quickActionIconFromKey(preference.iconKey) ??
+            definition?.icon ??
+            Icons.apps;
+
+        final defaultLabel = definition?.label ?? preference.actionKey;
 
         previewItems.add(
           Container(
@@ -786,13 +1094,13 @@ class _QuickActionPreview extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  definition?.icon ?? Icons.apps,
+                  icon,
                   color: AppTheme.primaryColor,
                   size: 23,
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  definition?.label ?? selected[index],
+                  preference.resolvedLabel(defaultLabel),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
