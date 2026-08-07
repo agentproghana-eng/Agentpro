@@ -18,6 +18,7 @@ import "../../shared/widgets/dashboard_empty_state.dart";
 import 'widgets/dashboard_quick_actions_section.dart';
 import 'widgets/dashboard_recent_transaction_item.dart';
 import 'widgets/dashboard_header.dart';
+import 'widgets/dashboard_owner_glance.dart';
 
 class HomeTab extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -668,6 +669,10 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
             child: CustomScrollView(
               slivers: [
                 const SliverToBoxAdapter(child: OfflineStatusBanner()),
+                if (widget.user['role'] == 'business_owner')
+                  const SliverToBoxAdapter(
+                    child: DashboardOwnerGlance(),
+                  ),
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
