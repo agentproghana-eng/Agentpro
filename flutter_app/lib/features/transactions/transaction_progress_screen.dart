@@ -296,25 +296,25 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     // is deliberately NOT included here - it's a manual-entry transaction
     // (money already moved peer-to-peer to the agent's SIM), never a
     // USSD dial at all.
-    final transactionType = widget.data["transaction_type"]?.toString() ??
-        transaction["transaction_type"]?.toString();
+    final transactionType = widget.data['transaction_type']?.toString() ??
+        transaction['transaction_type']?.toString();
 
     if (transactionType == null || transactionType.isEmpty) {
-      _showStartupFailure("The transaction type is unavailable.");
+      _showStartupFailure('The transaction type is unavailable.');
       return;
     }
 
-    final bundleCategory = widget.data["bundle_category"] as String?;
-    final recipientMode = widget.data["recipient_mode"] as String?;
+    final bundleCategory = widget.data['bundle_category'] as String?;
+    final recipientMode = widget.data['recipient_mode'] as String?;
     final selectionsInOrder =
-        (widget.data["selections_in_order"] as List?)?.cast<String>() ??
+        (widget.data['selections_in_order'] as List?)?.cast<String>() ??
             const [];
-    final isMtnAccessibilityFlow = provider == "mtn" &&
-        (transactionType == "cash_in" ||
-            transactionType == "cash_out" ||
-            transactionType == "send_money");
+    final isMtnAccessibilityFlow = provider == 'mtn' &&
+        (transactionType == 'cash_in' ||
+            transactionType == 'cash_out' ||
+            transactionType == 'send_money');
     final isTelecelDepositFlow =
-        provider == "telecel" && transactionType == "cash_in";
+        provider == 'telecel' && transactionType == 'cash_in';
 
     // Telecel Operator ID is only actually needed by flows whose steps
     // include a send_operator_id action (Telecel Airtime, and the
@@ -329,7 +329,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     // the resolved flow's real steps at the point it matters - this
     // layer doesn't need to duplicate that logic or guess in advance.
     String? telecelOperatorId;
-    if (provider == "telecel") {
+    if (provider == 'telecel') {
       if (!mounted) return;
 
       final authState = context.read<AuthBloc>().state;
@@ -645,20 +645,20 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     // would handle identically anyway. The one real difference is WHICH
     // phone number gets credited - the recipient's, not the customer's.
     final nativeTransactionType =
-        (provider == "mtn" && transactionType == "send_money")
-            ? "cash_in"
+        (provider == 'mtn' && transactionType == 'send_money')
+            ? 'cash_in'
             : transactionType;
-    final phoneForAutomation = (transactionType == "send_money")
-        ? (automationParams["recipient_phone"] ?? "")
-        : (automationParams["customer_phone"] ?? "");
+    final phoneForAutomation = (transactionType == 'send_money')
+        ? (automationParams['recipient_phone'] ?? '')
+        : (automationParams['customer_phone'] ?? '');
 
     final accessEngine = UssdAccessibilityEngine();
 
     final enabled = await accessEngine.isServiceEnabled();
     if (!enabled) {
-      const reason = "Accessibility permission is required for automated "
-          "USSD transactions. Enable Agent Pro Ghana under Settings > "
-          "Accessibility, then try again.";
+      const reason = 'Accessibility permission is required for automated '
+          'USSD transactions. Enable Agent Pro Ghana under Settings > '
+          'Accessibility, then try again.';
       if (mounted) setState(() => _simWarning = reason);
       await accessEngine.openAccessibilitySettings();
       await _reportResult(
@@ -687,12 +687,12 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
     final result = await accessEngine.execute(
       customerPhone: phoneForAutomation,
-      amount: automationParams["amount"] ?? "",
+      amount: automationParams['amount'] ?? '',
       transactionType: nativeTransactionType,
       provider: provider,
       operatorId: operatorId,
-      reference: automationParams["payment_reference"],
-      merchantId: automationParams["merchant_id"],
+      reference: automationParams['payment_reference'],
+      merchantId: automationParams['merchant_id'],
       simSlot: simSlot,
       dialCode: dialCode,
       steps: steps,
@@ -727,18 +727,18 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     final outcome = await showDialog<USSDStatus>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("Did the transaction succeed?"),
+        title: const Text('Did the transaction succeed?'),
         content: const Text(
-          "Check the result shown on your network screen, then choose what it said.",
+          'Check the result shown on your network screen, then choose what it said.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, USSDStatus.failed),
-            child: const Text("It failed"),
+            child: const Text('It failed'),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, USSDStatus.success),
-            child: const Text("It succeeded"),
+            child: const Text('It succeeded'),
           ),
         ],
       ),
@@ -747,14 +747,14 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     _wasManuallyConfirmed = true;
 
     final transaction = _resolvedTransaction ??
-        (widget.data["transaction"] is Map
-            ? Map<String, dynamic>.from(widget.data["transaction"] as Map)
+        (widget.data['transaction'] is Map
+            ? Map<String, dynamic>.from(widget.data['transaction'] as Map)
             : null);
 
-    final transactionId = transaction?["transaction_id"]?.toString();
+    final transactionId = transaction?['transaction_id']?.toString();
 
     if (transactionId == null || transactionId.isEmpty) {
-      _showStartupFailure("The transaction reference is unavailable.");
+      _showStartupFailure('The transaction reference is unavailable.');
       return;
     }
 
@@ -763,7 +763,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       USSDResult(
         outcome: outcome,
         failureReason: outcome == USSDStatus.failed
-            ? "Manually confirmed as failed by agent"
+            ? 'Manually confirmed as failed by agent'
             : null,
         sessionLog: const [],
       ),
@@ -785,9 +785,9 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     // Offline transaction: this local ID means the dial already
     // happened but the app has no connectivity to report it. Queue it
     // for sync instead of calling the real API, which would just fail.
-    if (transactionId.startsWith("local_")) {
+    if (transactionId.startsWith('local_')) {
       final requestFields = Map<String, dynamic>.from(
-        widget.data["request_fields"] as Map,
+        widget.data['request_fields'] as Map,
       );
       await OfflineQueueService.queueTransaction(
         requestFields: requestFields,
@@ -802,9 +802,9 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
           _outcome = result.outcome;
           _failureReason = result.failureReason;
           _completedTransaction = {
-            "reference": transactionId,
-            "status": statusString,
-            "offline_pending_sync": true,
+            'reference': transactionId,
+            'status': statusString,
+            'offline_pending_sync': true,
           };
         });
       }
@@ -851,9 +851,9 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             _outcome = result.outcome;
             _failureReason = result.failureReason;
             _completedTransaction = {
-              "reference": transactionId,
-              "status": statusString,
-              "offline_pending_sync": true,
+              'reference': transactionId,
+              'status': statusString,
+              'offline_pending_sync': true,
             };
           });
         }
