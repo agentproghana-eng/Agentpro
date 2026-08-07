@@ -52,10 +52,10 @@ class _ProgressTimelineRow extends StatelessWidget {
         ? AppTheme.successColor
         : active
             ? activeColor
-            : context.appSecondaryText.withOpacity(0.18);
+            : context.appSecondaryText.withValues(alpha: 0.18);
 
     final textColor =
-        pending ? context.appSecondaryText.withOpacity(0.68) : null;
+        pending ? context.appSecondaryText.withValues(alpha: 0.68) : null;
 
     return IntrinsicHeight(
       child: Row(
@@ -75,7 +75,7 @@ class _ProgressTimelineRow extends StatelessWidget {
                     boxShadow: active
                         ? [
                             BoxShadow(
-                              color: activeColor.withOpacity(0.25),
+                              color: activeColor.withValues(alpha: 0.25),
                               blurRadius: 8,
                             ),
                           ]
@@ -99,8 +99,8 @@ class _ProgressTimelineRow extends StatelessWidget {
                       width: 2,
                       margin: const EdgeInsets.symmetric(vertical: 3),
                       color: completed
-                          ? AppTheme.successColor.withOpacity(0.55)
-                          : context.appSecondaryText.withOpacity(0.14),
+                          ? AppTheme.successColor.withValues(alpha: 0.55)
+                          : context.appSecondaryText.withValues(alpha: 0.14),
                     ),
                   ),
               ],
@@ -960,19 +960,19 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
               gradient: LinearGradient(
                 colors: isAwaitingPIN
                     ? [
-                        AppTheme.secondaryColor.withOpacity(0.18),
-                        AppTheme.secondaryColor.withOpacity(0.06),
+                        AppTheme.secondaryColor.withValues(alpha: 0.18),
+                        AppTheme.secondaryColor.withValues(alpha: 0.06),
                       ]
                     : [
-                        AppTheme.primaryColor.withOpacity(0.16),
-                        AppTheme.primaryColor.withOpacity(0.05),
+                        AppTheme.primaryColor.withValues(alpha: 0.16),
+                        AppTheme.primaryColor.withValues(alpha: 0.05),
                       ],
               ),
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
                 color: isAwaitingPIN
-                    ? AppTheme.secondaryColor.withOpacity(0.35)
-                    : AppTheme.primaryColor.withOpacity(0.25),
+                    ? AppTheme.secondaryColor.withValues(alpha: 0.35)
+                    : AppTheme.primaryColor.withValues(alpha: 0.25),
               ),
             ),
             child: Row(
@@ -985,11 +985,11 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: isAwaitingPIN
-                          ? AppTheme.secondaryColor.withOpacity(
-                              0.12 + (_pulseCtrl.value * 0.13),
+                          ? AppTheme.secondaryColor.withValues(
+                              alpha: 0.12 + (_pulseCtrl.value * 0.13),
                             )
-                          : AppTheme.primaryColor.withOpacity(
-                              0.10 + (_pulseCtrl.value * 0.12),
+                          : AppTheme.primaryColor.withValues(
+                              alpha: 0.10 + (_pulseCtrl.value * 0.12),
                             ),
                     ),
                     child: Icon(
@@ -1056,7 +1056,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -1090,7 +1090,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
                     : const Color(0xFFFFF7DA),
                 borderRadius: BorderRadius.circular(15),
                 border: Border.all(
-                  color: AppTheme.secondaryColor.withOpacity(0.55),
+                  color: AppTheme.secondaryColor.withValues(alpha: 0.55),
                 ),
               ),
               child: Column(
@@ -1159,7 +1159,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
                     : const Color(0xFFEAF3FF),
                 borderRadius: BorderRadius.circular(15),
                 border: Border.all(
-                  color: const Color(0xFF6FA5E6).withOpacity(0.55),
+                  color: const Color(0xFF6FA5E6).withValues(alpha: 0.55),
                 ),
               ),
               child: Column(
@@ -1258,7 +1258,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             width: 34,
             height: 34,
             decoration: BoxDecoration(
-              color: AppTheme.primaryColor.withOpacity(0.09),
+              color: AppTheme.primaryColor.withValues(alpha: 0.09),
               borderRadius: BorderRadius.circular(9),
             ),
             child: Icon(icon, size: 18, color: AppTheme.primaryColor),
@@ -1303,9 +1303,9 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       width: double.infinity,
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: color.withOpacity(context.isDarkMode ? 0.13 : 0.08),
+        color: color.withValues(alpha: context.isDarkMode ? 0.13 : 0.08),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withOpacity(0.32)),
+        border: Border.all(color: color.withValues(alpha: 0.32)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1427,10 +1427,10 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             decoration: BoxDecoration(
               color: context.appSurface,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: statusColor.withOpacity(0.22)),
+              border: Border.all(color: statusColor.withValues(alpha: 0.22)),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.06),
+                  color: Colors.black.withValues(alpha: 0.06),
                   blurRadius: 14,
                   offset: const Offset(0, 5),
                 ),
@@ -1443,7 +1443,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
                   height: 88,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: statusColor.withOpacity(0.11),
+                    color: statusColor.withValues(alpha: 0.11),
                   ),
                   child: Icon(statusIcon, size: 52, color: statusColor),
                 ),
@@ -1484,7 +1484,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.09),
+                    color: statusColor.withValues(alpha: 0.09),
                     borderRadius: BorderRadius.circular(30),
                   ),
                   child: Text(
