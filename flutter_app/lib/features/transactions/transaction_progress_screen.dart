@@ -174,6 +174,10 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
   bool _wasManuallyConfirmed = false;
   bool _showConfirmButton = false;
   Timer? _confirmTimer;
+
+  StreamSubscription? _engineProgressSubscription;
+  StreamSubscription? _accessibilityProgressSubscription;
+
   Map<String, dynamic>? _resolvedTransaction;
   USSDStatus _outcome = USSDStatus.failed;
   String? _failureReason;
@@ -459,7 +463,9 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     // Listen to progress stream — the new engine only reports status +
     // message, no step counts, since there's no more multi-step loop
     // (see ussd_service.dart for why: a single dial replaces navigation).
-    _engine!.progressStream.listen((progress) {
+    _engineProgressSubscription?.cancel();
+
+    _engineProgressSubscription = _engine!.progressStream.listen((progress) {
       if (mounted) {
         setState(() {
           _status = progress.status;
@@ -666,7 +672,10 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       return;
     }
 
-    accessEngine.progressStream.listen((progress) {
+    _accessibilityProgressSubscription?.cancel();
+
+    _accessibilityProgressSubscription =
+        accessEngine.progressStream.listen((progress) {
       if (mounted) {
         setState(() {
           _status = progress.status;
@@ -1661,6 +1670,10 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
   void dispose() {
     _pulseCtrl.dispose();
     _confirmTimer?.cancel();
+
+    _engineProgressSubscription?.cancel();
+    _accessibilityProgressSubscription?.cancel();
+
     _engine?.dispose();
     super.dispose();
   }
