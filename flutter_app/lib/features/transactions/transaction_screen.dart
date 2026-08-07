@@ -75,6 +75,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
   bool _loading = false;
   bool _feeAutoCalculated = true;
   Map<String, SimCard?>? _simMap;
+  bool _simDetectionComplete = false;
+  bool _simPermissionDenied = false;
   AgentTelecelBundleOption? _selectedTelecelBundle;
 
   Timer? _flowPreloadDebounce;
@@ -140,16 +142,16 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // phone field, unlike Cash In/Cash Out/Pay to Agent, where the agent
   // is entering a real person's phone in front of them.
   bool get _needsCustomer => ![
-    'balance_enquiry',
-    'mini_statement',
-    'send_money',
-    'merchant_payment',
-    'commission_balance',
-    'cash_in_commission',
-    'working_to_float',
-    'float_to_working',
-    'commission_transfer',
-  ].contains(widget.transactionType);
+        'balance_enquiry',
+        'mini_statement',
+        'send_money',
+        'merchant_payment',
+        'commission_balance',
+        'cash_in_commission',
+        'working_to_float',
+        'float_to_working',
+        'commission_transfer',
+      ].contains(widget.transactionType);
   bool get _isSendMoney => widget.transactionType == 'send_money';
 
   // Telecel/AirtelTigo Cash Out: e-cash moves directly SIM-to-SIM,
@@ -162,46 +164,88 @@ class _TransactionScreenState extends State<TransactionScreen> {
       widget.transactionType == "cash_out" &&
       (_selectedProvider == "telecel" || _selectedProvider == "at_money");
 
-  // Only shows provider tabs for SIMs actually present on the device.
-  // Falls back to all three if detection has not finished yet or
-  // failed, so agents are never blocked. Never overrides the forced
-  // MTN provider for Pay to Agent/Merchant, which hide the selector
-  // entirely regardless of SIM presence.
-  List<String> get _availableProviders => _simMap == null
-      ? ["mtn", "telecel", "at_money"]
-      : _simMap!.entries
-            .where((e) => e.value != null)
-            .map((e) => e.key)
-            .toList();
+  List<String> get _availableProviders {
+    if (!_simDetectionComplete || _simMap == null) {
+      return const <String>[];
+    }
+
+    return _simMap!.entries
+        .where((entry) => entry.value != null)
+        .map((entry) => entry.key)
+        .toList();
+  }
+
+  SimCard? get _selectedSim => _simMap?[_selectedProvider];
 
   Future<void> _loadSimMap() async {
+    if (mounted) {
+      setState(() {
+        _simDetectionComplete = false;
+        _simPermissionDenied = false;
+      });
+    }
+
     try {
-      final map = await SimCardService.getNetworkSimMap();
+      var map = await SimCardService.getNetworkSimMap();
+
+      if (map.values.every((sim) => sim == null)) {
+        await Future.delayed(const Duration(milliseconds: 1200));
+
+        if (!mounted) return;
+
+        map = await SimCardService.getNetworkSimMap();
+      }
+
       if (!mounted) return;
+
+      final available = map.entries
+          .where((entry) => entry.value != null)
+          .map((entry) => entry.key)
+          .toList();
+
       var providerChanged = false;
 
       setState(() {
         _simMap = map;
+        _simDetectionComplete = true;
+        _simPermissionDenied = false;
 
-        if (!_needsReference && map[_selectedProvider] == null) {
-          final available = map.entries
-              .where((entry) => entry.value != null)
-              .toList();
-
-          if (available.isNotEmpty) {
-            final resolvedProvider = available.first.key;
-            providerChanged = resolvedProvider != _selectedProvider;
-            _selectedProvider = resolvedProvider;
-          }
+        if (!_needsReference &&
+            available.isNotEmpty &&
+            !available.contains(_selectedProvider)) {
+          providerChanged = true;
+          _selectedProvider = available.first;
+          _selectedTelecelBundle = null;
         }
       });
 
       if (providerChanged) {
         _scheduleFlowPreload();
       }
+    } on SimPermissionException {
+      if (!mounted) return;
+
+      setState(() {
+        _simMap = const {
+          'mtn': null,
+          'telecel': null,
+          'at_money': null,
+        };
+        _simDetectionComplete = true;
+        _simPermissionDenied = true;
+      });
     } catch (_) {
-      // Permission denied or detection failed - leave _simMap null so
-      // the UI falls back to showing all three tabs.
+      if (!mounted) return;
+
+      setState(() {
+        _simMap = const {
+          'mtn': null,
+          'telecel': null,
+          'at_money': null,
+        };
+        _simDetectionComplete = true;
+        _simPermissionDenied = false;
+      });
     }
   }
 
@@ -281,6 +325,28 @@ class _TransactionScreenState extends State<TransactionScreen> {
   Future<void> _proceed() async {
     if (!_formKey.currentState!.validate()) return;
 
+    if (!_needsReference) {
+      if (!_simDetectionComplete) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('SIM detection is still in progress.')),
+        );
+        return;
+      }
+
+      if (_selectedSim == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              _simPermissionDenied
+                  ? 'Allow phone permission before starting this transaction.'
+                  : 'No supported SIM is available for this transaction.',
+            ),
+          ),
+        );
+        return;
+      }
+    }
+
     if (_isTelecelDataBundle && _selectedTelecelBundle == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Select a Telecel data bundle')),
@@ -319,8 +385,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
     // run. Gating these on cachedTemplate != null would mean they can
     // never go offline at all. Only the custom Flow Builder path
     // genuinely needs a prior online run to learn its dial code.
-    final isAccessibilityHardcodedFlow =
-        (_selectedProvider == "mtn" &&
+    final isAccessibilityHardcodedFlow = (_selectedProvider == "mtn" &&
             (widget.transactionType == "cash_in" ||
                 widget.transactionType == "cash_out" ||
                 widget.transactionType == "send_money")) ||
@@ -369,8 +434,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
           "customer_name": "",
           "selections_in_order":
               _isTelecelDataBundle && _selectedTelecelBundle != null
-              ? <String>[_selectedTelecelBundle!.digit]
-              : const <String>[],
+                  ? <String>[_selectedTelecelBundle!.digit]
+                  : const <String>[],
           "request_fields": requestFields,
         },
       );
@@ -420,8 +485,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'customer_name': '',
         'selections_in_order':
             _isTelecelDataBundle && _selectedTelecelBundle != null
-            ? <String>[_selectedTelecelBundle!.digit]
-            : const <String>[],
+                ? <String>[_selectedTelecelBundle!.digit]
+                : const <String>[],
       },
     );
 
@@ -448,9 +513,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
     final transaction = Map<String, dynamic>.from(rawTransaction);
     final rawTemplate = transaction['ussd_template'];
-    final template = rawTemplate is Map
-        ? Map<String, dynamic>.from(rawTemplate)
-        : null;
+    final template =
+        rawTemplate is Map ? Map<String, dynamic>.from(rawTemplate) : null;
 
     unawaited(
       _cacheTransactionAutomationData(
@@ -552,67 +616,162 @@ class _TransactionScreenState extends State<TransactionScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Provider Selector - hidden for Pay to Agent and Pay to
-              // Merchant, both confirmed MTN-only.
+              // SIM-aware network selection.
               if (!_needsReference) ...[
-                const Text(
-                  'Select Network',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: _availableProviders.map((p) {
-                    final selected = _selectedProvider == p;
-                    final color = AppTheme.providerColor(p);
-                    final label = {
-                      'mtn': 'MTN MoMo',
-                      'telecel': 'Telecel Cash',
-                      'at_money': 'AT Money',
-                    }[p]!;
-                    return Expanded(
-                      child: GestureDetector(
-                        onTap: () => _selectProvider(p),
-                        child: Container(
-                          margin: const EdgeInsets.only(right: 8),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          decoration: BoxDecoration(
-                            color: selected ? color : context.appSurface,
-                            border: Border.all(
-                              color: selected ? color : context.appDivider,
+                if (!_simDetectionComplete) ...[
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 10),
+                        Text(
+                          'Detecting SIMs…',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ] else if (_availableProviders.isEmpty) ...[
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: context.appSurface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: context.appDivider),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.sim_card_alert_outlined,
+                          color: context.appSecondaryText,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _simPermissionDenied
+                                ? 'Allow phone permission to detect your SIM cards.'
+                                : 'Insert an MTN, Telecel or AT Money SIM to continue.',
+                            style: TextStyle(
+                              color: context.appSecondaryText,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
                             ),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Column(
-                            children: [
-                              Icon(
-                                Icons.phone_android,
-                                color: selected
-                                    ? (p == 'mtn' ? Colors.black : Colors.white)
-                                    : color,
-                                size: 20,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                label,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: selected
-                                      ? (p == 'mtn'
-                                            ? Colors.black
-                                            : Colors.white)
-                                      : context.appSecondaryText,
-                                ),
-                              ),
-                            ],
                           ),
                         ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 20),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ] else if (_availableProviders.length == 1) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: context.appSurface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: context.appDivider),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.sim_card_outlined,
+                          color: AppTheme.providerColor(_selectedProvider),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Using ${{
+                              'mtn': 'MTN',
+                              'telecel': 'Telecel',
+                              'at_money': 'AT Money',
+                            }[_selectedProvider]} SIM ${_selectedSim!.slot + 1}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        const Icon(Icons.check_circle_outline, size: 18),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ] else ...[
+                  const Text(
+                    'Using SIM',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: _availableProviders.map((provider) {
+                      final selected = _selectedProvider == provider;
+                      final color = AppTheme.providerColor(provider);
+                      final sim = _simMap![provider]!;
+                      final label = {
+                        'mtn': 'MTN',
+                        'telecel': 'Telecel',
+                        'at_money': 'AT Money',
+                      }[provider]!;
+
+                      return Expanded(
+                        child: GestureDetector(
+                          onTap: () => _selectProvider(provider),
+                          child: Container(
+                            margin: const EdgeInsets.only(right: 8),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: selected ? color : context.appSurface,
+                              border: Border.all(
+                                color: selected ? color : context.appDivider,
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Column(
+                              children: [
+                                Icon(
+                                  Icons.sim_card_outlined,
+                                  color: selected
+                                      ? (provider == 'mtn'
+                                          ? Colors.black
+                                          : Colors.white)
+                                      : color,
+                                  size: 20,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '$label SIM ${sim.slot + 1}',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: selected
+                                        ? (provider == 'mtn'
+                                            ? Colors.black
+                                            : Colors.white)
+                                        : context.appSecondaryText,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 20),
+                ],
               ],
 
               // Merchant ID (Pay to Merchant)
@@ -667,20 +826,18 @@ class _TransactionScreenState extends State<TransactionScreen> {
               if (_needsCustomer) ...[
                 AppTextField(
                   controller: _customerPhoneCtrl,
-                  label:
-                      [
-                        'business_deposit',
-                        'business_withdrawal',
-                      ].contains(widget.transactionType)
+                  label: [
+                    'business_deposit',
+                    'business_withdrawal',
+                  ].contains(widget.transactionType)
                       ? 'Agent Short Code'
                       : (_needsReference
-                            ? 'Enter Number'
-                            : 'Customer Phone Number'),
-                  hint:
-                      [
-                        'business_deposit',
-                        'business_withdrawal',
-                      ].contains(widget.transactionType)
+                          ? 'Enter Number'
+                          : 'Customer Phone Number'),
+                  hint: [
+                    'business_deposit',
+                    'business_withdrawal',
+                  ].contains(widget.transactionType)
                       ? 'Enter agent short code'
                       : '024XXXXXXX',
                   keyboardType: TextInputType.phone,
@@ -849,9 +1006,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     children: [
                       Icon(
                         Icons.security,
-                        color: context.isDarkMode
-                            ? Colors.blue[200]
-                            : Colors.blue,
+                        color:
+                            context.isDarkMode ? Colors.blue[200] : Colors.blue,
                         size: 18,
                       ),
                       const SizedBox(width: 8),
