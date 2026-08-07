@@ -27,7 +27,6 @@ class _DashboardOwnerGlanceState extends State<DashboardOwnerGlance>
   );
 
   Timer? _hideTimer;
-  Timer? _liveRefreshTimer;
   StreamSubscription<DashboardRefreshEvent>? _dashboardRefreshSubscription;
 
   bool _revealed = false;
@@ -51,7 +50,6 @@ class _DashboardOwnerGlanceState extends State<DashboardOwnerGlance>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _hideTimer?.cancel();
-    _liveRefreshTimer?.cancel();
     _dashboardRefreshSubscription?.cancel();
     super.dispose();
   }
@@ -68,7 +66,6 @@ class _DashboardOwnerGlanceState extends State<DashboardOwnerGlance>
 
   void _hide() {
     _hideTimer?.cancel();
-    _liveRefreshTimer?.cancel();
 
     if (!mounted || !_revealed) return;
 
@@ -78,19 +75,6 @@ class _DashboardOwnerGlanceState extends State<DashboardOwnerGlance>
   void _scheduleHide() {
     _hideTimer?.cancel();
     _hideTimer = Timer(_revealDuration, _hide);
-  }
-
-  void _startLiveRefresh() {
-    _liveRefreshTimer?.cancel();
-
-    _liveRefreshTimer = Timer.periodic(
-      const Duration(seconds: 15),
-      (_) {
-        if (_revealed && !_loading) {
-          unawaited(_loadMetrics());
-        }
-      },
-    );
   }
 
   void _handleDashboardRefresh(DashboardRefreshEvent event) {
@@ -113,7 +97,6 @@ class _DashboardOwnerGlanceState extends State<DashboardOwnerGlance>
 
       setState(() => _revealed = true);
       _scheduleHide();
-      _startLiveRefresh();
 
       await _loadMetrics();
     } finally {
