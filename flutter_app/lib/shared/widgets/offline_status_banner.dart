@@ -18,6 +18,7 @@ class _OfflineStatusBannerState extends State<OfflineStatusBanner>
     with WidgetsBindingObserver {
   StreamSubscription<List<ConnectivityResult>>? _subscription;
   Timer? _refreshTimer;
+  Timer? _autoSyncTimer;
 
   bool _offline = false;
   bool _syncing = false;
@@ -33,10 +34,15 @@ class _OfflineStatusBannerState extends State<OfflineStatusBanner>
     _refresh();
 
     _subscription = Connectivity().onConnectivityChanged.listen((results) {
-      _applyConnectivity(results);
+      final wasOffline = _offline;
 
-      if (!_offline && _pendingCount > 0) {
-        _refresh();
+      _applyConnectivity(results);
+      _refreshQueueCount();
+
+      // Give the connection a moment to stabilize before uploading
+      // anything that was completed while offline.
+      if (wasOffline && !_offline && _pendingCount > 0) {
+        _scheduleAutoSync();
       }
     });
 
@@ -44,7 +50,7 @@ class _OfflineStatusBannerState extends State<OfflineStatusBanner>
     // connectivity changing. Reading Hive locally is inexpensive.
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 4),
-      (_) => _refreshQueueCount(),
+      (_) => _refreshQueueCount(autoSyncIfIncreased: true),
     );
   }
 
@@ -62,11 +68,16 @@ class _OfflineStatusBannerState extends State<OfflineStatusBanner>
 
     _applyConnectivity(results);
     _refreshQueueCount();
+
+    // Covers cold startup and returning to AgentPro after the phone
+    // regained connectivity while the app was in the background.
+    if (!_offline && _pendingCount > 0) {
+      _scheduleAutoSync();
+    }
   }
 
   void _applyConnectivity(List<ConnectivityResult> results) {
-    final offline =
-        results.isEmpty ||
+    final offline = results.isEmpty ||
         results.every((result) => result == ConnectivityResult.none);
 
     if (!mounted || offline == _offline) return;
@@ -74,15 +85,46 @@ class _OfflineStatusBannerState extends State<OfflineStatusBanner>
     setState(() => _offline = offline);
   }
 
-  void _refreshQueueCount() {
+  void _refreshQueueCount({bool autoSyncIfIncreased = false}) {
+    final previousCount = _pendingCount;
     final count = OfflineQueueService.pendingCount;
 
-    if (!mounted || count == _pendingCount) return;
+    if (!mounted) return;
 
-    setState(() => _pendingCount = count);
+    if (count != previousCount) {
+      setState(() => _pendingCount = count);
+    }
+
+    // A transaction may enter the queue even while Android still reports
+    // connectivity (for example, a temporary API timeout). Retry it once
+    // after a short stabilization delay. If that retry fails, the unchanged
+    // queue count prevents this polling loop from repeatedly hammering
+    // the backend.
+    if (autoSyncIfIncreased &&
+        !_offline &&
+        count > previousCount &&
+        count > 0) {
+      _scheduleAutoSync();
+    }
   }
 
-  Future<void> _syncNow() async {
+  void _scheduleAutoSync({
+    Duration delay = const Duration(seconds: 3),
+  }) {
+    if (_offline || _syncing || _pendingCount == 0) return;
+
+    _autoSyncTimer?.cancel();
+
+    _autoSyncTimer = Timer(delay, () {
+      if (!mounted || _offline || _syncing || _pendingCount == 0) {
+        return;
+      }
+
+      _syncNow(automatic: true);
+    });
+  }
+
+  Future<void> _syncNow({bool automatic = false}) async {
     if (_offline || _syncing || _pendingCount == 0) return;
 
     setState(() => _syncing = true);
@@ -97,16 +139,18 @@ class _OfflineStatusBannerState extends State<OfflineStatusBanner>
       if (!mounted) return;
 
       final message = failed == 0
-          ? '$succeeded queued transaction'
-                '${succeeded == 1 ? '' : 's'} synced'
+          ? automatic
+              ? '$succeeded offline transaction'
+                  '${succeeded == 1 ? '' : 's'} synchronized automatically'
+              : '$succeeded queued transaction'
+                  '${succeeded == 1 ? '' : 's'} synced'
           : '$succeeded synced, $failed still pending';
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: failed == 0
-              ? AppTheme.successColor
-              : AppTheme.warningColor,
+          backgroundColor:
+              failed == 0 ? AppTheme.successColor : AppTheme.warningColor,
         ),
       );
     } catch (_) {
@@ -129,20 +173,19 @@ class _OfflineStatusBannerState extends State<OfflineStatusBanner>
   Widget build(BuildContext context) {
     if (!_visible) return const SizedBox.shrink();
 
-    final statusColor = _offline
-        ? AppTheme.warningColor
-        : AppTheme.primaryColor;
+    final statusColor =
+        _offline ? AppTheme.warningColor : AppTheme.primaryColor;
 
     final title = _offline ? 'You are offline' : 'Transactions waiting to sync';
 
     final message = _offline
         ? _pendingCount == 0
-              ? 'Transactions with cached automation can still be processed.'
-              : '$_pendingCount transaction'
-                    '${_pendingCount == 1 ? '' : 's'} saved safely '
-                    'on this device.'
+            ? 'Transactions with cached automation can still be processed.'
+            : '$_pendingCount transaction'
+                '${_pendingCount == 1 ? '' : 's'} saved safely '
+                'on this device.'
         : '$_pendingCount queued transaction'
-              '${_pendingCount == 1 ? '' : 's'} can now be uploaded.';
+            '${_pendingCount == 1 ? '' : 's'} can now be uploaded.';
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 250),
@@ -151,9 +194,10 @@ class _OfflineStatusBannerState extends State<OfflineStatusBanner>
         margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: statusColor.withOpacity(context.isDarkMode ? 0.14 : 0.08),
+          color:
+              statusColor.withValues(alpha: context.isDarkMode ? 0.14 : 0.08),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: statusColor.withOpacity(0.34)),
+          border: Border.all(color: statusColor.withValues(alpha: 0.34)),
         ),
         child: Row(
           children: [
@@ -161,7 +205,7 @@ class _OfflineStatusBannerState extends State<OfflineStatusBanner>
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: statusColor.withOpacity(0.14),
+                color: statusColor.withValues(alpha: 0.14),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -199,7 +243,7 @@ class _OfflineStatusBannerState extends State<OfflineStatusBanner>
             if (!_offline && _pendingCount > 0) ...[
               const SizedBox(width: 8),
               TextButton(
-                onPressed: _syncing ? null : _syncNow,
+                onPressed: _syncing ? null : () => _syncNow(),
                 child: _syncing
                     ? const SizedBox(
                         width: 17,
@@ -220,6 +264,7 @@ class _OfflineStatusBannerState extends State<OfflineStatusBanner>
     WidgetsBinding.instance.removeObserver(this);
     _subscription?.cancel();
     _refreshTimer?.cancel();
+    _autoSyncTimer?.cancel();
     super.dispose();
   }
 }
