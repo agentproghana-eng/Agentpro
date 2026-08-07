@@ -20,7 +20,10 @@ const Map<String, String> kPersonalTransactionLabels = {
   'withdraw_cash': 'Withdraw Cash',
 };
 
-const List<String> kNoAmountPersonalTypes = ['check_momo_balance', 'check_airtime_balance'];
+const List<String> kNoAmountPersonalTypes = [
+  'check_momo_balance',
+  'check_airtime_balance'
+];
 
 class DataBundleOption {
   final String label;
@@ -37,12 +40,17 @@ class DataBundleCategory {
 }
 
 const List<DataBundleCategory> kDataBundleCategories = [
-  DataBundleCategory('flexi', 'Flexi', 'Pick your own amount', Icons.flash_on_outlined),
+  DataBundleCategory(
+      'flexi', 'Flexi', 'Pick your own amount', Icons.flash_on_outlined),
   DataBundleCategory('2moorch', '2Moorch', 'No expiry', Icons.all_inclusive),
-  DataBundleCategory('daily', 'Daily / Bossu', 'Short validity', Icons.today_outlined),
-  DataBundleCategory('weekly', 'Weekly', '7-day validity', Icons.date_range_outlined),
-  DataBundleCategory('monthly', 'Monthly / Jumbo', '30-day validity', Icons.calendar_month_outlined),
-  DataBundleCategory('night', 'Night King', '12am – 5am', Icons.nightlight_outlined),
+  DataBundleCategory(
+      'daily', 'Daily / Bossu', 'Short validity', Icons.today_outlined),
+  DataBundleCategory(
+      'weekly', 'Weekly', '7-day validity', Icons.date_range_outlined),
+  DataBundleCategory('monthly', 'Monthly / Jumbo', '30-day validity',
+      Icons.calendar_month_outlined),
+  DataBundleCategory(
+      'night', 'Night King', '12am – 5am', Icons.nightlight_outlined),
 ];
 
 const Map<String, List<DataBundleOption>> kDataBundleOptions = {
@@ -111,7 +119,8 @@ class PersonalTransactionScreen extends StatefulWidget {
   });
 
   @override
-  State<PersonalTransactionScreen> createState() => _PersonalTransactionScreenState();
+  State<PersonalTransactionScreen> createState() =>
+      _PersonalTransactionScreenState();
 }
 
 class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
@@ -125,9 +134,17 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
 
   bool get _isDataBundle => widget.transactionType == 'buy_data';
 
-  bool get _needsAmount => !kNoAmountPersonalTypes.contains(widget.transactionType) && !_isDataBundle;
-  bool get _needsPhone => !kNoAmountPersonalTypes.contains(widget.transactionType) && widget.transactionType != 'withdraw_cash' && !_isDataBundle;
-  bool get _needsReference => ['send_money_same_network', 'send_money_cross_network'].contains(widget.transactionType);
+  bool get _needsAmount =>
+      !kNoAmountPersonalTypes.contains(widget.transactionType) &&
+      !_isDataBundle;
+  bool get _needsPhone =>
+      !kNoAmountPersonalTypes.contains(widget.transactionType) &&
+      widget.transactionType != 'withdraw_cash' &&
+      !_isDataBundle;
+  bool get _needsReference => [
+        'send_money_same_network',
+        'send_money_cross_network'
+      ].contains(widget.transactionType);
   bool get _needsTillNumber => widget.transactionType == 'withdraw_cash';
 
   String _dbStep = 'recipient_mode';
@@ -206,12 +223,14 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     setState(() => _loading = true);
 
     try {
-      final res = await ApiClient.instance.post('/personal-transactions', data: {
+      final res =
+          await ApiClient.instance.post('/personal-transactions', data: {
         'provider': widget.provider,
         'transaction_type': widget.transactionType,
         if (_needsAmount) 'amount': double.tryParse(_amountCtrl.text.trim()),
         if (_needsPhone) 'recipient_phone': _phoneCtrl.text.trim(),
-        if (_needsReference && _referenceCtrl.text.trim().isNotEmpty) 'notes': _referenceCtrl.text.trim(),
+        if (_needsReference && _referenceCtrl.text.trim().isNotEmpty)
+          'notes': _referenceCtrl.text.trim(),
         if (_needsTillNumber) 'merchant_id': _tillNumberCtrl.text.trim(),
         if (widget.simIccid != null) 'sim_iccid': widget.simIccid,
         if (widget.simSlot != null) 'sim_slot': widget.simSlot,
@@ -233,10 +252,11 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         },
       });
     } on DioException catch (e) {
-      final msg = e.response?.data?['message'] ?? 'Failed to start transaction. Please try again.';
+      final msg = e.response?.data?['message'] ??
+          'Failed to start transaction. Please try again.';
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor));
+            SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -245,11 +265,14 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
 
   Future<void> _submitDataBundle() async {
     setState(() => _loading = true);
-    final recipientPhone = _recipientMode == 'other' ? _phoneCtrl.text.trim() : null;
-    final flexiAmount = _bundleCategory == 'flexi' ? _flexiAmountCtrl.text.trim() : null;
+    final recipientPhone =
+        _recipientMode == 'other' ? _phoneCtrl.text.trim() : null;
+    final flexiAmount =
+        _bundleCategory == 'flexi' ? _flexiAmountCtrl.text.trim() : null;
 
     try {
-      final res = await ApiClient.instance.post('/personal-transactions', data: {
+      final res =
+          await ApiClient.instance.post('/personal-transactions', data: {
         'provider': widget.provider,
         'transaction_type': widget.transactionType,
         'bundle_category': _bundleCategory,
@@ -279,10 +302,11 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         },
       });
     } on DioException catch (e) {
-      final msg = e.response?.data?['message'] ?? 'Failed to start transaction. Please try again.';
+      final msg = e.response?.data?['message'] ??
+          'Failed to start transaction. Please try again.';
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor));
+            SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -291,13 +315,16 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final label = kPersonalTransactionLabels[widget.transactionType] ?? widget.transactionType;
+    final label = kPersonalTransactionLabels[widget.transactionType] ??
+        widget.transactionType;
 
     return Scaffold(
       appBar: AppBar(title: Text(label)),
       body: Padding(
         padding: const EdgeInsets.all(20),
-        child: _isDataBundle ? _buildDataBundleFlow(context) : _buildGenericForm(context, label),
+        child: _isDataBundle
+            ? _buildDataBundleFlow(context)
+            : _buildGenericForm(context, label),
       ),
     );
   }
@@ -311,7 +338,8 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
             AppTextField(
               controller: _amountCtrl,
               label: 'Amount (GHS)',
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               prefixIcon: Icons.payments_outlined,
               validator: (v) {
                 final n = double.tryParse((v ?? '').trim());
@@ -345,17 +373,26 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
               label: 'Till Number',
               keyboardType: TextInputType.number,
               prefixIcon: Icons.storefront_outlined,
-              validator: (v) => (v ?? '').trim().isEmpty ? 'Till number is required' : null,
+              validator: (v) =>
+                  (v ?? '').trim().isEmpty ? 'Till number is required' : null,
             ),
             const SizedBox(height: 14),
           ],
           if (!_needsAmount)
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: context.isDarkMode ? const Color(0xFF1A2B45) : Colors.blue[50], borderRadius: BorderRadius.circular(8)),
+              decoration: BoxDecoration(
+                  color: context.isDarkMode
+                      ? const Color(0xFF1A2B45)
+                      : Colors.blue[50],
+                  borderRadius: BorderRadius.circular(8)),
               child: Text(
                 'This will dial your $label enquiry - no amount or recipient needed.',
-                style: TextStyle(fontSize: 12, color: context.isDarkMode ? const Color(0xFF8FB8E8) : const Color(0xFF1A4D8F)),
+                style: TextStyle(
+                    fontSize: 12,
+                    color: context.isDarkMode
+                        ? const Color(0xFF8FB8E8)
+                        : const Color(0xFF1A4D8F)),
               ),
             ),
           const SizedBox(height: 24),
@@ -374,7 +411,8 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       case 'category':
         return _dbCategoryStep(context);
       case 'bundle':
-        return _dbBundleListStep(context, kDataBundleOptions[_bundleCategory] ?? const []);
+        return _dbBundleListStep(
+            context, kDataBundleOptions[_bundleCategory] ?? const []);
       case 'moorch':
         return _dbMoorchStep(context);
       case 'flexi_type':
@@ -384,7 +422,10 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           subtitle: 'How should this data be valid?',
           options: kFlexiTypes,
           onBack: () => setState(() => _dbStep = 'category'),
-          onPick: (opt) => setState(() { _flexiType = opt; _dbStep = 'flexi_payment'; }),
+          onPick: (opt) => setState(() {
+            _flexiType = opt;
+            _dbStep = 'flexi_payment';
+          }),
         );
       case 'flexi_payment':
         return _dbSimpleChoiceStep(
@@ -393,7 +434,10 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           subtitle: 'How should this be paid for?',
           options: kFlexiPayment,
           onBack: () => setState(() => _dbStep = 'flexi_type'),
-          onPick: (opt) => setState(() { _flexiPayment = opt; _dbStep = 'flexi_amount'; }),
+          onPick: (opt) => setState(() {
+            _flexiPayment = opt;
+            _dbStep = 'flexi_amount';
+          }),
         );
       case 'flexi_amount':
         return _dbFlexiAmountStep(context);
@@ -418,16 +462,25 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       children: [
         Text('Who is this for?', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 4),
-        Text('This decides whether we ask for a recipient number.', style: TextStyle(color: Colors.grey[600])),
+        Text('This decides whether we ask for a recipient number.',
+            style: TextStyle(color: Colors.grey[600])),
         const SizedBox(height: 20),
         Row(
           children: [
-            Expanded(child: _dbBigOption(context, 'Self', Icons.person_outline, () {
-              setState(() { _recipientMode = 'self'; _dbStep = 'category'; });
+            Expanded(
+                child: _dbBigOption(context, 'Self', Icons.person_outline, () {
+              setState(() {
+                _recipientMode = 'self';
+                _dbStep = 'category';
+              });
             })),
             const SizedBox(width: 12),
-            Expanded(child: _dbBigOption(context, 'Other', Icons.people_outline, () {
-              setState(() { _recipientMode = 'other'; _dbStep = 'recipient_phone'; });
+            Expanded(
+                child: _dbBigOption(context, 'Other', Icons.people_outline, () {
+              setState(() {
+                _recipientMode = 'other';
+                _dbStep = 'recipient_phone';
+              });
             })),
           ],
         ),
@@ -435,14 +488,15 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     );
   }
 
-  Widget _dbBigOption(BuildContext context, String label, IconData icon, VoidCallback onTap) {
+  Widget _dbBigOption(
+      BuildContext context, String label, IconData icon, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 28),
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.withOpacity(0.3)),
+          border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -460,9 +514,11 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     return ListView(
       children: [
         _dbBack(() => setState(() => _dbStep = 'recipient_mode')),
-        Text("Recipient's number", style: Theme.of(context).textTheme.titleLarge),
+        Text("Recipient's number",
+            style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 4),
-        Text('Who is receiving this data bundle?', style: TextStyle(color: Colors.grey[600])),
+        Text('Who is receiving this data bundle?',
+            style: TextStyle(color: Colors.grey[600])),
         const SizedBox(height: 20),
         AppTextField(
           controller: _phoneCtrl,
@@ -476,7 +532,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           onPressed: () {
             if (_phoneCtrl.text.trim().length < 9) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Enter a valid phone number')));
+                  const SnackBar(content: Text('Enter a valid phone number')));
               return;
             }
             setState(() => _dbStep = 'category');
@@ -489,8 +545,10 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   Widget _dbCategoryStep(BuildContext context) {
     return ListView(
       children: [
-        _dbBack(() => setState(() => _dbStep = _recipientMode == 'other' ? 'recipient_phone' : 'recipient_mode')),
-        Text('Choose a category', style: Theme.of(context).textTheme.titleLarge),
+        _dbBack(() => setState(() => _dbStep =
+            _recipientMode == 'other' ? 'recipient_phone' : 'recipient_mode')),
+        Text('Choose a category',
+            style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 16),
         GridView.count(
           crossAxisCount: 2,
@@ -506,17 +564,22 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
               child: Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                  border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(cat.icon, color: Theme.of(context).colorScheme.primary, size: 22),
+                    Icon(cat.icon,
+                        color: Theme.of(context).colorScheme.primary, size: 22),
                     const SizedBox(height: 8),
-                    Text(cat.label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    Text(cat.label,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 13)),
                     const SizedBox(height: 2),
-                    Text(cat.sub, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                    Text(cat.sub,
+                        style:
+                            TextStyle(fontSize: 11, color: Colors.grey[600])),
                   ],
                 ),
               ),
@@ -527,11 +590,13 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     );
   }
 
-  Widget _dbBundleListStep(BuildContext context, List<DataBundleOption> options) {
+  Widget _dbBundleListStep(
+      BuildContext context, List<DataBundleOption> options) {
     return ListView(
       children: [
         _dbBack(() => setState(() => _dbStep = 'category')),
-        Text(_categoryObj?.label ?? '', style: Theme.of(context).textTheme.titleLarge),
+        Text(_categoryObj?.label ?? '',
+            style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 4),
         Text('Pick a bundle.', style: TextStyle(color: Colors.grey[600])),
         const SizedBox(height: 16),
@@ -550,8 +615,10 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     return ListView(
       children: [
         _dbBack(() => setState(() => _dbStep = 'category')),
-        Text('2Moorch No Expiry', style: Theme.of(context).textTheme.titleLarge),
-        Text('Page $_moorchPage of 2', style: TextStyle(color: Colors.grey[600])),
+        Text('2Moorch No Expiry',
+            style: Theme.of(context).textTheme.titleLarge),
+        Text('Page $_moorchPage of 2',
+            style: TextStyle(color: Colors.grey[600])),
         const SizedBox(height: 16),
         ...options.map((opt) => _dbOptionTile(opt, () {
               setState(() {
@@ -602,7 +669,8 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         _dbBack(() => setState(() => _dbStep = 'flexi_payment')),
         Text('Amount', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 4),
-        Text('GHS 0.02 – 999.99. Telecel computes the MB.', style: TextStyle(color: Colors.grey[600])),
+        Text('GHS 0.02 – 999.99. Telecel computes the MB.',
+            style: TextStyle(color: Colors.grey[600])),
         const SizedBox(height: 16),
         AppTextField(
           controller: _flexiAmountCtrl,
@@ -616,8 +684,9 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           onPressed: () {
             final n = double.tryParse(_flexiAmountCtrl.text.trim());
             if (n == null || n < 0.02 || n > 999.99) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Enter an amount between GHS 0.02 and 999.99')));
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content:
+                      Text('Enter an amount between GHS 0.02 and 999.99')));
               return;
             }
             setState(() => _dbStep = 'review');
@@ -636,13 +705,15 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.withOpacity(0.3)),
+            border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Expanded(child: Text(opt.label, style: const TextStyle(fontWeight: FontWeight.w500))),
+              Expanded(
+                  child: Text(opt.label,
+                      style: const TextStyle(fontWeight: FontWeight.w500))),
               const Icon(Icons.chevron_right, size: 18),
             ],
           ),
@@ -659,22 +730,32 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.withOpacity(0.3)),
+            border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
             children: [
-              _dbReviewRow('For', _recipientMode == 'other' ? _phoneCtrl.text.trim() : 'Yourself'),
+              _dbReviewRow(
+                  'For',
+                  _recipientMode == 'other'
+                      ? _phoneCtrl.text.trim()
+                      : 'Yourself'),
               _dbReviewRow('Category', _categoryObj?.label ?? ''),
-              if (_bundleChoice != null) _dbReviewRow('Bundle', _bundleChoice!.label),
+              if (_bundleChoice != null)
+                _dbReviewRow('Bundle', _bundleChoice!.label),
               if (_flexiType != null) _dbReviewRow('Type', _flexiType!.label),
-              if (_flexiPayment != null) _dbReviewRow('Payment', _flexiPayment!.label),
-              if (_flexiAmountCtrl.text.trim().isNotEmpty) _dbReviewRow('Amount', 'GHS ${_flexiAmountCtrl.text.trim()}'),
+              if (_flexiPayment != null)
+                _dbReviewRow('Payment', _flexiPayment!.label),
+              if (_flexiAmountCtrl.text.trim().isNotEmpty)
+                _dbReviewRow('Amount', 'GHS ${_flexiAmountCtrl.text.trim()}'),
             ],
           ),
         ),
         const SizedBox(height: 24),
-        AppButton(label: 'Start Transaction', onPressed: _submit, isLoading: _loading),
+        AppButton(
+            label: 'Start Transaction',
+            onPressed: _submit,
+            isLoading: _loading),
       ],
     );
   }
