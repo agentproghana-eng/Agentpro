@@ -86,6 +86,9 @@ class OfflineQueueService {
       jsonEncode({
         'local_id': localId,
         'request_fields': requestFields,
+        'provider': requestFields['provider'],
+        'sim_slot': requestFields['sim_slot'],
+        'sim_iccid': requestFields['sim_iccid'],
         'status': status,
         'network_reference': networkReference,
         'failure_reason': failureReason,
@@ -131,6 +134,40 @@ class OfflineQueueService {
   }
 
   static int get pendingCount => getPendingTransactions().length;
+
+  static String providerLabel(String? provider) {
+    return switch (provider) {
+      'mtn' => 'MTN',
+      'telecel' => 'Telecel',
+      'at_money' => 'AT Money',
+      _ => provider?.toUpperCase() ?? 'Unknown',
+    };
+  }
+
+  static String simLabel(Map<String, dynamic> transaction) {
+    final requestFields = transaction['request_fields'];
+
+    dynamic rawProvider = transaction['provider'];
+    dynamic rawSlot = transaction['sim_slot'];
+
+    if (requestFields is Map) {
+      rawProvider ??= requestFields['provider'];
+      rawSlot ??= requestFields['sim_slot'];
+    }
+
+    final provider = rawProvider?.toString();
+    final slot = rawSlot is num
+        ? rawSlot.toInt()
+        : int.tryParse(rawSlot?.toString() ?? '');
+
+    final label = providerLabel(provider);
+
+    if (slot == null) {
+      return label;
+    }
+
+    return '$label SIM ${slot + 1}';
+  }
 
   static Future<void> _markSynced(String localId) async {
     final raw = _box.get(localId);
