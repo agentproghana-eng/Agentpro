@@ -161,8 +161,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // showing the actual PIN/USSD security notice here would be actively
   // wrong, since no PIN entry or dialing ever happens in this flow.
   bool get _isManualCashOut =>
-      widget.transactionType == "cash_out" &&
-      (_selectedProvider == "telecel" || _selectedProvider == "at_money");
+      widget.transactionType == 'cash_out' &&
+      (_selectedProvider == 'telecel' || _selectedProvider == 'at_money');
 
   List<String> get _availableProviders {
     if (!_simDetectionComplete || _simMap == null) {
@@ -385,60 +385,60 @@ class _TransactionScreenState extends State<TransactionScreen> {
     // run. Gating these on cachedTemplate != null would mean they can
     // never go offline at all. Only the custom Flow Builder path
     // genuinely needs a prior online run to learn its dial code.
-    final isAccessibilityHardcodedFlow = (_selectedProvider == "mtn" &&
-            (widget.transactionType == "cash_in" ||
-                widget.transactionType == "cash_out" ||
-                widget.transactionType == "send_money")) ||
-        (_selectedProvider == "telecel" && widget.transactionType == "cash_in");
+    final isAccessibilityHardcodedFlow = (_selectedProvider == 'mtn' &&
+            (widget.transactionType == 'cash_in' ||
+                widget.transactionType == 'cash_out' ||
+                widget.transactionType == 'send_money')) ||
+        (_selectedProvider == 'telecel' && widget.transactionType == 'cash_in');
 
     if (isOffline &&
         (isAccessibilityHardcodedFlow ||
             cachedTemplate != null ||
             cachedFlow != null)) {
-      final localId = "local_${DateTime.now().millisecondsSinceEpoch}";
+      final localId = 'local_${DateTime.now().millisecondsSinceEpoch}';
       final requestFields = {
-        "provider": _selectedProvider,
-        "transaction_type": widget.transactionType,
-        "amount": double.tryParse(_amountCtrl.text.replaceAll(",", "")) ?? 0,
-        "customer_phone": _customerPhoneCtrl.text.trim(),
-        "customer_name": "",
-        "recipient_phone": _recipientPhoneCtrl.text.trim(),
-        "biller_code": "",
-        "account_number": "",
-        "payment_reference": _referenceCtrl.text.trim(),
-        "merchant_id": _merchantIdCtrl.text.trim(),
-        "fee": _isSendMoney
-            ? (double.tryParse(_feeCtrl.text.replaceAll(",", "")) ?? 0)
+        'provider': _selectedProvider,
+        'transaction_type': widget.transactionType,
+        'amount': double.tryParse(_amountCtrl.text.replaceAll(',', '')) ?? 0,
+        'customer_phone': _customerPhoneCtrl.text.trim(),
+        'customer_name': '',
+        'recipient_phone': _recipientPhoneCtrl.text.trim(),
+        'biller_code': '',
+        'account_number': '',
+        'payment_reference': _referenceCtrl.text.trim(),
+        'merchant_id': _merchantIdCtrl.text.trim(),
+        'fee': _isSendMoney
+            ? (double.tryParse(_feeCtrl.text.replaceAll(',', '')) ?? 0)
             : 0,
-        "notes": "",
-        "sim_iccid": _simMap?[_selectedProvider]?.iccid ?? "",
-        "sim_slot": _simMap?[_selectedProvider]?.slot,
+        'notes': '',
+        'sim_iccid': _simMap?[_selectedProvider]?.iccid ?? '',
+        'sim_slot': _simMap?[_selectedProvider]?.slot,
       };
 
       if (!mounted) return;
       context.push(
-        "/transactions/progress",
+        '/transactions/progress',
         extra: {
-          "transaction": {
-            "transaction_id": localId,
-            "reference": "OFFLINE-$localId",
-            "status": "initiated",
-            "ussd_template": cachedTemplate,
-            "automation_params": requestFields,
-            "cached_flow": cachedFlow,
+          'transaction': {
+            'transaction_id': localId,
+            'reference': 'OFFLINE-$localId',
+            'status': 'initiated',
+            'ussd_template': cachedTemplate,
+            'automation_params': requestFields,
+            'cached_flow': cachedFlow,
           },
-          "provider": _selectedProvider,
-          "transaction_type": widget.transactionType,
-          "amount": _amountCtrl.text,
-          "customer_phone": _customerPhoneCtrl.text.trim(),
-          "customer_name": "",
-          "sim_slot": _selectedSim?.slot,
-          "sim_iccid": _selectedSim?.iccid,
-          "selections_in_order":
+          'provider': _selectedProvider,
+          'transaction_type': widget.transactionType,
+          'amount': _amountCtrl.text,
+          'customer_phone': _customerPhoneCtrl.text.trim(),
+          'customer_name': '',
+          'sim_slot': _selectedSim?.slot,
+          'sim_iccid': _selectedSim?.iccid,
+          'selections_in_order':
               _isTelecelDataBundle && _selectedTelecelBundle != null
                   ? <String>[_selectedTelecelBundle!.digit]
                   : const <String>[],
-          "request_fields": requestFields,
+          'request_fields': requestFields,
         },
       );
       if (mounted) setState(() => _loading = false);
@@ -572,11 +572,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
   }
 
   Future<void> _submitManualCashOut() async {
-    final amount = double.tryParse(_amountCtrl.text.replaceAll(",", ""));
+    final amount = double.tryParse(_amountCtrl.text.replaceAll(',', ''));
     if (amount == null || amount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Enter the cash amount given to the customer"),
+          content: Text('Enter the cash amount given to the customer'),
         ),
       );
       return;
@@ -584,26 +584,27 @@ class _TransactionScreenState extends State<TransactionScreen> {
     setState(() => _loading = true);
     try {
       await ApiClient.instance.post(
-        "/balances/cash-out-manual",
+        '/balances/cash-out-manual',
         data: {
-          "provider": _selectedProvider,
-          "amount": amount,
-          "reference": _customerPhoneCtrl.text.trim(),
-          "notes": "Manual Cash Out",
+          'provider': _selectedProvider,
+          'amount': amount,
+          'reference': _customerPhoneCtrl.text.trim(),
+          'notes': 'Manual Cash Out',
         },
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Cash Out recorded successfully")),
+          const SnackBar(content: Text('Cash Out recorded successfully')),
         );
         context.pop();
       }
     } on DioException catch (e) {
-      final msg = e.response?.data?["message"] ?? "Failed to record Cash Out";
-      if (mounted)
+      final msg = e.response?.data?['message'] ?? 'Failed to record Cash Out';
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor),
         );
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -792,7 +793,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
               if (_isTelecelDataBundle) ...[
                 DropdownButtonFormField<AgentTelecelBundleOption>(
-                  value: _selectedTelecelBundle,
+                  initialValue: _selectedTelecelBundle,
                   isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: 'Select Data Bundle',
@@ -997,7 +998,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: context.isDarkMode
-                        ? Colors.blue[900]!.withOpacity(0.25)
+                        ? Colors.blue[900]!.withValues(alpha: 0.25)
                         : Colors.blue[50],
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
