@@ -1,7 +1,5 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:convert';
-import 'dart:math';
-import 'package:crypto/crypto.dart';
 
 class StorageService {
   static late FlutterSecureStorage _storage;
@@ -10,8 +8,6 @@ class StorageService {
   static const _keyRefreshToken = 'refresh_token';
   static const _keyUser = 'user_data';
   static const _keyBiometricEnabled = 'biometric_enabled';
-  static const _keyPinHash = 'pin_hash';
-  static const _keyPinSalt = 'pin_salt';
 
   // In-memory cache avoids secure-storage reads on every API request.
   static String? _accessTokenCache;
@@ -68,72 +64,24 @@ class StorageService {
     return val == 'true';
   }
 
-  // ── Offline PIN unlock ──────────────────────────────────────
-  // The PIN unlocks a session already cached on this device - it is
-  // NEVER sent to the server and never substitutes for the real
-  // email/password login, which must succeed online at least once
-  // before a PIN can be set. Stored as salt + SHA-256(salt + pin),
-  // never as plaintext.
-
-  static String _generateSalt() {
-    final random = Random.secure();
-    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
-    return base64Url.encode(bytes);
-  }
-
-  static String _hashPin(String pin, String salt) {
-    final bytes = utf8.encode('$salt:$pin');
-    return sha256.convert(bytes).toString();
-  }
-
-  static Future<void> savePin(String pin) async {
-    final salt = _generateSalt();
-    final hash = _hashPin(pin, salt);
-    await _storage.write(key: _keyPinSalt, value: salt);
-    await _storage.write(key: _keyPinHash, value: hash);
-  }
-
-  static Future<bool> verifyPin(String pin) async {
-    final salt = await _storage.read(key: _keyPinSalt);
-    final storedHash = await _storage.read(key: _keyPinHash);
-    if (salt == null || storedHash == null) return false;
-    return _hashPin(pin, salt) == storedHash;
-  }
-
-  static Future<bool> hasPinSet() async {
-    final hash = await _storage.read(key: _keyPinHash);
-    return hash != null;
-  }
-
-  static Future<void> clearPin() async {
-    await _storage.delete(key: _keyPinSalt);
-    await _storage.delete(key: _keyPinHash);
-  }
-
   static Future<bool> isLoggedIn() async {
     final token = await getAccessToken();
     return token != null;
   }
 
-  /// Clears session data (tokens, cached user) AND the PIN, since a PIN
-  /// with nothing left to unlock is a security smell - especially on a
-  /// shared device where a different person might log in next.
-  /// Deliberately preserves biometric_enabled, a pure device
-  /// preference, same as before.
+  /// Clears all session data while preserving the device-authentication
+  /// preference, which is a device setting rather than account data.
   static Future<void> clearSession() async {
     _accessTokenCache = null;
     await _storage.delete(key: _keyAccessToken);
     await _storage.delete(key: _keyRefreshToken);
     await _storage.delete(key: _keyUser);
-    await clearPin();
   }
 
-  /// Clears only the access token, preserving refresh token, user
-  /// data, AND the PIN/biometric settings - used for the soft-logout
-  /// path (biometric-enabled or PIN-enabled device), where the local
-  /// UI session ends but the device stays trusted to restore access
-  /// instantly next time, without the backend logout call that would
-  /// otherwise revoke the refresh token entirely.
+  /// Clears only the access token while preserving the refresh token,
+  /// cached user, and device-authentication preference. This supports
+  /// optional phone-authentication re-entry without revoking the trusted
+  /// device's refresh token.
   static Future<void> clearAccessTokenOnly() async {
     _accessTokenCache = null;
     await _storage.delete(key: _keyAccessToken);

@@ -12,8 +12,6 @@ import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 
-const int _kPinLength = 4;
-
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
   @override
@@ -24,7 +22,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _biometricEnabled = false;
   bool _canBiometric = false;
   String _biometricLabel = 'Biometrics';
-  bool _pinEnabled = false;
 
   @override
   void initState() {
@@ -36,13 +33,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final availability = await BiometricService.checkAvailability();
     final enabled = await BiometricService.isBiometricEnabled();
     final label = await BiometricService.getBiometricLabel();
-    final pinSet = await StorageService.hasPinSet();
     if (mounted) {
       setState(() {
         _canBiometric = availability == BiometricAvailability.available;
         _biometricEnabled = enabled;
         _biometricLabel = label;
-        _pinEnabled = pinSet;
       });
     }
   }
@@ -53,57 +48,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!success) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not verify your biometrics. Please try again.')),
+            const SnackBar(
+                content: Text(
+                    'Could not verify your biometrics. Please try again.')),
           );
         }
         return;
       }
     } else {
       await BiometricService.disableBiometric();
-      // Revoking any lingering refresh token this device may have
-      // relied on for silent biometric re-entry - disabling
-      // biometric means this device should no longer have
-      // standing access. Skipped if a PIN is still enabled, since
-      // that also depends on the same refresh token surviving.
-      if (!_pinEnabled) {
-        try {
-          final refreshToken = await StorageService.getRefreshToken();
-          if (refreshToken != null) {
-            await ApiClient.instance.post("/auth/logout", data: {"refresh_token": refreshToken});
-          }
-        } catch (_) {}
-      }
+
+      // Disabling phone authentication removes standing trusted-device
+      // access by revoking the preserved refresh token.
+      try {
+        final refreshToken = await StorageService.getRefreshToken();
+        if (refreshToken != null) {
+          await ApiClient.instance.post(
+            '/auth/logout',
+            data: {'refresh_token': refreshToken},
+          );
+        }
+      } catch (_) {}
     }
     if (mounted) setState(() => _biometricEnabled = value);
-  }
-
-  Future<void> _togglePin(bool value) async {
-    if (value) {
-      final first = await _showPinEntryDialog('Choose a 4-digit PIN');
-      if (first == null || !mounted) return;
-      final confirm = await _showPinEntryDialog('Confirm your PIN');
-      if (confirm == null || !mounted) return;
-
-      if (first != confirm) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("PINs didn't match — try again")));
-        return;
-      }
-      context.read<AuthBloc>().add(AuthSetPinEvent(first));
-    } else {
-      context.read<AuthBloc>().add(AuthClearPinEvent());
-      // Same reasoning as biometric above - if biometric is also off,
-      // this device should no longer have standing offline access.
-      if (!_biometricEnabled) {
-        try {
-          final refreshToken = await StorageService.getRefreshToken();
-          if (refreshToken != null) {
-            await ApiClient.instance.post("/auth/logout", data: {"refresh_token": refreshToken});
-          }
-        } catch (_) {}
-      }
-    }
-    if (mounted) setState(() => _pinEnabled = value);
   }
 
   // Idempotent on the backend (safe even if already added), and only
@@ -113,63 +80,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // used for self-service settings changes elsewhere in the app.
   Future<void> _addPersonalCapability(BuildContext context) async {
     try {
-      final res = await ApiClient.instance.post('/auth/add-personal-capability');
+      final res =
+          await ApiClient.instance.post('/auth/add-personal-capability');
       final data = res.data['data'];
       if (context.mounted) {
         context.read<AuthBloc>().add(AuthUpdateUserEvent({
-          'personal_subscription_plan': data['personal_subscription_plan'],
-          'personal_subscription_expires_at': data['personal_subscription_expires_at'],
-        }));
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Personal account added! Find it under Switch to Personal Mode.')));
+              'personal_subscription_plan': data['personal_subscription_plan'],
+              'personal_subscription_expires_at':
+                  data['personal_subscription_expires_at'],
+            }));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'Personal account added! Find it under Switch to Personal Mode.')));
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to add Personal account'), backgroundColor: AppTheme.errorColor));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Failed to add Personal account'),
+            backgroundColor: AppTheme.errorColor));
       }
     }
-  }
-
-  Future<String?> _showPinEntryDialog(String title) {
-    String digits = '';
-    return showDialog<String>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(title),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            _SettingsPinDots(filled: digits.length),
-            const SizedBox(height: 20),
-            _SettingsNumericKeypad(
-              onDigit: (d) {
-                if (digits.length >= _kPinLength) return;
-                digits += d;
-                setDialogState(() {});
-                if (digits.length == _kPinLength) {
-                  Navigator.pop(ctx, digits);
-                }
-              },
-              onBackspace: () {
-                if (digits.isEmpty) return;
-                digits = digits.substring(0, digits.length - 1);
-                setDialogState(() {});
-              },
-            ),
-          ]),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('Cancel')),
-          ],
-        ),
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     final user = context.read<AuthBloc>().state is AuthAuthenticated
-        ? (context.read<AuthBloc>().state as AuthAuthenticated).user : {};
+        ? (context.read<AuthBloc>().state as AuthAuthenticated).user
+        : {};
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -178,15 +115,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ListTile(
           leading: CircleAvatar(
             backgroundColor: AppTheme.primaryColor,
-            child: Text(((user['first_name'] as String?) ?? 'U')[0].toUpperCase(),
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            child: Text(
+                ((user['first_name'] as String?) ?? 'U')[0].toUpperCase(),
+                style: const TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
           ),
           title: Text('${user['first_name'] ?? ''} ${user['last_name'] ?? ''}',
-            style: const TextStyle(fontWeight: FontWeight.bold)),
+              style: const TextStyle(fontWeight: FontWeight.bold)),
           subtitle: Text(user['email'] ?? ''),
           trailing: Chip(
-            label: Text((user['role'] ?? '').toString().replaceAll('_', ' ').toUpperCase(),
-              style: const TextStyle(fontSize: 10)),
+            label: Text(
+                (user['role'] ?? '')
+                    .toString()
+                    .replaceAll('_', ' ')
+                    .toUpperCase(),
+                style: const TextStyle(fontSize: 10)),
             backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
           ),
         ),
@@ -194,27 +137,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-          child: Text('SECURITY', style: TextStyle(fontSize: 11, color: context.appSecondaryText, fontWeight: FontWeight.bold, letterSpacing: 1)),
+          child: Text('SECURITY',
+              style: TextStyle(
+                  fontSize: 11,
+                  color: context.appSecondaryText,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1)),
         ),
 
         if (_canBiometric)
           SwitchListTile(
-            secondary: const Icon(Icons.fingerprint, color: AppTheme.primaryColor),
+            secondary:
+                const Icon(Icons.fingerprint, color: AppTheme.primaryColor),
             title: Text('$_biometricLabel Login'),
-            subtitle: Text('Use $_biometricLabel to unlock the app\n(Never used for your Mobile Money PIN)'),
+            subtitle: Text(
+                'Use $_biometricLabel to unlock the app\n(Never used for your Mobile Money PIN)'),
             value: _biometricEnabled,
             onChanged: _toggleBiometric,
             activeColor: AppTheme.primaryColor,
           ),
-
-        SwitchListTile(
-          secondary: const Icon(Icons.lock_outline, color: AppTheme.primaryColor),
-          title: const Text('PIN Login'),
-          subtitle: const Text('Sign in instantly with a 4-digit PIN, even offline\n(Never used for your Mobile Money PIN)'),
-          value: _pinEnabled,
-          onChanged: _togglePin,
-          activeColor: AppTheme.primaryColor,
-        ),
 
         ListTile(
           leading: const Icon(Icons.lock_reset, color: AppTheme.primaryColor),
@@ -223,7 +164,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onTap: () => showModalBottomSheet(
             context: context,
             isScrollControlled: true,
-            shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+            shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
             builder: (_) => const _ChangePasswordSheet(),
           ),
         ),
@@ -245,9 +187,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // when not already present, to avoid a pointless duplicate tap.
         if (user['personal_subscription_plan'] == null)
           ListTile(
-            leading: const Icon(Icons.person_add_outlined, color: AppTheme.primaryColor),
+            leading: const Icon(Icons.person_add_outlined,
+                color: AppTheme.primaryColor),
             title: const Text('Add Personal Account'),
-            subtitle: const Text('Use Agent Pro Ghana for your own transactions too'),
+            subtitle:
+                const Text('Use Agent Pro Ghana for your own transactions too'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _addPersonalCapability(context),
           ),
@@ -255,9 +199,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // Only relevant for someone holding both Business and Personal
         // capability at once - a one-sided user has nothing to
         // distinguish between SIMs for.
-        if (user['company_id'] != null && user['personal_subscription_plan'] != null)
+        if (user['company_id'] != null &&
+            user['personal_subscription_plan'] != null)
           ListTile(
-            leading: const Icon(Icons.sim_card_outlined, color: AppTheme.primaryColor),
+            leading: const Icon(Icons.sim_card_outlined,
+                color: AppTheme.primaryColor),
             title: const Text('SIM Purpose'),
             subtitle: const Text('Which SIM is for Business vs Personal use'),
             trailing: const Icon(Icons.chevron_right),
@@ -267,9 +213,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const Divider(),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-          child: Text('ABOUT', style: TextStyle(fontSize: 11, color: context.appSecondaryText, fontWeight: FontWeight.bold, letterSpacing: 1)),
+          child: Text('ABOUT',
+              style: TextStyle(
+                  fontSize: 11,
+                  color: context.appSecondaryText,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1)),
         ),
-        const ListTile(leading: Icon(Icons.info_outline), title: Text('Version'), trailing: Text('2.0.0')),
+        const ListTile(
+            leading: Icon(Icons.info_outline),
+            title: Text('Version'),
+            trailing: Text('2.0.0')),
         ListTile(
           leading: const Icon(Icons.support_agent),
           title: const Text('Contact Support'),
@@ -292,7 +246,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             }
             if (!launched && context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Please email us at support@agentproghana.com')),
+                const SnackBar(
+                    content:
+                        Text('Please email us at support@agentproghana.com')),
               );
             }
           },
@@ -301,17 +257,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const Divider(),
         ListTile(
           leading: const Icon(Icons.logout, color: AppTheme.errorColor),
-          title: const Text('Sign Out', style: TextStyle(color: AppTheme.errorColor)),
+          title: const Text('Sign Out',
+              style: TextStyle(color: AppTheme.errorColor)),
           onTap: () => showDialog(
             context: context,
             builder: (_) => AlertDialog(
               title: const Text('Sign Out'),
               content: const Text('Are you sure you want to sign out?'),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel')),
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.errorColor),
-                  onPressed: () { Navigator.pop(context); context.read<AuthBloc>().add(AuthLogoutEvent()); },
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.errorColor),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    context.read<AuthBloc>().add(AuthLogoutEvent());
+                  },
                   child: const Text('Sign Out'),
                 ),
               ],
@@ -322,67 +285,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 }
-
-class _SettingsPinDots extends StatelessWidget {
-  final int filled;
-  const _SettingsPinDots({required this.filled});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(_kPinLength, (i) {
-        final isFilled = i < filled;
-        return Container(
-          width: 16, height: 16,
-          margin: const EdgeInsets.symmetric(horizontal: 8),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: isFilled ? AppTheme.primaryColor : Colors.transparent,
-            border: Border.all(color: AppTheme.primaryColor, width: 2),
-          ),
-        );
-      }),
-    );
-  }
-}
-
-class _SettingsNumericKeypad extends StatelessWidget {
-  final void Function(String) onDigit;
-  final VoidCallback onBackspace;
-  const _SettingsNumericKeypad({required this.onDigit, required this.onBackspace});
-
-  Widget _key(String label, {VoidCallback? onTap, Widget? child}) {
-    return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(40),
-        child: Container(
-          margin: const EdgeInsets.all(6),
-          height: 56,
-          alignment: Alignment.center,
-          child: child ?? Text(label, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(children: [
-      Row(children: ['1', '2', '3'].map((d) => _key(d, onTap: () => onDigit(d))).toList()),
-      Row(children: ['4', '5', '6'].map((d) => _key(d, onTap: () => onDigit(d))).toList()),
-      Row(children: ['7', '8', '9'].map((d) => _key(d, onTap: () => onDigit(d))).toList()),
-      Row(children: [
-        _key('', onTap: null),
-        _key('0', onTap: () => onDigit('0')),
-        _key('', onTap: onBackspace, child: const Icon(Icons.backspace_outlined, size: 20)),
-      ]),
-    ]);
-  }
-}
-
-// ── Change Password Sheet ──────────────────────────────────────
 
 class _ChangePasswordSheet extends StatefulWidget {
   const _ChangePasswordSheet();
@@ -416,13 +318,13 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Password changed successfully.')));
+            const SnackBar(content: Text('Password changed successfully.')));
       }
     } on DioException catch (e) {
       final msg = e.response?.data?['message'] ?? 'Failed to change password.';
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor));
+            SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -432,7 +334,8 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+      padding: EdgeInsets.fromLTRB(
+          16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
       child: Form(
         key: _formKey,
         child: Column(
@@ -440,13 +343,14 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text('Change Password',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             _PasswordField(
               controller: _currentCtrl,
               label: 'Current Password',
               obscure: _obscureCurrent,
-              onToggle: () => setState(() => _obscureCurrent = !_obscureCurrent),
+              onToggle: () =>
+                  setState(() => _obscureCurrent = !_obscureCurrent),
               validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
             ),
             const SizedBox(height: 12),
@@ -457,9 +361,11 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
               onToggle: () => setState(() => _obscureNew = !_obscureNew),
               validator: (v) {
                 if (v == null || v.length < 8) return 'Min 8 characters';
-                if (!v.contains(RegExp(r'[A-Z]'))) return 'Include an uppercase letter';
+                if (!v.contains(RegExp(r'[A-Z]')))
+                  return 'Include an uppercase letter';
                 if (!v.contains(RegExp(r'[0-9]'))) return 'Include a number';
-                if (v == _currentCtrl.text) return 'New password must differ from current';
+                if (v == _currentCtrl.text)
+                  return 'New password must differ from current';
                 return null;
               },
             ),
@@ -468,11 +374,16 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
               controller: _confirmCtrl,
               label: 'Confirm New Password',
               obscure: _obscureConfirm,
-              onToggle: () => setState(() => _obscureConfirm = !_obscureConfirm),
-              validator: (v) => v != _newCtrl.text ? 'Passwords do not match' : null,
+              onToggle: () =>
+                  setState(() => _obscureConfirm = !_obscureConfirm),
+              validator: (v) =>
+                  v != _newCtrl.text ? 'Passwords do not match' : null,
             ),
             const SizedBox(height: 20),
-            AppButton(label: 'Change Password', onPressed: _submit, isLoading: _loading),
+            AppButton(
+                label: 'Change Password',
+                onPressed: _submit,
+                isLoading: _loading),
           ],
         ),
       ),
@@ -514,7 +425,9 @@ class _PasswordField extends StatelessWidget {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         prefixIcon: const Icon(Icons.lock_outline),
         suffixIcon: IconButton(
-          icon: Icon(obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+          icon: Icon(obscure
+              ? Icons.visibility_outlined
+              : Icons.visibility_off_outlined),
           onPressed: onToggle,
         ),
       ),
