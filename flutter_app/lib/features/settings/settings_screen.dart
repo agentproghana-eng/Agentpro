@@ -130,7 +130,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     .replaceAll('_', ' ')
                     .toUpperCase(),
                 style: const TextStyle(fontSize: 10)),
-            backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+            backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
           ),
         ),
         const Divider(),
@@ -147,14 +147,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
         if (_canBiometric)
           SwitchListTile(
-            secondary:
-                const Icon(Icons.fingerprint, color: AppTheme.primaryColor),
-            title: Text('$_biometricLabel Login'),
+            secondary: const Icon(
+              Icons.security,
+              color: AppTheme.primaryColor,
+            ),
+            title: const Text('Require phone authentication'),
             subtitle: Text(
-                'Use $_biometricLabel to unlock the app\n(Never used for your Mobile Money PIN)'),
+              'Unlock AgentPro using $_biometricLabel '
+              'or your phone PIN, pattern, or password.',
+            ),
             value: _biometricEnabled,
             onChanged: _toggleBiometric,
-            activeColor: AppTheme.primaryColor,
+            activeThumbColor: AppTheme.primaryColor,
           ),
 
         ListTile(
@@ -172,12 +176,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
         ListTile(
           leading: const Icon(Icons.sync, color: AppTheme.primaryColor),
-          title: const Text("Offline Sync"),
+          title: const Text('Offline Sync'),
           subtitle: Text(OfflineQueueService.pendingCount > 0
-              ? "${OfflineQueueService.pendingCount} pending"
-              : "All synced"),
+              ? '${OfflineQueueService.pendingCount} pending'
+              : 'All synced'),
           trailing: const Icon(Icons.chevron_right),
-          onTap: () => context.push("/sync"),
+          onTap: () => context.push('/sync'),
         ),
 
         // The missing piece that made the Mode Switcher/SIM Purpose
@@ -361,11 +365,13 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
               onToggle: () => setState(() => _obscureNew = !_obscureNew),
               validator: (v) {
                 if (v == null || v.length < 8) return 'Min 8 characters';
-                if (!v.contains(RegExp(r'[A-Z]')))
+                if (!v.contains(RegExp(r'[A-Z]'))) {
                   return 'Include an uppercase letter';
+                }
                 if (!v.contains(RegExp(r'[0-9]'))) return 'Include a number';
-                if (v == _currentCtrl.text)
+                if (v == _currentCtrl.text) {
                   return 'New password must differ from current';
+                }
                 return null;
               },
             ),
