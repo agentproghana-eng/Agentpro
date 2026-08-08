@@ -19,7 +19,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    final user = (context.read<AuthBloc>().state as AuthAuthenticated).user;
+    final authState = context.watch<AuthBloc>().state;
+    final user =
+        authState is AuthAuthenticated ? authState.user : <String, dynamic>{};
 
     return Scaffold(
       body: IndexedStack(
@@ -62,6 +64,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
 class _ManagerMoreTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final authState = context.watch<AuthBloc>().state;
+    final user =
+        authState is AuthAuthenticated ? authState.user : <String, dynamic>{};
+
     return Scaffold(
       appBar: AppBar(title: const Text('More')),
       body: ListView(
@@ -112,6 +118,13 @@ class _ManagerMoreTab extends StatelessWidget {
             subtitle: 'View and manage business locations',
           ),
           const MoreGroupLabel('Account'),
+          if (user['personal_subscription_plan'] != null)
+            MoreTile(
+              Icons.swap_horiz_rounded,
+              'Switch to Personal Mode',
+              () => context.go('/personal-home'),
+              subtitle: 'Open your Personal AgentPro workspace',
+            ),
           MoreTile(
             Icons.settings_outlined,
             'Settings',

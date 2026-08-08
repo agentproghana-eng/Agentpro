@@ -19,9 +19,9 @@ class _AgentDashboardState extends State<AgentDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    final user = context.read<AuthBloc>().state is AuthAuthenticated
-        ? (context.read<AuthBloc>().state as AuthAuthenticated).user
-        : <String, dynamic>{};
+    final authState = context.watch<AuthBloc>().state;
+    final user =
+        authState is AuthAuthenticated ? authState.user : <String, dynamic>{};
 
     return Scaffold(
       body: IndexedStack(
@@ -70,9 +70,9 @@ class _MoreTab extends StatelessWidget {
     // and is const-constructed, so 'user' can't be passed through the
     // constructor (const constructors can't take runtime values) - it
     // needs its own lookup here instead.
-    final user = context.read<AuthBloc>().state is AuthAuthenticated
-        ? (context.read<AuthBloc>().state as AuthAuthenticated).user
-        : <String, dynamic>{};
+    final authState = context.watch<AuthBloc>().state;
+    final user =
+        authState is AuthAuthenticated ? authState.user : <String, dynamic>{};
 
     return Scaffold(
       appBar: AppBar(title: const Text('More')),

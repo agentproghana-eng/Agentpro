@@ -662,10 +662,13 @@ exports.getMe = async (req, res) => {
               u.ghana_card_number, u.profile_image_url, u.status, u.last_login_at,
               u.company_id, c.name as company_name, c.status as company_status,
               s.plan as subscription_plan, s.status as subscription_status,
-              s.expires_at as subscription_expires_at
+              s.expires_at as subscription_expires_at,
+              ps.plan as personal_subscription_plan,
+              ps.expires_at as personal_subscription_expires_at
        FROM users u
        LEFT JOIN companies c ON u.company_id = c.id
        LEFT JOIN subscriptions s ON c.id = s.company_id
+       LEFT JOIN personal_subscriptions ps ON ps.user_id = u.id
        WHERE u.id = $1
        ORDER BY s.created_at DESC LIMIT 1`,
       [req.user.id]
