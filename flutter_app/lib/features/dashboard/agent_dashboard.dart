@@ -78,52 +78,60 @@ class _MoreTab extends StatelessWidget {
       appBar: AppBar(title: const Text('More')),
       body: ListView(
         children: [
-          const MoreGroupLabel('MoMo'),
+          const MoreGroupLabel('Money & Operations'),
           MoreTile(
             Icons.receipt_long_outlined,
-            'My Transactions',
+            'Transaction History',
             () => context.push('/transactions/history'),
+            subtitle: 'View, search and review your transactions',
           ),
           MoreTile(
             Icons.account_balance_wallet_outlined,
-            'My Float Balance',
+            'Float Balance',
             () => context.push('/my-balance'),
+            subtitle: 'Monitor your available e-float and cash',
           ),
           MoreTile(
             Icons.bar_chart_outlined,
-            'My Reports',
+            'Reports',
             () => context.push('/reports'),
+            subtitle: 'Review your performance and transaction summaries',
           ),
+          const MoreGroupLabel('Tools & Automation'),
           MoreTile(
             Icons.wifi_tethering,
             'USSD Automation',
             () => context.push('/ussd-settings'),
+            subtitle: 'Configure SIMs and automated transaction actions',
           ),
-
-          // Only shown to someone holding both Business and Personal
-          // capability at once - a pure Agent has no other mode.
+          const MoreGroupLabel('Account'),
           if (user['personal_subscription_plan'] != null)
             MoreTile(
-              Icons.person_outline,
+              Icons.swap_horiz_rounded,
               'Switch to Personal Mode',
               () => context.go('/personal-home'),
+              subtitle: 'Open your Personal AgentPro workspace',
             ),
-
-          const MoreGroupLabel('Help'),
-          MoreTile(
-            Icons.support_agent_outlined,
-            'Help',
-            () => context.push('/support'),
-          ),
           MoreTile(
             Icons.settings_outlined,
             'Settings',
             () => context.push('/settings'),
+            subtitle: 'Manage preferences, security and app configuration',
+          ),
+          const MoreGroupLabel('Help & Support'),
+          MoreTile(
+            Icons.support_agent_outlined,
+            'Help & Support',
+            () => context.push('/support'),
+            subtitle: 'Guides, assistance and support options',
           ),
           const Divider(),
-          MoreTile(Icons.logout, 'Sign Out', () {
-            context.read<AuthBloc>().add(AuthLogoutEvent());
-          }, color: AppTheme.errorColor),
+          MoreTile(
+            Icons.logout,
+            'Sign Out',
+            () => context.read<AuthBloc>().add(AuthLogoutEvent()),
+            color: AppTheme.errorColor,
+          ),
         ],
       ),
     );

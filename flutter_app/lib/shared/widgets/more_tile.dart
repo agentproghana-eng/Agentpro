@@ -34,9 +34,18 @@ class MoreTile extends StatefulWidget {
   final String label;
   final VoidCallback onTap;
   final Color? color;
+  final String? subtitle;
   final String? newFeatureKey;
-  const MoreTile(this.icon, this.label, this.onTap,
-      {super.key, this.color, this.newFeatureKey});
+
+  const MoreTile(
+    this.icon,
+    this.label,
+    this.onTap, {
+    super.key,
+    this.color,
+    this.subtitle,
+    this.newFeatureKey,
+  });
 
   @override
   State<MoreTile> createState() => _MoreTileState();
@@ -84,7 +93,22 @@ class _MoreTileState extends State<MoreTile> {
               ),
           ],
         ),
-        trailing: Icon(Icons.chevron_right, color: context.appSecondaryText),
+        subtitle: widget.subtitle == null
+            ? null
+            : Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  widget.subtitle!,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: context.appSecondaryText,
+                  ),
+                ),
+              ),
+        trailing: Icon(
+          Icons.chevron_right,
+          color: context.appSecondaryText,
+        ),
         onTap: widget.onTap,
       );
 }

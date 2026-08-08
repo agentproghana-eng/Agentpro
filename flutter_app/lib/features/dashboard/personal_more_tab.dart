@@ -49,7 +49,7 @@ class PersonalMoreTab extends StatelessWidget {
       appBar: AppBar(title: const Text('More')),
       body: ListView(
         children: [
-          const MoreGroupLabel('MoMo'),
+          const MoreGroupLabel('Money & Activity'),
           MoreTile(
             Icons.receipt_long_outlined,
             'Transaction History',
@@ -58,51 +58,57 @@ class PersonalMoreTab extends StatelessWidget {
                   ? '/personal-transactions/history'
                   : '/personal-subscription',
             ),
+            subtitle: isPaid
+                ? 'View, search and review your personal transactions'
+                : 'Upgrade to unlock your complete transaction history',
           ),
           MoreTile(
             Icons.bar_chart_outlined,
-            'My Reports',
+            'Reports',
             () => context.push('/personal-reports'),
+            subtitle: 'Understand your personal transaction activity',
           ),
+          const MoreGroupLabel('Tools & Automation'),
           if (isPaid)
             MoreTile(
               Icons.wifi_tethering,
               'USSD Automation',
               () => context.push('/personal-ussd-settings'),
+              subtitle: 'Configure SIMs and personal transaction automation',
             ),
           if (isPaid)
             MoreTile(
               Icons.route_outlined,
               'Custom USSD Flows',
               () => context.push('/personal-ussd-flows'),
+              subtitle: 'Create and manage your own USSD sequences',
             ),
-
           const MoreGroupLabel('Account'),
           MoreTile(
             Icons.workspace_premium_outlined,
             'My Subscription',
             () => context.push('/personal-subscription'),
+            subtitle: 'View or manage your Personal AgentPro plan',
           ),
-          // Only shown to someone holding both Business and Personal
-          // capability at once - a one-sided Personal user has no
-          // other mode to switch to.
           if (hasBusinessRole)
             MoreTile(
-              Icons.swap_horiz,
+              Icons.swap_horiz_rounded,
               'Switch to Business Mode',
               () => context.go(_businessHomeRoute(user['role'])),
+              subtitle: 'Open your AgentPro business workspace',
             ),
-
-          const MoreGroupLabel('Help'),
-          MoreTile(
-            Icons.support_agent_outlined,
-            'Help',
-            () => context.push('/support'),
-          ),
           MoreTile(
             Icons.settings_outlined,
             'Settings',
             () => context.push('/settings'),
+            subtitle: 'Manage preferences, security and app configuration',
+          ),
+          const MoreGroupLabel('Help & Support'),
+          MoreTile(
+            Icons.support_agent_outlined,
+            'Help & Support',
+            () => context.push('/support'),
+            subtitle: 'Guides, assistance and support options',
           ),
           const Divider(),
           MoreTile(

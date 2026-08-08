@@ -66,53 +66,64 @@ class _ManagerMoreTab extends StatelessWidget {
       appBar: AppBar(title: const Text('More')),
       body: ListView(
         children: [
-          const MoreGroupLabel('MoMo'),
+          const MoreGroupLabel('Money & Operations'),
           MoreTile(
             Icons.receipt_long_outlined,
-            'Transactions',
+            'Transaction History',
             () => context.push('/transactions/history'),
+            subtitle: 'Review transactions across your operations',
           ),
           MoreTile(
             Icons.account_balance_wallet_outlined,
             'Float Overview',
             () => context.push('/float-overview'),
+            subtitle: 'Monitor float positions and availability',
           ),
           MoreTile(
             Icons.bar_chart_outlined,
             'Reports',
             () => context.push('/reports'),
+            subtitle: 'View operational and transaction performance',
           ),
           MoreTile(
             Icons.fact_check_outlined,
             'Shift Reconciliation',
             () => context.push('/shifts/history'),
+            subtitle: 'Review completed shifts and reconcile balances',
           ),
+          const MoreGroupLabel('Tools & Automation'),
           MoreTile(
             Icons.wifi_tethering,
             'USSD Automation',
             () => context.push('/ussd-settings'),
+            subtitle: 'Configure SIMs and automated transaction actions',
           ),
           const MoreGroupLabel('Business'),
           MoreTile(
             Icons.people_outlined,
             'Staff Management',
             () => context.push('/users'),
+            subtitle: 'Manage staff access, roles and activity',
           ),
           MoreTile(
             Icons.store_outlined,
-            'My Branches',
+            'Branches',
             () => context.push('/branches'),
+            subtitle: 'View and manage business locations',
           ),
-          const MoreGroupLabel('Help'),
-          MoreTile(
-            Icons.support_agent_outlined,
-            'Help',
-            () => context.push('/support'),
-          ),
+          const MoreGroupLabel('Account'),
           MoreTile(
             Icons.settings_outlined,
             'Settings',
             () => context.push('/settings'),
+            subtitle: 'Manage preferences, security and app configuration',
+          ),
+          const MoreGroupLabel('Help & Support'),
+          MoreTile(
+            Icons.support_agent_outlined,
+            'Help & Support',
+            () => context.push('/support'),
+            subtitle: 'Guides, assistance and support options',
           ),
           const Divider(),
           MoreTile(
