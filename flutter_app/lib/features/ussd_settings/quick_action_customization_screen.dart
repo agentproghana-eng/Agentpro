@@ -723,10 +723,6 @@ class _QuickActionCustomizationScreenState
   void _reorder(int oldIndex, int newIndex) {
     final items = List<QuickActionPreference>.from(_selected);
 
-    if (newIndex > oldIndex) {
-      newIndex -= 1;
-    }
-
     final item = items.removeAt(oldIndex);
     items.insert(newIndex, item);
 
@@ -861,7 +857,7 @@ class _QuickActionCustomizationScreenState
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: _selected.length,
-                    onReorder: _reorder,
+                    onReorderItem: _reorder,
                     itemBuilder: (context, index) {
                       final preference = _selected[index];
                       final definition = _definitionFor(preference.actionKey)!;
