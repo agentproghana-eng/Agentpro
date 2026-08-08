@@ -13,6 +13,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/personal_ad_banner.dart';
 import '../../shared/widgets/personal_transaction_item.dart';
 import '../ussd_settings/quick_action_customization_screen.dart';
+import '../ussd_settings/quick_action_preference.dart';
 import '../../shared/widgets/offline_status_banner.dart';
 import '../../shared/widgets/dashboard_skeleton.dart';
 import '../../shared/widgets/dashboard_empty_state.dart';
@@ -39,7 +40,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
   Map<String, SimCard?>? _simMap;
   List<dynamic> _recent = [];
   bool _loadingRecent = true;
-  Map<String, List<String>> _personalQuickActions = {};
+  Map<String, List<QuickActionPreference>> _personalQuickActions = {};
   StreamSubscription<DashboardRefreshEvent>? _dashboardRefreshSubscription;
   bool _highlightNewestTransaction = false;
 
@@ -121,14 +122,41 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
 
       if (!mounted || personal is! Map) return;
 
-      final parsed = <String, List<String>>{};
+      final parsed = <String, List<QuickActionPreference>>{};
 
       for (final provider in ['mtn', 'telecel', 'at_money']) {
         final value = personal[provider];
 
-        if (value is List) {
-          parsed[provider] = value.whereType<String>().take(9).toList();
+        if (value is! List) continue;
+
+        final items = <QuickActionPreference>[];
+
+        for (var index = 0; index < value.length; index++) {
+          try {
+            final preference = QuickActionPreference.fromDynamic(
+              value[index],
+              fallbackPosition: index,
+            );
+
+            if (preference.actionKey.trim().isEmpty) continue;
+
+            items.add(preference);
+          } catch (_) {
+            // Ignore malformed individual records.
+          }
         }
+
+        items.sort((a, b) => a.position.compareTo(b.position));
+
+        parsed[provider] = items
+            .take(9)
+            .toList()
+            .asMap()
+            .entries
+            .map(
+              (entry) => entry.value.copyWith(position: entry.key),
+            )
+            .toList();
       }
 
       setState(() => _personalQuickActions = parsed);
@@ -137,26 +165,45 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
     }
   }
 
-  List<QuickActionDefinition> get _visibleQuickActions {
-    final saved = _personalQuickActions[_provider];
-
-    final types = saved ??
-        List<String>.from(
-          kPersonalQuickActionDefaults[_provider] ?? const <String>[],
-        );
-
-    final result = <QuickActionDefinition>[];
-
-    for (final type in types.take(9)) {
-      for (final definition in kPersonalQuickActionDefinitions) {
-        if (definition.type == type) {
-          result.add(definition);
-          break;
-        }
+  QuickActionDefinition? _quickActionDefinition(String type) {
+    for (final definition in kPersonalQuickActionDefinitions) {
+      if (definition.type == type) {
+        return definition;
       }
     }
 
-    return result;
+    return null;
+  }
+
+  List<QuickActionPreference> get _visibleQuickActions {
+    final saved = _personalQuickActions[_provider];
+
+    if (saved != null) {
+      return saved
+          .where(
+            (item) =>
+                item.isVisible &&
+                _quickActionDefinition(item.actionKey) != null,
+          )
+          .take(9)
+          .toList();
+    }
+
+    final defaults =
+        kPersonalQuickActionDefaults[_provider] ?? const <String>[];
+
+    return defaults
+        .take(9)
+        .toList()
+        .asMap()
+        .entries
+        .map(
+          (entry) => QuickActionPreference(
+            actionKey: entry.value,
+            position: entry.key,
+          ),
+        )
+        .toList();
   }
 
   String _providerLabel(String provider) {
@@ -501,16 +548,30 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                               crossAxisSpacing: 10,
                               mainAxisSpacing: 10,
                               childAspectRatio: 0.85,
-                              children: _visibleQuickActions
-                                  .map(
-                                    (action) => _QuickActionTile(
-                                      icon: action.icon,
-                                      label: action.label,
-                                      onTap: () =>
-                                          _startTransaction(action.type),
+                              children: _visibleQuickActions.map(
+                                (preference) {
+                                  final definition = _quickActionDefinition(
+                                    preference.actionKey,
+                                  )!;
+
+                                  final icon = quickActionIconFromKey(
+                                        preference.iconKey,
+                                      ) ??
+                                      definition.icon;
+
+                                  final label = preference.resolvedLabel(
+                                    definition.label,
+                                  );
+
+                                  return _QuickActionTile(
+                                    icon: icon,
+                                    label: label,
+                                    onTap: () => _startTransaction(
+                                      preference.actionKey,
                                     ),
-                                  )
-                                  .toList(),
+                                  );
+                                },
+                              ).toList(),
                             ),
                           ),
                   ),

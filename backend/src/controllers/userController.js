@@ -651,26 +651,91 @@ function validateQuickActionPreferences(value, fieldName) {
     return `${fieldName} must be an object keyed by provider`;
   }
 
-  for (const [provider, transactionTypes] of Object.entries(value)) {
+  for (const [provider, actions] of Object.entries(value)) {
     if (!QUICK_ACTION_PROVIDERS.includes(provider)) {
       return `Invalid provider in ${fieldName}: ${provider}`;
     }
 
-    if (!Array.isArray(transactionTypes)) {
+    if (!Array.isArray(actions)) {
       return `${fieldName}.${provider} must be an array`;
     }
 
-    if (transactionTypes.length > 9) {
+    if (actions.length > 9) {
       return `${fieldName}.${provider} cannot contain more than 9 actions`;
     }
 
-    if (!transactionTypes.every(
-      item => typeof item === 'string' && item.trim().length > 0
-    )) {
-      return `${fieldName}.${provider} must contain only transaction-type strings`;
+    const actionKeys = [];
+
+    for (let index = 0; index < actions.length; index += 1) {
+      const item = actions[index];
+
+      // Backward compatibility:
+      // Existing users may still have ["cash_in", "cash_out"].
+      if (typeof item === 'string') {
+        const actionKey = item.trim();
+
+        if (!actionKey) {
+          return `${fieldName}.${provider}[${index}] must not be empty`;
+        }
+
+        actionKeys.push(actionKey);
+        continue;
+      }
+
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        return `${fieldName}.${provider}[${index}] must be a string or action object`;
+      }
+
+      const {
+        action_key,
+        custom_name,
+        icon_key,
+        position,
+        is_visible,
+      } = item;
+
+      if (typeof action_key !== 'string' || action_key.trim().length === 0) {
+        return `${fieldName}.${provider}[${index}].action_key is required`;
+      }
+
+      if (
+        custom_name !== undefined &&
+        custom_name !== null &&
+        (typeof custom_name !== 'string' ||
+          custom_name.trim().length === 0 ||
+          custom_name.trim().length > 25)
+      ) {
+        return `${fieldName}.${provider}[${index}].custom_name must be 1-25 characters`;
+      }
+
+      if (
+        icon_key !== undefined &&
+        icon_key !== null &&
+        (typeof icon_key !== 'string' ||
+          icon_key.trim().length === 0 ||
+          icon_key.trim().length > 50)
+      ) {
+        return `${fieldName}.${provider}[${index}].icon_key is invalid`;
+      }
+
+      if (
+        position !== undefined &&
+        (!Number.isInteger(position) || position < 0 || position > 8)
+      ) {
+        return `${fieldName}.${provider}[${index}].position must be an integer from 0 to 8`;
+      }
+
+      if (
+        is_visible !== undefined &&
+        typeof is_visible !== 'boolean'
+      ) {
+        return `${fieldName}.${provider}[${index}].is_visible must be boolean`;
+      }
+
+      actionKeys.push(action_key.trim());
     }
 
-    if (new Set(transactionTypes).size !== transactionTypes.length) {
+    if (new Set(actionKeys).size !== actionKeys.length) {
       return `${fieldName}.${provider} cannot contain duplicate actions`;
     }
   }

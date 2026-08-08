@@ -1,0 +1,226 @@
+import 'package:flutter/material.dart';
+
+class QuickActionPreference {
+  final String actionKey;
+  final String? customName;
+  final String? iconKey;
+  final int position;
+  final bool isVisible;
+
+  const QuickActionPreference({
+    required this.actionKey,
+    this.customName,
+    this.iconKey,
+    required this.position,
+    this.isVisible = true,
+  });
+
+  factory QuickActionPreference.fromDynamic(
+    dynamic value, {
+    required int fallbackPosition,
+  }) {
+    // Backward compatibility with the old format:
+    // ["cash_in", "cash_out"]
+    if (value is String) {
+      return QuickActionPreference(
+        actionKey: value,
+        position: fallbackPosition,
+      );
+    }
+
+    if (value is Map) {
+      final map = Map<String, dynamic>.from(value);
+
+      return QuickActionPreference(
+        actionKey: (map['action_key'] ?? '').toString(),
+        customName: _nullableString(map['custom_name']),
+        iconKey: _nullableString(map['icon_key']),
+        position:
+            map['position'] is int ? map['position'] as int : fallbackPosition,
+        isVisible: map['is_visible'] is bool ? map['is_visible'] as bool : true,
+      );
+    }
+
+    throw const FormatException('Invalid Quick Action preference');
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'action_key': actionKey,
+      'custom_name': customName,
+      'icon_key': iconKey,
+      'position': position,
+      'is_visible': isVisible,
+    };
+  }
+
+  QuickActionPreference copyWith({
+    String? actionKey,
+    String? customName,
+    bool clearCustomName = false,
+    String? iconKey,
+    bool clearIconKey = false,
+    int? position,
+    bool? isVisible,
+  }) {
+    return QuickActionPreference(
+      actionKey: actionKey ?? this.actionKey,
+      customName: clearCustomName ? null : customName ?? this.customName,
+      iconKey: clearIconKey ? null : iconKey ?? this.iconKey,
+      position: position ?? this.position,
+      isVisible: isVisible ?? this.isVisible,
+    );
+  }
+
+  String resolvedLabel(String defaultLabel) {
+    final custom = customName?.trim();
+    if (custom != null && custom.isNotEmpty) {
+      return custom;
+    }
+    return defaultLabel;
+  }
+
+  static String? _nullableString(dynamic value) {
+    if (value == null) return null;
+
+    final text = value.toString().trim();
+    return text.isEmpty ? null : text;
+  }
+}
+
+class QuickActionIconOption {
+  final String key;
+  final String label;
+  final IconData icon;
+
+  const QuickActionIconOption({
+    required this.key,
+    required this.label,
+    required this.icon,
+  });
+}
+
+const List<QuickActionIconOption> kQuickActionIconOptions = [
+  QuickActionIconOption(
+    key: 'send',
+    label: 'Send',
+    icon: Icons.send_rounded,
+  ),
+  QuickActionIconOption(
+    key: 'payments',
+    label: 'Payments',
+    icon: Icons.payments_rounded,
+  ),
+  QuickActionIconOption(
+    key: 'wallet',
+    label: 'Wallet',
+    icon: Icons.account_balance_wallet_rounded,
+  ),
+  QuickActionIconOption(
+    key: 'deposit',
+    label: 'Deposit',
+    icon: Icons.call_received_rounded,
+  ),
+  QuickActionIconOption(
+    key: 'withdraw',
+    label: 'Withdraw',
+    icon: Icons.call_made_rounded,
+  ),
+  QuickActionIconOption(
+    key: 'store',
+    label: 'Store',
+    icon: Icons.storefront_rounded,
+  ),
+  QuickActionIconOption(
+    key: 'receipt',
+    label: 'Receipt',
+    icon: Icons.receipt_long_rounded,
+  ),
+  QuickActionIconOption(
+    key: 'phone',
+    label: 'Phone',
+    icon: Icons.phone_android_rounded,
+  ),
+  QuickActionIconOption(
+    key: 'data',
+    label: 'Data',
+    icon: Icons.wifi_rounded,
+  ),
+  QuickActionIconOption(
+    key: 'balance',
+    label: 'Balance',
+    icon: Icons.account_balance_wallet_outlined,
+  ),
+  QuickActionIconOption(
+    key: 'savings',
+    label: 'Savings',
+    icon: Icons.savings_rounded,
+  ),
+  QuickActionIconOption(
+    key: 'swap',
+    label: 'Transfer',
+    icon: Icons.swap_horiz_rounded,
+  ),
+  QuickActionIconOption(
+    key: 'business',
+    label: 'Business',
+    icon: Icons.business_rounded,
+  ),
+  QuickActionIconOption(
+    key: 'bank',
+    label: 'Bank',
+    icon: Icons.account_balance_rounded,
+  ),
+  QuickActionIconOption(
+    key: 'people',
+    label: 'People',
+    icon: Icons.people_alt_rounded,
+  ),
+  QuickActionIconOption(
+    key: 'person',
+    label: 'Person',
+    icon: Icons.person_rounded,
+  ),
+  QuickActionIconOption(
+    key: 'history',
+    label: 'History',
+    icon: Icons.history_rounded,
+  ),
+  QuickActionIconOption(
+    key: 'analytics',
+    label: 'Analytics',
+    icon: Icons.analytics_rounded,
+  ),
+  QuickActionIconOption(
+    key: 'calculator',
+    label: 'Calculator',
+    icon: Icons.calculate_rounded,
+  ),
+  QuickActionIconOption(
+    key: 'qr_code',
+    label: 'QR Code',
+    icon: Icons.qr_code_scanner_rounded,
+  ),
+  QuickActionIconOption(
+    key: 'bolt',
+    label: 'Quick',
+    icon: Icons.bolt_rounded,
+  ),
+  QuickActionIconOption(
+    key: 'star',
+    label: 'Favourite',
+    icon: Icons.star_rounded,
+  ),
+];
+
+IconData? quickActionIconFromKey(String? key) {
+  if (key == null) return null;
+
+  for (final option in kQuickActionIconOptions) {
+    if (option.key == key) {
+      return option.icon;
+    }
+  }
+
+  return null;
+}
