@@ -562,60 +562,82 @@ class _QuickActionCustomizationScreenState
     });
   }
 
-  Future<void> _renameAction(QuickActionPreference preference) async {
+  Future<void> _renameAction(
+    QuickActionPreference preference,
+  ) async {
     final definition = _definitionFor(preference.actionKey);
     if (definition == null) return;
 
-    final controller = TextEditingController(
-      text: preference.customName ?? definition.label.replaceAll('\n', ' '),
-    );
+    final defaultLabel = definition.label.replaceAll('\n', ' ');
+    var draftName = preference.customName ?? defaultLabel;
 
-    final result = await showDialog<String?>(
+    final result = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Rename Quick Action'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 25,
-          decoration: InputDecoration(
-            labelText: 'Custom name',
-            helperText: 'Original: ${definition.label.replaceAll('\n', ' ')}',
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Rename Quick Action'),
+          content: TextFormField(
+            initialValue: draftName,
+            maxLength: 25,
+            textInputAction: TextInputAction.done,
+            decoration: InputDecoration(
+              labelText: 'Custom name',
+              helperText: 'Original: $defaultLabel',
+            ),
+            onChanged: (value) {
+              draftName = value;
+            },
+            onFieldSubmitted: (value) {
+              final trimmed = value.trim();
+
+              if (trimmed.isNotEmpty) {
+                Navigator.of(dialogContext).pop(trimmed);
+              }
+            },
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, ''),
-            child: const Text('Use Default'),
-          ),
-          ElevatedButton(
-            onPressed: () =>
-                Navigator.pop(dialogContext, controller.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(''),
+              child: const Text('Use Default'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final trimmed = draftName.trim();
+
+                if (trimmed.isEmpty) {
+                  return;
+                }
+
+                Navigator.of(dialogContext).pop(trimmed);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
     );
 
-    controller.dispose();
-
-    if (result == null || !mounted) return;
+    if (!mounted || result == null) return;
 
     if (result.isEmpty) {
       _updatePreference(
         preference.actionKey,
-        (current) => current.copyWith(clearCustomName: true),
+        (current) => current.copyWith(
+          clearCustomName: true,
+        ),
       );
       return;
     }
 
     _updatePreference(
       preference.actionKey,
-      (current) => current.copyWith(customName: result),
+      (current) => current.copyWith(
+        customName: result,
+      ),
     );
   }
 
@@ -717,6 +739,159 @@ class _QuickActionCustomizationScreenState
     _updatePreference(
       preference.actionKey,
       (current) => current.copyWith(iconKey: result),
+    );
+  }
+
+  Future<void> _chooseIconColor(
+    QuickActionPreference preference,
+  ) async {
+    final selectedHex = preference.iconColorHex;
+
+    final result = await showModalBottomSheet<String?>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return SafeArea(
+          top: false,
+          child: Container(
+            decoration: BoxDecoration(
+              color: sheetContext.appSurface,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
+            ),
+            padding: const EdgeInsets.fromLTRB(18, 10, 18, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 44,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: sheetContext.appSecondaryText.withValues(
+                      alpha: 0.28,
+                    ),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Change Icon Colour',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: kQuickActionColorOptions.length,
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 5,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 18,
+                    childAspectRatio: 0.72,
+                  ),
+                  itemBuilder: (context, index) {
+                    final option = kQuickActionColorOptions[index];
+                    final selected =
+                        option.hex.toUpperCase() == selectedHex?.toUpperCase();
+
+                    final checkColor =
+                        option.hex == '#FDD835' || option.hex == '#F9A825'
+                            ? Colors.black
+                            : Colors.white;
+
+                    return InkWell(
+                      onTap: () => Navigator.pop(sheetContext, option.hex),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: option.color,
+                              shape: BoxShape.circle,
+                              border: selected
+                                  ? Border.all(
+                                      color: AppTheme.primaryColor,
+                                      width: 3,
+                                    )
+                                  : null,
+                              boxShadow: selected
+                                  ? [
+                                      BoxShadow(
+                                        color: AppTheme.primaryColor
+                                            .withValues(alpha: 0.22),
+                                        blurRadius: 6,
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: selected
+                                ? Icon(
+                                    Icons.check_rounded,
+                                    color: checkColor,
+                                  )
+                                : null,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            option.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 10),
+                TextButton.icon(
+                  onPressed: () => Navigator.pop(sheetContext, ''),
+                  icon: const Icon(Icons.restart_alt_rounded),
+                  label: const Text('Use default colour'),
+                ),
+                const SizedBox(height: 2),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(sheetContext),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted || result == null) return;
+
+    if (result.isEmpty) {
+      _updatePreference(
+        preference.actionKey,
+        (current) => current.copyWith(
+          clearIconColor: true,
+        ),
+      );
+      return;
+    }
+
+    _updatePreference(
+      preference.actionKey,
+      (current) => current.copyWith(
+        iconColorHex: result,
+      ),
     );
   }
 
@@ -879,7 +1054,9 @@ class _QuickActionCustomizationScreenState
                               padding: const EdgeInsets.all(8),
                               child: Icon(
                                 icon,
-                                color: AppTheme.primaryColor,
+                                color: preference.resolvedIconColor(
+                                  AppTheme.primaryColor,
+                                ),
                               ),
                             ),
                           ),
@@ -910,6 +1087,8 @@ class _QuickActionCustomizationScreenState
                                     _renameAction(preference);
                                   } else if (value == 'icon') {
                                     _chooseIcon(preference);
+                                  } else if (value == 'color') {
+                                    _chooseIconColor(preference);
                                   } else if (value == 'remove') {
                                     _toggle(preference.actionKey);
                                   }
@@ -924,17 +1103,20 @@ class _QuickActionCustomizationScreenState
                                     child: Text('Change icon'),
                                   ),
                                   PopupMenuItem(
+                                    value: 'color',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.palette_outlined),
+                                        SizedBox(width: 10),
+                                        Text('Change icon colour'),
+                                      ],
+                                    ),
+                                  ),
+                                  PopupMenuItem(
                                     value: 'remove',
                                     child: Text('Remove'),
                                   ),
                                 ],
-                              ),
-                              ReorderableDragStartListener(
-                                index: index,
-                                child: const Padding(
-                                  padding: EdgeInsets.all(8),
-                                  child: Icon(Icons.drag_handle),
-                                ),
                               ),
                             ],
                           ),
@@ -1091,7 +1273,9 @@ class _QuickActionPreview extends StatelessWidget {
               children: [
                 Icon(
                   icon,
-                  color: AppTheme.primaryColor,
+                  color: preference.resolvedIconColor(
+                    AppTheme.primaryColor,
+                  ),
                   size: 23,
                 ),
                 const SizedBox(height: 5),
