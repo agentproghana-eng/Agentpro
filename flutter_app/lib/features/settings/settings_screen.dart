@@ -217,6 +217,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const Divider(),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Text(
+            'QUICK ACTIONS',
+            style: TextStyle(
+              fontSize: 11,
+              color: context.appSecondaryText,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1,
+            ),
+          ),
+        ),
+
+        if (user['company_id'] != null)
+          ListTile(
+            leading: const Icon(
+              Icons.grid_view_rounded,
+              color: AppTheme.primaryColor,
+            ),
+            title: const Text('Agent Quick Actions'),
+            subtitle: const Text(
+              'Choose, reorder, rename and change dashboard icons',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/agent-quick-actions'),
+          ),
+
+        if (user['personal_subscription_plan'] != null)
+          ListTile(
+            leading: const Icon(
+              Icons.person_outline_rounded,
+              color: AppTheme.primaryColor,
+            ),
+            title: const Text('Personal Quick Actions'),
+            subtitle: const Text(
+              'Customize your Personal dashboard shortcuts',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/personal-quick-actions'),
+          ),
+
+        const Divider(),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
           child: Text('ABOUT',
               style: TextStyle(
                   fontSize: 11,

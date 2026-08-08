@@ -565,6 +565,9 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
 
                                   return _QuickActionTile(
                                     icon: icon,
+                                    iconColor: preference.resolvedIconColor(
+                                      AppTheme.primaryColor,
+                                    ),
                                     label: label,
                                     onTap: () => _startTransaction(
                                       preference.actionKey,
@@ -673,11 +676,13 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
 
 class _QuickActionTile extends StatefulWidget {
   final IconData icon;
+  final Color iconColor;
   final String label;
   final VoidCallback onTap;
 
   const _QuickActionTile({
     required this.icon,
+    required this.iconColor,
     required this.label,
     required this.onTap,
   });
@@ -746,14 +751,14 @@ class _QuickActionTileState extends State<_QuickActionTile> {
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withValues(
+                      color: widget.iconColor.withValues(
                         alpha: context.isDarkMode ? 0.20 : 0.10,
                       ),
                       borderRadius: BorderRadius.circular(11),
                     ),
                     child: Icon(
                       widget.icon,
-                      color: AppTheme.primaryColor,
+                      color: widget.iconColor,
                       size: 23,
                     ),
                   ),

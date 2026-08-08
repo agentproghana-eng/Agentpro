@@ -644,6 +644,19 @@ exports.updateMySettings = async (req, res) => {
 
 const QUICK_ACTION_PROVIDERS = ['mtn', 'telecel', 'at_money'];
 
+const QUICK_ACTION_ICON_COLORS = new Set([
+  '#00897B',
+  '#1565C0',
+  '#6A1B9A',
+  '#D84315',
+  '#C62828',
+  '#FDD835',
+  '#F9A825',
+  '#455A64',
+  '#3949AB',
+  '#D81B60',
+]);
+
 function validateQuickActionPreferences(value, fieldName) {
   if (value === undefined) return null;
 
@@ -690,6 +703,7 @@ function validateQuickActionPreferences(value, fieldName) {
         action_key,
         custom_name,
         icon_key,
+        icon_color,
         position,
         is_visible,
       } = item;
@@ -716,6 +730,17 @@ function validateQuickActionPreferences(value, fieldName) {
           icon_key.trim().length > 50)
       ) {
         return `${fieldName}.${provider}[${index}].icon_key is invalid`;
+      }
+
+      if (
+        icon_color !== undefined &&
+        icon_color !== null &&
+        (
+          typeof icon_color !== 'string' ||
+          !QUICK_ACTION_ICON_COLORS.has(icon_color.trim().toUpperCase())
+        )
+      ) {
+        return `${fieldName}.${provider}[${index}].icon_color is invalid`;
       }
 
       if (

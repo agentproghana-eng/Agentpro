@@ -173,7 +173,9 @@ class DashboardQuickActionsSection extends StatelessWidget {
           icon: icon,
           label: label,
           bgColor: backgrounds[index % backgrounds.length],
-          iconColor: iconColors[index % iconColors.length],
+          iconColor: preference.resolvedIconColor(
+            iconColors[index % iconColors.length],
+          ),
           type: type,
           onTap: () => context.push(
             '/transactions?type=$type&provider=$provider',
@@ -233,7 +235,9 @@ class DashboardQuickActionsSection extends StatelessWidget {
           icon: icon,
           label: label,
           bgColor: backgrounds[index % backgrounds.length],
-          iconColor: iconColors[index % iconColors.length],
+          iconColor: preference.resolvedIconColor(
+            iconColors[index % iconColors.length],
+          ),
           type: type,
           onTap: () {
             final query = <String, String>{

@@ -4,6 +4,7 @@ class QuickActionPreference {
   final String actionKey;
   final String? customName;
   final String? iconKey;
+  final String? iconColorHex;
   final int position;
   final bool isVisible;
 
@@ -11,6 +12,7 @@ class QuickActionPreference {
     required this.actionKey,
     this.customName,
     this.iconKey,
+    this.iconColorHex,
     required this.position,
     this.isVisible = true,
   });
@@ -35,6 +37,7 @@ class QuickActionPreference {
         actionKey: (map['action_key'] ?? '').toString(),
         customName: _nullableString(map['custom_name']),
         iconKey: _nullableString(map['icon_key']),
+        iconColorHex: _nullableString(map['icon_color']),
         position:
             map['position'] is int ? map['position'] as int : fallbackPosition,
         isVisible: map['is_visible'] is bool ? map['is_visible'] as bool : true,
@@ -49,6 +52,7 @@ class QuickActionPreference {
       'action_key': actionKey,
       'custom_name': customName,
       'icon_key': iconKey,
+      'icon_color': iconColorHex,
       'position': position,
       'is_visible': isVisible,
     };
@@ -60,6 +64,8 @@ class QuickActionPreference {
     bool clearCustomName = false,
     String? iconKey,
     bool clearIconKey = false,
+    String? iconColorHex,
+    bool clearIconColor = false,
     int? position,
     bool? isVisible,
   }) {
@@ -67,9 +73,14 @@ class QuickActionPreference {
       actionKey: actionKey ?? this.actionKey,
       customName: clearCustomName ? null : customName ?? this.customName,
       iconKey: clearIconKey ? null : iconKey ?? this.iconKey,
+      iconColorHex: clearIconColor ? null : iconColorHex ?? this.iconColorHex,
       position: position ?? this.position,
       isVisible: isVisible ?? this.isVisible,
     );
+  }
+
+  Color resolvedIconColor(Color defaultColor) {
+    return quickActionColorFromHex(iconColorHex) ?? defaultColor;
   }
 
   String resolvedLabel(String defaultLabel) {
@@ -219,6 +230,85 @@ IconData? quickActionIconFromKey(String? key) {
   for (final option in kQuickActionIconOptions) {
     if (option.key == key) {
       return option.icon;
+    }
+  }
+
+  return null;
+}
+
+class QuickActionColorOption {
+  final String name;
+  final String hex;
+  final Color color;
+
+  const QuickActionColorOption({
+    required this.name,
+    required this.hex,
+    required this.color,
+  });
+}
+
+const List<QuickActionColorOption> kQuickActionColorOptions = [
+  QuickActionColorOption(
+    name: 'AgentPro Teal',
+    hex: '#00897B',
+    color: Color(0xFF00897B),
+  ),
+  QuickActionColorOption(
+    name: 'Blue',
+    hex: '#1565C0',
+    color: Color(0xFF1565C0),
+  ),
+  QuickActionColorOption(
+    name: 'Purple',
+    hex: '#6A1B9A',
+    color: Color(0xFF6A1B9A),
+  ),
+  QuickActionColorOption(
+    name: 'Orange',
+    hex: '#D84315',
+    color: Color(0xFFD84315),
+  ),
+  QuickActionColorOption(
+    name: 'Red',
+    hex: '#C62828',
+    color: Color(0xFFC62828),
+  ),
+  QuickActionColorOption(
+    name: 'Yellow',
+    hex: '#FDD835',
+    color: Color(0xFFFDD835),
+  ),
+  QuickActionColorOption(
+    name: 'Gold',
+    hex: '#F9A825',
+    color: Color(0xFFF9A825),
+  ),
+  QuickActionColorOption(
+    name: 'Blue Grey',
+    hex: '#455A64',
+    color: Color(0xFF455A64),
+  ),
+  QuickActionColorOption(
+    name: 'Indigo',
+    hex: '#3949AB',
+    color: Color(0xFF3949AB),
+  ),
+  QuickActionColorOption(
+    name: 'Pink',
+    hex: '#D81B60',
+    color: Color(0xFFD81B60),
+  ),
+];
+
+Color? quickActionColorFromHex(String? hex) {
+  if (hex == null) return null;
+
+  final normalized = hex.trim().toUpperCase();
+
+  for (final option in kQuickActionColorOptions) {
+    if (option.hex == normalized) {
+      return option.color;
     }
   }
 
