@@ -7,6 +7,7 @@ import '../../../shared/theme/app_colors.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/dashboard_empty_state.dart';
 import '../../ussd_settings/quick_action_customization_screen.dart';
+import '../../ussd_settings/quick_action_preference.dart';
 
 class DashboardQuickActionsSection extends StatelessWidget {
   const DashboardQuickActionsSection({
@@ -23,8 +24,8 @@ class DashboardQuickActionsSection extends StatelessWidget {
   final Map<String, SimCard?>? simMap;
   final Set<String> disabledTypes;
   final Map<int, String> simPurposes;
-  final Map<String, List<String>> agentQuickActions;
-  final Map<String, List<String>> personalQuickActions;
+  final Map<String, List<QuickActionPreference>> agentQuickActions;
+  final Map<String, List<QuickActionPreference>> personalQuickActions;
 
   bool get _isPersonalSim {
     final sim = simMap?[provider];
@@ -36,21 +37,32 @@ class DashboardQuickActionsSection extends StatelessWidget {
     return simPurposes[sim.slot] == 'personal';
   }
 
-  List<String> _quickActionTypes({required bool personal}) {
+  List<QuickActionPreference> _quickActions({
+    required bool personal,
+  }) {
     final saved =
         personal ? personalQuickActions[provider] : agentQuickActions[provider];
 
     if (saved != null) {
-      return saved.take(9).toList();
+      return saved.where((item) => item.isVisible).take(9).toList();
     }
 
     final defaults = personal
         ? kPersonalQuickActionDefaults[provider]
         : kAgentQuickActionDefaults[provider];
 
-    return List<String>.from(
-      defaults ?? const <String>[],
-    ).take(9).toList();
+    return (defaults ?? const <String>[])
+        .take(9)
+        .toList()
+        .asMap()
+        .entries
+        .map(
+          (entry) => QuickActionPreference(
+            actionKey: entry.value,
+            position: entry.key,
+          ),
+        )
+        .toList();
   }
 
   QuickActionDefinition? _definition(
@@ -103,7 +115,7 @@ class DashboardQuickActionsSection extends StatelessWidget {
   }
 
   List<Widget> _agentTiles(BuildContext context) {
-    final types = _quickActionTypes(personal: false);
+    final actions = _quickActions(personal: false);
     final tiles = <Widget>[];
 
     const backgrounds = <Color>[
@@ -130,30 +142,35 @@ class DashboardQuickActionsSection extends StatelessWidget {
       Color(0xFFB33F6B),
     ];
 
-    for (var index = 0; index < types.length; index++) {
-      final type = types[index];
+    for (var index = 0; index < actions.length; index++) {
+      final preference = actions[index];
+      final type = preference.actionKey;
       final definition = _definition(type, personal: false);
 
       if (definition == null) {
         continue;
       }
 
-      var label = definition.label;
+      var defaultLabel = definition.label;
 
       if (provider == 'telecel') {
-        label = switch (type) {
+        defaultLabel = switch (type) {
           'cash_in' => 'Deposit',
           'cash_out' => 'Withdrawal',
           'data_bundle' => 'Internet Data',
           'balance_enquiry' => 'Balance',
-          _ => label,
+          _ => defaultLabel,
         };
       }
+
+      final label = preference.resolvedLabel(defaultLabel);
+      final icon =
+          quickActionIconFromKey(preference.iconKey) ?? definition.icon;
 
       tiles.add(
         _buildTile(
           context: context,
-          icon: definition.icon,
+          icon: icon,
           label: label,
           bgColor: backgrounds[index % backgrounds.length],
           iconColor: iconColors[index % iconColors.length],
@@ -170,7 +187,7 @@ class DashboardQuickActionsSection extends StatelessWidget {
 
   List<Widget> _personalTiles(BuildContext context) {
     final sim = simMap?[provider];
-    final types = _quickActionTypes(personal: true);
+    final actions = _quickActions(personal: true);
     final tiles = <Widget>[];
 
     const backgrounds = <Color>[
@@ -197,19 +214,24 @@ class DashboardQuickActionsSection extends StatelessWidget {
       Color(0xFFB33F6B),
     ];
 
-    for (var index = 0; index < types.length; index++) {
-      final type = types[index];
+    for (var index = 0; index < actions.length; index++) {
+      final preference = actions[index];
+      final type = preference.actionKey;
       final definition = _definition(type, personal: true);
 
       if (definition == null) {
         continue;
       }
 
+      final icon =
+          quickActionIconFromKey(preference.iconKey) ?? definition.icon;
+      final label = preference.resolvedLabel(definition.label);
+
       tiles.add(
         _buildTile(
           context: context,
-          icon: definition.icon,
-          label: definition.label,
+          icon: icon,
+          label: label,
           bgColor: backgrounds[index % backgrounds.length],
           iconColor: iconColors[index % iconColors.length],
           type: type,
