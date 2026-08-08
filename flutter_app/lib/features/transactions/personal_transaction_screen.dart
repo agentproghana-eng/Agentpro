@@ -463,7 +463,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         Text('Who is this for?', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 4),
         Text('This decides whether we ask for a recipient number.',
-            style: TextStyle(color: Colors.grey[600])),
+            style: TextStyle(color: context.appSecondaryText)),
         const SizedBox(height: 20),
         Row(
           children: [
@@ -496,7 +496,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 28),
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+          border: Border.all(color: context.appDivider),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -518,7 +518,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
             style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 4),
         Text('Who is receiving this data bundle?',
-            style: TextStyle(color: Colors.grey[600])),
+            style: TextStyle(color: context.appSecondaryText)),
         const SizedBox(height: 20),
         AppTextField(
           controller: _phoneCtrl,
@@ -564,7 +564,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
               child: Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+                  border: Border.all(color: context.appDivider),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
@@ -578,8 +578,8 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
                             fontWeight: FontWeight.w600, fontSize: 13)),
                     const SizedBox(height: 2),
                     Text(cat.sub,
-                        style:
-                            TextStyle(fontSize: 11, color: Colors.grey[600])),
+                        style: TextStyle(
+                            fontSize: 11, color: context.appSecondaryText)),
                   ],
                 ),
               ),
@@ -598,7 +598,8 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         Text(_categoryObj?.label ?? '',
             style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 4),
-        Text('Pick a bundle.', style: TextStyle(color: Colors.grey[600])),
+        Text('Pick a bundle.',
+            style: TextStyle(color: context.appSecondaryText)),
         const SizedBox(height: 16),
         ...options.map((opt) => _dbOptionTile(opt, () {
               setState(() {
@@ -618,7 +619,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         Text('2Moorch No Expiry',
             style: Theme.of(context).textTheme.titleLarge),
         Text('Page $_moorchPage of 2',
-            style: TextStyle(color: Colors.grey[600])),
+            style: TextStyle(color: context.appSecondaryText)),
         const SizedBox(height: 16),
         ...options.map((opt) => _dbOptionTile(opt, () {
               setState(() {
@@ -656,7 +657,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         _dbBack(onBack),
         Text(title, style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 4),
-        Text(subtitle, style: TextStyle(color: Colors.grey[600])),
+        Text(subtitle, style: TextStyle(color: context.appSecondaryText)),
         const SizedBox(height: 16),
         ...options.map((opt) => _dbOptionTile(opt, () => onPick(opt))),
       ],
@@ -670,7 +671,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         Text('Amount', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 4),
         Text('GHS 0.02 – 999.99. Telecel computes the MB.',
-            style: TextStyle(color: Colors.grey[600])),
+            style: TextStyle(color: context.appSecondaryText)),
         const SizedBox(height: 16),
         AppTextField(
           controller: _flexiAmountCtrl,
@@ -705,7 +706,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+            border: Border.all(color: context.appDivider),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Row(
@@ -730,7 +731,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+            border: Border.all(color: context.appDivider),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
@@ -766,7 +767,8 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+          Text(label,
+              style: TextStyle(color: context.appSecondaryText, fontSize: 12)),
           Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
         ],
       ),

@@ -10,6 +10,7 @@ import '../../core/api/api_client.dart';
 import '../../core/auth/auth_bloc.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
+import '../../shared/theme/app_colors.dart';
 
 /// Paid-Personal-only per spec (enforced server-side by
 /// requirePaidPersonalPlan) - checks the same cached
@@ -131,10 +132,10 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
               const Text('Reports are a Paid feature',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                   'Upgrade your Personal plan to download PDF and CSV transaction reports.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey)),
+                  style: TextStyle(color: context.appSecondaryText)),
               const SizedBox(height: 20),
               AppButton(
                   label: 'Upgrade to Paid',

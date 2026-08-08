@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
+import '../../shared/theme/app_colors.dart';
 
 class TransactionDetailScreen extends StatefulWidget {
   final String transactionId;
@@ -70,7 +71,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                                   .replaceAll('_', ' ')
                                   .toUpperCase(),
                               style: TextStyle(
-                                  color: Colors.grey[600],
+                                  color: context.appSecondaryText,
                                   letterSpacing: 1,
                                   fontSize: 12)),
                           const SizedBox(height: 8),
@@ -130,8 +131,8 @@ class _DetailRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       dense: true,
-      title:
-          Text(label, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+      title: Text(label,
+          style: TextStyle(color: context.appSecondaryText, fontSize: 12)),
       trailing: GestureDetector(
         onLongPress: () {
           Clipboard.setData(ClipboardData(text: value ?? ''));

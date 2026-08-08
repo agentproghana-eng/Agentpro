@@ -198,46 +198,140 @@ exports.completeTransaction = async (req, res) => {
 // there is no manager/owner "view others' transactions" concept here.
 
 exports.listTransactions = async (req, res) => {
-  const { page = 1, limit = 20, provider, transaction_type, status, sort_by = 'date', sort_order = 'desc' } = req.query;
+  const {
+    page = 1,
+    limit = 20,
+    provider,
+    transaction_type,
+    status,
+    search,
+    from_date,
+    to_date,
+    sim_iccid,
+    sort_by = 'date',
+    sort_order = 'desc',
+  } = req.query;
+
   const userId = req.user.id;
 
-  const SORT_COLUMNS = { date: 'created_at', amount: 'amount' };
+  const SORT_COLUMNS = {
+    date: 'created_at',
+    amount: 'amount',
+  };
+
   const sortColumn = SORT_COLUMNS[sort_by] || SORT_COLUMNS.date;
   const sortDirection = sort_order === 'asc' ? 'ASC' : 'DESC';
 
+  const parsedPage = Math.max(parseInt(page, 10) || 1, 1);
+  const parsedLimit = Math.min(
+    Math.max(parseInt(limit, 10) || 20, 1),
+    100
+  );
+
   try {
-    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const offset = (parsedPage - 1) * parsedLimit;
+
     const conditions = ['user_id = $1'];
     const params = [userId];
     let idx = 2;
 
-    if (provider) { conditions.push(`provider = $${idx++}`); params.push(provider); }
-    if (transaction_type) { conditions.push(`transaction_type = $${idx++}`); params.push(transaction_type); }
-    if (status) { conditions.push(`status = $${idx++}`); params.push(status); }
+    if (provider) {
+      conditions.push(`provider = $${idx++}`);
+      params.push(provider);
+    }
+
+    if (transaction_type) {
+      conditions.push(`transaction_type = $${idx++}`);
+      params.push(transaction_type);
+    }
+
+    if (status) {
+      conditions.push(`status = $${idx++}`);
+      params.push(status);
+    }
+
+    if (sim_iccid) {
+      conditions.push(`sim_iccid = $${idx++}`);
+      params.push(sim_iccid);
+    }
+
+    if (from_date) {
+      const parsed = new Date(from_date);
+
+      if (!Number.isNaN(parsed.getTime())) {
+        conditions.push(`created_at >= $${idx++}`);
+        params.push(parsed);
+      }
+    }
+
+    if (to_date) {
+      const parsed = new Date(to_date);
+
+      if (!Number.isNaN(parsed.getTime())) {
+        conditions.push(`created_at <= $${idx++}`);
+        params.push(parsed);
+      }
+    }
+
+    const normalizedSearch =
+      typeof search === 'string' ? search.trim() : '';
+
+    if (normalizedSearch) {
+      const pattern = `%${normalizedSearch}%`;
+
+      conditions.push(`(
+        reference ILIKE $${idx}
+        OR COALESCE(recipient_phone, '') ILIKE $${idx}
+        OR COALESCE(network_reference, '') ILIKE $${idx}
+        OR COALESCE(notes, '') ILIKE $${idx}
+      )`);
+
+      params.push(pattern);
+      idx += 1;
+    }
 
     const where = `WHERE ${conditions.join(' AND ')}`;
 
+    const dataParams = [...params, parsedLimit, offset];
+    const limitIndex = idx;
+    const offsetIndex = idx + 1;
+
     const [dataResult, countResult] = await Promise.all([
       query(
-        `SELECT * FROM personal_transactions ${where}
-         ORDER BY ${sortColumn} ${sortDirection}
-         LIMIT $${idx++} OFFSET $${idx++}`,
-        [...params, parseInt(limit), offset]
+        `SELECT *
+         FROM personal_transactions
+         ${where}
+         ORDER BY ${sortColumn} ${sortDirection}, id DESC
+         LIMIT $${limitIndex} OFFSET $${offsetIndex}`,
+        dataParams
       ),
-      query(`SELECT COUNT(*) FROM personal_transactions ${where}`, params),
+      query(
+        `SELECT COUNT(*)
+         FROM personal_transactions
+         ${where}`,
+        params
+      ),
     ]);
 
-    const total = parseInt(countResult.rows[0].count);
+    const total = parseInt(countResult.rows[0].count, 10);
 
     res.json({
       success: true,
       data: dataResult.rows,
-      meta: { total, page: parseInt(page), limit: parseInt(limit), total_pages: Math.ceil(total / parseInt(limit)) }
+      meta: {
+        total,
+        page: parsedPage,
+        limit: parsedLimit,
+        total_pages: Math.ceil(total / parsedLimit),
+      },
     });
-
   } catch (error) {
     logger.error('List personal transactions error:', error);
-    res.status(500).json({ success: false, message: 'Failed to fetch transactions' });
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch transactions',
+    });
   }
 };
 

@@ -79,9 +79,9 @@ class PersonalTransactionItem extends StatelessWidget {
               style:
                   const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
           Text('${tx['recipient_phone'] ?? ''} \u00b7 $timeStr',
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 10.5,
-                  color: Colors.grey,
+                  color: context.appSecondaryText,
                   fontWeight: FontWeight.w700)),
         ])),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [

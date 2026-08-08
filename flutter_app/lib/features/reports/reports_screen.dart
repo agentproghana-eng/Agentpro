@@ -729,7 +729,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         ),
                         decoration: BoxDecoration(
                           border: Border.all(
-                            color: Colors.grey.withValues(alpha: 0.3),
+                            color: context.appDivider,
                           ),
                           borderRadius: BorderRadius.circular(10),
                         ),
