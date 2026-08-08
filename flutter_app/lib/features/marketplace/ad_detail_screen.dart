@@ -5,6 +5,7 @@ import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_network_image.dart';
 import '../../shared/widgets/app_widgets.dart';
+import '../../shared/theme/app_colors.dart';
 
 class AdDetailScreen extends StatefulWidget {
   final String adId;
@@ -183,7 +184,9 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
                                     .withValues(alpha: 0.1),
                                 child: Center(
                                     child: Icon(Icons.broken_image_outlined,
-                                        size: 40, color: Colors.grey[500])),
+                                        size: 40,
+                                        color: context.appSecondaryText
+                                            .withValues(alpha: 0.78))),
                               ),
                             ),
                           ),
@@ -223,33 +226,39 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
                       const SizedBox(width: 4),
                       Text(
                         '${double.parse(ad['avg_rating'].toString()).toStringAsFixed(1)} · ${ad['rating_count']} rating${ad['rating_count'].toString() == '1' ? '' : 's'}',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                        style: TextStyle(
+                            color: context.appSecondaryText, fontSize: 13),
                       ),
                     ]),
                   ],
                   const SizedBox(height: 12),
                   Text(ad['description'] ?? '',
-                      style: TextStyle(color: Colors.grey[700])),
+                      style: TextStyle(color: context.appPrimaryText)),
                   if (ad['location'] != null) ...[
                     const SizedBox(height: 12),
                     Row(children: [
                       Icon(Icons.location_on_outlined,
-                          size: 16, color: Colors.grey[500]),
+                          size: 16,
+                          color:
+                              context.appSecondaryText.withValues(alpha: 0.78)),
                       const SizedBox(width: 4),
                       Text(ad['location'],
-                          style:
-                              TextStyle(color: Colors.grey[600], fontSize: 13)),
+                          style: TextStyle(
+                              color: context.appSecondaryText, fontSize: 13)),
                     ]),
                   ],
                   if (ad['published_at'] != null) ...[
                     const SizedBox(height: 8),
                     Row(children: [
                       Icon(Icons.calendar_today_outlined,
-                          size: 15, color: Colors.grey[500]),
+                          size: 15,
+                          color:
+                              context.appSecondaryText.withValues(alpha: 0.78)),
                       const SizedBox(width: 4),
                       Text(
                         'Published ${DateFormat('MMM d, y \'at\' h:mm a').format(DateTime.parse(ad['published_at']).toLocal())}',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                        style: TextStyle(
+                            color: context.appSecondaryText, fontSize: 13),
                       ),
                     ]),
                   ],
@@ -257,12 +266,14 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
                     const SizedBox(height: 8),
                     Row(children: [
                       Icon(Icons.phone_outlined,
-                          size: 15, color: Colors.grey[500]),
+                          size: 15,
+                          color:
+                              context.appSecondaryText.withValues(alpha: 0.78)),
                       const SizedBox(width: 4),
                       Text(
                         ad['contact_phone'],
                         style: TextStyle(
-                            color: Colors.grey[600],
+                            color: context.appSecondaryText,
                             fontSize: 13,
                             fontWeight: FontWeight.w600),
                       ),
@@ -444,7 +455,7 @@ class _AdPaymentSheetState extends State<_AdPaymentSheet> {
           const SizedBox(height: 4),
           Text(
               'Pay GH₵ ${widget.fee.toStringAsFixed(2)} via MTN MoMo, then enter your reference below.',
-              style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+              style: TextStyle(color: context.appSecondaryText, fontSize: 13)),
           const SizedBox(height: 16),
           TextField(
             controller: _refCtrl,

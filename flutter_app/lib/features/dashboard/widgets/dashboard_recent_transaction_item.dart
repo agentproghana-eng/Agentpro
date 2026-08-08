@@ -88,9 +88,9 @@ class DashboardRecentTransactionItem extends StatelessWidget {
                   Text(
                     '${transaction['customer_phone'] ?? ''}'
                     ' · $time',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 10.5,
-                      color: Colors.grey,
+                      color: context.appSecondaryText,
                       fontWeight: FontWeight.w700,
                     ),
                   ),

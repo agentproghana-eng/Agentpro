@@ -94,8 +94,9 @@ class _PersonalSubscriptionScreenState
                     padding: const EdgeInsets.all(20),
                     child: Column(children: [
                       Icon(isPaid ? Icons.check_circle : Icons.info_outline,
-                          color:
-                              isPaid ? AppTheme.successColor : Colors.grey[700],
+                          color: isPaid
+                              ? AppTheme.successColor
+                              : context.appPrimaryText,
                           size: 48),
                       const SizedBox(height: 8),
                       Text(
@@ -108,7 +109,7 @@ class _PersonalSubscriptionScreenState
                         const SizedBox(height: 4),
                         Text(
                             'Renews/Expires: ${DateFormat('dd MMM yyyy').format(DateTime.parse(expiresAt))}',
-                            style: TextStyle(color: Colors.grey[700])),
+                            style: TextStyle(color: context.appPrimaryText)),
                       ],
                     ])),
               ),

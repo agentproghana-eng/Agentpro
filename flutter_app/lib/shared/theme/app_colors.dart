@@ -14,9 +14,9 @@ extension AppColors on BuildContext {
       isDarkMode ? AppTheme.darkScaffoldBg : const Color(0xFFF5F5F5);
   Color get appSurface => isDarkMode ? AppTheme.darkSurface : Colors.white;
   Color get appPrimaryText =>
-      isDarkMode ? AppTheme.darkPrimaryText : Colors.black87;
+      isDarkMode ? AppTheme.darkPrimaryText : const Color(0xFF212121);
   Color get appSecondaryText =>
-      isDarkMode ? AppTheme.darkSecondaryText : Colors.grey;
+      isDarkMode ? AppTheme.darkSecondaryText : const Color(0xFF616161);
   Color get appDivider =>
       isDarkMode ? AppTheme.darkDivider : Colors.grey.shade200;
 

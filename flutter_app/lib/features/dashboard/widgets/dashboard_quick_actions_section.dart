@@ -275,10 +275,14 @@ class DashboardQuickActionsSection extends StatelessWidget {
     return _QuickAction(
       icon: icon,
       label: label,
-      bgColor: context.appTileColor(
-        disabled ? Colors.grey[200]! : bgColor,
-      ),
-      iconColor: disabled ? Colors.grey : iconColor,
+      bgColor: disabled
+          ? context.appSecondaryText.withValues(
+              alpha: context.isDarkMode ? 0.12 : 0.10,
+            )
+          : context.appTileColor(bgColor),
+      iconColor: disabled
+          ? context.appSecondaryText.withValues(alpha: 0.75)
+          : iconColor,
       onTap: disabled
           ? () {
               ScaffoldMessenger.of(context).showSnackBar(

@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/theme/app_colors.dart';
 
 /// Entry point for account creation - forks to the existing Business
 /// registration (unchanged) or the new lightweight Personal
@@ -81,7 +82,8 @@ class _AccountTypeCard extends StatelessWidget {
                         fontWeight: FontWeight.bold, fontSize: 15)),
                 const SizedBox(height: 4),
                 Text(subtitle,
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                    style: TextStyle(
+                        fontSize: 12, color: context.appSecondaryText)),
               ])),
           const Icon(Icons.chevron_right),
         ]),

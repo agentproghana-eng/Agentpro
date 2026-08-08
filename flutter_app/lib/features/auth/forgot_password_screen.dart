@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
+import '../../shared/theme/app_colors.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -57,7 +58,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   ?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Text('Enter your email and we\'ll send you a reset link.',
-              style: TextStyle(color: Colors.grey[600])),
+              style: TextStyle(color: context.appSecondaryText)),
           const SizedBox(height: 32),
           AppTextField(
             controller: _emailCtrl,
@@ -99,7 +100,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           'If ${_emailCtrl.text} is registered, you\'ll receive a password reset link shortly.\n\n'
           'The link expires in 1 hour.',
           textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.grey[600]),
+          style: TextStyle(color: context.appSecondaryText),
         ),
         const SizedBox(height: 32),
         AppButton(

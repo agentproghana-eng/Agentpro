@@ -30,7 +30,16 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
-      textTheme: GoogleFonts.interTextTheme(),
+      scaffoldBackgroundColor: const Color(0xFFF5F5F5),
+      textTheme: GoogleFonts.interTextTheme(
+        ThemeData.light().textTheme,
+      ).apply(
+        bodyColor: const Color(0xFF212121),
+        displayColor: const Color(0xFF212121),
+      ),
+      iconTheme: const IconThemeData(
+        color: Color(0xFF424242),
+      ),
       appBarTheme: AppBarTheme(
         backgroundColor: primaryColor,
         foregroundColor: Colors.white,
@@ -97,11 +106,36 @@ class AppTheme {
         color: Colors.white,
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: primaryColor.withValues(alpha: 0.1),
-        labelStyle:
-            GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500),
+        backgroundColor: const Color(0xFFF1F5F4),
+        selectedColor: primaryColor.withValues(alpha: 0.14),
+        disabledColor: const Color(0xFFF1F1F1),
+        checkmarkColor: primaryColor,
+        labelStyle: GoogleFonts.inter(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: const Color(0xFF37474F),
+        ),
+        secondaryLabelStyle: GoogleFonts.inter(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: const Color(0xFF212121),
+        ),
+        side: const BorderSide(
+          color: Color(0xFFB0BEC5),
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+      ),
+      listTileTheme: const ListTileThemeData(
+        textColor: Color(0xFF212121),
+        iconColor: Color(0xFF424242),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: primaryColor,
+        ),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: Colors.white,

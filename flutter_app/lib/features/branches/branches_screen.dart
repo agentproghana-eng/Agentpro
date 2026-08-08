@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
+import '../../shared/theme/app_colors.dart';
 
 /// Standalone branches list screen.
 /// Used by managers (read-only context — they don't create branches)
@@ -154,7 +155,8 @@ class _Row extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(children: [
-        Text(label, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+        Text(label,
+            style: TextStyle(color: context.appSecondaryText, fontSize: 12)),
         const Spacer(),
         Text(value,
             style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),

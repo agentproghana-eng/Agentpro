@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_colors.dart';
 
 // ── AppButton ─────────────────────────────────────────────────
 
@@ -232,8 +233,11 @@ class InfoCard extends StatelessWidget {
                   ),
                   const Spacer(),
                   if (onTap != null)
-                    Icon(Icons.chevron_right,
-                        color: Colors.grey[400], size: 20),
+                    Icon(
+                      Icons.chevron_right,
+                      color: context.appSecondaryText.withValues(alpha: 0.70),
+                      size: 20,
+                    ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -243,12 +247,22 @@ class InfoCard extends StatelessWidget {
                       .titleLarge
                       ?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 2),
-              Text(title,
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+              Text(
+                title,
+                style: TextStyle(
+                  color: context.appSecondaryText,
+                  fontSize: 12,
+                ),
+              ),
               if (subtitle != null) ...[
                 const SizedBox(height: 2),
-                Text(subtitle!,
-                    style: TextStyle(color: Colors.grey[400], fontSize: 11)),
+                Text(
+                  subtitle!,
+                  style: TextStyle(
+                    color: context.appSecondaryText.withValues(alpha: 0.82),
+                    fontSize: 11,
+                  ),
+                ),
               ],
             ],
           ),
@@ -332,16 +346,29 @@ class EmptyState extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 64, color: Colors.grey[300]),
+            Icon(
+              icon,
+              size: 64,
+              color: context.appSecondaryText.withValues(alpha: 0.55),
+            ),
             const SizedBox(height: 16),
-            Text(title,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600, color: Colors.grey[600])),
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: context.appPrimaryText,
+                  ),
+            ),
             if (subtitle != null) ...[
               const SizedBox(height: 8),
-              Text(subtitle!,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey[400], fontSize: 14)),
+              Text(
+                subtitle!,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: context.appSecondaryText,
+                  fontSize: 14,
+                ),
+              ),
             ],
             if (actionLabel != null && onAction != null) ...[
               const SizedBox(height: 24),
@@ -368,9 +395,13 @@ class SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(title,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.bold, color: Colors.grey[700])),
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: context.appPrimaryText,
+              ),
+        ),
         const Spacer(),
         if (actionLabel != null)
           TextButton(onPressed: onAction, child: Text(actionLabel!)),

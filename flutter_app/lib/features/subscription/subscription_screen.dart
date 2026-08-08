@@ -103,7 +103,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                         const SizedBox(height: 4),
                         Text(
                             'Expires: ${DateFormat('dd MMM yyyy').format(DateTime.parse(expiresAt))}',
-                            style: TextStyle(color: Colors.grey[700])),
+                            style: TextStyle(color: context.appPrimaryText)),
                       ],
                     ])),
               ),

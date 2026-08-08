@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/theme/app_colors.dart';
 
 class CloseShiftScreen extends StatefulWidget {
   final String shiftId;
@@ -131,9 +132,12 @@ class _CloseShiftScreenState extends State<CloseShiftScreen> {
                       fontWeight: FontWeight.bold, fontSize: 18, color: color)),
               if (flagged) ...[
                 const SizedBox(height: 4),
-                const Text(
+                Text(
                   'This variance is large enough to be flagged for your manager/owner.',
-                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: context.appSecondaryText,
+                  ),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -168,7 +172,13 @@ class _SummaryRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+        Text(
+          label,
+          style: TextStyle(
+            color: context.appSecondaryText,
+            fontSize: 13,
+          ),
+        ),
         Text(value,
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
       ]),

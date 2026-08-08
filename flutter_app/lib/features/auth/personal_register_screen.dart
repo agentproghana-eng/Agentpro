@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/auth/auth_bloc.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
+import '../../shared/theme/app_colors.dart';
 
 /// Lightweight Personal Subscriber registration - a single form, no
 /// company info, no approval wait. On success, the router picks up the
@@ -80,9 +81,10 @@ class _PersonalRegisterScreenState extends State<PersonalRegisterScreen> {
                       style:
                           TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                       'Free to start. No business registration or approval needed.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      style: TextStyle(
+                          fontSize: 12, color: context.appSecondaryText)),
                   const SizedBox(height: 20),
                   Row(children: [
                     Expanded(

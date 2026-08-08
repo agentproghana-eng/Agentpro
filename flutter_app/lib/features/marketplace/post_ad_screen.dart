@@ -222,8 +222,8 @@ class _PostAdScreenState extends State<PostAdScreen> {
                                       child: GestureDetector(
                                         onTap: () => _removeImage(entry.key),
                                         child: Container(
-                                          decoration: const BoxDecoration(
-                                              color: Colors.black54,
+                                          decoration: BoxDecoration(
+                                              color: context.appSecondaryText,
                                               shape: BoxShape.circle),
                                           padding: const EdgeInsets.all(2),
                                           child: const Icon(Icons.close,
@@ -240,11 +240,11 @@ class _PostAdScreenState extends State<PostAdScreen> {
                               width: 80,
                               height: 80,
                               decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey[300]!),
+                                border: Border.all(color: context.appDivider),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Icon(Icons.add_a_photo_outlined,
-                                  color: Colors.grey[500]),
+                                  color: context.appSecondaryText),
                             ),
                           ),
                       ],
