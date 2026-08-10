@@ -60,19 +60,6 @@ class _PendingApprovalsScreenState extends State<PendingApprovalsScreen> {
     }
   }
 
-  String _providerLabel(String p) {
-    switch (p) {
-      case 'mtn':
-        return 'MTN';
-      case 'telecel':
-        return 'Telecel';
-      case 'at_money':
-        return 'AirtelTigo';
-      default:
-        return p;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -93,7 +80,6 @@ class _PendingApprovalsScreenState extends State<PendingApprovalsScreen> {
                           return _ApprovalCard(
                             agentName:
                                 '${item['first_name'] ?? ''} ${item['last_name'] ?? ''}',
-                            providerLabel: _providerLabel(item['provider']),
                             movementType: item['movement_type'],
                             amount: (double.tryParse(item['amount']
                                         .toString()
@@ -113,7 +99,6 @@ class _PendingApprovalsScreenState extends State<PendingApprovalsScreen> {
 
 class _ApprovalCard extends StatelessWidget {
   final String agentName;
-  final String providerLabel;
   final String movementType;
   final String amount;
   final String? notes;
@@ -122,7 +107,6 @@ class _ApprovalCard extends StatelessWidget {
 
   const _ApprovalCard({
     required this.agentName,
-    required this.providerLabel,
     required this.movementType,
     required this.amount,
     required this.notes,
@@ -149,7 +133,7 @@ class _ApprovalCard extends StatelessWidget {
             Text(agentName,
                 style:
                     const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-            Text(providerLabel,
+            Text('Cash drawer',
                 style:
                     TextStyle(fontSize: 10.5, color: context.appSecondaryText)),
           ]),

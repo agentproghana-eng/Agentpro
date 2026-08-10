@@ -245,18 +245,7 @@ class AppRouter {
         ),
         GoRoute(
           path: '/balances/cash-adjustment',
-          builder: (_, state) {
-            final provider = _providerFromExtra(state.extra);
-
-            if (provider == null) {
-              return const AppRouteErrorScreen(
-                message: 'A provider is required.',
-                location: '/balances/cash-adjustment',
-              );
-            }
-
-            return CashAdjustmentScreen(provider: provider);
-          },
+          builder: (_, __) => const CashAdjustmentScreen(),
         ),
         GoRoute(
             path: '/balances/pending-approvals',

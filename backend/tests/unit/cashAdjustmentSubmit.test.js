@@ -140,7 +140,7 @@ describe('Cash adjustment submission canonical cash drawer posting', () => {
     expect(movementInsert[0]).toContain("'cash_at_hand'");
     expect(movementInsert[1]).toEqual([
       'agent-1',
-      'telecel',
+      null,
       150,
       500,
       650,
@@ -185,7 +185,7 @@ describe('Cash adjustment submission canonical cash drawer posting', () => {
     expect(movementInsert[0]).toContain("'pending'");
     expect(movementInsert[1]).toEqual([
       'agent-1',
-      'telecel',
+      null,
       'cash_injection',
       100,
       500,
@@ -226,7 +226,7 @@ describe('Cash adjustment submission canonical cash drawer posting', () => {
     expect(movementInsert).toBeDefined();
     expect(movementInsert[1]).toEqual([
       'agent-1',
-      'telecel',
+      null,
       'cash_withdrawal',
       -75,
       500,

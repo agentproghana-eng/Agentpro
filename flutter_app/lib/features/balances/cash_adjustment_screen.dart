@@ -5,8 +5,7 @@ import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
 
 class CashAdjustmentScreen extends StatefulWidget {
-  final String provider;
-  const CashAdjustmentScreen({super.key, required this.provider});
+  const CashAdjustmentScreen({super.key});
 
   @override
   State<CashAdjustmentScreen> createState() => _CashAdjustmentScreenState();
@@ -39,7 +38,6 @@ class _CashAdjustmentScreenState extends State<CashAdjustmentScreen> {
     try {
       final res =
           await ApiClient.instance.post('/balances/cash-adjustment', data: {
-        'provider': widget.provider,
         'adjustment_type': type,
         'amount': amount,
         'reason': _reasonCtrl.text.trim(),

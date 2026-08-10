@@ -1194,7 +1194,7 @@ exports.recordFloatReceived = async (req, res) => {
 //   money from the till - requires manager/owner approval before it
 //   takes effect, since this is a bigger financial event.
 exports.submitCashAdjustment = async (req, res) => {
-  const { provider, adjustment_type, amount, reason } = req.body;
+  const { adjustment_type, amount, reason } = req.body;
   const agentId = req.user.id;
 
   const validTypes = ["cash_set", "cash_injection", "cash_withdrawal"];
@@ -1218,8 +1218,8 @@ exports.submitCashAdjustment = async (req, res) => {
 
   try {
     const result = await withTransaction(async (client) => {
-      // Physical cash is one drawer per agent. Provider remains on the
-      // movement only as request/UI provenance; it is not the cash owner.
+      // Physical cash is one drawer per agent. Cash-only adjustments
+      // have no provider dimension; provider is stored as NULL.
       const cashBalance = await getOrCreateAgentCashBalance(
         client,
         agentId
@@ -1263,7 +1263,7 @@ exports.submitCashAdjustment = async (req, res) => {
            )`,
           [
             agentId,
-            provider,
+            null,
             amt - cashBefore,
             cashBefore,
             amt,
@@ -1309,7 +1309,7 @@ exports.submitCashAdjustment = async (req, res) => {
          RETURNING id`,
         [
           agentId,
-          provider,
+          null,
           adjustment_type,
           signedAmt,
           cashBefore,
@@ -1518,7 +1518,7 @@ exports.reviewCashAdjustment = async (req, res) => {
 exports.listPendingAdjustments = async (req, res) => {
   try {
     const result = await query(
-      `SELECT abm.id, abm.agent_id, abm.provider, abm.movement_type, abm.amount,
+      `SELECT abm.id, abm.agent_id, abm.movement_type, abm.amount,
               abm.notes, abm.created_at, u.first_name, u.last_name
        FROM agent_balance_movements abm
        JOIN users u ON u.id = abm.agent_id

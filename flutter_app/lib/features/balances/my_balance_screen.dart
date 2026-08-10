@@ -232,6 +232,13 @@ class _MyBalanceScreenState extends State<MyBalanceScreen> {
                         colorEnd: const Color(0xFF8A6300),
                         tag: 'PHYSICAL',
                       ),
+                      const SizedBox(height: 10),
+                      _ActionChip(
+                        icon: Icons.payments_outlined,
+                        label: 'Adjust Cash',
+                        route: '/balances/cash-adjustment',
+                        onChanged: _load,
+                      ),
                       const SizedBox(height: 24),
                       if (_simWarning != null) ...[
                         _BalanceNotice(
@@ -397,9 +404,8 @@ class _ProviderBalanceCard extends StatelessWidget {
 
         const SizedBox(height: 14),
 
-        // Keep the existing balance action workflows unchanged in this
-        // accounting-reader slice. Their destination screens perform their
-        // own physical-SIM selection and validation.
+        // Electronic actions remain attached to the physical SIM/provider.
+        // Physical cash adjustment is agent-level and is shown once above.
         Row(
           children: [
             Expanded(
@@ -407,16 +413,6 @@ class _ProviderBalanceCard extends StatelessWidget {
                 icon: Icons.call_received,
                 label: 'Declare Float',
                 route: '/balances/float-received',
-                provider: provider,
-                onChanged: onChanged,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _ActionChip(
-                icon: Icons.payments_outlined,
-                label: 'Adjust Cash',
-                route: '/balances/cash-adjustment',
                 provider: provider,
                 onChanged: onChanged,
               ),
@@ -575,14 +571,14 @@ class _ActionChip extends StatelessWidget {
   final IconData icon;
   final String label;
   final String route;
-  final String provider;
+  final String? provider;
   final VoidCallback onChanged;
 
   const _ActionChip({
     required this.icon,
     required this.label,
     required this.route,
-    required this.provider,
+    this.provider,
     required this.onChanged,
   });
 
@@ -593,9 +589,11 @@ class _ActionChip extends StatelessWidget {
       onTap: () async {
         await context.push(
           route,
-          extra: {
-            'provider': provider,
-          },
+          extra: provider == null
+              ? null
+              : {
+                  'provider': provider,
+                },
         );
 
         onChanged();
