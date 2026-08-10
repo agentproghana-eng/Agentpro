@@ -7,6 +7,7 @@ import '../../core/api/api_client.dart';
 import '../../core/auth/auth_bloc.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/utils/transaction_labels.dart';
 import '../../shared/widgets/app_widgets.dart';
 import '../../core/services/sim_card_service.dart';
 
@@ -34,10 +35,10 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
   bool _loadingMore = false;
   bool _hasMore = true;
   int _page = 1;
+  int _total = 0;
   String? _error;
   bool _showBranchFilter = false;
   bool _isAgent = false;
-  Map<String, SimCard?>? _simMap;
   List<SimCard> _simCards = [];
   String? _simIccidFilter;
 
@@ -57,11 +58,12 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     {'value': 'all', 'label': 'All'},
     {'value': 'cash_in', 'label': 'Cash In'},
     {'value': 'cash_out', 'label': 'Cash Out'},
+    {'value': 'float_received', 'label': 'Float Received'},
     {'value': 'send_money', 'label': 'Send'},
     {'value': 'airtime', 'label': 'Airtime'},
     {'value': 'data_bundle', 'label': 'Data'},
     {'value': 'merchant_payment', 'label': 'Merchant'},
-    {'value': 'bill_payment', 'label': 'Pay Agent'},
+    {'value': 'bill_payment', 'label': 'Pay to Agent'},
     {'value': 'balance_enquiry', 'label': 'Balance'},
     {'value': 'business_deposit', 'label': 'Business In'},
     {'value': 'business_withdrawal', 'label': 'Business Out'},
@@ -85,7 +87,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     {'value': 'date', 'label': 'Date'},
     {'value': 'amount', 'label': 'Amount'},
     {'value': 'commission', 'label': 'Commission'},
-    {'value': 'fee', 'label': 'Transfer Charge'},
+    {'value': 'fee', 'label': 'Recorded Network Charge'},
   ];
 
   @override
@@ -145,11 +147,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
       final cards = await SimCardService.getSimCards();
       if (!mounted) return;
       setState(() {
-        _simMap = map;
         _simCards = cards.where((c) => c.iccid.isNotEmpty).toList();
-        if (_providerFilter != 'all' && map[_providerFilter] == null) {
-          _providerFilter = 'all';
-        }
       });
     } catch (_) {
       // Permission denied or detection failed - leave _simMap null and
@@ -218,10 +216,14 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
       final meta = res.data['meta'] as Map<String, dynamic>?;
       if (mounted) {
         setState(() {
+          final currentPage = (meta?['page'] as num?)?.toInt() ?? 1;
+          final totalPages = (meta?['total_pages'] as num?)?.toInt() ?? 1;
+
           _transactions = data;
+          _page = currentPage;
+          _total = (meta?['total'] as num?)?.toInt() ?? data.length;
           _loading = false;
-          _hasMore = meta != null &&
-              (meta['page'] as int) < (meta['total_pages'] as int);
+          _hasMore = currentPage < totalPages;
         });
       }
     } catch (_) {
@@ -247,15 +249,29 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
       final meta = res.data['meta'] as Map<String, dynamic>?;
       if (mounted) {
         setState(() {
+          final currentPage = (meta?['page'] as num?)?.toInt() ?? nextPage;
+          final totalPages =
+              (meta?['total_pages'] as num?)?.toInt() ?? currentPage;
+
           _transactions.addAll(data);
-          _page = nextPage;
+          _page = currentPage;
+          _total = (meta?['total'] as num?)?.toInt() ?? _total;
           _loadingMore = false;
-          _hasMore = meta != null &&
-              (meta['page'] as int) < (meta['total_pages'] as int);
+          _hasMore = currentPage < totalPages;
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _loadingMore = false);
+      if (!mounted) return;
+
+      setState(() => _loadingMore = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not load more transactions. Pull down to retry.',
+          ),
+        ),
+      );
     }
   }
 
@@ -277,6 +293,9 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     if (_branchFilter != null) count++;
     return count;
   }
+
+  bool get _hasAnyFiltering =>
+      _activeFilterCount > 0 || _searchController.text.trim().isNotEmpty;
 
   String get _dateRangeLabel {
     if (_dateRange == null) return 'Any date';
@@ -581,39 +600,60 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     String current,
     void Function(String) onSelect, {
     Color Function(String)? colorFor,
+    bool scrollable = false,
   }) {
-    return Row(
-      children: options.map((opt) {
-        final selected = current == opt['value'];
-        final color =
-            colorFor != null ? colorFor(opt['value']!) : AppTheme.primaryColor;
-        return Expanded(
-          child: GestureDetector(
-            onTap: () => onSelect(opt['value']!),
-            child: Container(
-              margin: const EdgeInsets.only(right: 6),
-              padding: const EdgeInsets.symmetric(vertical: 7),
-              decoration: BoxDecoration(
-                color: selected ? color : context.appSurface,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                opt['label']!,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: selected
-                      ? (color == AppTheme.mtnColor
-                          ? Colors.black
-                          : Colors.white)
-                      : context.appSecondaryText,
-                ),
-              ),
+    Widget buildPill(Map<String, String> opt) {
+      final selected = current == opt['value'];
+      final color =
+          colorFor != null ? colorFor(opt['value']!) : AppTheme.primaryColor;
+
+      return GestureDetector(
+        onTap: () => onSelect(opt['value']!),
+        child: Container(
+          margin: const EdgeInsets.only(right: 6),
+          padding: EdgeInsets.symmetric(
+            horizontal: scrollable ? 12 : 4,
+            vertical: 7,
+          ),
+          constraints: scrollable ? const BoxConstraints(minWidth: 52) : null,
+          decoration: BoxDecoration(
+            color: selected ? color : context.appSurface,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            opt['label']!,
+            maxLines: 1,
+            softWrap: false,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: selected
+                  ? (color == AppTheme.mtnColor ? Colors.black : Colors.white)
+                  : context.appSecondaryText,
             ),
           ),
-        );
-      }).toList(),
+        ),
+      );
+    }
+
+    if (scrollable) {
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: options.map(buildPill).toList(),
+        ),
+      );
+    }
+
+    return Row(
+      children: options
+          .map(
+            (opt) => Expanded(
+              child: buildPill(opt),
+            ),
+          )
+          .toList(),
     );
   }
 
@@ -737,41 +777,29 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
           _filterSectionLabel('TYPE'),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: _filterPillRow(_types, _typeFilter, (v) {
-              setState(() => _typeFilter = v);
-              _load();
-            }),
+            child: _filterPillRow(
+              _types,
+              _typeFilter,
+              (v) {
+                setState(() => _typeFilter = v);
+                _load();
+              },
+              scrollable: true,
+            ),
           ),
           _filterSectionLabel('PROVIDER'),
-          if (_simMap != null && _simMap!.values.every((v) => v == null))
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: Text(
-                'No SIM card detected. Insert a SIM to filter by provider.',
-                style: TextStyle(fontSize: 11, color: context.appSecondaryText),
-              ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: _filterPillRow(
-                _simMap == null
-                    ? _providers
-                    : _providers
-                        .where(
-                          (p) =>
-                              p['value'] == 'all' ||
-                              _simMap![p['value']] != null,
-                        )
-                        .toList(),
-                _providerFilter,
-                (v) {
-                  setState(() => _providerFilter = v);
-                  _load();
-                },
-                colorFor: AppTheme.providerColor,
-              ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: _filterPillRow(
+              _providers,
+              _providerFilter,
+              (v) {
+                setState(() => _providerFilter = v);
+                _load();
+              },
+              colorFor: AppTheme.providerColor,
             ),
+          ),
           if (_isAgent && _simCards.length >= 2) ...[
             _filterSectionLabel('SIM'),
             Padding(
@@ -791,6 +819,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                   setState(() => _simIccidFilter = v == 'all' ? null : v);
                   _load();
                 },
+                scrollable: true,
               ),
             ),
           ],
@@ -838,19 +867,38 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
               ),
             ),
           ],
-          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                _loading
+                    ? 'Loading transactions…'
+                    : '$_total ${_total == 1 ? 'transaction' : 'transactions'}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: context.appSecondaryText,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
           const Divider(height: 1),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
-                : _error != null
-                    ? Center(child: Text(_error!))
+                : _error != null && _transactions.isEmpty
+                    ? _BusinessHistoryErrorState(onRetry: _load)
                     : _transactions.isEmpty
-                        ? const Center(child: Text('No transactions found'))
+                        ? _BusinessHistoryEmptyState(
+                            filtered: _hasAnyFiltering,
+                            onClear: _clearAllFilters,
+                          )
                         : RefreshIndicator(
                             onRefresh: _load,
                             child: ListView.builder(
                               controller: _scrollController,
+                              physics: const AlwaysScrollableScrollPhysics(),
                               padding: const EdgeInsets.all(12),
                               itemCount:
                                   _transactions.length + (_hasMore ? 1 : 0),
@@ -859,7 +907,8 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                                   return const Padding(
                                     padding: EdgeInsets.all(16),
                                     child: Center(
-                                        child: CircularProgressIndicator()),
+                                      child: CircularProgressIndicator(),
+                                    ),
                                   );
                                 }
                                 final tx =
@@ -875,6 +924,110 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
   }
 }
 
+class _BusinessHistoryErrorState extends StatelessWidget {
+  final Future<void> Function() onRetry;
+
+  const _BusinessHistoryErrorState({
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.cloud_off_outlined,
+              size: 46,
+              color: context.appSecondaryText,
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'Could not load transactions',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Please check your connection and try again.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: context.appSecondaryText,
+              ),
+            ),
+            const SizedBox(height: 18),
+            ElevatedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BusinessHistoryEmptyState extends StatelessWidget {
+  final bool filtered;
+  final VoidCallback onClear;
+
+  const _BusinessHistoryEmptyState({
+    required this.filtered,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              filtered ? Icons.search_off_rounded : Icons.receipt_long_outlined,
+              size: 48,
+              color: context.appSecondaryText,
+            ),
+            const SizedBox(height: 14),
+            Text(
+              filtered ? 'No matching transactions' : 'No transactions yet',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              filtered
+                  ? 'Try changing your search or filters.'
+                  : 'Transactions will appear here once activity is recorded.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: context.appSecondaryText,
+              ),
+            ),
+            if (filtered) ...[
+              const SizedBox(height: 16),
+              TextButton.icon(
+                onPressed: onClear,
+                icon: const Icon(Icons.filter_alt_off_outlined),
+                label: const Text('Clear filters'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _TransactionRow extends StatelessWidget {
   final Map<String, dynamic> tx;
   const _TransactionRow({required this.tx});
@@ -882,7 +1035,7 @@ class _TransactionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final type = (tx['transaction_type'] ?? '').toString();
-    final isCashIn = type == 'cash_in';
+    final isIncoming = type == 'cash_in' || type == 'float_received';
     final amount = double.tryParse(tx['amount']?.toString() ?? '0') ?? 0;
     final commission = tx['net_commission'] != null
         ? double.tryParse(tx['net_commission'].toString())
@@ -917,7 +1070,7 @@ class _TransactionRow extends StatelessWidget {
             tx['provider'] ?? '',
           ).withValues(alpha: 0.15),
           child: Icon(
-            isCashIn ? Icons.call_received : Icons.call_made,
+            isIncoming ? Icons.call_received : Icons.call_made,
             color: AppTheme.providerColor(tx['provider'] ?? ''),
           ),
         ),
@@ -925,7 +1078,10 @@ class _TransactionRow extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              type.replaceAll('_', ' '),
+              transactionTypeLabel(
+                type,
+                (tx['provider'] ?? '').toString(),
+              ),
               style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
             ),
             const SizedBox(width: 6),

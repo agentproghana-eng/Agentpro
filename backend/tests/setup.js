@@ -1,5 +1,6 @@
 // Set test environment variables before any module loads
 process.env.NODE_ENV = 'test';
+process.env.APP_NAME = 'AgentPro Test';
 process.env.PORT = '3001';
 process.env.DATABASE_URL = 'postgresql://postgres:postgres@localhost:5432/agentpro_test';
 process.env.REDIS_URL = 'redis://localhost:6379';

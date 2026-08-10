@@ -42,7 +42,7 @@ class AppConstants {
     'cash_out': 'Cash Out',
     'send_money': 'Send Money',
     'merchant_payment': 'Merchant Payment',
-    'bill_payment': 'Bill Payment',
+    'bill_payment': 'Pay to Agent',
     'airtime': 'Airtime',
     'data_bundle': 'Data Bundle',
     'balance_enquiry': 'Balance Enquiry',

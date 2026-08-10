@@ -89,6 +89,8 @@ class OfflineQueueService {
         'provider': requestFields['provider'],
         'sim_slot': requestFields['sim_slot'],
         'sim_iccid': requestFields['sim_iccid'],
+        'installation_id': requestFields['installation_id'],
+        'sim_subscription_id': requestFields['sim_subscription_id'],
         'status': status,
         'network_reference': networkReference,
         'failure_reason': failureReason,

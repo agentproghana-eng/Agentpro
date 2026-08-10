@@ -23,6 +23,29 @@ router.use(requireActiveSubscription);
 // POST /api/v1/transactions — Initiate a transaction
 router.post('/', [
   body('provider').isIn(['mtn', 'telecel', 'at_money']).withMessage('Invalid provider'),
+  body('client_operation_id')
+    .optional({ nullable: true, checkFalsy: true })
+    .isUUID()
+    .withMessage('client_operation_id must be a valid UUID'),
+  body('sim_iccid')
+    .optional({ nullable: true })
+    .isString()
+    .isLength({ max: 100 })
+    .withMessage('sim_iccid is invalid'),
+  body('sim_slot')
+    .optional({ nullable: true })
+    .isInt({ min: 0 })
+    .withMessage('sim_slot must be a non-negative integer')
+    .toInt(),
+  body('installation_id')
+    .optional({ nullable: true, checkFalsy: true })
+    .isUUID()
+    .withMessage('installation_id must be a valid UUID'),
+  body('sim_subscription_id')
+    .optional({ nullable: true })
+    .isInt({ min: 0 })
+    .withMessage('sim_subscription_id must be a non-negative integer')
+    .toInt(),
   body('transaction_type').isIn([
     'cash_in', 'cash_out', 'send_money', 'merchant_payment',
     'commission_balance', 'cash_in_commission', 'commission_transfer',

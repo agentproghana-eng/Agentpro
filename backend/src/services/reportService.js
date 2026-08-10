@@ -315,7 +315,7 @@ async function generateTransactionReportExcel({ transactions, filters, summary, 
   const headerRow = sheet.addRow([
     'Date', 'Reference', 'Network Ref', 'Transaction Type',
     'Provider', 'Customer Phone', 'Customer Name', 'Amount (GHS)',
-    'Transfer Charge (GHS)', 'Commission (GHS)', 'Status', 'Agent', 'Branch', 'SIM (ICCID)',
+    'Recorded Network Charge (GHS)', 'Commission (GHS)', 'Status', 'Agent', 'Branch', 'SIM (ICCID)',
   ]);
   headerRow.eachCell(cell => {
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF006B5E' } };

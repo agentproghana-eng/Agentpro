@@ -89,7 +89,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     {'value': 'date', 'label': 'Date'},
     {'value': 'amount', 'label': 'Amount'},
     {'value': 'commission', 'label': 'Commission'},
-    {'value': 'fee', 'label': 'Transfer Charge'},
+    {'value': 'fee', 'label': 'Recorded Network Charge'},
   ];
 
   @override

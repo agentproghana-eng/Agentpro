@@ -1,5 +1,27 @@
+const mockDbQuery = jest.fn();
+const mockPoolQuery = jest.fn();
+
+jest.mock('../../src/config/database', () => ({
+  query: (...args) => mockDbQuery(...args),
+  pool: {
+    query: (...args) => mockPoolQuery(...args),
+  },
+  withTransaction: jest.fn(),
+  connectDB: jest.fn(),
+}));
+
 const request = require('supertest');
 const app = require('../../server');
+
+beforeEach(() => {
+  jest.clearAllMocks();
+
+  // The auth case in this file only needs "user does not exist".
+  mockDbQuery.mockResolvedValue({ rows: [] });
+
+  // Health endpoint should see its database dependency as healthy.
+  mockPoolQuery.mockResolvedValue({ rows: [{ '?column?': 1 }] });
+});
 
 // ─── Auth Integration Tests ───────────────────────────────────
 

@@ -36,10 +36,12 @@ String transactionTypeLabel(String type, String provider) {
       return 'Cash Out Commission';
     case 'commission_transfer':
       return 'Commission to Float';
+    case 'float_received':
+      return 'Float Received';
     case 'working_to_float':
-      return 'M-PESA to Float';
+      return 'Working Account to Float';
     case 'float_to_working':
-      return 'Float to M-PESA';
+      return 'Float to Working Account';
     case 'business_deposit':
       return 'Business Deposit';
     case 'business_withdrawal':

@@ -1,5 +1,7 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:convert';
+
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:uuid/uuid.dart';
 
 class StorageService {
   static late FlutterSecureStorage _storage;
@@ -8,9 +10,11 @@ class StorageService {
   static const _keyRefreshToken = 'refresh_token';
   static const _keyUser = 'user_data';
   static const _keyBiometricEnabled = 'biometric_enabled';
+  static const _keyInstallationId = 'installation_id';
 
-  // In-memory cache avoids secure-storage reads on every API request.
+  // In-memory caches avoid secure-storage reads on hot paths.
   static String? _accessTokenCache;
+  static String? _installationIdCache;
 
   static Future<void> init() async {
     _storage = const FlutterSecureStorage(
@@ -21,6 +25,29 @@ class StorageService {
         storageCipherAlgorithm: StorageCipherAlgorithm.AES_GCM_NoPadding,
       ),
     );
+  }
+
+  /// Returns the durable identifier for this AgentPro installation.
+  ///
+  /// It survives normal logout/login because [clearSession] only removes
+  /// account/session data. It is intentionally installation-scoped rather
+  /// than user-scoped and is used only as a fallback identity component
+  /// when Android cannot expose a physical SIM's ICCID.
+  static Future<String> getOrCreateInstallationId() async {
+    if (_installationIdCache != null) {
+      return _installationIdCache!;
+    }
+
+    final stored = await _storage.read(key: _keyInstallationId);
+    if (stored != null && stored.trim().isNotEmpty) {
+      _installationIdCache = stored.trim();
+      return _installationIdCache!;
+    }
+
+    final generated = const Uuid().v4();
+    await _storage.write(key: _keyInstallationId, value: generated);
+    _installationIdCache = generated;
+    return generated;
   }
 
   static Future<void> saveAccessToken(String token) async {
@@ -102,5 +129,9 @@ class StorageService {
   static Future<void> markFeatureSeen(String key) =>
       _storage.write(key: 'seen_feature_$key', value: 'true');
 
-  static Future<void> clearAll() async => _storage.deleteAll();
+  static Future<void> clearAll() async {
+    _accessTokenCache = null;
+    _installationIdCache = null;
+    await _storage.deleteAll();
+  }
 }

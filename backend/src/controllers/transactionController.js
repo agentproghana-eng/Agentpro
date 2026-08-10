@@ -2,9 +2,41 @@ const { v4: uuidv4 } = require('uuid');
 const { query, withTransaction } = require('../config/database');
 const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
-const { calculateCommission } = require('../services/commissionService');
+const {
+  calculateAndPostCommission
+} = require('../services/commissionPostingService');
+const {
+  postCommissionTransfer
+} = require('../services/commissionTransferPostingService');
+const {
+  postCashIn
+} = require('../services/cashInPostingService');
+const {
+  postCashOut
+} = require('../services/cashOutPostingService');
+const {
+  postSendMoney
+} = require('../services/sendMoneyPostingService');
+const {
+  postAirtime
+} = require('../services/airtimePostingService');
+const {
+  postDataBundle
+} = require('../services/dataBundlePostingService');
+const {
+  postMerchantPayment
+} = require('../services/merchantPaymentPostingService');
+const {
+  postPayToAgent
+} = require('../services/payToAgentPostingService');
+const {
+  postWorkingFloatTransfer
+} = require('../services/workingFloatPostingService');
 const { sendTransactionNotification } = require('../services/notificationService');
 const { generateTransactionReceipt } = require('../services/reportService');
+const {
+  resolveAgentFinancialBranch
+} = require('../services/financialBranchService');
 
 async function recordAgentSimUsage({
   agentId,
@@ -101,18 +133,263 @@ exports.initiateTransaction = async (req, res) => {
   merchant_id,
   sim_iccid,
   sim_slot,
+  installation_id,
+  sim_subscription_id,
+  client_operation_id,
   } = req.body;
 
   const agentId = req.user.id;
   const companyId = req.user.company_id;
 
+  const feeValue =
+    transaction_type === 'send_money'
+      ? (parseFloat(fee) || 0)
+      : 0;
+
+  const normalizeSlot = (value) =>
+    value === null || value === undefined || value === ''
+      ? null
+      : Number(value);
+
+  const normalizedRequestedIccid = String(sim_iccid || '').trim();
+
+  const isSameSimIdentity = (existing) => {
+    const existingIccid = String(existing.sim_iccid || '').trim();
+    const sameSlot =
+      normalizeSlot(existing.sim_slot) === normalizeSlot(sim_slot);
+
+    // ICCID is authoritative when Android supplied it.
+    if (normalizedRequestedIccid) {
+      return existingIccid === normalizedRequestedIccid && sameSlot;
+    }
+
+    // Without ICCID, the operation must match the same installation,
+    // Android subscription and slot. This remains an unresolved physical
+    // identity and must never be merged into an ICCID-backed wallet.
+    return (
+      existingIccid === '' &&
+      sameSlot &&
+      String(existing.installation_id || '') ===
+        String(installation_id || '') &&
+      normalizeSlot(existing.sim_subscription_id) ===
+        normalizeSlot(sim_subscription_id)
+    );
+  };
+
+  const isSameClientOperation = (existing) =>
+    existing.provider === provider &&
+    existing.transaction_type === transaction_type &&
+    Number(existing.amount) === Number(amount) &&
+    String(existing.customer_phone || '') === String(customer_phone || '') &&
+    String(existing.customer_name || '') === String(customer_name || '') &&
+    String(existing.recipient_phone || '') === String(recipient_phone || '') &&
+    String(existing.recipient_name || '') === String(recipient_name || '') &&
+    String(existing.biller_code || '') === String(biller_code || '') &&
+    String(existing.biller_name || '') === String(biller_name || '') &&
+    String(existing.account_number || '') === String(account_number || '') &&
+    String(existing.notes || '') === String(notes || '') &&
+    Number(existing.fee || 0) === Number(feeValue) &&
+    String(existing.payment_reference || '') === String(payment_reference || '') &&
+    String(existing.merchant_id || '') === String(merchant_id || '') &&
+    isSameSimIdentity(existing);
+
   try {
+    if (client_operation_id) {
+      const existingResult = await query(
+        `SELECT id, reference, status, created_at,
+                provider, transaction_type, amount,
+                customer_phone, customer_name,
+                recipient_phone, recipient_name,
+                biller_code, biller_name, account_number,
+                notes, fee, payment_reference, merchant_id,
+                sim_iccid, sim_slot,
+                installation_id, sim_subscription_id,
+                (
+                  SELECT json_build_object(
+                    'id', ut.id,
+                    'ussd_string_pattern', ut.ussd_string_pattern,
+                    'pin_prompt_strings', ut.pin_prompt_strings,
+                    'success_strings', ut.success_strings,
+                    'failure_strings', ut.failure_strings,
+                    'timeout_seconds', ut.timeout_seconds,
+                    'retry_count', ut.retry_count
+                  )
+                  FROM ussd_templates ut
+                  WHERE ut.provider = transactions.provider
+                    AND ut.transaction_type = transactions.transaction_type
+                    AND ut.is_active = TRUE
+                  LIMIT 1
+                ) AS ussd_template
+         FROM transactions
+         WHERE agent_id = $1
+           AND client_operation_id = $2`,
+        [agentId, client_operation_id]
+      );
+
+      if (existingResult.rows.length > 0) {
+        const existing = existingResult.rows[0];
+
+        if (!isSameClientOperation(existing)) {
+          return res.status(409).json({
+            success: false,
+            message:
+              'client_operation_id has already been used for a different transaction'
+          });
+        }
+
+        return res.status(200).json({
+          success: true,
+          message: 'Existing transaction returned for retry.',
+          data: {
+            transaction_id: existing.id,
+            reference: existing.reference,
+            status: existing.status,
+            created_at: existing.created_at,
+            ussd_template: existing.ussd_template || null,
+            automation_params: {
+              amount: String(existing.amount ?? 0),
+              customer_phone: existing.customer_phone || '',
+              recipient_phone: existing.recipient_phone || '',
+              biller_code: existing.biller_code || '',
+              account_number: existing.account_number || '',
+              payment_reference: existing.payment_reference || '',
+              merchant_id: existing.merchant_id || ''
+            },
+            idempotent_replay: true
+          }
+        });
+      }
+    }
+
+    // Telecel and AT Money Cash Out are manual-recording operations.
+    // They already post their exact SIM e-Float and agent cash effects through
+    // /balances/cash-out-manual and must never create a second canonical
+    // Cash Out that could duplicate or omit principal ledger movements.
+    //
+    // This intentionally runs AFTER idempotent replay resolution above so an
+    // already-existing historical canonical operation can still replay safely.
+    if (
+      transaction_type === 'cash_out' &&
+      (provider === 'telecel' || provider === 'at_money')
+    ) {
+      return res.status(422).json({
+        success: false,
+        code: 'CASH_OUT_MANUAL_REQUIRED',
+        message:
+          'Telecel and AT Money Cash Out must be recorded through the manual Cash Out flow.'
+      });
+    }
+
+    // Telecel Agent Working Account / Float transfers are Telecel-only.
+    //
+    // This intentionally runs AFTER idempotent replay resolution so an
+    // already-existing historical canonical operation can still replay safely.
+    if (
+      (
+        transaction_type === 'working_to_float' ||
+        transaction_type === 'float_to_working'
+      ) &&
+      provider !== 'telecel'
+    ) {
+      return res.status(422).json({
+        success: false,
+        code: 'WORKING_FLOAT_TELECEL_ONLY',
+        message:
+          'Working Account / Float transfers are only supported on Telecel.'
+      });
+    }
+
+    // Agent Pay to Agent is currently an MTN-only transaction.
+    // Telecel and AT Money Agent SIMs do not provide this Agent-mode flow.
+    //
+    // This intentionally runs AFTER idempotent replay resolution so an
+    // already-existing historical canonical operation can still replay safely.
+    if (
+      transaction_type === 'bill_payment' &&
+      provider !== 'mtn'
+    ) {
+      return res.status(422).json({
+        success: false,
+        code: 'PAY_TO_AGENT_MTN_ONLY',
+        message:
+          'Agent Pay to Agent is only supported on MTN.'
+      });
+    }
+
+    // Agent Pay to Merchant is currently an MTN-only transaction.
+    // Telecel and AT Money Pay to Merchant belong to personal-wallet
+    // flows and must not create Agent-mode merchant_payment transactions.
+    //
+    // This intentionally runs AFTER idempotent replay resolution so an
+    // already-existing historical canonical operation can still replay safely.
+    if (
+      transaction_type === 'merchant_payment' &&
+      provider !== 'mtn'
+    ) {
+      return res.status(422).json({
+        success: false,
+        code: 'MERCHANT_PAYMENT_MTN_ONLY',
+        message:
+          'Agent Pay to Merchant is only supported on MTN.'
+      });
+    }
+
+    // Every NEW canonical transaction must carry enough SIM identity
+    // to target an exact electronic wallet later.
+    //
+    // This deliberately runs AFTER idempotent replay resolution so an
+    // already-existing historical transaction can still replay safely.
+    //
+    // Identified:
+    //   ICCID + observed SIM slot
+    //
+    // Unresolved:
+    //   installation UUID + Android subscription ID + observed SIM slot
+    //
+    // Provider or slot alone is never an electronic-wallet identity.
+    const normalizedRequestedSlot =
+      normalizeSlot(sim_slot);
+
+    const normalizedRequestedSubscriptionId =
+      normalizeSlot(sim_subscription_id);
+
+    const normalizedRequestedInstallationId =
+      String(installation_id || '').trim();
+
+    const hasValidRequestedSlot =
+      Number.isInteger(normalizedRequestedSlot) &&
+      normalizedRequestedSlot >= 0;
+
+    const hasIdentifiedSimIdentity =
+      normalizedRequestedIccid.length > 0 &&
+      hasValidRequestedSlot;
+
+    const hasUnresolvedSimIdentity =
+      normalizedRequestedIccid.length === 0 &&
+      normalizedRequestedInstallationId.length > 0 &&
+      Number.isInteger(normalizedRequestedSubscriptionId) &&
+      normalizedRequestedSubscriptionId >= 0 &&
+      hasValidRequestedSlot;
+
+    if (
+      !hasIdentifiedSimIdentity &&
+      !hasUnresolvedSimIdentity
+    ) {
+      return res.status(422).json({
+        success: false,
+        code: 'SIM_IDENTITY_REQUIRED',
+        message:
+          'A physical SIM ICCID with SIM slot, or complete unresolved SIM identity ' +
+          '(installation_id, sim_subscription_id, sim_slot), is required'
+      });
+    }
+
     // Run independent transaction preflight queries concurrently.
     // These checks do not depend on one another, so awaiting them
     // sequentially only delays the USSD startup response.
     const [
       flagResult,
-      branchLookup,
+      branchResolution,
       templateResult,
       flowResult
     ] = await Promise.all([
@@ -130,15 +407,11 @@ exports.initiateTransaction = async (req, res) => {
         return { rows: [] };
       }),
 
-      query(
-        `SELECT b.id
-         FROM branches b
-         INNER JOIN agent_branches ab
-           ON ab.branch_id = b.id
-         WHERE ab.agent_id = $1
-           AND b.status = 'active'`,
-        [agentId]
-      ),
+      resolveAgentFinancialBranch({
+        queryFn: query,
+        agentId,
+        companyId
+      }),
 
       query(
         `SELECT *
@@ -183,15 +456,19 @@ exports.initiateTransaction = async (req, res) => {
       }
     }
 
-    if (branchLookup.rows.length === 0) {
-      return res.status(403).json({
+    if (!branchResolution.ok) {
+      const message = branchResolution.code === 'NO_ACTIVE_BRANCH'
+        ? 'You are not currently assigned to an active branch. Contact your business owner or manager.'
+        : 'Your branch assignment is ambiguous. Contact your business owner or manager before processing financial transactions.';
+
+      return res.status(409).json({
         success: false,
-        message:
-          'You are not currently assigned to a branch. Contact your business owner or manager.'
+        message,
+        code: branchResolution.code
       });
     }
 
-    const branch_id = branchLookup.rows[0].id;
+    const branch_id = branchResolution.branchId;
 
     if (templateResult.rows.length === 0 && flowResult.rows.length === 0) {
       return res.status(400).json({
@@ -203,28 +480,113 @@ exports.initiateTransaction = async (req, res) => {
     const template = templateResult.rows[0] || null;
     const reference = `APG-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
 
-      // Transfer charge: only meaningful for send_money; the agent enters
-      // it (pre-filled client-side with an auto-calculated 1% of amount,
-      // no cap) before dialing, and it is stored on the transaction record
-      // right away so it survives even if the transaction later fails.
-      const feeValue = transaction_type === 'send_money' ? (parseFloat(fee) || 0) : 0;
+    // Transfer charge is normalized above so both idempotency comparison
+    // and the inserted transaction use exactly the same stored value.
 
-    // Create transaction record
-    const txResult = await query(
-      `INSERT INTO transactions (
-        reference, agent_id, branch_id, company_id, provider,
-        transaction_type, status, amount, customer_phone, customer_name,
-        recipient_phone, recipient_name, biller_code, biller_name,
-        account_number, notes, fee, payment_reference, merchant_id, sim_iccid, sim_slot
-      ) VALUES ($1, $2, $3, $4, $5, $6, 'initiated', $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
-      RETURNING id, reference, status, created_at`,
-      [
-        reference, agentId, branch_id, companyId, provider,
-        transaction_type, amount, customer_phone, customer_name,
-        recipient_phone, recipient_name, biller_code, biller_name,
-        account_number, notes, feeValue, payment_reference || '', merchant_id || '', sim_iccid || null, sim_slot ?? null
-      ]
-    );
+    // Create transaction record. The unique client-operation index is the
+    // final concurrency barrier: two simultaneous retries may both pass the
+    // lookup above, but only one may create the financial transaction.
+    let txResult;
+
+    try {
+      txResult = await query(
+        `INSERT INTO transactions (
+          reference, agent_id, branch_id, company_id, provider,
+          transaction_type, status, amount, customer_phone, customer_name,
+          recipient_phone, recipient_name, biller_code, biller_name,
+          account_number, notes, fee, payment_reference, merchant_id,
+          sim_iccid, sim_slot, installation_id,
+          sim_subscription_id, client_operation_id
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, 'initiated',
+          $7, $8, $9, $10, $11, $12, $13, $14, $15,
+          $16, $17, $18, $19, $20, $21, $22, $23
+        )
+        RETURNING id, reference, status, created_at`,
+        [
+          reference, agentId, branch_id, companyId, provider,
+          transaction_type, amount, customer_phone, customer_name,
+          recipient_phone, recipient_name, biller_code, biller_name,
+          account_number, notes, feeValue, payment_reference || '',
+          merchant_id || '', sim_iccid || null, sim_slot ?? null,
+          installation_id || null, normalizeSlot(sim_subscription_id),
+          client_operation_id || null
+        ]
+      );
+    } catch (insertError) {
+      if (
+        client_operation_id &&
+        insertError.code === '23505' &&
+        insertError.constraint === 'idx_transactions_agent_client_operation'
+      ) {
+        const replayResult = await query(
+          `SELECT id, reference, status, created_at,
+                  provider, transaction_type, amount,
+                  customer_phone, customer_name,
+                  recipient_phone, recipient_name,
+                  biller_code, biller_name, account_number,
+                  notes, fee, payment_reference, merchant_id,
+                  sim_iccid, sim_slot,
+                installation_id, sim_subscription_id,
+                  (
+                    SELECT json_build_object(
+                      'id', ut.id,
+                      'ussd_string_pattern', ut.ussd_string_pattern,
+                      'pin_prompt_strings', ut.pin_prompt_strings,
+                      'success_strings', ut.success_strings,
+                      'failure_strings', ut.failure_strings,
+                      'timeout_seconds', ut.timeout_seconds,
+                      'retry_count', ut.retry_count
+                    )
+                    FROM ussd_templates ut
+                    WHERE ut.provider = transactions.provider
+                      AND ut.transaction_type = transactions.transaction_type
+                      AND ut.is_active = TRUE
+                    LIMIT 1
+                  ) AS ussd_template
+           FROM transactions
+           WHERE agent_id = $1
+             AND client_operation_id = $2`,
+          [agentId, client_operation_id]
+        );
+
+        if (replayResult.rows.length > 0) {
+          const existing = replayResult.rows[0];
+
+          if (!isSameClientOperation(existing)) {
+            return res.status(409).json({
+              success: false,
+              message:
+                'client_operation_id has already been used for a different transaction'
+            });
+          }
+
+          return res.status(200).json({
+            success: true,
+            message: 'Existing transaction returned for concurrent retry.',
+            data: {
+              transaction_id: existing.id,
+              reference: existing.reference,
+              status: existing.status,
+              created_at: existing.created_at,
+              ussd_template: existing.ussd_template || null,
+              automation_params: {
+                amount: String(existing.amount ?? 0),
+                customer_phone: existing.customer_phone || '',
+                recipient_phone: existing.recipient_phone || '',
+                biller_code: existing.biller_code || '',
+                account_number: existing.account_number || '',
+                payment_reference: existing.payment_reference || '',
+                merchant_id: existing.merchant_id || ''
+              },
+              idempotent_replay: true
+            }
+          });
+        }
+      }
+
+      throw insertError;
+    }
 
     const transaction = txResult.rows[0];
 
@@ -305,39 +667,66 @@ exports.completeTransaction = async (req, res) => {
   const agentId = req.user.id;
 
   try {
-    // Fetch transaction
-    const txResult = await query(
-      'SELECT * FROM transactions WHERE id = $1 AND agent_id = $2',
-      [transaction_id, agentId]
-    );
-
-    if (txResult.rows.length === 0) {
-      return res.status(404).json({ success: false, message: 'Transaction not found' });
-    }
-
-    const tx = txResult.rows[0];
-
-    if (tx.status !== 'initiated' && tx.status !== 'processing') {
-      return res.status(400).json({
-        success: false,
-        message: `Transaction already ${tx.status}`
-      });
-    }
-
-    // CRITICAL: Validate no PIN data in session log
+    // CRITICAL: Validate no PIN data in session log before persisting it.
     const sanitizedLog = sanitizeUSSDLog(ussd_session_log);
 
     // status is validated by the route as one of: success, failed,
     // pending_confirmation. Do NOT collapse pending_confirmation into
-    // failed — the whole point of that status is that we genuinely do
-    // not know the outcome (e.g. the network never confirmed after a
-    // PIN prompt), and money may have actually moved. Treating it as a
-    // definite failure here could tell an agent to safely retry a
-    // transaction that already succeeded.
+    // failed — money may have moved even when the network response is
+    // inconclusive.
     const finalStatus = status;
 
+    let tx = null;
+    let transactionNotFound = false;
+    let idempotentReplay = false;
+    let conflictingStatus = null;
+    let manualCashOutRequired = false;
+
     await withTransaction(async (client) => {
-      // Update transaction
+      // Lock the transaction before checking its status. Without this lock,
+      // two simultaneous completion requests can both observe "initiated"
+      // and both execute financial posting.
+      const lockedResult = await client.query(
+        `SELECT *
+         FROM transactions
+         WHERE id = $1
+           AND agent_id = $2
+         FOR UPDATE`,
+        [transaction_id, agentId]
+      );
+
+      if (lockedResult.rows.length === 0) {
+        transactionNotFound = true;
+        return;
+      }
+
+      tx = lockedResult.rows[0];
+
+      if (tx.status !== 'initiated' && tx.status !== 'processing') {
+        if (tx.status === finalStatus) {
+          idempotentReplay = true;
+          return;
+        }
+
+        conflictingStatus = tx.status;
+        return;
+      }
+
+      // Historical Telecel/AT Money canonical Cash Out rows may still exist
+      // from before the initiation guard was introduced. They must not be
+      // newly completed here because their real principal movement belongs
+      // to /balances/cash-out-manual.
+      //
+      // Already-final rows were handled above so safe same-status replay
+      // remains available.
+      if (
+        tx.transaction_type === 'cash_out' &&
+        (tx.provider === 'telecel' || tx.provider === 'at_money')
+      ) {
+        manualCashOutRequired = true;
+        return;
+      }
+
       await client.query(
         `UPDATE transactions SET
           status = $1,
@@ -346,16 +735,228 @@ exports.completeTransaction = async (req, res) => {
           ussd_session_log = $4,
           completed_at = NOW()
          WHERE id = $5`,
-        [finalStatus, network_reference, failure_reason, JSON.stringify(sanitizedLog), transaction_id]
+        [
+          finalStatus,
+          network_reference,
+          failure_reason,
+          JSON.stringify(sanitizedLog),
+          transaction_id
+        ]
       );
 
-      // Float and commission are only ever updated on a CONFIRMED
-      // success — never on pending_confirmation, since we don't know
-      // whether the money actually moved.
+      // Financial effects happen only after confirmed success. This section
+      // is now protected by the transaction-row lock, preventing concurrent
+      // duplicate posting.
       if (finalStatus === 'success') {
-        await updateFloat(client, tx.branch_id, tx.provider, tx.transaction_type, tx.amount, transaction_id);
-        await calculateAndRecordCommission(client, tx, agentId);
-        await calculateAndRecordSendMoneyFee(client, tx, agentId);
+        if (tx.transaction_type === 'commission_transfer') {
+          // A commission transfer is an internal electronic-wallet movement
+          // on one exact physical/unresolved SIM:
+          //
+          //   commission - amount
+          //   e-Float    + amount
+          //
+          // It is NOT branch treasury float activity and must not itself earn
+          // another commission.
+          const posting = await postCommissionTransfer(
+            client,
+            tx,
+            agentId
+          );
+
+          // Keep the in-memory transaction consistent for notification/audit
+          // payloads before the final DB reload below.
+          tx.sim_wallet_id = posting.simWalletId;
+        } else if (tx.transaction_type === 'cash_in') {
+          // Customer Cash In is an exchange on the exact selected SIM:
+          //
+          //   e-Float      - amount
+          //   cash drawer  + amount
+          //
+          // Principal balances post first. Earned commission remains a
+          // separate movement on the same exact SIM wallet.
+          const posting = await postCashIn(
+            client,
+            tx,
+            agentId
+          );
+
+          // Keep notification/audit payloads consistent before final reload.
+          tx.sim_wallet_id = posting.simWalletId;
+
+          await calculateAndPostCommission(
+            client,
+            tx,
+            agentId
+          );
+        } else if (
+          tx.transaction_type === 'cash_out' &&
+          tx.provider === 'mtn'
+        ) {
+          // Canonical MTN customer Cash Out:
+          //
+          //   e-Float      + amount
+          //   cash drawer  - amount
+          //
+          // Telecel and AT Money Cash Out never enter this branch;
+          // they use the separate /balances/cash-out-manual path.
+          const posting = await postCashOut(
+            client,
+            tx,
+            agentId
+          );
+
+          tx.sim_wallet_id = posting.simWalletId;
+
+          await calculateAndPostCommission(
+            client,
+            tx,
+            agentId
+          );
+        } else if (
+          tx.transaction_type === 'send_money'
+        ) {
+          // Agent SIM Send Money for MTN, Telecel and AT Money:
+          //
+          //   exact SIM e-Float  - amount
+          //   cash drawer        + amount
+          //
+          // Principal balances post first. Earned commission remains
+          // a separate movement on the same exact SIM wallet.
+          //
+          // tx.fee remains recorded network-charge metadata only and
+          // does not create an invented cash/e-Float movement.
+          const posting = await postSendMoney(
+            client,
+            tx,
+            agentId
+          );
+
+          tx.sim_wallet_id = posting.simWalletId;
+
+          await calculateAndPostCommission(
+            client,
+            tx,
+            agentId
+          );
+        } else if (
+          tx.transaction_type === 'airtime'
+        ) {
+          // Agent Airtime sale for MTN, Telecel and AT Money:
+          //
+          //   exact SIM e-Float  - amount
+          //   cash drawer        + amount
+          //
+          // Principal accounting posts first. Earned commission remains
+          // a separate movement on the same exact SIM wallet.
+          const posting = await postAirtime(
+            client,
+            tx,
+            agentId
+          );
+
+          tx.sim_wallet_id = posting.simWalletId;
+
+          await calculateAndPostCommission(
+            client,
+            tx,
+            agentId
+          );
+        } else if (
+          tx.transaction_type === 'data_bundle'
+        ) {
+          // Agent Data Bundle sale for MTN and Telecel:
+          //
+          //   exact SIM e-Float  - amount
+          //   cash drawer        + amount
+          //
+          // Principal accounting posts first. Earned commission remains
+          // a separate movement on the same exact SIM wallet.
+          const posting = await postDataBundle(
+            client,
+            tx,
+            agentId
+          );
+
+          tx.sim_wallet_id = posting.simWalletId;
+
+          await calculateAndPostCommission(
+            client,
+            tx,
+            agentId
+          );
+        } else if (
+          tx.transaction_type === 'working_to_float' ||
+          tx.transaction_type === 'float_to_working'
+        ) {
+          // Telecel Agent Move Money reallocates electronic value
+          // between two balances on the same exact SIM:
+          //
+          // Working -> Float:
+          //   working_balance  - amount
+          //   e-Float          + amount
+          //
+          // Float -> Working:
+          //   e-Float          - amount
+          //   working_balance  + amount
+          //
+          // No cash, commission, or branch treasury movement.
+          const posting = await postWorkingFloatTransfer(
+            client,
+            tx,
+            agentId
+          );
+
+          tx.sim_wallet_id = posting.simWalletId;
+        } else if (
+          tx.transaction_type === 'bill_payment'
+        ) {
+          // MTN Pay to Agent converts e-cash into physical cash:
+          //
+          //   exact SIM e-Float  - amount
+          //   cash drawer        + amount
+          //   earned commission  none
+          //
+          // Branch treasury is not involved.
+          const posting = await postPayToAgent(
+            client,
+            tx,
+            agentId
+          );
+
+          tx.sim_wallet_id = posting.simWalletId;
+        } else if (
+          tx.transaction_type === 'merchant_payment'
+        ) {
+          // MTN Pay to Merchant is a business expense:
+          //
+          //   exact SIM e-Float  - amount
+          //   cash drawer        no movement
+          //   earned commission  none
+          //
+          // The merchant_payment transaction itself is the expense
+          // source record. Branch treasury is not involved.
+          const posting = await postMerchantPayment(
+            client,
+            tx,
+            agentId
+          );
+
+          tx.sim_wallet_id = posting.simWalletId;
+        } else {
+          // These transaction types have not yet had their principal
+          // e-Float/cash semantics migrated. Do not invent movements.
+          await calculateAndPostCommission(
+            client,
+            tx,
+            agentId
+          );
+        }
+
+        // tx.fee is captured before the USSD transaction as network-charge
+        // metadata. The app does not currently observe a structured final fee
+        // or resulting wallet balance, so it must not invent a cash/e-float
+        // movement from this value. Statement/SMS reconciliation can confirm
+        // the real provider debit later.
       }
 
       const notificationType = {
@@ -366,7 +967,12 @@ exports.completeTransaction = async (req, res) => {
 
       await sendTransactionNotification(agentId, {
         type: notificationType,
-        transaction: { ...tx, status: finalStatus, network_reference, failure_reason }
+        transaction: {
+          ...tx,
+          status: finalStatus,
+          network_reference,
+          failure_reason
+        }
       });
 
       await auditLog({
@@ -380,6 +986,41 @@ exports.completeTransaction = async (req, res) => {
         requestId: req.requestId
       });
     });
+
+    if (transactionNotFound) {
+      return res.status(404).json({
+        success: false,
+        message: 'Transaction not found'
+      });
+    }
+
+    if (idempotentReplay) {
+      return res.json({
+        success: true,
+        message: `Transaction already ${tx.status}`,
+        data: {
+          ...tx,
+          idempotent_replay: true
+        }
+      });
+    }
+
+    if (conflictingStatus) {
+      return res.status(409).json({
+        success: false,
+        message:
+          `Transaction already ${conflictingStatus}; cannot change completion to ${finalStatus}`
+      });
+    }
+
+    if (manualCashOutRequired) {
+      return res.status(422).json({
+        success: false,
+        code: 'CASH_OUT_MANUAL_REQUIRED',
+        message:
+          'Telecel and AT Money Cash Out must be recorded through the manual Cash Out flow.'
+      });
+    }
 
     // Generate receipt PDF only on confirmed success
     let receiptUrl = null;
@@ -582,144 +1223,8 @@ exports.listTransactions = async (req, res) => {
   }
 };
 
-// ─── Helper: Update Float After Transaction ───────────────────
-
-async function updateFloat(client, branchId, provider, transactionType, amount, transactionId) {
-  // Cash In: float decreases (we gave cash out, network received)
-  // Cash Out: float increases (we received cash, network sent)
-  const floatDelta = ['cash_out'].includes(transactionType) ? amount : -amount;
-
-  const floatResult = await client.query(
-    'SELECT id, current_balance FROM float_accounts WHERE branch_id = $1 AND provider = $2',
-    [branchId, provider]
-  );
-
-  if (floatResult.rows.length === 0) return;
-
-  const float = floatResult.rows[0];
-  const balanceBefore = parseFloat(float.current_balance);
-  const balanceAfter = balanceBefore + parseFloat(floatDelta);
-
-  await client.query(
-    'UPDATE float_accounts SET current_balance = $1, last_updated_at = NOW() WHERE id = $2',
-    [balanceAfter, float.id]
-  );
-
-  await client.query(
-    `INSERT INTO float_movements (
-      float_account_id, movement_type, amount, balance_before,
-      balance_after, transaction_id, performed_by
-    ) VALUES ($1, 'debit', $2, $3, $4, $5, $5)`,
-    [float.id, Math.abs(floatDelta), balanceBefore, balanceAfter, transactionId]
-  );
-
-  // Check low float threshold
-  const floatAccount = await client.query(
-    'SELECT low_balance_threshold FROM float_accounts WHERE id = $1',
-    [float.id]
-  );
-
-  if (balanceAfter <= parseFloat(floatAccount.rows[0].low_balance_threshold)) {
-    // Trigger low float notification (async, don't await)
-    const { sendLowFloatAlert } = require('../services/notificationService');
-    sendLowFloatAlert(branchId, provider, balanceAfter).catch(console.error);
-  }
-}
-
 // ─── Helper: Calculate and Record Commission ──────────────────
 
-async function calculateAndRecordCommission(client, transaction, agentId) {
-  try {
-    // Find applicable commission rule (company-specific first, then global)
-    const ruleResult = await client.query(
-      `SELECT * FROM commission_rules
-       WHERE (company_id = $1 OR company_id IS NULL)
-         AND (provider = $2 OR provider IS NULL)
-         AND (transaction_type = $3 OR transaction_type IS NULL)
-         AND is_active = TRUE
-         AND effective_from <= CURRENT_DATE
-         AND (effective_to IS NULL OR effective_to >= CURRENT_DATE)
-       ORDER BY company_id NULLS LAST, provider NULLS LAST, transaction_type NULLS LAST
-       LIMIT 1`,
-      [transaction.company_id, transaction.provider, transaction.transaction_type]
-    );
-
-    if (ruleResult.rows.length === 0) return;
-
-    const rule = ruleResult.rows[0];
-    const { gross, provider_share, net } = await calculateCommission(
-      parseFloat(transaction.amount),
-      parseFloat(rule.rate_percent),
-      rule.threshold_amount ? parseFloat(rule.threshold_amount) : null,
-      rule.cap_amount ? parseFloat(rule.cap_amount) : null,
-      parseFloat(rule.provider_share_percent)
-    );
-
-    await client.query(
-      `INSERT INTO commissions (
-        transaction_id, agent_id, branch_id, company_id, rule_id,
-        gross_commission, provider_share, net_commission
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [transaction.id, agentId, transaction.branch_id, transaction.company_id,
-       rule.id, gross, provider_share, net]
-    );
-  } catch (error) {
-    logger.error('Commission calculation error:', error);
-    // Don't throw — commission failure shouldn't block transaction completion
-  }
-}
-
-// Send Money fee: entered by the agent (pre-filled with an auto-calculated
-// 1% of the amount, no cap) at the time the transaction is initiated, and
-// stored on the transaction record at that point. Applies only when sending
-// to a number that is NOT the sending customers own number. Never blocks
-// transaction completion if it fails - same pattern as
-// calculateAndRecordCommission above.
-async function calculateAndRecordSendMoneyFee(client, transaction, agentId) {
-  try {
-    if (transaction.transaction_type !== "send_money") return;
-    const recipient = (transaction.recipient_phone || "").trim();
-    const customer = (transaction.customer_phone || "").trim();
-    if (!recipient || !customer || recipient === customer) return;
-
-    const amount = parseFloat(transaction.amount);
-    // The fee was captured at initiation (agent-editable, pre-filled with
-    // 1% of amount, no cap). Fall back to the 1% default only if it is
-    // missing/zero - e.g. an older client that did not send one.
-    let fee = parseFloat(transaction.fee);
-    if (!fee || fee <= 0) {
-      fee = amount * 0.01;
-      await client.query("UPDATE transactions SET fee = $1 WHERE id = $2", [fee, transaction.id]);
-    }
-
-    let balanceResult = await client.query(
-      "SELECT * FROM agent_balances WHERE agent_id = $1 AND provider = $2",
-      [agentId, transaction.provider]
-    );
-    if (balanceResult.rows.length === 0) {
-      balanceResult = await client.query(
-        "INSERT INTO agent_balances (agent_id, provider) VALUES ($1, $2) RETURNING *",
-        [agentId, transaction.provider]
-      );
-    }
-    const balance = balanceResult.rows[0];
-    const cashBefore = parseFloat(balance.cash_at_hand);
-    const cashAfter = cashBefore + fee;
-
-    await client.query(
-      "UPDATE agent_balances SET cash_at_hand = $1, last_updated_at = NOW() WHERE id = $2",
-      [cashAfter, balance.id]
-    );
-    await client.query(
-      `INSERT INTO agent_balance_movements
-       (agent_id, provider, movement_type, balance_type, amount, balance_before, balance_after, transaction_id)
-       VALUES ($1, $2, 'charge_collected', 'cash_at_hand', $3, $4, $5, $6)`,
-      [agentId, transaction.provider, fee, cashBefore, cashAfter, transaction.id]
-    );
-  } catch (error) {
-    logger.error("Send Money fee calculation error:", error);
-  }
-}
 
 // ─── Helper: Sanitize USSD Log (remove any PIN-related data) ─
 //

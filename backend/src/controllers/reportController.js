@@ -339,7 +339,7 @@ exports.transactionReport = async (req, res) => {
         { label: 'Customer Phone', key: 'customer_phone' },
         { label: 'Customer Name', key: 'customer_name' },
         { label: 'Amount (GHS)', key: 'amount' },
-        { label: 'Transfer Charge (GHS)', key: 'fee' },
+        { label: 'Recorded Network Charge (GHS)', key: 'fee' },
         { label: 'Commission (GHS)', key: 'net_commission' },
         { label: 'Status', key: 'status' },
         { label: 'Agent', key: 'agent_name' },

@@ -185,6 +185,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
   USSDEngine? _engine;
   String? _simWarning;
   bool _permissionPermanentlyDenied = false;
+  bool _startupInitiationRetryAvailable = false;
 
   @override
   void initState() {
@@ -203,12 +204,16 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     // together. Dialing remains blocked until both have succeeded.
     final requestedSimSlot = _parseSimSlot(widget.data['sim_slot']);
     final requestedSimIccid = widget.data['sim_iccid']?.toString();
+    final requestedSimSubscriptionId = int.tryParse(
+      widget.data['sim_subscription_id']?.toString() ?? '',
+    );
 
     final transactionFuture = _resolveTransactionData();
     final deviceFuture = TransactionDevicePreparationService.prepare(
       provider: provider,
       requestedSimSlot: requestedSimSlot,
       requestedSimIccid: requestedSimIccid,
+      requestedSimSubscriptionId: requestedSimSubscriptionId,
       onStatus: (message) {
         if (mounted) {
           setState(() => _statusMessage = message);
@@ -232,6 +237,10 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       final responseData = error.response?.data;
       final message =
           responseData is Map ? responseData['message']?.toString() : null;
+
+      _startupInitiationRetryAvailable = !widget.isPersonal &&
+          widget.data['request_fields'] is Map &&
+          _isRetryableInitiationError(error);
 
       _showStartupFailure(message ?? 'Failed to initiate transaction.');
       return;
@@ -495,6 +504,10 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
   }
 
   Future<Map<String, dynamic>> _resolveTransactionData() async {
+    if (_resolvedTransaction != null) {
+      return Map<String, dynamic>.from(_resolvedTransaction!);
+    }
+
     final existingTransaction = widget.data['transaction'];
 
     if (existingTransaction is Map) {
@@ -1351,9 +1364,90 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     context.go(widget.isPersonal ? '/personal-home' : '/agent');
   }
 
+  bool _isRetryableInitiationError(DioException error) {
+    final statusCode = error.response?.statusCode;
+
+    // No response is ambiguous: the server may already have created the
+    // transaction even though the phone never received the response.
+    // Retrying these cases with the same client_operation_id is safe.
+    return error.response == null ||
+        statusCode == 408 ||
+        statusCode == 429 ||
+        (statusCode != null && statusCode >= 500);
+  }
+
+  Future<void> _retryStartupInitiation() async {
+    final rawRequestFields = widget.data['request_fields'];
+
+    if (rawRequestFields is! Map) {
+      _startupInitiationRetryAvailable = false;
+      _showStartupFailure('The original transaction request is unavailable.');
+      return;
+    }
+
+    final requestFields = Map<String, dynamic>.from(rawRequestFields);
+
+    _pulseCtrl.repeat(reverse: true);
+
+    if (mounted) {
+      setState(() {
+        _status = USSDStatus.idle;
+        _statusMessage = 'Retrying transaction initiation...';
+        _completed = false;
+        _outcome = USSDStatus.failed;
+        _failureReason = null;
+        _completedTransaction = null;
+        _resolvedTransaction = null;
+        _startupInitiationRetryAvailable = false;
+      });
+    }
+
+    try {
+      // Re-submit the exact original request. In particular,
+      // client_operation_id must remain unchanged.
+      final response = await ApiClient.instance.post(
+        '/transactions',
+        data: requestFields,
+      );
+
+      final rawTransaction = response.data['data'];
+
+      if (rawTransaction is! Map) {
+        throw const FormatException(
+          'Invalid transaction initiation response',
+        );
+      }
+
+      _resolvedTransaction = Map<String, dynamic>.from(rawTransaction);
+
+      await _startUSSD();
+    } on DioException catch (error) {
+      final responseData = error.response?.data;
+      final message =
+          responseData is Map ? responseData['message']?.toString() : null;
+
+      _startupInitiationRetryAvailable = _isRetryableInitiationError(error);
+
+      _showStartupFailure(message ?? 'Failed to initiate transaction.');
+    } on FormatException catch (error) {
+      _startupInitiationRetryAvailable = false;
+      _showStartupFailure(error.message);
+    } catch (_) {
+      _startupInitiationRetryAvailable = false;
+      _showStartupFailure(
+        'The transaction could not be started. Please try again.',
+      );
+    }
+  }
+
   void _retryTransaction() {
     final provider = widget.data['provider']?.toString() ?? 'mtn';
     final type = widget.data['transaction_type']?.toString() ?? '';
+
+    if (!widget.isPersonal && _startupInitiationRetryAvailable) {
+      unawaited(_retryStartupInitiation());
+      return;
+    }
 
     if (widget.isPersonal) {
       context.go(

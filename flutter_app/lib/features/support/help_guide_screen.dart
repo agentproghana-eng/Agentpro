@@ -107,7 +107,7 @@ final List<HelpSection> _helpSections = [
     HelpItem(
       question: 'How do I sort the list?',
       answer:
-          'Tap the sort icon at the top of the screen — choose Date, Amount, Commission, or Transfer Charge, ascending or descending.',
+          'Tap the sort icon at the top of the screen — choose Date, Amount, Commission, or Recorded Network Charge, ascending or descending.',
     ),
   ]),
   const HelpSection(

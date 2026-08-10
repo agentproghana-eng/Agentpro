@@ -74,12 +74,12 @@ const List<QuickActionDefinition> kAgentQuickActionDefinitions = [
   ),
   QuickActionDefinition(
     type: 'working_to_float',
-    label: 'M-PESA to Float',
+    label: 'Working Account to Float',
     icon: Icons.move_to_inbox_outlined,
   ),
   QuickActionDefinition(
     type: 'float_to_working',
-    label: 'Float to M-PESA',
+    label: 'Float to Working Account',
     icon: Icons.outbox_outlined,
   ),
   QuickActionDefinition(
