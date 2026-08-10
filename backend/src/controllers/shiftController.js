@@ -2,13 +2,17 @@ const { query, withTransaction } = require('../config/database');
 const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
 
-// Sums cash_at_hand across every provider balance the agent has - the
-// "expected" cash figure a shift reconciles against. Physical cash is
-// one drawer regardless of how many provider wallets feed into it, so
-// this is a single total, not a per-provider breakdown.
+// A shift reconciles against the agent's single physical cash drawer.
+// Electronic provider wallets are separate and must never be summed to
+// derive physical cash.
 async function getExpectedCash(client, agentId) {
   const result = await client.query(
-    'SELECT COALESCE(SUM(cash_at_hand), 0) AS total FROM agent_balances WHERE agent_id = $1',
+    `SELECT COALESCE(
+       (SELECT cash_at_hand
+        FROM agent_cash_balances
+        WHERE agent_id = $1),
+       0
+     ) AS total`,
     [agentId]
   );
   return parseFloat(result.rows[0].total);
