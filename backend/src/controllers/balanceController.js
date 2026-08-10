@@ -10,49 +10,11 @@ const {
 } = require("../services/agentWalletService");
 const { logger } = require("../utils/logger");
 
-// Get or create the agent's balance row for a given provider.
-// Must be called with an active transaction client.
-
-// Fetch an agent's balances across all providers. Owners/managers can
-// view any agent in their company; agents can only view their own.
-exports.getAgentBalances = async (req, res) => {
-  const targetAgentId = req.params.agent_id || req.user.id;
-
-  try {
-    if (targetAgentId !== req.user.id && !["superuser", "business_owner", "manager"].includes(req.user.role)) {
-      return res.status(403).json({ success: false, message: "Access denied" });
-    }
-
-    const result = await query(
-      "SELECT provider, e_float_balance, cash_at_hand, commission_balance, last_updated_at FROM agent_balances WHERE agent_id = $1",
-      [targetAgentId]
-    );
-
-    const existingByProvider = {};
-    result.rows.forEach((row) => { existingByProvider[row.provider] = row; });
-
-    const allProviders = ["mtn", "telecel", "at_money"];
-    const data = allProviders.map((provider) => existingByProvider[provider] || {
-      provider,
-      e_float_balance: "0.00",
-      cash_at_hand: "0.00",
-      commission_balance: "0.00",
-      last_updated_at: null,
-    });
-
-    res.json({ success: true, data: data });
-  } catch (error) {
-    logger.error("Get agent balances error:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch balances" });
-  }
-};
-
-
 // Read the agent's one physical cash drawer.
 //
 // This endpoint is intentionally READ ONLY:
 // - it never creates a cash balance just because a screen was opened;
-// - it never falls back to legacy provider-level agent_balances rows.
+// - it never falls back to legacy provider-level balance rows.
 exports.getOwnCashBalance = async (req, res) => {
   const agentId = req.user.id;
 

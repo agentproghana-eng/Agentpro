@@ -77,7 +77,6 @@ router.get(
   balanceController.getOwnSimWalletBalance
 );
 
-router.get("/:agent_id?", authorize("superuser", "business_owner", "manager", "agent"), balanceController.getAgentBalances);
 router.post(
   "/cash-out-manual",
   [
