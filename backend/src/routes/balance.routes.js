@@ -30,7 +30,7 @@ router.get("/pending-adjustments", authorize("superuser", "business_owner", "man
 
 router.get(
   "/cash-drawer",
-  authorize("agent"),
+  authorize("agent", "business_owner", "manager"),
   balanceController.getOwnCashBalance
 );
 
@@ -73,7 +73,7 @@ router.get(
       .toInt()
   ],
   handleValidation,
-  authorize("agent"),
+  authorize("agent", "business_owner", "manager"),
   balanceController.getOwnSimWalletBalance
 );
 
