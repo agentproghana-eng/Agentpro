@@ -155,8 +155,21 @@ class AppRouter {
           builder: (_, state) {
             final type = state.uri.queryParameters['type'] ?? 'cash_in';
             final provider = state.uri.queryParameters['provider'];
+            final simSlotStr = state.uri.queryParameters['sim_slot'];
+            final simIccid = state.uri.queryParameters['sim_iccid'];
+            final simSubscriptionIdStr =
+                state.uri.queryParameters['sim_subscription_id'];
+
             return TransactionScreen(
-                transactionType: type, initialProvider: provider);
+              transactionType: type,
+              initialProvider: provider,
+              initialSimSlot:
+                  simSlotStr != null ? int.tryParse(simSlotStr) : null,
+              initialSimIccid: simIccid,
+              initialSimSubscriptionId: simSubscriptionIdStr != null
+                  ? int.tryParse(simSubscriptionIdStr)
+                  : null,
+            );
           },
         ),
         GoRoute(
@@ -225,7 +238,23 @@ class AppRouter {
               );
             }
 
-            return FloatReceivedScreen(initialProvider: provider);
+            final simSlotStr =
+                state.uri.queryParameters['sim_slot'];
+            final simIccid =
+                state.uri.queryParameters['sim_iccid'];
+            final simSubscriptionIdStr =
+                state.uri.queryParameters['sim_subscription_id'];
+
+            return FloatReceivedScreen(
+              initialProvider: provider,
+              initialSimSlot:
+                  simSlotStr != null ? int.tryParse(simSlotStr) : null,
+              initialSimIccid: simIccid,
+              initialSimSubscriptionId:
+                  simSubscriptionIdStr != null
+                      ? int.tryParse(simSubscriptionIdStr)
+                      : null,
+            );
           },
         ),
         GoRoute(
@@ -240,7 +269,23 @@ class AppRouter {
               );
             }
 
-            return CommissionTransferScreen(provider: provider);
+            final simSlotStr =
+                state.uri.queryParameters['sim_slot'];
+            final simIccid =
+                state.uri.queryParameters['sim_iccid'];
+            final simSubscriptionIdStr =
+                state.uri.queryParameters['sim_subscription_id'];
+
+            return CommissionTransferScreen(
+              provider: provider,
+              initialSimSlot:
+                  simSlotStr != null ? int.tryParse(simSlotStr) : null,
+              initialSimIccid: simIccid,
+              initialSimSubscriptionId:
+                  simSubscriptionIdStr != null
+                      ? int.tryParse(simSubscriptionIdStr)
+                      : null,
+            );
           },
         ),
         GoRoute(

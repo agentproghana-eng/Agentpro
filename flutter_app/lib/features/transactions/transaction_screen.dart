@@ -54,10 +54,17 @@ const List<AgentTelecelBundleOption> kAgentTelecelBundles = [
 class TransactionScreen extends StatefulWidget {
   final String transactionType;
   final String? initialProvider;
+  final int? initialSimSlot;
+  final String? initialSimIccid;
+  final int? initialSimSubscriptionId;
+
   const TransactionScreen({
     super.key,
     required this.transactionType,
     this.initialProvider,
+    this.initialSimSlot,
+    this.initialSimIccid,
+    this.initialSimSubscriptionId,
   });
 
   @override
@@ -80,6 +87,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
   Map<String, SimCard?>? _simMap;
   List<SimCard> _simCards = const [];
   int? _selectedSimSlot;
+  bool _initialSimIdentityUnavailable = false;
   bool _simDetectionComplete = false;
   bool _simPermissionDenied = false;
   AgentTelecelBundleOption? _selectedTelecelBundle;
@@ -99,6 +107,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
     if (widget.initialProvider != null) {
       _selectedProvider = widget.initialProvider!;
     }
+
+    _selectedSimSlot = widget.initialSimSlot;
     // Pay to Agent and Pay to Merchant are both confirmed MTN-only
     // (mapped from MTN's own "Pay To" USSD menu) - force it regardless
     // of whatever provider filter was active on Home when this tile was
@@ -222,6 +232,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
       }
     }
 
+    // A route that explicitly requested a physical SIM must never
+    // silently substitute another same-provider SIM.
+    if (_initialSimIdentityUnavailable) {
+      return null;
+    }
+
     return sims.first;
   }
 
@@ -288,10 +304,57 @@ class _TransactionScreenState extends State<TransactionScreen> {
             .toList()
           ..sort((a, b) => a.slot.compareTo(b.slot));
 
+        final requestedIccid =
+            (widget.initialSimIccid ?? '').trim();
+
+        final routeRequestedExactSim =
+            widget.initialSimSlot != null ||
+            requestedIccid.isNotEmpty ||
+            widget.initialSimSubscriptionId != null;
+
+        SimCard? requestedSim;
+
+        if (routeRequestedExactSim) {
+          for (final sim in providerSims) {
+            final slotMatches =
+                widget.initialSimSlot == null ||
+                sim.slot == widget.initialSimSlot;
+
+            final identityMatches =
+                requestedIccid.isNotEmpty
+                    // Identified SIM: ICCID + slot is canonical.
+                    // Subscription ID must not split an ICCID wallet.
+                    ? sim.iccid.trim() == requestedIccid &&
+                        slotMatches
+                    // Unresolved SIM: current subscription + slot selects
+                    // the exact installation-local physical SIM.
+                    : slotMatches &&
+                        widget.initialSimSubscriptionId != null &&
+                        sim.subscriptionId ==
+                            widget.initialSimSubscriptionId;
+
+            if (identityMatches) {
+              requestedSim = sim;
+              break;
+            }
+          }
+        }
+
         if (providerSims.isEmpty) {
           _selectedSimSlot = null;
-        } else if (!providerSims.any((sim) => sim.slot == _selectedSimSlot)) {
+          _initialSimIdentityUnavailable =
+              routeRequestedExactSim;
+        } else if (routeRequestedExactSim) {
+          _selectedSimSlot = requestedSim?.slot;
+          _initialSimIdentityUnavailable =
+              requestedSim == null;
+        } else if (!providerSims.any(
+          (sim) => sim.slot == _selectedSimSlot,
+        )) {
           _selectedSimSlot = providerSims.first.slot;
+          _initialSimIdentityUnavailable = false;
+        } else {
+          _initialSimIdentityUnavailable = false;
         }
       });
 
@@ -940,6 +1003,82 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
+                ] else if (_selectedSim == null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: context.appSurface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: context.appDivider,
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.sim_card_alert_outlined,
+                          color: context.appSecondaryText,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'The selected physical SIM is no longer available. '
+                            'Select another SIM explicitly to continue.',
+                            style: TextStyle(
+                              color: context.appSecondaryText,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_selectedProviderSims.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Select physical SIM',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _selectedProviderSims.map((sim) {
+                        final color =
+                            AppTheme.providerColor(_selectedProvider);
+
+                        return ChoiceChip(
+                          selected: false,
+                          onSelected: (_) {
+                            setState(() {
+                              _selectedSimSlot = sim.slot;
+                              _initialSimIdentityUnavailable = false;
+                            });
+                          },
+                          selectedColor:
+                              color.withValues(alpha: 0.16),
+                          avatar: Icon(
+                            Icons.sim_card_outlined,
+                            size: 18,
+                            color: context.appSecondaryText,
+                          ),
+                          label: Text(
+                            'SIM ${sim.slot + 1}'
+                            '${sim.iccid.isNotEmpty ? ' · ${sim.iccid.substring(sim.iccid.length > 6 ? sim.iccid.length - 6 : 0)}' : ''}',
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
                 ] else ...[
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -1001,6 +1140,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                           onSelected: (_) {
                             setState(() {
                               _selectedSimSlot = sim.slot;
+                              _initialSimIdentityUnavailable = false;
                             });
                           },
                           selectedColor: color.withValues(alpha: 0.16),
@@ -1073,6 +1213,82 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
+                ] else if (_selectedSim == null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: context.appSurface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: context.appDivider,
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.sim_card_alert_outlined,
+                          color: context.appSecondaryText,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'The selected physical SIM is no longer available. '
+                            'Select another SIM explicitly to continue.',
+                            style: TextStyle(
+                              color: context.appSecondaryText,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_selectedProviderSims.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Select physical SIM',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _selectedProviderSims.map((sim) {
+                        final color =
+                            AppTheme.providerColor(_selectedProvider);
+
+                        return ChoiceChip(
+                          selected: false,
+                          onSelected: (_) {
+                            setState(() {
+                              _selectedSimSlot = sim.slot;
+                              _initialSimIdentityUnavailable = false;
+                            });
+                          },
+                          selectedColor:
+                              color.withValues(alpha: 0.16),
+                          avatar: Icon(
+                            Icons.sim_card_outlined,
+                            size: 18,
+                            color: context.appSecondaryText,
+                          ),
+                          label: Text(
+                            'SIM ${sim.slot + 1}'
+                            '${sim.iccid.isNotEmpty ? ' · ${sim.iccid.substring(sim.iccid.length > 6 ? sim.iccid.length - 6 : 0)}' : ''}',
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
                 ] else if (_availableProviders.length == 1) ...[
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -1133,6 +1349,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                           onSelected: (_) {
                             setState(() {
                               _selectedSimSlot = sim.slot;
+                              _initialSimIdentityUnavailable = false;
                             });
                           },
                           selectedColor: color.withValues(alpha: 0.16),
@@ -1241,6 +1458,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                           onSelected: (_) {
                             setState(() {
                               _selectedSimSlot = sim.slot;
+                              _initialSimIdentityUnavailable = false;
                             });
                           },
                           selectedColor: color.withValues(alpha: 0.16),

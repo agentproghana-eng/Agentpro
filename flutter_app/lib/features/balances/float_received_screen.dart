@@ -12,10 +12,16 @@ import '../../shared/theme/app_theme.dart';
 
 class FloatReceivedScreen extends StatefulWidget {
   final String initialProvider;
+  final int? initialSimSlot;
+  final String? initialSimIccid;
+  final int? initialSimSubscriptionId;
 
   const FloatReceivedScreen({
     super.key,
     required this.initialProvider,
+    this.initialSimSlot,
+    this.initialSimIccid,
+    this.initialSimSubscriptionId,
   });
 
   @override
@@ -30,6 +36,7 @@ class _FloatReceivedScreenState extends State<FloatReceivedScreen> {
 
   List<SimCard> _simCards = const [];
   int? _selectedSimSlot;
+  bool _initialSimIdentityUnavailable = false;
 
   bool _simDetectionComplete = false;
   bool _simPermissionDenied = false;
@@ -47,6 +54,7 @@ class _FloatReceivedScreenState extends State<FloatReceivedScreen> {
   void initState() {
     super.initState();
     _provider = widget.initialProvider;
+    _selectedSimSlot = widget.initialSimSlot;
     _loadSimCards();
   }
 
@@ -101,6 +109,10 @@ class _FloatReceivedScreenState extends State<FloatReceivedScreen> {
           return sim;
         }
       }
+    }
+
+    if (_initialSimIdentityUnavailable) {
+      return null;
     }
 
     return sims.first;
@@ -167,7 +179,16 @@ class _FloatReceivedScreenState extends State<FloatReceivedScreen> {
         _simDetectionComplete = true;
         _simPermissionDenied = false;
 
-        if (availableProviders.isNotEmpty &&
+        final requestedIccid =
+            (widget.initialSimIccid ?? '').trim();
+
+        final routeRequestedExactSim =
+            widget.initialSimSlot != null ||
+            requestedIccid.isNotEmpty ||
+            widget.initialSimSubscriptionId != null;
+
+        if (!routeRequestedExactSim &&
+            availableProviders.isNotEmpty &&
             !availableProviders.contains(_provider)) {
           _provider = availableProviders.first;
         }
@@ -177,12 +198,45 @@ class _FloatReceivedScreenState extends State<FloatReceivedScreen> {
             .toList()
           ..sort((a, b) => a.slot.compareTo(b.slot));
 
+        SimCard? requestedSim;
+
+        if (routeRequestedExactSim) {
+          for (final sim in providerSims) {
+            final slotMatches =
+                widget.initialSimSlot == null ||
+                sim.slot == widget.initialSimSlot;
+
+            final identityMatches =
+                requestedIccid.isNotEmpty
+                    ? sim.iccid.trim() == requestedIccid &&
+                        slotMatches
+                    : slotMatches &&
+                        widget.initialSimSubscriptionId != null &&
+                        sim.subscriptionId ==
+                            widget.initialSimSubscriptionId;
+
+            if (identityMatches) {
+              requestedSim = sim;
+              break;
+            }
+          }
+        }
+
         if (providerSims.isEmpty) {
           _selectedSimSlot = null;
+          _initialSimIdentityUnavailable =
+              routeRequestedExactSim;
+        } else if (routeRequestedExactSim) {
+          _selectedSimSlot = requestedSim?.slot;
+          _initialSimIdentityUnavailable =
+              requestedSim == null;
         } else if (!providerSims.any(
           (sim) => sim.slot == _selectedSimSlot,
         )) {
           _selectedSimSlot = providerSims.first.slot;
+          _initialSimIdentityUnavailable = false;
+        } else {
+          _initialSimIdentityUnavailable = false;
         }
       });
     } on SimPermissionException {
@@ -223,7 +277,9 @@ class _FloatReceivedScreenState extends State<FloatReceivedScreen> {
 
     setState(() {
       _provider = provider;
-      _selectedSimSlot = providerSims.isEmpty ? null : providerSims.first.slot;
+      _selectedSimSlot =
+          providerSims.isEmpty ? null : providerSims.first.slot;
+      _initialSimIdentityUnavailable = false;
       _error = null;
     });
   }
@@ -526,7 +582,9 @@ class _FloatReceivedScreenState extends State<FloatReceivedScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              if (providerSims.length > 1)
+              if (providerSims.length > 1 ||
+                  (_initialSimIdentityUnavailable &&
+                      providerSims.isNotEmpty))
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -539,6 +597,7 @@ class _FloatReceivedScreenState extends State<FloatReceivedScreen> {
                           : (_) {
                               setState(() {
                                 _selectedSimSlot = sim.slot;
+                                _initialSimIdentityUnavailable = false;
                                 _error = null;
                               });
                             },
