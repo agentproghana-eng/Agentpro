@@ -495,7 +495,9 @@ class _ProviderBalanceCard extends StatelessWidget {
             Expanded(
               child: _ActionChip(
                 icon: Icons.swap_horiz,
-                label: 'Transfer Commission to e-Float',
+                label: isTelecel
+                    ? 'Transfer Commission to Float'
+                    : 'Transfer Commission to e-Float',
                 route: _balanceActionRoute(
                   '/balances/commission-transfer',
                 ),

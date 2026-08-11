@@ -501,8 +501,13 @@ class _CommissionTransferScreenState extends State<CommissionTransferScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final destinationLabel =
+        widget.provider == 'telecel' ? 'Float' : 'e-Float';
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Transfer Commission to e-Float')),
+      appBar: AppBar(
+        title: Text('Transfer Commission to $destinationLabel'),
+      ),
       body: _loadingSims
           ? const Center(child: CircularProgressIndicator())
           : Padding(

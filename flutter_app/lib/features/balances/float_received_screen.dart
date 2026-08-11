@@ -31,6 +31,9 @@ class FloatReceivedScreen extends StatefulWidget {
 class _FloatReceivedScreenState extends State<FloatReceivedScreen> {
   late String _provider;
 
+  String get _floatLabel =>
+      _provider == 'telecel' ? 'Float' : 'e-Float';
+
   final _amountCtrl = TextEditingController();
   final _refCtrl = TextEditingController();
 
@@ -321,7 +324,7 @@ class _FloatReceivedScreenState extends State<FloatReceivedScreen> {
       setState(() {
         _error = _simPermissionDenied
             ? 'Allow phone permission before recording Float Received.'
-            : 'Select the physical SIM that received this e-Float.';
+            : 'Select the physical SIM that received this $_floatLabel.';
       });
       return;
     }
@@ -682,7 +685,7 @@ class _FloatReceivedScreenState extends State<FloatReceivedScreen> {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
-                'This adds directly to the selected SIM wallet\'s e-Float balance. '
+                'This adds directly to the selected SIM wallet\'s $_floatLabel balance. '
                 'No branch float is changed and no approval is required.',
                 style: TextStyle(
                   fontSize: 11,
