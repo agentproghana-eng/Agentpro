@@ -1,6 +1,9 @@
 const { query, withTransaction } = require('../config/database');
 const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
+const {
+  getOrCreateAgentSimWallet,
+} = require('../services/agentWalletService');
 
 // A shift reconciles against the agent's single physical cash drawer.
 // Electronic provider wallets are separate and must never be summed to
@@ -26,6 +29,93 @@ async function getVarianceThreshold() {
 exports.openShift = async (req, res) => {
   const agentId = req.user.id;
   const companyId = req.user.company_id;
+  const {
+    opening_cash_declared,
+    opening_sim_balances = [],
+  } = req.body || {};
+
+  if (
+    opening_cash_declared === undefined ||
+    opening_cash_declared === null ||
+    String(opening_cash_declared).trim() === '' ||
+    !Number.isFinite(Number(opening_cash_declared))
+  ) {
+    return res.status(422).json({
+      success: false,
+      message:
+        'opening_cash_declared is required and must be a number',
+    });
+  }
+
+  if (Number(opening_cash_declared) < 0) {
+    return res.status(422).json({
+      success: false,
+      message:
+        'opening_cash_declared is required and must be a non-negative number',
+    });
+  }
+
+  if (!Array.isArray(opening_sim_balances)) {
+    return res.status(422).json({
+      success: false,
+      message: 'opening_sim_balances must be an array',
+    });
+  }
+
+  const isNonNegativeAmount = (value) => {
+    if (
+      value === undefined ||
+      value === null ||
+      String(value).trim() === ''
+    ) {
+      return false;
+    }
+
+    const amount = Number(value);
+
+    return Number.isFinite(amount) && amount >= 0;
+  };
+
+  for (const declaration of opening_sim_balances) {
+    if (!isNonNegativeAmount(declaration?.e_float_declared)) {
+      return res.status(422).json({
+        success: false,
+        message:
+          'e_float_declared is required for every SIM and must be a non-negative number',
+      });
+    }
+
+    if (!isNonNegativeAmount(declaration?.commission_declared)) {
+      return res.status(422).json({
+        success: false,
+        message:
+          'commission_declared is required for every SIM and must be a non-negative number',
+      });
+    }
+
+    if (
+      declaration?.provider !== 'telecel' &&
+      declaration?.working_declared !== undefined &&
+      declaration?.working_declared !== null
+    ) {
+      return res.status(422).json({
+        success: false,
+        message:
+          'working_declared is only allowed for Telecel SIMs',
+      });
+    }
+
+    if (
+      declaration?.provider === 'telecel' &&
+      !isNonNegativeAmount(declaration?.working_declared)
+    ) {
+      return res.status(422).json({
+        success: false,
+        message:
+          'working_declared is required for Telecel SIMs and must be a non-negative number',
+      });
+    }
+  }
 
   try {
     const branchResult = await query(
@@ -36,17 +126,110 @@ exports.openShift = async (req, res) => {
 
     const shift = await withTransaction(async (client) => {
       const openingCash = await getExpectedCash(client, agentId);
+      const openingDeclared = parseFloat(opening_cash_declared);
+      const openingVariance = openingDeclared - openingCash;
+
       const result = await client.query(
-        `INSERT INTO shifts (agent_id, branch_id, company_id, opening_cash_expected)
-         VALUES ($1, $2, $3, $4) RETURNING *`,
-        [agentId, branchId, companyId, openingCash]
+        `INSERT INTO shifts (
+           agent_id,
+           branch_id,
+           company_id,
+           opening_cash_expected,
+           opening_cash_declared,
+           opening_cash_variance
+         )
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING *`,
+        [
+          agentId,
+          branchId,
+          companyId,
+          openingCash,
+          openingDeclared,
+          openingVariance,
+        ]
       );
+
+      for (const declaration of opening_sim_balances) {
+        const wallet = await getOrCreateAgentSimWallet(
+          client,
+          {
+            agentId,
+            provider: declaration.provider,
+            simIccid: declaration.sim_iccid,
+            installationId: declaration.installation_id,
+            simSubscriptionId:
+              declaration.sim_subscription_id,
+            simSlot: declaration.sim_slot,
+          }
+        );
+
+        const snapshotOpeningBalance = async (
+          balanceType,
+          expectedValue,
+          declaredValue
+        ) => {
+          if (
+            declaredValue === undefined ||
+            declaredValue === null
+          ) {
+            return;
+          }
+
+          const expected = parseFloat(expectedValue || 0);
+          const declared = parseFloat(declaredValue);
+          const variance = declared - expected;
+
+          await client.query(
+            `INSERT INTO shift_sim_balance_snapshots (
+               shift_id,
+               sim_wallet_id,
+               balance_type,
+               opening_expected,
+               opening_declared,
+               opening_variance
+             )
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [
+              result.rows[0].id,
+              wallet.id,
+              balanceType,
+              expected,
+              declared,
+              variance,
+            ]
+          );
+        };
+
+        await snapshotOpeningBalance(
+          'e_float',
+          wallet.e_float_balance,
+          declaration.e_float_declared
+        );
+
+        await snapshotOpeningBalance(
+          'commission',
+          wallet.commission_balance,
+          declaration.commission_declared
+        );
+
+        await snapshotOpeningBalance(
+          'working_balance',
+          wallet.working_balance,
+          declaration.working_declared
+        );
+      }
+
       return result.rows[0];
     });
 
     await auditLog({
       userId: agentId, companyId, action: 'SHIFT_OPENED', entityType: 'shift', entityId: shift.id,
-      newValues: { opening_cash_expected: shift.opening_cash_expected },
+      newValues: {
+        opening_cash_expected: shift.opening_cash_expected,
+        opening_cash_declared: shift.opening_cash_declared,
+        opening_cash_variance: shift.opening_cash_variance,
+      },
       ipAddress: req.ip, requestId: req.requestId,
     });
 
@@ -75,11 +258,80 @@ exports.getCurrentShift = async (req, res) => {
 
 exports.closeShift = async (req, res) => {
   const { shift_id } = req.params;
-  const { closing_cash_actual, notes } = req.body;
+  const {
+    closing_cash_declared,
+    closing_cash_actual,
+    closing_sim_balances = [],
+    notes,
+  } = req.body || {};
   const agentId = req.user.id;
 
-  if (closing_cash_actual === undefined || closing_cash_actual === null || isNaN(parseFloat(closing_cash_actual))) {
-    return res.status(422).json({ success: false, message: 'closing_cash_actual is required and must be a number' });
+  // closing_cash_declared is the new reconciliation contract.
+  // closing_cash_actual remains accepted for backward compatibility
+  // with existing AgentPro clients.
+  const closingCashInput =
+    closing_cash_declared ?? closing_cash_actual;
+
+  if (
+    closingCashInput === undefined ||
+    closingCashInput === null ||
+    String(closingCashInput).trim() === '' ||
+    !Number.isFinite(Number(closingCashInput))
+  ) {
+    return res.status(422).json({
+      success: false,
+      message:
+        'closing_cash_actual is required and must be a number',
+    });
+  }
+
+  if (Number(closingCashInput) < 0) {
+    return res.status(422).json({
+      success: false,
+      message: closing_cash_declared !== undefined
+        ? 'closing_cash_declared is required and must be a non-negative number'
+        : 'closing_cash_actual is required and must be a non-negative number',
+    });
+  }
+
+  if (!Array.isArray(closing_sim_balances)) {
+    return res.status(422).json({
+      success: false,
+      message: 'closing_sim_balances must be an array',
+    });
+  }
+
+  const hasMalformedClosingSimDeclaration =
+    closing_sim_balances.some(
+      (declaration) =>
+        declaration === null ||
+        typeof declaration !== 'object' ||
+        Array.isArray(declaration) ||
+        typeof declaration.sim_wallet_id !== 'string' ||
+        declaration.sim_wallet_id.trim() === ''
+    );
+
+  if (hasMalformedClosingSimDeclaration) {
+    return res.status(422).json({
+      success: false,
+      message:
+        'every closing SIM balance must include a valid sim_wallet_id',
+    });
+  }
+
+  const closingSimWalletIds = closing_sim_balances.map(
+    (declaration) => declaration.sim_wallet_id
+  );
+
+  if (
+    new Set(closingSimWalletIds).size !==
+    closingSimWalletIds.length
+  ) {
+    return res.status(422).json({
+      success: false,
+      message:
+        'closing_sim_balances must not contain duplicate sim_wallet_id values',
+    });
   }
 
   try {
@@ -94,8 +346,171 @@ exports.closeShift = async (req, res) => {
 
     const closed = await withTransaction(async (client) => {
       const closingExpected = await getExpectedCash(client, agentId);
-      const actual = parseFloat(closing_cash_actual);
+      const actual = Number(closingCashInput);
       const variance = actual - closingExpected;
+
+      if (closing_sim_balances.length === 0) {
+        const snapshotPresenceResult = await client.query(
+          `SELECT id
+           FROM shift_sim_balance_snapshots
+           WHERE shift_id = $1
+           FOR UPDATE`,
+          [shift_id]
+        );
+
+        if (snapshotPresenceResult.rows.length > 0) {
+          const error = new Error(
+            'closing_sim_balances is required because this shift has electronic balance snapshots'
+          );
+
+          error.statusCode = 422;
+          throw error;
+        }
+      }
+
+      if (closing_sim_balances.length > 0) {
+        const snapshotResult = await client.query(
+          `SELECT
+             snapshot.id AS snapshot_id,
+             snapshot.sim_wallet_id,
+             wallet.provider,
+             snapshot.balance_type,
+             CASE snapshot.balance_type
+               WHEN 'e_float'
+                 THEN wallet.e_float_balance
+               WHEN 'commission'
+                 THEN wallet.commission_balance
+               WHEN 'working_balance'
+                 THEN wallet.working_balance
+             END AS closing_expected
+           FROM shift_sim_balance_snapshots snapshot
+           JOIN agent_sim_wallets wallet
+             ON wallet.id = snapshot.sim_wallet_id
+           WHERE snapshot.shift_id = $1
+           ORDER BY snapshot.id
+           FOR UPDATE OF snapshot`,
+          [shift_id]
+        );
+
+        const declarationsByWallet = new Map(
+          closing_sim_balances.map(
+            (declaration) => [
+              declaration.sim_wallet_id,
+              declaration,
+            ]
+          )
+        );
+
+        const capturedWalletIds = new Set(
+          snapshotResult.rows.map(
+            (snapshot) => snapshot.sim_wallet_id
+          )
+        );
+
+        const hasUnknownWallet =
+          closing_sim_balances.some(
+            (declaration) =>
+              !capturedWalletIds.has(
+                declaration.sim_wallet_id
+              )
+          );
+
+        if (hasUnknownWallet) {
+          const error = new Error(
+            'closing_sim_balances contains a SIM wallet that was not captured when this shift opened'
+          );
+
+          error.statusCode = 422;
+          throw error;
+        }
+
+        const getClosingDeclaredValue = (
+          declaration,
+          balanceType
+        ) => {
+          if (!declaration) {
+            return undefined;
+          }
+
+          if (balanceType === 'e_float') {
+            return declaration.e_float_declared;
+          }
+
+          if (balanceType === 'commission') {
+            return declaration.commission_declared;
+          }
+
+          if (balanceType === 'working_balance') {
+            return declaration.working_declared;
+          }
+
+          return undefined;
+        };
+
+        const closingBalanceErrorMessage = (
+          balanceType
+        ) => {
+          if (balanceType === 'e_float') {
+            return 'e_float_declared is required for every closing SIM balance and must be a non-negative number';
+          }
+
+          if (balanceType === 'commission') {
+            return 'commission_declared is required for every closing SIM balance and must be a non-negative number';
+          }
+
+          return 'working_declared is required for every closing Telecel SIM balance and must be a non-negative number';
+        };
+
+        for (const snapshot of snapshotResult.rows) {
+          const declaration = declarationsByWallet.get(
+            snapshot.sim_wallet_id
+          );
+
+          const declaredValue =
+            getClosingDeclaredValue(
+              declaration,
+              snapshot.balance_type
+            );
+
+          if (
+            declaredValue === undefined ||
+            declaredValue === null ||
+            String(declaredValue).trim() === '' ||
+            !Number.isFinite(Number(declaredValue)) ||
+            Number(declaredValue) < 0
+          ) {
+            const error = new Error(
+              closingBalanceErrorMessage(
+                snapshot.balance_type
+              )
+            );
+
+            error.statusCode = 422;
+            throw error;
+          }
+
+          const expected =
+            Number(snapshot.closing_expected || 0);
+          const declared = Number(declaredValue);
+          const closingVariance =
+            declared - expected;
+
+          await client.query(
+            `UPDATE shift_sim_balance_snapshots
+             SET closing_expected = $1,
+                 closing_declared = $2,
+                 closing_variance = $3,
+                 updated_at = NOW()
+             WHERE id = $4`,
+            [
+              expected,
+              declared,
+              closingVariance,
+              snapshot.snapshot_id,
+            ]
+          );
+        }
+      }
 
       const txCountResult = await client.query(
         `SELECT COUNT(*) FROM transactions WHERE agent_id = $1 AND created_at >= $2`,
@@ -106,13 +521,24 @@ exports.closeShift = async (req, res) => {
         `UPDATE shifts SET
            status = 'closed',
            closing_cash_expected = $1,
-           closing_cash_actual = $2,
-           variance = $3,
-           transaction_count = $4,
-           notes = $5,
+           closing_cash_declared = $2,
+           closing_cash_variance = $3,
+           closing_cash_actual = $4,
+           variance = $5,
+           transaction_count = $6,
+           notes = $7,
            closed_at = NOW()
-         WHERE id = $6 RETURNING *`,
-        [closingExpected, actual, variance, parseInt(txCountResult.rows[0].count), notes || null, shift_id]
+         WHERE id = $8 RETURNING *`,
+        [
+          closingExpected,
+          actual,
+          variance,
+          actual,
+          variance,
+          parseInt(txCountResult.rows[0].count),
+          notes || null,
+          shift_id,
+        ]
       );
       return result.rows[0];
     });
@@ -122,14 +548,32 @@ exports.closeShift = async (req, res) => {
 
     await auditLog({
       userId: agentId, companyId: req.user.company_id, action: 'SHIFT_CLOSED', entityType: 'shift', entityId: shift_id,
-      newValues: { closing_cash_expected: closed.closing_cash_expected, closing_cash_actual: closed.closing_cash_actual, variance: closed.variance, flagged },
+      newValues: {
+        closing_cash_expected: closed.closing_cash_expected,
+        closing_cash_declared: closed.closing_cash_declared,
+        closing_cash_variance: closed.closing_cash_variance,
+        closing_cash_actual: closed.closing_cash_actual,
+        variance: closed.variance,
+        flagged,
+      },
       ipAddress: req.ip, requestId: req.requestId,
     });
 
     res.json({ success: true, data: { ...closed, flagged, threshold } });
   } catch (error) {
     logger.error('Close shift error:', error);
-    res.status(500).json({ success: false, message: 'Failed to close shift' });
+
+    if (error.statusCode === 422) {
+      return res.status(422).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to close shift',
+    });
   }
 };
 
