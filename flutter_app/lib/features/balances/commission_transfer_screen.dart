@@ -10,7 +10,17 @@ import '../../shared/theme/app_colors.dart';
 
 class CommissionTransferScreen extends StatefulWidget {
   final String provider;
-  const CommissionTransferScreen({super.key, required this.provider});
+  final int? initialSimSlot;
+  final String? initialSimIccid;
+  final int? initialSimSubscriptionId;
+
+  const CommissionTransferScreen({
+    super.key,
+    required this.provider,
+    this.initialSimSlot,
+    this.initialSimIccid,
+    this.initialSimSubscriptionId,
+  });
 
   @override
   State<CommissionTransferScreen> createState() =>
@@ -37,6 +47,7 @@ class _CommissionTransferScreenState extends State<CommissionTransferScreen> {
 
   List<SimCard> _providerSims = const [];
   int? _selectedSimSlot;
+  bool _initialSimIdentityUnavailable = false;
 
   // Retained only while retrying the exact same initiation request.
   String? _pendingClientOperationId;
@@ -74,13 +85,51 @@ class _CommissionTransferScreenState extends State<CommissionTransferScreen> {
 
       if (!mounted) return;
 
+      final requestedIccid =
+          (widget.initialSimIccid ?? '').trim();
+
+      final routeRequestedExactSim =
+          widget.initialSimSlot != null ||
+          requestedIccid.isNotEmpty ||
+          widget.initialSimSubscriptionId != null;
+
+      SimCard? requestedSim;
+
+      if (routeRequestedExactSim) {
+        for (final sim in matches) {
+          final slotMatches =
+              widget.initialSimSlot == null ||
+              sim.slot == widget.initialSimSlot;
+
+          final identityMatches =
+              requestedIccid.isNotEmpty
+                  ? sim.iccid.trim() == requestedIccid &&
+                      slotMatches
+                  : slotMatches &&
+                      widget.initialSimSubscriptionId != null &&
+                      sim.subscriptionId ==
+                          widget.initialSimSubscriptionId;
+
+          if (identityMatches) {
+            requestedSim = sim;
+            break;
+          }
+        }
+      }
+
       final noSimError = matches.isEmpty
           ? 'No ${_providerLabel(widget.provider)} SIM is available on this device.'
-          : null;
+          : routeRequestedExactSim && requestedSim == null
+              ? 'The selected physical SIM is no longer available on this device.'
+              : null;
 
       setState(() {
         _providerSims = matches;
-        _selectedSimSlot = matches.isEmpty ? null : matches.first.slot;
+        _selectedSimSlot = routeRequestedExactSim
+            ? requestedSim?.slot
+            : (matches.isEmpty ? null : matches.first.slot);
+        _initialSimIdentityUnavailable =
+            routeRequestedExactSim && requestedSim == null;
         _loadingSims = false;
         _simError = noSimError;
 
@@ -135,6 +184,8 @@ class _CommissionTransferScreenState extends State<CommissionTransferScreen> {
   void _selectSim(int slot) {
     setState(() {
       _selectedSimSlot = slot;
+      _initialSimIdentityUnavailable = false;
+      _simError = null;
 
       // Changing the physical SIM changes the financial operation identity.
       _pendingClientOperationId = null;
@@ -450,8 +501,13 @@ class _CommissionTransferScreenState extends State<CommissionTransferScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final destinationLabel =
+        widget.provider == 'telecel' ? 'Float' : 'e-Float';
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Transfer Commission to e-Float')),
+      appBar: AppBar(
+        title: Text('Transfer Commission to $destinationLabel'),
+      ),
       body: _loadingSims
           ? const Center(child: CircularProgressIndicator())
           : Padding(
@@ -603,7 +659,10 @@ class _CommissionTransferScreenState extends State<CommissionTransferScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                ] else if (_providerSims.length > 1) ...[
+                ],
+                if (_providerSims.length > 1 ||
+                    (_initialSimIdentityUnavailable &&
+                        _providerSims.isNotEmpty)) ...[
                   Text(
                     'SIM to use',
                     style: TextStyle(
@@ -628,7 +687,8 @@ class _CommissionTransferScreenState extends State<CommissionTransferScreen> {
                     }).toList(),
                   ),
                   const SizedBox(height: 16),
-                ] else if (_providerSims.length == 1) ...[
+                ] else if (_providerSims.length == 1 &&
+                    !_initialSimIdentityUnavailable) ...[
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(

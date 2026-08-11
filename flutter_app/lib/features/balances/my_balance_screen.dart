@@ -323,6 +323,41 @@ class _ProviderBalanceCard extends StatelessWidget {
     required this.onChanged,
   });
 
+  Map<String, String> _simIdentityQuery() {
+    final queryParameters = <String, String>{
+      'sim_slot': sim.slot.toString(),
+    };
+
+    final iccid = sim.iccid.trim();
+
+    if (iccid.isNotEmpty) {
+      queryParameters['sim_iccid'] = iccid;
+    } else {
+      queryParameters['sim_subscription_id'] =
+          sim.subscriptionId.toString();
+    }
+
+    return queryParameters;
+  }
+
+  String _transactionRoute(String transactionType) {
+    return Uri(
+      path: '/transactions',
+      queryParameters: {
+        'type': transactionType,
+        'provider': provider,
+        ..._simIdentityQuery(),
+      },
+    ).toString();
+  }
+
+  String _balanceActionRoute(String path) {
+    return Uri(
+      path: path,
+      queryParameters: _simIdentityQuery(),
+    ).toString();
+  }
+
   @override
   Widget build(BuildContext context) {
     final isTelecel = provider == 'telecel';
@@ -404,6 +439,39 @@ class _ProviderBalanceCard extends StatelessWidget {
 
         const SizedBox(height: 14),
 
+        if (isTelecel) ...[
+          Row(
+            children: [
+              Expanded(
+                child: _ActionChip(
+                  icon: Icons.move_to_inbox_outlined,
+                  label: 'Working Account to Float',
+                  route: _transactionRoute(
+                    'working_to_float',
+                  ),
+                  onChanged: onChanged,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _ActionChip(
+                  icon: Icons.outbox_outlined,
+                  label: 'Float to Working Account',
+                  route: _transactionRoute(
+                    'float_to_working',
+                  ),
+                  onChanged: onChanged,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+        ],
+
         // Electronic actions remain attached to the physical SIM/provider.
         // Physical cash adjustment is agent-level and is shown once above.
         Row(
@@ -412,7 +480,9 @@ class _ProviderBalanceCard extends StatelessWidget {
               child: _ActionChip(
                 icon: Icons.call_received,
                 label: 'Declare Float',
-                route: '/balances/float-received',
+                route: _balanceActionRoute(
+                  '/balances/float-received',
+                ),
                 provider: provider,
                 onChanged: onChanged,
               ),
@@ -425,8 +495,12 @@ class _ProviderBalanceCard extends StatelessWidget {
             Expanded(
               child: _ActionChip(
                 icon: Icons.swap_horiz,
-                label: 'Transfer Commission to e-Float',
-                route: '/balances/commission-transfer',
+                label: isTelecel
+                    ? 'Transfer Commission to Float'
+                    : 'Transfer Commission to e-Float',
+                route: _balanceActionRoute(
+                  '/balances/commission-transfer',
+                ),
                 provider: provider,
                 onChanged: onChanged,
               ),
