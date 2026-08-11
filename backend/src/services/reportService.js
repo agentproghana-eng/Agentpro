@@ -194,7 +194,7 @@ async function generateTransactionReportPDF({ transactions, filters, summary, ti
     // Summary Cards
     const summaries = [
       ['Total Transactions', summary.count || 0],
-      ['Total Amount', GHS(summary.total_amount)],
+      ['Customer Volume', GHS(summary.total_amount)],
       ['Net Commission', GHS(summary.total_commission)],
       ['Success Rate', `${summary.success_rate || 0}%`],
     ];
@@ -308,7 +308,7 @@ async function generateTransactionReportExcel({ transactions, filters, summary, 
   // Summary row
   sheet.addRow([]);
   sheet.addRow(['Summary']);
-  sheet.addRow(['Total Transactions', summary.count, '', 'Total Amount', `GHS ${parseFloat(summary.total_amount||0).toFixed(2)}`, '', 'Net Commission', `GHS ${parseFloat(summary.total_commission||0).toFixed(2)}`]);
+  sheet.addRow(['Total Transactions', summary.count, '', 'Customer Volume', `GHS ${parseFloat(summary.total_amount||0).toFixed(2)}`, '', 'Net Commission', `GHS ${parseFloat(summary.total_commission||0).toFixed(2)}`]);
   sheet.addRow([]);
 
   // Headers

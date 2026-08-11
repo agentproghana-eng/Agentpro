@@ -8,6 +8,9 @@ const {
   generateCSV,
 } = require('../services/reportService');
 const { getCommissionSummary } = require('../services/commissionService');
+const {
+  CUSTOMER_VOLUME_TRANSACTION_TYPES,
+} = require('../config/reportClassification');
 
 // ── Build transaction query with filters ──────────────────────
 
@@ -76,6 +79,12 @@ async function fetchTransactions(filters, userContext) {
   const sortColumn = SORT_COLUMNS[filters.sort_by] || SORT_COLUMNS.date;
   const sortDirection = filters.sort_order === 'asc' ? 'ASC' : 'DESC';
 
+  const customerVolumeTypeParam = params.length + 1;
+  const summaryParams = [
+    ...params,
+    CUSTOMER_VOLUME_TRANSACTION_TYPES,
+  ];
+
   const [txResult, summaryResult] = await Promise.all([
     query(
       `SELECT t.*,
@@ -94,15 +103,33 @@ async function fetchTransactions(filters, userContext) {
     query(
       `SELECT
          COUNT(*) as count,
-         COALESCE(SUM(t.amount), 0) as total_amount,
-         COALESCE(SUM(cm.net_commission), 0) as total_commission,
+         COALESCE(
+           SUM(
+             CASE
+               WHEN t.status = 'success'
+                AND t.transaction_type::text = ANY($${customerVolumeTypeParam}::text[])
+               THEN t.amount
+               ELSE 0
+             END
+           ),
+           0
+         ) as total_amount,
+         COALESCE(
+           SUM(
+             CASE
+               WHEN t.status = 'success' THEN cm.net_commission
+               ELSE 0
+             END
+           ),
+           0
+         ) as total_commission,
          ROUND(
            100.0 * COUNT(CASE WHEN t.status = 'success' THEN 1 END) / NULLIF(COUNT(*), 0), 1
          ) as success_rate
        FROM transactions t
        LEFT JOIN commissions cm ON cm.transaction_id = t.id
        ${where}`,
-      params
+      summaryParams
     ),
   ]);
 
@@ -460,19 +487,65 @@ exports.dashboardSummary = async (req, res) => {
 
     const [todayTx, monthTx, floatSummary, recentTx] = await Promise.all([
       query(
-        `SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total,
-                COUNT(CASE WHEN status = 'success' THEN 1 END) as success_count
+        `SELECT
+                COUNT(
+                  CASE
+                    WHEN t.status = 'success'
+                     AND t.transaction_type::text = ANY($2::text[])
+                    THEN 1
+                  END
+                ) as customer_transaction_count,
+                COALESCE(
+                  SUM(
+                    CASE
+                      WHEN t.status = 'success'
+                       AND t.transaction_type::text = ANY($2::text[])
+                      THEN t.amount
+                      ELSE 0
+                    END
+                  ),
+                  0
+                ) as customer_volume,
+                COALESCE(
+                  SUM(
+                    CASE
+                      WHEN t.status = 'success' THEN cm.net_commission
+                      ELSE 0
+                    END
+                  ),
+                  0
+                ) as commission,
+                COUNT(CASE WHEN t.status = 'success' THEN 1 END) as success_count
          FROM transactions t
+         LEFT JOIN commissions cm ON cm.transaction_id = t.id
          WHERE t.created_at >= $1 ${companyFilter} ${agentFilter}`,
-        [startOfDay]
+        [startOfDay, CUSTOMER_VOLUME_TRANSACTION_TYPES]
       ),
       query(
-        `SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total,
+        `SELECT
+                COUNT(
+                  CASE
+                    WHEN t.transaction_type::text = ANY($2::text[])
+                    THEN 1
+                  END
+                ) as customer_transaction_count,
+                COALESCE(
+                  SUM(
+                    CASE
+                      WHEN t.transaction_type::text = ANY($2::text[])
+                      THEN t.amount
+                      ELSE 0
+                    END
+                  ),
+                  0
+                ) as customer_volume,
                 COALESCE(SUM(cm.net_commission), 0) as commission
          FROM transactions t
          LEFT JOIN commissions cm ON cm.transaction_id = t.id
-         WHERE t.created_at >= $1 AND t.status = 'success' ${companyFilter} ${agentFilter}`,
-        [startOfMonth]
+         WHERE t.created_at >= $1
+           AND t.status = 'success'
+           ${companyFilter} ${agentFilter}`,
+        [startOfMonth, CUSTOMER_VOLUME_TRANSACTION_TYPES]
       ),
       companyId ? query(
         `SELECT COALESCE(SUM(fa.current_balance), 0) as total, provider
@@ -494,14 +567,30 @@ exports.dashboardSummary = async (req, res) => {
     res.json({
       success: true,
       data: {
+        today_volume: parseFloat(todayTx.rows[0].customer_volume),
+        today_commission: parseFloat(todayTx.rows[0].commission),
+        today_transactions: parseInt(
+          todayTx.rows[0].customer_transaction_count
+        ),
         today: {
-          transaction_count: parseInt(todayTx.rows[0].count),
-          total_amount: parseFloat(todayTx.rows[0].total),
+          transaction_count: parseInt(
+            todayTx.rows[0].customer_transaction_count
+          ),
+          total_amount: parseFloat(
+            todayTx.rows[0].customer_volume
+          ),
+          net_commission: parseFloat(
+            todayTx.rows[0].commission
+          ),
           success_count: parseInt(todayTx.rows[0].success_count),
         },
         this_month: {
-          transaction_count: parseInt(monthTx.rows[0].count),
-          total_amount: parseFloat(monthTx.rows[0].total),
+          transaction_count: parseInt(
+            monthTx.rows[0].customer_transaction_count
+          ),
+          total_amount: parseFloat(
+            monthTx.rows[0].customer_volume
+          ),
           net_commission: parseFloat(monthTx.rows[0].commission),
         },
         float_by_provider: floatSummary.rows,
