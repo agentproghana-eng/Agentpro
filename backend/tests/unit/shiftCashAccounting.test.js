@@ -65,6 +65,9 @@ describe('Shift canonical cash drawer accounting', () => {
         id: 'agent-1',
         company_id: 'company-1',
       },
+      body: {
+        opening_cash_declared: '350.00',
+      },
       ip: '127.0.0.1',
       requestId: 'request-1',
     };
@@ -88,6 +91,8 @@ describe('Shift canonical cash drawer accounting', () => {
       'branch-1',
       'company-1',
       350,
+      350,
+      0,
     ]);
 
     expect(res.status).toHaveBeenCalledWith(201);
@@ -116,6 +121,9 @@ describe('Shift canonical cash drawer accounting', () => {
         .fn()
         .mockResolvedValueOnce({
           rows: [{ total: '410.00' }],
+        })
+        .mockResolvedValueOnce({
+          rows: [],
         })
         .mockResolvedValueOnce({
           rows: [{ count: '3' }],
@@ -160,11 +168,13 @@ describe('Shift canonical cash drawer accounting', () => {
     expect(cashSql).not.toContain('FROM agent_balances');
     expect(cashParams).toEqual(['agent-1']);
 
-    const [updateSql, updateParams] = client.query.mock.calls[2];
+    const [updateSql, updateParams] = client.query.mock.calls[3];
 
     expect(updateSql).toContain('UPDATE shifts SET');
     expect(updateParams).toEqual([
       410,
+      425,
+      15,
       425,
       15,
       3,
