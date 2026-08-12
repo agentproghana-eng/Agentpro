@@ -6,7 +6,6 @@ const mockGenerateTransactionReportPDFStream =
   jest.fn();
 const mockGenerateTransactionReportExcelStream =
   jest.fn();
-const mockGenerateCSV = jest.fn(() => 'csv-output');
 
 jest.mock('../../src/config/database', () => ({
   query: (...args) => mockQuery(...args),
@@ -37,17 +36,22 @@ jest.mock('../../src/services/reportService', () => ({
       ),
   generateCommissionReportPDF: jest.fn(),
   generateCommissionReportExcel: jest.fn(),
-  generateCSV: (...args) => mockGenerateCSV(...args),
 }));
 
 const mockGetCommissionSummary = jest.fn();
 const mockGetCommissionTotals = jest.fn();
+const mockStreamCommissionSummaryRows =
+  jest.fn();
 
 jest.mock('../../src/services/commissionService', () => ({
   getCommissionSummary: (...args) =>
     mockGetCommissionSummary(...args),
   getCommissionTotals: (...args) =>
     mockGetCommissionTotals(...args),
+  streamCommissionSummaryRows: (...args) =>
+    mockStreamCommissionSummaryRows(
+      ...args
+    ),
 }));
 
 const reportController =
@@ -60,10 +64,8 @@ const {
 function resetReportMocks() {
   jest.resetAllMocks();
 
-  // resetAllMocks intentionally clears implementations as well as
-  // call history. Restore shared baseline behavior required by tests
-  // that exercise the legacy Commission CSV generator.
-  mockGenerateCSV.mockReturnValue('csv-output');
+  mockStreamCommissionSummaryRows
+    .mockResolvedValue();
 
   mockGetCommissionTotals.mockResolvedValue({
     transaction_count: '0',
@@ -853,7 +855,7 @@ describe('reportController manager report scope', () => {
         role: 'manager',
       },
       query: {
-        format: 'csv',
+        format: 'pdf',
         branch_id: 'branch-unmanaged',
         from_date: '2026-08-01T00:00:00.000Z',
         to_date: '2026-08-12T23:59:59.999Z',
@@ -1442,6 +1444,169 @@ describe('reportController monthly dashboard accounting', () => {
 });
 
 
+describe('reportController commission CSV streaming', () => {
+  beforeEach(() => {
+    resetReportMocks();
+  });
+
+  function makeCommissionRow(index) {
+    return {
+      group_id: `agent-${index}`,
+      label: `Agent ${index}`,
+      transaction_count: '1',
+      total_gross: '10.00',
+      total_provider_share: '3.00',
+      total_net: '7.00',
+    };
+  }
+
+  test('streams more than 5000 grouped rows without buffering the report', async () => {
+    mockStreamCommissionSummaryRows
+      .mockImplementation(
+        async (params, onRow) => {
+          expect(params).toEqual(
+            expect.objectContaining({
+              company_id: 'company-1',
+              manager_id: 'manager-1',
+              branch_id: 'branch-1',
+              group_by: 'agent',
+            })
+          );
+
+          for (
+            let index = 1;
+            index <= 5001;
+            index++
+          ) {
+            await onRow(
+              makeCommissionRow(index)
+            );
+          }
+        }
+      );
+
+    const req = {
+      user: {
+        id: 'manager-1',
+        company_id: 'company-1',
+        role: 'manager',
+      },
+      query: {
+        format: 'csv',
+        group_by: 'agent',
+        branch_id: 'branch-1',
+        from_date:
+          '2026-08-01T00:00:00.000Z',
+        to_date:
+          '2026-08-12T23:59:59.999Z',
+      },
+    };
+
+    const res = makeRes();
+
+    await reportController.commissionReport(
+      req,
+      res
+    );
+
+    expect(mockStreamCommissionSummaryRows)
+      .toHaveBeenCalledTimes(1);
+
+    expect(mockGetCommissionSummary)
+      .not.toHaveBeenCalled();
+
+    expect(mockGetCommissionTotals)
+      .not.toHaveBeenCalled();
+
+    // Header + 11 bounded data chunks:
+    // 10 x 500 rows + one final row.
+    expect(res.write)
+      .toHaveBeenCalledTimes(12);
+
+    const output = res.write.mock.calls
+      .map(([chunk]) => String(chunk))
+      .join('');
+
+    expect(output).toContain(
+      '"Agent 1"'
+    );
+
+    expect(output).toContain(
+      '"Agent 5000"'
+    );
+
+    expect(output).toContain(
+      '"Agent 5001"'
+    );
+
+    const dataLineCount =
+      output.trim().split('\n').length - 1;
+
+    expect(dataLineCount)
+      .toBe(5001);
+
+    expect(res.setHeader)
+      .toHaveBeenCalledWith(
+        'Content-Type',
+        'text/csv; charset=utf-8'
+      );
+
+    expect(res.end)
+      .toHaveBeenCalledTimes(1);
+  });
+
+  test('waits for response drain when commission CSV backpressure is applied', async () => {
+    mockStreamCommissionSummaryRows
+      .mockImplementation(
+        async (params, onRow) => {
+          await onRow(
+            makeCommissionRow(1)
+          );
+        }
+      );
+
+    const res = makeRes();
+
+    res.write
+      .mockImplementationOnce(() => true)
+      .mockImplementationOnce(() => {
+        setImmediate(() => {
+          res.emit('drain');
+        });
+
+        return false;
+      });
+
+    const req = {
+      user: {
+        id: 'agent-1',
+        company_id: 'company-1',
+        role: 'agent',
+      },
+      query: {
+        format: 'csv',
+        group_by: 'agent',
+        period: 'today',
+      },
+    };
+
+    await reportController.commissionReport(
+      req,
+      res
+    );
+
+    expect(res.write)
+      .toHaveBeenCalledTimes(2);
+
+    expect(res.end)
+      .toHaveBeenCalledTimes(1);
+
+    expect(res.destroy)
+      .not.toHaveBeenCalled();
+  });
+});
+
+
 describe('reportController commission report security and periods', () => {
   beforeEach(() => {
     resetReportMocks();
@@ -1461,7 +1626,7 @@ describe('reportController commission report security and periods', () => {
         role: 'agent',
       },
       query: {
-        format: 'csv',
+        format: 'pdf',
         from_date: '2026-08-01T00:00:00.000Z',
         to_date: '2026-08-12T10:00:00.000Z',
         agent_id: 'agent-other',
@@ -1492,15 +1657,13 @@ describe('reportController commission report security and periods', () => {
         })
       );
 
-    expect(res.send)
-      .toHaveBeenCalledWith('csv-output');
   });
 
   test.each([
     ['agent', 'Agent', 'Agent One'],
     ['branch', 'Branch', 'Main Branch'],
   ])(
-    'uses the correct CSV grouping column for agent and branch reports',
+    'streams the correct CSV grouping column for agent and branch reports',
     async (
       groupBy,
       expectedHeader,
@@ -1518,10 +1681,15 @@ describe('reportController commission report security and periods', () => {
         total_net: '7.00',
       };
 
-      mockGetCommissionSummary
-        .mockResolvedValue([
-          groupedRow,
-        ]);
+      mockStreamCommissionSummaryRows
+        .mockImplementation(
+          async (params, onRow) => {
+            expect(params.group_by)
+              .toBe(groupBy);
+
+            await onRow(groupedRow);
+          }
+        );
 
       const req = {
         user: {
@@ -1542,34 +1710,30 @@ describe('reportController commission report security and periods', () => {
         res
       );
 
-      expect(mockGenerateCSV)
+      expect(mockGetCommissionSummary)
+        .not.toHaveBeenCalled();
+
+      expect(mockGetCommissionTotals)
+        .not.toHaveBeenCalled();
+
+      const output = res.write.mock.calls
+        .map(([chunk]) => String(chunk))
+        .join('');
+
+      expect(output).toContain(
+        `"${expectedHeader}"`
+      );
+
+      expect(output).toContain(
+        `"${expectedLabel}"`
+      );
+
+      expect(output).toContain(
+        '"10.00"'
+      );
+
+      expect(res.end)
         .toHaveBeenCalledTimes(1);
-
-      const [
-        rows,
-        columns,
-      ] = mockGenerateCSV.mock.calls[0];
-
-      expect(rows).toEqual([
-        groupedRow,
-      ]);
-
-      expect(columns[0].label)
-        .toBe(expectedHeader);
-
-      expect(columns[0].key)
-        .toBe('label');
-
-      expect(
-        columns[0].getValue(
-          groupedRow
-        )
-      ).toBe(expectedLabel);
-
-      expect(res.send)
-        .toHaveBeenCalledWith(
-          'csv-output'
-        );
     }
   );
 
@@ -1581,7 +1745,7 @@ describe('reportController commission report security and periods', () => {
         role: 'business_owner',
       },
       query: {
-        format: 'csv',
+        format: 'pdf',
         from_date: '2026-08-01T00:00:00.000Z',
         to_date: '2026-08-12T10:00:00.000Z',
         agent_id: 'agent-selected',
@@ -1622,7 +1786,7 @@ describe('reportController commission report security and periods', () => {
           role: 'business_owner',
         },
         query: {
-          format: 'csv',
+          format: 'pdf',
           period,
         },
       };

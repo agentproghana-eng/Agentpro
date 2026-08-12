@@ -8,11 +8,11 @@ const {
   generateTransactionReportExcelStream,
   generateCommissionReportPDF,
   generateCommissionReportExcel,
-  generateCSV,
 } = require('../services/reportService');
 const {
   getCommissionSummary,
   getCommissionTotals,
+  streamCommissionSummaryRows,
 } = require('../services/commissionService');
 const {
   CUSTOMER_VOLUME_TRANSACTION_TYPES,
@@ -296,6 +296,118 @@ async function streamTransactionCsv(
   await streamTransactionRows(
     filters,
     userContext,
+    async (row) => {
+      pendingRows.push(row);
+
+      if (pendingRows.length >= 500) {
+        await flushPendingRows();
+      }
+    }
+  );
+
+  await flushPendingRows();
+}
+
+
+function commissionGroupLabel(groupBy) {
+  if (groupBy === 'agent') {
+    return 'Agent';
+  }
+
+  if (groupBy === 'branch') {
+    return 'Branch';
+  }
+
+  return 'Period';
+}
+
+function commissionCsvGroupValue(
+  row,
+  groupBy
+) {
+  if (
+    groupBy === 'agent' ||
+    groupBy === 'branch'
+  ) {
+    return row.label || '';
+  }
+
+  return row.period
+    ? new Date(row.period)
+        .toLocaleDateString('en-GH')
+    : '';
+}
+
+function commissionCsvRow(
+  row,
+  groupBy
+) {
+  return [
+    commissionCsvGroupValue(
+      row,
+      groupBy
+    ),
+    row.transaction_count,
+    row.total_gross,
+    row.total_provider_share,
+    row.total_net,
+  ]
+    .map(csvCell)
+    .join(',');
+}
+
+function commissionCsvHeader(groupBy) {
+  return [
+    commissionGroupLabel(groupBy),
+    'Transactions',
+    'Gross Commission (GHS)',
+    'Provider Share (GHS)',
+    'Net Commission (GHS)',
+  ]
+    .map(csvCell)
+    .join(',');
+}
+
+async function streamCommissionCsv(
+  filters,
+  groupBy,
+  res
+) {
+  await writeResponseChunk(
+    res,
+    `${commissionCsvHeader(groupBy)}\n`
+  );
+
+  let pendingRows = [];
+
+  const flushPendingRows = async () => {
+    if (pendingRows.length === 0) {
+      return;
+    }
+
+    const chunk =
+      `${pendingRows
+        .map((row) =>
+          commissionCsvRow(
+            row,
+            groupBy
+          )
+        )
+        .join('\n')}\n`;
+
+    pendingRows = [];
+
+    await writeResponseChunk(
+      res,
+      chunk
+    );
+  };
+
+  await streamCommissionSummaryRows(
+    {
+      ...filters,
+      group_by: groupBy,
+    },
     async (row) => {
       pendingRows.push(row);
 
@@ -831,6 +943,25 @@ exports.commissionReport = async (req, res) => {
       to_date: resolvedTo,
     };
 
+    if (format === 'csv') {
+      res.setHeader(
+        'Content-Type',
+        'text/csv; charset=utf-8'
+      );
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="commissions_${Date.now()}.csv"`
+      );
+
+      await streamCommissionCsv(
+        commissionFilters,
+        group_by,
+        res
+      );
+
+      return res.end();
+    }
+
     const [
       data,
       summary,
@@ -849,46 +980,6 @@ exports.commissionReport = async (req, res) => {
       ? `Commission Report — ${branchName} — ${period || 'Custom Period'}`
       : `Commission Report — ${period || 'Custom Period'}`;
 
-    if (format === 'csv') {
-      const groupLabel =
-        group_by === 'agent'
-          ? 'Agent'
-          : group_by === 'branch'
-            ? 'Branch'
-            : 'Period';
-
-      const csv = generateCSV(data, [
-        {
-          label: groupLabel,
-          key:
-            group_by === 'agent' ||
-            group_by === 'branch'
-              ? 'label'
-              : 'period',
-          getValue: (r) => {
-            if (
-              group_by === 'agent' ||
-              group_by === 'branch'
-            ) {
-              return r.label || '';
-            }
-
-            return r.period
-              ? new Date(r.period)
-                  .toLocaleDateString('en-GH')
-              : '';
-          },
-        },
-        { label: 'Transactions', key: 'transaction_count' },
-        { label: 'Gross Commission (GHS)', key: 'total_gross' },
-        { label: 'Provider Share (GHS)', key: 'total_provider_share' },
-        { label: 'Net Commission (GHS)', key: 'total_net' },
-      ]);
-      res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', `attachment; filename="commissions_${Date.now()}.csv"`);
-      return res.send(csv);
-    }
-
     if (format === 'excel') {
       const buffer = await generateCommissionReportExcel({ commissions: data, summary, title, groupBy: group_by });
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -902,8 +993,27 @@ exports.commissionReport = async (req, res) => {
     return res.send(buffer);
 
   } catch (error) {
-    logger.error('Commission report error:', error);
-    res.status(500).json({ success: false, message: 'Failed to generate commission report' });
+    logger.error(
+      'Commission report error:',
+      error
+    );
+
+    if (res.headersSent) {
+      if (
+        !res.writableEnded &&
+        typeof res.destroy === 'function'
+      ) {
+        res.destroy(error);
+      }
+
+      return;
+    }
+
+    return res.status(500).json({
+      success: false,
+      message:
+        'Failed to generate commission report',
+    });
   }
 };
 

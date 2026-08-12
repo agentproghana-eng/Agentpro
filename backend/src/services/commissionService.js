@@ -131,12 +131,70 @@ function buildCommissionFilterParts(params) {
   };
 }
 
-/**
- * Get grouped commission rows for a period.
- */
-async function getCommissionSummary(params) {
-  const { query } = require('../config/database');
+const COMMISSION_GROUP_CONFIG = {
+  day: {
+    select:
+      "DATE_TRUNC('day', c.calculated_at) AS period",
+    joins: '',
+    groupBy:
+      "DATE_TRUNC('day', c.calculated_at)",
+    orderBy: 'period DESC',
+  },
+  week: {
+    select:
+      "DATE_TRUNC('week', c.calculated_at) AS period",
+    joins: '',
+    groupBy:
+      "DATE_TRUNC('week', c.calculated_at)",
+    orderBy: 'period DESC',
+  },
+  month: {
+    select:
+      "DATE_TRUNC('month', c.calculated_at) AS period",
+    joins: '',
+    groupBy:
+      "DATE_TRUNC('month', c.calculated_at)",
+    orderBy: 'period DESC',
+  },
+  year: {
+    select:
+      "DATE_TRUNC('year', c.calculated_at) AS period",
+    joins: '',
+    groupBy:
+      "DATE_TRUNC('year', c.calculated_at)",
+    orderBy: 'period DESC',
+  },
+  agent: {
+    select: `c.agent_id AS group_id,
+             CONCAT_WS(
+               ' ',
+               u.first_name,
+               u.last_name
+             ) AS label`,
+    joins:
+      'LEFT JOIN users u ON u.id = c.agent_id',
+    groupBy:
+      'c.agent_id, u.first_name, u.last_name',
+    orderBy:
+      'label ASC, c.agent_id ASC',
+  },
+  branch: {
+    select: `c.branch_id AS group_id,
+             b.name AS label`,
+    joins:
+      'LEFT JOIN branches b ON b.id = c.branch_id',
+    groupBy:
+      'c.branch_id, b.name',
+    orderBy:
+      'label ASC, c.branch_id ASC',
+  },
+};
 
+/**
+ * Build the grouped commission query once for both buffered JSON/report
+ * consumers and cursor-based export consumers.
+ */
+function buildCommissionSummaryQuery(params) {
   const {
     group_by = 'day',
   } = params;
@@ -147,71 +205,10 @@ async function getCommissionSummary(params) {
     transactionJoin,
   } = buildCommissionFilterParts(params);
 
-  // Strict allowlist: never interpolate the raw client group_by value
-  // into SQL. Agent and branch grouping use stable IDs as grouping keys
-  // and expose a display label for report writers.
-  const GROUP_CONFIG = {
-    day: {
-      select:
-        "DATE_TRUNC('day', c.calculated_at) AS period",
-      joins: '',
-      groupBy:
-        "DATE_TRUNC('day', c.calculated_at)",
-      orderBy: 'period DESC',
-    },
-    week: {
-      select:
-        "DATE_TRUNC('week', c.calculated_at) AS period",
-      joins: '',
-      groupBy:
-        "DATE_TRUNC('week', c.calculated_at)",
-      orderBy: 'period DESC',
-    },
-    month: {
-      select:
-        "DATE_TRUNC('month', c.calculated_at) AS period",
-      joins: '',
-      groupBy:
-        "DATE_TRUNC('month', c.calculated_at)",
-      orderBy: 'period DESC',
-    },
-    year: {
-      select:
-        "DATE_TRUNC('year', c.calculated_at) AS period",
-      joins: '',
-      groupBy:
-        "DATE_TRUNC('year', c.calculated_at)",
-      orderBy: 'period DESC',
-    },
-    agent: {
-      select: `c.agent_id AS group_id,
-               CONCAT_WS(
-                 ' ',
-                 u.first_name,
-                 u.last_name
-               ) AS label`,
-      joins:
-        'LEFT JOIN users u ON u.id = c.agent_id',
-      groupBy:
-        'c.agent_id, u.first_name, u.last_name',
-      orderBy:
-        'label ASC, c.agent_id ASC',
-    },
-    branch: {
-      select: `c.branch_id AS group_id,
-               b.name AS label`,
-      joins:
-        'LEFT JOIN branches b ON b.id = c.branch_id',
-      groupBy:
-        'c.branch_id, b.name',
-      orderBy:
-        'label ASC, c.branch_id ASC',
-    },
-  };
-
+  // Strict allowlist: raw group_by input is never interpolated into SQL.
   const grouping =
-    GROUP_CONFIG[group_by] ||
-    GROUP_CONFIG.day;
+    COMMISSION_GROUP_CONFIG[group_by] ||
+    COMMISSION_GROUP_CONFIG.day;
 
   const joins = [
     transactionJoin,
@@ -220,22 +217,77 @@ async function getCommissionSummary(params) {
     .filter(Boolean)
     .join('\n');
 
-  const result = await query(
-    `SELECT
+  const sql = `SELECT
        ${grouping.select},
-       COUNT(*) as transaction_count,
-       SUM(c.gross_commission) as total_gross,
-       SUM(c.provider_share) as total_provider_share,
-       SUM(c.net_commission) as total_net
+       COUNT(*) AS transaction_count,
+       SUM(c.gross_commission) AS total_gross,
+       SUM(c.provider_share) AS total_provider_share,
+       SUM(c.net_commission) AS total_net
      FROM commissions c
      ${joins}
      ${whereClause}
      GROUP BY ${grouping.groupBy}
-     ORDER BY ${grouping.orderBy}`,
+     ORDER BY ${grouping.orderBy}`;
+
+  return {
+    sql,
+    queryParams,
+  };
+}
+
+/**
+ * Get grouped commission rows for JSON and buffered consumers.
+ */
+async function getCommissionSummary(params) {
+  const { query } = require('../config/database');
+
+  const {
+    sql,
+    queryParams,
+  } = buildCommissionSummaryQuery(params);
+
+  const result = await query(
+    sql,
     queryParams
   );
 
   return result.rows;
+}
+
+/**
+ * Stream grouped commission rows in bounded PostgreSQL cursor batches.
+ */
+async function streamCommissionSummaryRows(
+  params,
+  onRow
+) {
+  if (typeof onRow !== 'function') {
+    throw new TypeError(
+      'streamCommissionSummaryRows requires an onRow callback'
+    );
+  }
+
+  const {
+    streamQueryBatches,
+  } = require('../config/database');
+
+  const {
+    sql,
+    queryParams,
+  } = buildCommissionSummaryQuery(params);
+
+  await streamQueryBatches(
+    sql,
+    queryParams,
+    {
+      batchSize: 500,
+      onRows: async (rows) => {
+        for (const row of rows) {
+          await onRow(row);
+        }
+      },
+    }
+  );
 }
 
 /**
@@ -286,4 +338,5 @@ module.exports = {
   calculateCommission,
   getCommissionSummary,
   getCommissionTotals,
+  streamCommissionSummaryRows,
 };
