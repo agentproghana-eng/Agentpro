@@ -530,36 +530,65 @@ async function streamTransactionRows(
 
 function resolvePeriodRange(period, fromDate, toDate) {
   let resolvedFrom = fromDate;
-  let resolvedTo = toDate || new Date().toISOString();
+  const now = new Date();
+  let resolvedTo = toDate || now.toISOString();
 
   if (period && !fromDate) {
-    const now = new Date();
+    let start;
 
     if (period === 'today') {
-      resolvedFrom = new Date(
-        now.setHours(0, 0, 0, 0)
-      ).toISOString();
+      start = new Date(
+        Date.UTC(
+          now.getUTCFullYear(),
+          now.getUTCMonth(),
+          now.getUTCDate()
+        )
+      );
     }
 
     if (period === 'week') {
-      const date = new Date();
-      date.setDate(date.getDate() - 7);
-      resolvedFrom = date.toISOString();
+      const day =
+        now.getUTCDay();
+
+      const daysSinceMonday =
+        (day + 6) % 7;
+
+      start = new Date(
+        Date.UTC(
+          now.getUTCFullYear(),
+          now.getUTCMonth(),
+          now.getUTCDate()
+        )
+      );
+
+      start.setUTCDate(
+        start.getUTCDate() -
+        daysSinceMonday
+      );
     }
 
     if (period === 'month') {
-      const date = new Date();
-      date.setDate(1);
-      date.setHours(0, 0, 0, 0);
-      resolvedFrom = date.toISOString();
+      start = new Date(
+        Date.UTC(
+          now.getUTCFullYear(),
+          now.getUTCMonth(),
+          1
+        )
+      );
     }
 
     if (period === 'year') {
-      const date = new Date();
-      date.setMonth(0, 1);
-      date.setHours(0, 0, 0, 0);
-      resolvedFrom = date.toISOString();
+      start = new Date(
+        Date.UTC(
+          now.getUTCFullYear(),
+          0,
+          1
+        )
+      );
     }
+
+    resolvedFrom =
+      start?.toISOString();
   }
 
   return { resolvedFrom, resolvedTo };

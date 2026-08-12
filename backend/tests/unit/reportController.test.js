@@ -2260,6 +2260,31 @@ describe('reportController commission report security and periods', () => {
         ).getTime()
       );
 
+      const expectedFromByPeriod = {
+        today:
+          '2026-08-12T00:00:00.000Z',
+        week:
+          '2026-08-10T00:00:00.000Z',
+        month:
+          '2026-08-01T00:00:00.000Z',
+        year:
+          '2026-01-01T00:00:00.000Z',
+      };
+
+      expect(
+        streamFilters.from_date
+      ).toBe(
+        expectedFromByPeriod[
+          period
+        ]
+      );
+
+      expect(
+        streamFilters.to_date
+      ).toBe(
+        '2026-08-12T10:30:00.000Z'
+      );
+
       expect(mockGetCommissionTotals)
         .toHaveBeenCalledWith(
           expect.objectContaining({
