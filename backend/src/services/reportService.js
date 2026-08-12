@@ -1772,6 +1772,443 @@ async function generatePersonalTransactionReportPDF({ transactions, summary, tit
   return Buffer.concat(buffers);
 }
 
+// ── Streaming Personal Transaction Report PDF ─────────────────
+//
+// Bounded-memory Personal report writer.
+// PDFKit writes directly to the supplied HTTP/file stream while
+// personal transaction rows arrive incrementally from PostgreSQL.
+async function generatePersonalTransactionReportPDFStream({
+  stream,
+  summary,
+  title,
+  writeTransactions,
+}) {
+  if (
+    !stream ||
+    typeof stream.write !== 'function'
+  ) {
+    throw new TypeError(
+      'PDF report stream must be writable'
+    );
+  }
+
+  if (
+    typeof writeTransactions !==
+    'function'
+  ) {
+    throw new TypeError(
+      'writeTransactions callback is required'
+    );
+  }
+
+  const exactGhs = (value) => {
+    if (
+      value === null ||
+      value === undefined ||
+      value === ''
+    ) {
+      return '—';
+    }
+
+    const raw =
+      String(value);
+
+    if (/^-?\d+$/.test(raw)) {
+      return `GHS ${raw}.00`;
+    }
+
+    if (/^-?\d+\.\d$/.test(raw)) {
+      return `GHS ${raw}0`;
+    }
+
+    return `GHS ${raw}`;
+  };
+
+  const doc = new PDFDocument({
+    size: 'A4',
+    margin: 40,
+  });
+
+  const completed =
+    new Promise(
+      (resolve, reject) => {
+        doc.on(
+          'end',
+          resolve
+        );
+
+        doc.on(
+          'error',
+          reject
+        );
+
+        stream.on(
+          'error',
+          reject
+        );
+      }
+    );
+
+  doc.pipe(stream);
+
+  let pageNum = 1;
+  let rowIndex = 0;
+
+  const cols = [
+    {
+      label: 'Date',
+      width: 65,
+    },
+    {
+      label: 'Reference',
+      width: 90,
+    },
+    {
+      label: 'Type',
+      width: 90,
+    },
+    {
+      label: 'Provider',
+      width: 55,
+    },
+    {
+      label: 'Recipient',
+      width: 85,
+    },
+    {
+      label: 'Amount',
+      width: 65,
+    },
+    {
+      label: 'Status',
+      width: 65,
+    },
+  ];
+
+  const drawTableHeader = () => {
+    const headerY = doc.y;
+
+    doc
+      .rect(
+        40,
+        headerY,
+        doc.page.width - 80,
+        18
+      )
+      .fill(COLORS.primary);
+
+    let x = 40;
+
+    for (const col of cols) {
+      doc
+        .fontSize(7.5)
+        .fillColor('white')
+        .font('Helvetica-Bold')
+        .text(
+          col.label,
+          x + 4,
+          headerY + 5,
+          {
+            width:
+              col.width - 4,
+            lineBreak: false,
+          }
+        );
+
+      x += col.width;
+    }
+
+    doc.y =
+      headerY + 18;
+  };
+
+  const drawFirstPage = () => {
+    decoratePage(
+      doc,
+      pageNum
+    );
+
+    doc
+      .rect(
+        0,
+        0,
+        doc.page.width,
+        70
+      )
+      .fill(COLORS.primary);
+
+    try {
+      doc.image(
+        LOGO_PATH,
+        15,
+        15,
+        {
+          height: 40,
+        }
+      );
+    } catch (e) {
+      logger.warn(
+        'Logo image not found, skipping:',
+        e.message
+      );
+    }
+
+    doc
+      .fillColor(
+        COLORS.secondary
+      )
+      .fontSize(18)
+      .font(
+        'Helvetica-Bold'
+      )
+      .text(
+        'Agent Pro Ghana',
+        40,
+        15
+      );
+
+    doc
+      .fillColor('white')
+      .fontSize(11)
+      .font('Helvetica')
+      .text(
+        title ||
+          'My Transaction Report',
+        40,
+        35
+      );
+
+    doc
+      .fontSize(9)
+      .text(
+        `Generated: ${dateTimeStr(
+          new Date()
+        )}`,
+        40,
+        52
+      );
+
+    doc.fillColor(
+      COLORS.text
+    );
+
+    doc.moveDown(2.5);
+
+    const summaries = [
+      [
+        'Total Transactions',
+        summary?.count ||
+          '0',
+      ],
+      [
+        'Successful',
+        summary?.success_count ||
+          '0',
+      ],
+      [
+        'Failed',
+        summary?.failed_count ||
+          '0',
+      ],
+      [
+        'Needs Verification',
+        summary?.pending_count ||
+          '0',
+      ],
+    ];
+
+    const cardWidth =
+      (
+        doc.page.width -
+        80 -
+        30
+      ) / 4;
+
+    for (
+      let i = 0;
+      i < summaries.length;
+      i++
+    ) {
+      const [
+        label,
+        value,
+      ] = summaries[i];
+
+      const x =
+        40 +
+        i *
+          (
+            cardWidth +
+            10
+          );
+
+      const y = doc.y;
+
+      doc
+        .rect(
+          x,
+          y,
+          cardWidth,
+          48
+        )
+        .fill(
+          COLORS.light
+        );
+
+      doc
+        .fontSize(7)
+        .fillColor(
+          COLORS.muted
+        )
+        .font('Helvetica')
+        .text(
+          label,
+          x + 6,
+          y + 8,
+          {
+            width:
+              cardWidth - 12,
+          }
+        );
+
+      doc
+        .fontSize(12)
+        .fillColor(
+          COLORS.primary
+        )
+        .font(
+          'Helvetica-Bold'
+        )
+        .text(
+          String(value),
+          x + 6,
+          y + 20,
+          {
+            width:
+              cardWidth - 12,
+          }
+        );
+    }
+
+    doc.moveDown(3.5);
+
+    drawTableHeader();
+  };
+
+  const addContinuationPage =
+    () => {
+      doc.addPage();
+      pageNum++;
+
+      decoratePage(
+        doc,
+        pageNum
+      );
+
+      doc.moveDown(1);
+
+      drawTableHeader();
+    };
+
+  drawFirstPage();
+
+  await writeTransactions(
+    async (tx) => {
+      if (
+        doc.y >
+        doc.page.height - 80
+      ) {
+        addContinuationPage();
+      }
+
+      const rowY = doc.y;
+
+      if (
+        rowIndex % 2 === 0
+      ) {
+        doc
+          .rect(
+            40,
+            rowY,
+            doc.page.width - 80,
+            16
+          )
+          .fill('#FAFAFA');
+      }
+
+      const rowData = [
+        dateStr(
+          tx.created_at
+        ),
+        tx.reference || '—',
+        (
+          tx.transaction_type ||
+          ''
+        ).replace(
+          /_/g,
+          ' '
+        ),
+        (
+          tx.provider ||
+          ''
+        ).toUpperCase(),
+        tx.recipient_phone ||
+          '—',
+        exactGhs(
+          tx.amount
+        ),
+        (
+          tx.status ||
+          ''
+        ).toUpperCase(),
+      ];
+
+      let x = 40;
+
+      for (
+        let i = 0;
+        i < rowData.length;
+        i++
+      ) {
+        const color =
+          i === 6
+            ? statusColor(
+                tx.status
+              )
+            : COLORS.text;
+
+        doc
+          .fontSize(7)
+          .fillColor(color)
+          .font('Helvetica')
+          .text(
+            rowData[i],
+            x + 4,
+            rowY + 4,
+            {
+              width:
+                cols[i].width -
+                4,
+            }
+          );
+
+        x +=
+          cols[i].width;
+      }
+
+      doc.y =
+        rowY + 18;
+
+      rowIndex++;
+    }
+  );
+
+  doc.end();
+
+  await completed;
+}
+
+
 // ── CSV Generator ─────────────────────────────────────────────
 
 function generateCSV(data, columns) {
@@ -1794,5 +2231,6 @@ module.exports = {
   generateCommissionReportExcel,
   generateCommissionReportExcelStream,
   generatePersonalTransactionReportPDF,
+  generatePersonalTransactionReportPDFStream,
   generateCSV,
 };
