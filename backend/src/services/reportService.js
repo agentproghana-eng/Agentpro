@@ -354,6 +354,221 @@ async function generateTransactionReportExcel({ transactions, filters, summary, 
   return await workbook.xlsx.writeBuffer();
 }
 
+
+// ── Streaming Transaction Report Excel ─────────────────────────
+//
+// Used for large business transaction exports. Unlike the legacy
+// Workbook/writeBuffer path above, WorkbookWriter commits rows as they
+// are produced so the complete transaction set is never retained in
+// Node.js memory.
+//
+// `writeTransactions` receives an async row-writer callback. The caller
+// can feed it PostgreSQL cursor batches without this service needing to
+// know anything about database access.
+async function generateTransactionReportExcelStream({
+  stream,
+  summary,
+  title,
+  writeTransactions,
+}) {
+  if (
+    !stream ||
+    typeof stream.write !== 'function'
+  ) {
+    throw new TypeError(
+      'Excel report stream must be writable'
+    );
+  }
+
+  if (typeof writeTransactions !== 'function') {
+    throw new TypeError(
+      'writeTransactions callback is required'
+    );
+  }
+
+  const workbook =
+    new ExcelJS.stream.xlsx.WorkbookWriter({
+      stream,
+      useStyles: true,
+      useSharedStrings: false,
+    });
+
+  workbook.creator = 'Agent Pro Ghana';
+  workbook.created = new Date();
+
+  const sheet = workbook.addWorksheet(
+    'Transactions',
+    {
+      pageSetup: {
+        paperSize: 9,
+        orientation: 'landscape',
+      },
+    }
+  );
+
+  // Set widths before any worksheet rows are committed.
+  for (let i = 1; i <= 14; i++) {
+    sheet.getColumn(i).width = 16;
+  }
+
+  sheet.mergeCells('A1:H1');
+
+  const titleRow = sheet.getRow(1);
+  titleRow.getCell(1).value =
+    title ||
+    'Agent Pro Ghana — Transaction Report';
+
+  titleRow.getCell(1).font = {
+    size: 14,
+    bold: true,
+    color: {
+      argb: 'FF006B5E',
+    },
+  };
+
+  titleRow.getCell(1).alignment = {
+    horizontal: 'center',
+  };
+
+  titleRow.commit();
+
+  sheet.mergeCells('A2:H2');
+
+  const generatedRow = sheet.getRow(2);
+  generatedRow.getCell(1).value =
+    `Generated: ${dateTimeStr(new Date())}`;
+
+  generatedRow.getCell(1).font = {
+    size: 9,
+    color: {
+      argb: 'FF666666',
+    },
+  };
+
+  generatedRow.getCell(1).alignment = {
+    horizontal: 'center',
+  };
+
+  generatedRow.commit();
+
+  sheet.addRow([]).commit();
+
+  const summaryLabelRow =
+    sheet.addRow(['Summary']);
+
+  summaryLabelRow.commit();
+
+  const summaryRow = sheet.addRow([
+    'Total Transactions',
+    summary?.count || 0,
+    '',
+    'Customer Volume',
+    `GHS ${parseFloat(
+      summary?.total_amount || 0
+    ).toFixed(2)}`,
+    '',
+    'Net Commission',
+    `GHS ${parseFloat(
+      summary?.total_commission || 0
+    ).toFixed(2)}`,
+  ]);
+
+  summaryRow.commit();
+
+  sheet.addRow([]).commit();
+
+  const headerRow = sheet.addRow([
+    'Date',
+    'Reference',
+    'Network Ref',
+    'Transaction Type',
+    'Provider',
+    'Customer Phone',
+    'Customer Name',
+    'Amount (GHS)',
+    'Recorded Network Charge (GHS)',
+    'Commission (GHS)',
+    'Status',
+    'Agent',
+    'Branch',
+    'SIM (ICCID)',
+  ]);
+
+  headerRow.eachCell((cell) => {
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: {
+        argb: 'FF006B5E',
+      },
+    };
+
+    cell.font = {
+      bold: true,
+      color: {
+        argb: 'FFFFFFFF',
+      },
+    };
+
+    cell.border = {
+      bottom: {
+        style: 'thin',
+      },
+    };
+  });
+
+  headerRow.commit();
+
+  let rowIndex = 0;
+
+  await writeTransactions(
+    async (tx) => {
+      const row = sheet.addRow([
+        tx.created_at
+          ? new Date(tx.created_at)
+          : '',
+        tx.reference,
+        tx.network_reference || '',
+        (tx.transaction_type || '')
+          .replace(/_/g, ' '),
+        (tx.provider || '').toUpperCase(),
+        tx.customer_phone || '',
+        tx.customer_name || '',
+        parseFloat(tx.amount || 0),
+        parseFloat(tx.fee || 0),
+        parseFloat(tx.net_commission || 0),
+        (tx.status || '').toUpperCase(),
+        tx.agent_name || '',
+        tx.branch_name || '',
+        simLabel(
+          tx,
+          {
+            full: true,
+          }
+        ),
+      ]);
+
+      if (rowIndex % 2 === 0) {
+        row.eachCell((cell) => {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: {
+              argb: 'FFF5F5F5',
+            },
+          };
+        });
+      }
+
+      row.commit();
+      rowIndex++;
+    }
+  );
+
+  sheet.commit();
+  await workbook.commit();
+}
+
 // ── Commission Report PDF ──────────────────────────────────────
 
 async function generateCommissionReportPDF({ commissions, summary, title, groupBy }) {
@@ -633,6 +848,7 @@ module.exports = {
   generateTransactionReceipt,
   generateTransactionReportPDF,
   generateTransactionReportExcel,
+  generateTransactionReportExcelStream,
   generateCommissionReportPDF,
   generateCommissionReportExcel,
   generatePersonalTransactionReportPDF,

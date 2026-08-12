@@ -5,7 +5,7 @@ const {
 const { logger } = require('../utils/logger');
 const {
   generateTransactionReportPDF,
-  generateTransactionReportExcel,
+  generateTransactionReportExcelStream,
   generateCommissionReportPDF,
   generateCommissionReportExcel,
   generateCSV,
@@ -189,8 +189,8 @@ async function fetchTransactions(
         where,
         sortColumn,
         sortDirection,
-        // PDF and non-streaming Excel remain protected until their
-        // bounded-memory writers are implemented in the next phases.
+        // PDF remains protected by the legacy safety cap until its
+        // bounded-memory streaming writer is implemented in Phase 2C.
         limitClause: 'LIMIT 5000',
       }),
       params
@@ -336,6 +336,124 @@ async function streamTransactionCsv(
   userContext,
   res
 ) {
+  await writeResponseChunk(
+    res,
+    `${TRANSACTION_CSV_HEADER}\n`
+  );
+
+  let pendingRows = [];
+
+  const flushPendingRows = async () => {
+    if (pendingRows.length === 0) {
+      return;
+    }
+
+    const chunk =
+      `${pendingRows
+        .map(transactionCsvRow)
+        .join('\n')}\n`;
+
+    pendingRows = [];
+
+    await writeResponseChunk(
+      res,
+      chunk
+    );
+  };
+
+  await streamTransactionRows(
+    filters,
+    userContext,
+    async (row) => {
+      pendingRows.push(row);
+
+      if (pendingRows.length >= 500) {
+        await flushPendingRows();
+      }
+    }
+  );
+
+  await flushPendingRows();
+}
+
+
+async function fetchTransactionSummary(
+  filters,
+  userContext
+) {
+  const {
+    where,
+    params,
+  } = buildTransactionQueryParts(
+    filters,
+    userContext
+  );
+
+  const customerVolumeTypeParam =
+    params.length + 1;
+
+  const summaryParams = [
+    ...params,
+    CUSTOMER_VOLUME_TRANSACTION_TYPES,
+  ];
+
+  const result = await query(
+    `SELECT
+       COUNT(*) as count,
+       COALESCE(
+         SUM(
+           CASE
+             WHEN t.status = 'success'
+              AND t.transaction_type::text =
+                  ANY($${customerVolumeTypeParam}::text[])
+             THEN t.amount
+             ELSE 0
+           END
+         ),
+         0
+       ) as total_amount,
+       COALESCE(
+         SUM(
+           CASE
+             WHEN t.status = 'success'
+             THEN cm.net_commission
+             ELSE 0
+           END
+         ),
+         0
+       ) as total_commission,
+       ROUND(
+         100.0 *
+         COUNT(
+           CASE
+             WHEN t.status = 'success'
+             THEN 1
+           END
+         ) /
+         NULLIF(COUNT(*), 0),
+         1
+       ) as success_rate
+     FROM transactions t
+     LEFT JOIN commissions cm
+       ON cm.transaction_id = t.id
+     ${where}`,
+    summaryParams
+  );
+
+  return result.rows[0];
+}
+
+async function streamTransactionRows(
+  filters,
+  userContext,
+  onRow
+) {
+  if (typeof onRow !== 'function') {
+    throw new TypeError(
+      'streamTransactionRows requires an onRow callback'
+    );
+  }
+
   const {
     where,
     params,
@@ -352,34 +470,20 @@ async function streamTransactionCsv(
     sortDirection,
   });
 
-  await writeResponseChunk(
-    res,
-    `${TRANSACTION_CSV_HEADER}\n`
-  );
-
   await streamQueryBatches(
     sql,
     params,
     {
       batchSize: 500,
       onRows: async (rows) => {
-        if (rows.length === 0) {
-          return;
+        for (const row of rows) {
+          await onRow(row);
         }
-
-        const chunk =
-          `${rows
-            .map(transactionCsvRow)
-            .join('\n')}\n`;
-
-        await writeResponseChunk(
-          res,
-          chunk
-        );
       },
     }
   );
 }
+
 
 function resolvePeriodRange(period, fromDate, toDate) {
   let resolvedFrom = fromDate;
@@ -620,6 +724,59 @@ exports.transactionReport = async (req, res) => {
       return res.end();
     }
 
+    const periodLabel =
+      period ||
+      `${resolvedFrom?.slice(0, 10)} to ${resolvedTo?.slice(0, 10)}`;
+
+    const branchName =
+      await resolveBranchName(branch_id);
+
+    const title = branchName
+      ? `Transaction Report — ${branchName} — ${periodLabel}`
+      : `Transaction Report — ${periodLabel}`;
+
+    if (format === 'excel') {
+      // Resolve the aggregate summary before sending response headers.
+      // If the database query fails, we can still return a normal JSON
+      // error instead of failing halfway through an XLSX download.
+      const summary =
+        await fetchTransactionSummary(
+          reportFilters,
+          req.user
+        );
+
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      );
+
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="transactions_${Date.now()}.xlsx"`
+      );
+
+      await generateTransactionReportExcelStream({
+        stream: res,
+        summary,
+        title,
+        writeTransactions:
+          async (writeRow) => {
+            await streamTransactionRows(
+              reportFilters,
+              req.user,
+              writeRow
+            );
+          },
+      });
+
+      if (!res.writableEnded) {
+        return res.end();
+      }
+
+      return;
+    }
+
+    // PDF remains on the bounded legacy path until Phase 2C.
     const {
       transactions,
       summary,
@@ -628,22 +785,11 @@ exports.transactionReport = async (req, res) => {
       req.user
     );
 
-    const periodLabel = period || `${resolvedFrom?.slice(0, 10)} to ${resolvedTo?.slice(0, 10)}`;
-    const branchName = await resolveBranchName(branch_id);
-    const title = branchName
-      ? `Transaction Report — ${branchName} — ${periodLabel}`
-      : `Transaction Report — ${periodLabel}`;
-
-
-    if (format === 'excel') {
-      const buffer = await generateTransactionReportExcel({ transactions, summary, title });
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename="transactions_${Date.now()}.xlsx"`);
-      return res.send(buffer);
-    }
-
-    // Default: PDF
-    const buffer = await generateTransactionReportPDF({ transactions, summary, title });
+    const buffer = await generateTransactionReportPDF({
+      transactions,
+      summary,
+      title,
+    });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="transactions_${Date.now()}.pdf"`);
     return res.send(buffer);

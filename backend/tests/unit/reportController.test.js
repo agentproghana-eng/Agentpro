@@ -2,6 +2,8 @@ const { EventEmitter } = require('events');
 
 const mockQuery = jest.fn();
 const mockStreamQueryBatches = jest.fn();
+const mockGenerateTransactionReportExcelStream =
+  jest.fn();
 const mockGenerateCSV = jest.fn(() => 'csv-output');
 
 jest.mock('../../src/config/database', () => ({
@@ -21,6 +23,11 @@ jest.mock('../../src/utils/logger', () => ({
 jest.mock('../../src/services/reportService', () => ({
   generateTransactionReportPDF: jest.fn(),
   generateTransactionReportExcel: jest.fn(),
+  generateTransactionReportExcelStream:
+    (...args) =>
+      mockGenerateTransactionReportExcelStream(
+        ...args
+      ),
   generateCommissionReportPDF: jest.fn(),
   generateCommissionReportExcel: jest.fn(),
   generateCSV: (...args) => mockGenerateCSV(...args),
@@ -325,6 +332,154 @@ describe('reportController transaction CSV streaming', () => {
     expect(res.write).toHaveBeenCalledTimes(2);
     expect(res.end).toHaveBeenCalledTimes(1);
     expect(res.destroy).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('reportController transaction Excel streaming', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  function makeTransaction(index) {
+    return {
+      id: `tx-excel-${index}`,
+      created_at: '2026-08-12T10:00:00.000Z',
+      reference: `XLSX-REF-${index}`,
+      transaction_type: 'cash_in',
+      provider: 'mtn',
+      amount: '100.00',
+      fee: '1.00',
+      net_commission: '0.50',
+      status: 'success',
+      agent_name: 'Agent One',
+      branch_name: 'Main Branch',
+    };
+  }
+
+  test('streams more than 5000 Excel transaction rows without the legacy cap', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{
+        count: '5001',
+        total_amount: '500100.00',
+        total_commission: '2500.50',
+        success_rate: '100.0',
+      }],
+    });
+
+    mockStreamQueryBatches.mockImplementation(
+      async (sql, params, options) => {
+        expect(options.batchSize).toBe(500);
+
+        let nextIndex = 1;
+
+        for (let batch = 0; batch < 10; batch++) {
+          const rows = Array.from(
+            { length: 500 },
+            () => makeTransaction(nextIndex++)
+          );
+
+          await options.onRows(rows);
+        }
+
+        await options.onRows([
+          makeTransaction(nextIndex++),
+        ]);
+      }
+    );
+
+    const writtenRows = [];
+
+    mockGenerateTransactionReportExcelStream
+      .mockImplementation(
+        async ({
+          summary,
+          writeTransactions,
+        }) => {
+          expect(summary).toEqual(
+            expect.objectContaining({
+              count: '5001',
+            })
+          );
+
+          await writeTransactions(
+            async (row) => {
+              writtenRows.push(row);
+            }
+          );
+        }
+      );
+
+    const req = {
+      user: {
+        id: 'agent-1',
+        company_id: 'company-1',
+        role: 'agent',
+      },
+      query: {
+        format: 'excel',
+        from_date: '2026-08-01T00:00:00.000Z',
+        to_date: '2026-08-12T23:59:59.999Z',
+      },
+    };
+
+    const res = makeRes();
+
+    await reportController.transactionReport(
+      req,
+      res
+    );
+
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+
+    expect(mockStreamQueryBatches)
+      .toHaveBeenCalledTimes(1);
+
+    const [
+      rowSql,
+      rowParams,
+      options,
+    ] = mockStreamQueryBatches.mock.calls[0];
+
+    expect(rowSql).not.toMatch(
+      /LIMIT\s+5000/i
+    );
+
+    expect(rowSql).toContain(
+      't.id DESC'
+    );
+
+    expect(rowParams).toEqual([
+      'agent-1',
+      '2026-08-01T00:00:00.000Z',
+      '2026-08-12T23:59:59.999Z',
+    ]);
+
+    expect(options.batchSize).toBe(500);
+
+    expect(writtenRows).toHaveLength(5001);
+
+    expect(writtenRows[0].reference)
+      .toBe('XLSX-REF-1');
+
+    expect(writtenRows[4999].reference)
+      .toBe('XLSX-REF-5000');
+
+    expect(writtenRows[5000].reference)
+      .toBe('XLSX-REF-5001');
+
+    expect(
+      mockGenerateTransactionReportExcelStream
+    ).toHaveBeenCalledTimes(1);
+
+    expect(res.setHeader)
+      .toHaveBeenCalledWith(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      );
+
+    expect(res.end).toHaveBeenCalledTimes(1);
+    expect(res.send).not.toHaveBeenCalled();
   });
 });
 
