@@ -14,6 +14,16 @@ reportRouter.get(
   reportController.transactionCount
 );
 reportRouter.get('/transactions', authorize('superuser','business_owner','manager','agent','auditor'), reportController.transactionReport);
-reportRouter.get('/commissions', authorize('superuser','business_owner','manager','auditor'), reportController.commissionReport);
+reportRouter.get(
+  '/commissions',
+  authorize(
+    'superuser',
+    'business_owner',
+    'manager',
+    'agent',
+    'auditor'
+  ),
+  reportController.commissionReport
+);
 
 module.exports = reportRouter;
