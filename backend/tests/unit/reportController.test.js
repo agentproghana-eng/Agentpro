@@ -6,6 +6,8 @@ const mockGenerateTransactionReportPDFStream =
   jest.fn();
 const mockGenerateTransactionReportExcelStream =
   jest.fn();
+const mockGenerateCommissionReportExcelStream =
+  jest.fn();
 
 jest.mock('../../src/config/database', () => ({
   query: (...args) => mockQuery(...args),
@@ -36,6 +38,11 @@ jest.mock('../../src/services/reportService', () => ({
       ),
   generateCommissionReportPDF: jest.fn(),
   generateCommissionReportExcel: jest.fn(),
+  generateCommissionReportExcelStream:
+    (...args) =>
+      mockGenerateCommissionReportExcelStream(
+        ...args
+      ),
 }));
 
 const mockGetCommissionSummary = jest.fn();
@@ -1440,6 +1447,213 @@ describe('reportController monthly dashboard accounting', () => {
         },
       }),
     });
+  });
+});
+
+
+describe('reportController commission Excel streaming', () => {
+  beforeEach(() => {
+    resetReportMocks();
+  });
+
+  function makeCommissionRow(index) {
+    return {
+      group_id: `agent-${index}`,
+      label: `Agent ${index}`,
+      transaction_count: '1',
+      total_gross: '10.00',
+      total_provider_share: '3.00',
+      total_net: '7.00',
+    };
+  }
+
+  test('streams more than 5000 Excel commission rows without buffering grouped data', async () => {
+    mockGetCommissionTotals
+      .mockResolvedValue({
+        transaction_count: '5001',
+        total_gross: '50010.00',
+        total_provider_share: '15003.00',
+        total_net: '35007.00',
+      });
+
+    mockStreamCommissionSummaryRows
+      .mockImplementation(
+        async (params, onRow) => {
+          expect(params).toEqual(
+            expect.objectContaining({
+              company_id: 'company-1',
+              manager_id: 'manager-1',
+              branch_id: 'branch-1',
+              group_by: 'agent',
+            })
+          );
+
+          for (
+            let index = 1;
+            index <= 5001;
+            index++
+          ) {
+            await onRow(
+              makeCommissionRow(index)
+            );
+          }
+        }
+      );
+
+    const writtenRows = [];
+
+    mockGenerateCommissionReportExcelStream
+      .mockImplementation(
+        async ({
+          stream,
+          summary,
+          groupBy,
+          writeCommissions,
+        }) => {
+          expect(stream)
+            .toBeDefined();
+
+          expect(summary).toEqual({
+            transaction_count: '5001',
+            total_gross: '50010.00',
+            total_provider_share: '15003.00',
+            total_net: '35007.00',
+          });
+
+          expect(groupBy)
+            .toBe('agent');
+
+          await writeCommissions(
+            async (row) => {
+              writtenRows.push(row);
+            }
+          );
+        }
+      );
+
+    const req = {
+      user: {
+        id: 'manager-1',
+        company_id: 'company-1',
+        role: 'manager',
+      },
+      query: {
+        format: 'excel',
+        group_by: 'agent',
+        branch_id: 'branch-1',
+        from_date:
+          '2026-08-01T00:00:00.000Z',
+        to_date:
+          '2026-08-12T23:59:59.999Z',
+      },
+    };
+
+    const res = makeRes();
+
+    await reportController.commissionReport(
+      req,
+      res
+    );
+
+    expect(mockGetCommissionSummary)
+      .not.toHaveBeenCalled();
+
+    expect(mockGetCommissionTotals)
+      .toHaveBeenCalledTimes(1);
+
+    expect(mockStreamCommissionSummaryRows)
+      .toHaveBeenCalledTimes(1);
+
+    expect(
+      mockGenerateCommissionReportExcelStream
+    ).toHaveBeenCalledTimes(1);
+
+    expect(writtenRows)
+      .toHaveLength(5001);
+
+    expect(writtenRows[0].label)
+      .toBe('Agent 1');
+
+    expect(writtenRows[4999].label)
+      .toBe('Agent 5000');
+
+    expect(writtenRows[5000].label)
+      .toBe('Agent 5001');
+
+    expect(res.setHeader)
+      .toHaveBeenCalledWith(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      );
+
+    expect(res.end)
+      .toHaveBeenCalledTimes(1);
+
+    expect(res.send)
+      .not.toHaveBeenCalled();
+  });
+
+  test('passes authenticated agent scope into streamed Excel rows and exact totals', async () => {
+    mockStreamCommissionSummaryRows
+      .mockImplementation(
+        async (params) => {
+          expect(params).toEqual(
+            expect.objectContaining({
+              company_id: 'company-1',
+              agent_id: 'agent-authenticated',
+              group_by: 'month',
+            })
+          );
+
+          expect(params.agent_id)
+            .not.toBe('agent-other');
+        }
+      );
+
+    mockGenerateCommissionReportExcelStream
+      .mockImplementation(
+        async ({
+          writeCommissions,
+        }) => {
+          await writeCommissions(
+            async () => {}
+          );
+        }
+      );
+
+    const req = {
+      user: {
+        id: 'agent-authenticated',
+        company_id: 'company-1',
+        role: 'agent',
+      },
+      query: {
+        format: 'excel',
+        group_by: 'month',
+        agent_id: 'agent-other',
+      },
+    };
+
+    const res = makeRes();
+
+    await reportController.commissionReport(
+      req,
+      res
+    );
+
+    expect(mockGetCommissionTotals)
+      .toHaveBeenCalledWith(
+        expect.objectContaining({
+          company_id: 'company-1',
+          agent_id: 'agent-authenticated',
+        })
+      );
+
+    expect(mockGetCommissionSummary)
+      .not.toHaveBeenCalled();
+
+    expect(res.end)
+      .toHaveBeenCalledTimes(1);
   });
 });
 

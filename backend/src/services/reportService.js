@@ -1069,6 +1069,230 @@ async function generateCommissionReportExcel({ commissions, summary, title, grou
   return await workbook.xlsx.writeBuffer();
 }
 
+// ── Streaming Commission Report Excel ─────────────────────────
+//
+// Uses ExcelJS WorkbookWriter so grouped commission rows are committed
+// incrementally instead of retaining the complete report in memory.
+//
+// `writeCommissions` receives an async row-writer callback. The controller
+// feeds that callback from the PostgreSQL cursor-backed commission stream.
+async function generateCommissionReportExcelStream({
+  stream,
+  summary,
+  title,
+  groupBy,
+  writeCommissions,
+}) {
+  if (
+    !stream ||
+    typeof stream.write !== 'function'
+  ) {
+    throw new TypeError(
+      'Excel report stream must be writable'
+    );
+  }
+
+  if (typeof writeCommissions !== 'function') {
+    throw new TypeError(
+      'writeCommissions callback is required'
+    );
+  }
+
+  const workbook =
+    new ExcelJS.stream.xlsx.WorkbookWriter({
+      stream,
+      useStyles: true,
+      useSharedStrings: false,
+    });
+
+  workbook.creator = 'Agent Pro Ghana';
+  workbook.created = new Date();
+
+  const sheet = workbook.addWorksheet(
+    'Commissions',
+    {
+      pageSetup: {
+        paperSize: 9,
+        orientation: 'landscape',
+      },
+    }
+  );
+
+  // Widths must be set before rows are committed by WorkbookWriter.
+  for (let i = 1; i <= 5; i++) {
+    sheet.getColumn(i).width = 20;
+  }
+
+  sheet.mergeCells('A1:E1');
+
+  const titleRow = sheet.getRow(1);
+  titleRow.getCell(1).value =
+    title ||
+    'Agent Pro Ghana — Commission Report';
+
+  titleRow.getCell(1).font = {
+    size: 14,
+    bold: true,
+    color: {
+      argb: 'FF006B5E',
+    },
+  };
+
+  titleRow.getCell(1).alignment = {
+    horizontal: 'center',
+  };
+
+  titleRow.commit();
+
+  sheet.mergeCells('A2:E2');
+
+  const generatedRow = sheet.getRow(2);
+  generatedRow.getCell(1).value =
+    `Generated: ${dateTimeStr(new Date())}`;
+
+  generatedRow.getCell(1).font = {
+    size: 9,
+    color: {
+      argb: 'FF666666',
+    },
+  };
+
+  generatedRow.getCell(1).alignment = {
+    horizontal: 'center',
+  };
+
+  generatedRow.commit();
+
+  sheet.addRow([]).commit();
+
+  sheet.addRow([
+    'Summary',
+  ]).commit();
+
+  sheet.addRow([
+    'Transactions',
+    summary?.transaction_count || '0',
+    '',
+    'Gross Commission',
+    `GHS ${String(
+      summary?.total_gross || '0'
+    )}`,
+  ]).commit();
+
+  sheet.addRow([
+    'Provider Share',
+    `GHS ${String(
+      summary?.total_provider_share || '0'
+    )}`,
+    '',
+    'Net Commission',
+    `GHS ${String(
+      summary?.total_net || '0'
+    )}`,
+  ]).commit();
+
+  sheet.addRow([]).commit();
+
+  const periodLabel =
+    groupBy === 'agent'
+      ? 'Agent'
+      : groupBy === 'branch'
+        ? 'Branch'
+        : 'Period';
+
+  const headerRow = sheet.addRow([
+    periodLabel,
+    'Transactions',
+    'Gross Commission (GHS)',
+    'Provider Share (GHS)',
+    'Net Commission (GHS)',
+  ]);
+
+  headerRow.eachCell((cell) => {
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: {
+        argb: 'FF006B5E',
+      },
+    };
+
+    cell.font = {
+      bold: true,
+      color: {
+        argb: 'FFFFFFFF',
+      },
+    };
+
+    cell.border = {
+      bottom: {
+        style: 'thin',
+      },
+    };
+  });
+
+  headerRow.commit();
+
+  let rowIndex = 0;
+
+  await writeCommissions(
+    async (commissionRow) => {
+      let groupingValue;
+
+      if (
+        groupBy === 'agent' ||
+        groupBy === 'branch'
+      ) {
+        groupingValue =
+          commissionRow.label || '';
+      } else {
+        groupingValue =
+          commissionRow.period
+            ? new Date(
+                commissionRow.period
+              )
+            : '';
+      }
+
+      const row = sheet.addRow([
+        groupingValue,
+        commissionRow.transaction_count || '0',
+
+        // Keep PostgreSQL NUMERIC values as their exact decimal strings.
+        // This avoids reintroducing parseFloat() into Commission exports.
+        String(
+          commissionRow.total_gross || '0'
+        ),
+        String(
+          commissionRow.total_provider_share || '0'
+        ),
+        String(
+          commissionRow.total_net || '0'
+        ),
+      ]);
+
+      if (rowIndex % 2 === 0) {
+        row.eachCell((cell) => {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: {
+              argb: 'FFF5F5F5',
+            },
+          };
+        });
+      }
+
+      row.commit();
+      rowIndex++;
+    }
+  );
+
+  sheet.commit();
+  await workbook.commit();
+}
+
+
 // ── Personal Transaction Report PDF ─────────────────────────────
 // Simpler than the Agent version: no branch/agent/commission/fee
 // columns, since Personal transactions genuinely don't have those.
@@ -1198,6 +1422,7 @@ module.exports = {
   generateTransactionReportExcelStream,
   generateCommissionReportPDF,
   generateCommissionReportExcel,
+  generateCommissionReportExcelStream,
   generatePersonalTransactionReportPDF,
   generateCSV,
 };

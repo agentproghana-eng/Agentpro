@@ -7,7 +7,7 @@ const {
   generateTransactionReportPDFStream,
   generateTransactionReportExcelStream,
   generateCommissionReportPDF,
-  generateCommissionReportExcel,
+  generateCommissionReportExcelStream,
 } = require('../services/reportService');
 const {
   getCommissionSummary,
@@ -962,9 +962,58 @@ exports.commissionReport = async (req, res) => {
       return res.end();
     }
 
+    if (format === 'excel') {
+      const [
+        summary,
+        branchName,
+      ] = await Promise.all([
+        getCommissionTotals(
+          commissionFilters
+        ),
+        resolveBranchName(
+          branch_id,
+          req.user
+        ),
+      ]);
+
+      const title = branchName
+        ? `Commission Report — ${branchName} — ${period || 'Custom Period'}`
+        : `Commission Report — ${period || 'Custom Period'}`;
+
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      );
+
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="commissions_${Date.now()}.xlsx"`
+      );
+
+      await generateCommissionReportExcelStream({
+        stream: res,
+        summary,
+        title,
+        groupBy: group_by,
+        writeCommissions:
+          async (writeRow) => {
+            await streamCommissionSummaryRows(
+              {
+                ...commissionFilters,
+                group_by,
+              },
+              writeRow
+            );
+          },
+      });
+
+      return res.end();
+    }
+
     const [
       data,
       summary,
+      branchName,
     ] = await Promise.all([
       getCommissionSummary({
         ...commissionFilters,
@@ -973,19 +1022,15 @@ exports.commissionReport = async (req, res) => {
       getCommissionTotals(
         commissionFilters
       ),
+      resolveBranchName(
+        branch_id,
+        req.user
+      ),
     ]);
 
-    const branchName = await resolveBranchName(branch_id, req.user);
     const title = branchName
       ? `Commission Report — ${branchName} — ${period || 'Custom Period'}`
       : `Commission Report — ${period || 'Custom Period'}`;
-
-    if (format === 'excel') {
-      const buffer = await generateCommissionReportExcel({ commissions: data, summary, title, groupBy: group_by });
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename="commissions_${Date.now()}.xlsx"`);
-      return res.send(buffer);
-    }
 
     const buffer = await generateCommissionReportPDF({ commissions: data, summary, title, groupBy: group_by });
     res.setHeader('Content-Type', 'application/pdf');
