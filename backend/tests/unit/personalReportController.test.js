@@ -653,3 +653,347 @@ describe(
     );
   }
 );
+
+
+describe(
+  'personalReportController request validation',
+  () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+
+    test(
+      'rejects unsupported report formats before querying the database',
+      async () => {
+        const req = {
+          user: {
+            id:
+              'personal-user-1',
+          },
+          query: {
+            format: 'xlsx',
+            period: 'month',
+          },
+        };
+
+        const res =
+          makeRes();
+
+        await personalReportController
+          .transactionReport(
+            req,
+            res
+          );
+
+        expect(res.status)
+          .toHaveBeenCalledWith(400);
+
+        expect(res.json)
+          .toHaveBeenCalledWith({
+            success: false,
+            message:
+              'format must be either pdf or csv',
+          });
+
+        expect(mockQuery)
+          .not.toHaveBeenCalled();
+
+        expect(
+          mockStreamQueryBatches
+        ).not.toHaveBeenCalled();
+      }
+    );
+
+
+    test(
+      'rejects unsupported periods before querying the database',
+      async () => {
+        const req = {
+          user: {
+            id:
+              'personal-user-1',
+          },
+          query: {
+            format: 'csv',
+            period: 'quarter',
+          },
+        };
+
+        const res =
+          makeRes();
+
+        await personalReportController
+          .transactionReport(
+            req,
+            res
+          );
+
+        expect(res.status)
+          .toHaveBeenCalledWith(400);
+
+        expect(res.json)
+          .toHaveBeenCalledWith({
+            success: false,
+            message:
+              'period must be one of today, week, month, year, or custom',
+          });
+
+        expect(
+          mockStreamQueryBatches
+        ).not.toHaveBeenCalled();
+      }
+    );
+
+
+    test(
+      'requires both custom range boundaries',
+      async () => {
+        const req = {
+          user: {
+            id:
+              'personal-user-1',
+          },
+          query: {
+            format: 'pdf',
+            period: 'custom',
+            from_date:
+              '2026-08-01T00:00:00.000Z',
+          },
+        };
+
+        const res =
+          makeRes();
+
+        await personalReportController
+          .transactionReport(
+            req,
+            res
+          );
+
+        expect(res.status)
+          .toHaveBeenCalledWith(400);
+
+        expect(res.json)
+          .toHaveBeenCalledWith({
+            success: false,
+            message:
+              'custom period requires both from_date and to_date',
+          });
+
+        expect(mockQuery)
+          .not.toHaveBeenCalled();
+
+        expect(
+          mockStreamQueryBatches
+        ).not.toHaveBeenCalled();
+      }
+    );
+
+
+    test(
+      'rejects invalid ISO date values',
+      async () => {
+        const req = {
+          user: {
+            id:
+              'personal-user-1',
+          },
+          query: {
+            format: 'csv',
+            from_date:
+              'not-a-date',
+            to_date:
+              '2026-08-12T23:59:59.999Z',
+          },
+        };
+
+        const res =
+          makeRes();
+
+        await personalReportController
+          .transactionReport(
+            req,
+            res
+          );
+
+        expect(res.status)
+          .toHaveBeenCalledWith(400);
+
+        expect(res.json)
+          .toHaveBeenCalledWith({
+            success: false,
+            message:
+              'from_date must be a valid ISO 8601 date-time with timezone',
+          });
+
+        expect(
+          mockStreamQueryBatches
+        ).not.toHaveBeenCalled();
+      }
+    );
+
+
+    test(
+      'rejects reversed custom date ranges',
+      async () => {
+        const req = {
+          user: {
+            id:
+              'personal-user-1',
+          },
+          query: {
+            format: 'csv',
+            from_date:
+              '2026-08-12T23:59:59.999Z',
+            to_date:
+              '2026-08-01T00:00:00.000Z',
+          },
+        };
+
+        const res =
+          makeRes();
+
+        await personalReportController
+          .transactionReport(
+            req,
+            res
+          );
+
+        expect(res.status)
+          .toHaveBeenCalledWith(400);
+
+        expect(res.json)
+          .toHaveBeenCalledWith({
+            success: false,
+            message:
+              'from_date must be before or equal to to_date',
+          });
+
+        expect(
+          mockStreamQueryBatches
+        ).not.toHaveBeenCalled();
+      }
+    );
+
+
+    test(
+      'rejects explicit dates combined with a predefined period',
+      async () => {
+        const req = {
+          user: {
+            id:
+              'personal-user-1',
+          },
+          query: {
+            format: 'csv',
+            period: 'month',
+            from_date:
+              '2026-08-01T00:00:00.000Z',
+            to_date:
+              '2026-08-12T23:59:59.999Z',
+          },
+        };
+
+        const res =
+          makeRes();
+
+        await personalReportController
+          .transactionReport(
+            req,
+            res
+          );
+
+        expect(res.status)
+          .toHaveBeenCalledWith(400);
+
+        expect(res.json)
+          .toHaveBeenCalledWith({
+            success: false,
+            message:
+              'from_date and to_date cannot be combined with a predefined period',
+          });
+
+        expect(
+          mockStreamQueryBatches
+        ).not.toHaveBeenCalled();
+      }
+    );
+
+
+    test(
+      'resolves This Week from Monday 00:00 UTC',
+      () => {
+        const {
+          resolvedFrom,
+          resolvedTo,
+        } =
+          personalReportController
+            ._test
+            .resolvePersonalReportPeriod({
+              period: 'week',
+              now: new Date(
+                '2026-08-12T15:30:00.000Z'
+              ),
+            });
+
+        expect(resolvedFrom)
+          .toBe(
+            '2026-08-10T00:00:00.000Z'
+          );
+
+        expect(resolvedTo)
+          .toBe(
+            '2026-08-12T15:30:00.000Z'
+          );
+      }
+    );
+
+
+    test(
+      'resolves Today Month and Year at UTC calendar boundaries',
+      () => {
+        const now =
+          new Date(
+            '2026-08-12T15:30:00.000Z'
+          );
+
+        expect(
+          personalReportController
+            ._test
+            .resolvePersonalReportPeriod({
+              period: 'today',
+              now,
+            })
+            .resolvedFrom
+        ).toBe(
+          '2026-08-12T00:00:00.000Z'
+        );
+
+        expect(
+          personalReportController
+            ._test
+            .resolvePersonalReportPeriod({
+              period: 'month',
+              now,
+            })
+            .resolvedFrom
+        ).toBe(
+          '2026-08-01T00:00:00.000Z'
+        );
+
+        expect(
+          personalReportController
+            ._test
+            .resolvePersonalReportPeriod({
+              period: 'year',
+              now,
+            })
+            .resolvedFrom
+        ).toBe(
+          '2026-01-01T00:00:00.000Z'
+        );
+      }
+    );
+  }
+);

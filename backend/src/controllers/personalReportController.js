@@ -21,71 +21,232 @@ const {
 // rather than Agent/business accounting classification.
 
 
-function resolvePersonalReportPeriod({
+const PERSONAL_REPORT_PERIODS =
+  new Set([
+    'today',
+    'week',
+    'month',
+    'year',
+    'custom',
+  ]);
+
+
+const PERSONAL_REPORT_FORMATS =
+  new Set([
+    'pdf',
+    'csv',
+  ]);
+
+
+const ISO_DATE_TIME_RE =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/;
+
+
+class PersonalReportValidationError
+  extends Error {
+  constructor(message) {
+    super(message);
+    this.name =
+      'PersonalReportValidationError';
+    this.statusCode = 400;
+  }
+}
+
+
+function parsePersonalReportIsoDate(
+  value,
+  fieldName
+) {
+  if (
+    typeof value !== 'string' ||
+    !ISO_DATE_TIME_RE.test(value) ||
+    Number.isNaN(Date.parse(value))
+  ) {
+    throw new PersonalReportValidationError(
+      `${fieldName} must be a valid ISO 8601 date-time with timezone`
+    );
+  }
+
+  return new Date(value);
+}
+
+
+function validatePersonalReportRequest({
+  format,
   period,
   fromDate,
   toDate,
 }) {
-  let resolvedFrom = fromDate;
-  let resolvedTo =
-    toDate ||
-    new Date().toISOString();
+  if (
+    !PERSONAL_REPORT_FORMATS.has(
+      format
+    )
+  ) {
+    throw new PersonalReportValidationError(
+      'format must be either pdf or csv'
+    );
+  }
 
   if (
     period &&
+    !PERSONAL_REPORT_PERIODS.has(
+      period
+    )
+  ) {
+    throw new PersonalReportValidationError(
+      'period must be one of today, week, month, year, or custom'
+    );
+  }
+
+  const hasFrom =
+    fromDate !== undefined &&
+    fromDate !== null &&
+    fromDate !== '';
+
+  const hasTo =
+    toDate !== undefined &&
+    toDate !== null &&
+    toDate !== '';
+
+  if (
+    period === 'custom' &&
+    (!hasFrom || !hasTo)
+  ) {
+    throw new PersonalReportValidationError(
+      'custom period requires both from_date and to_date'
+    );
+  }
+
+  if (
+    hasFrom !== hasTo
+  ) {
+    throw new PersonalReportValidationError(
+      'from_date and to_date must be provided together'
+    );
+  }
+
+  if (
+    period &&
+    period !== 'custom' &&
+    (hasFrom || hasTo)
+  ) {
+    throw new PersonalReportValidationError(
+      'from_date and to_date cannot be combined with a predefined period'
+    );
+  }
+
+  let parsedFrom;
+  let parsedTo;
+
+  if (hasFrom) {
+    parsedFrom =
+      parsePersonalReportIsoDate(
+        fromDate,
+        'from_date'
+      );
+
+    parsedTo =
+      parsePersonalReportIsoDate(
+        toDate,
+        'to_date'
+      );
+
+    if (
+      parsedFrom.getTime() >
+      parsedTo.getTime()
+    ) {
+      throw new PersonalReportValidationError(
+        'from_date must be before or equal to to_date'
+      );
+    }
+  }
+
+  return {
+    format,
+    period,
+    fromDate:
+      hasFrom
+        ? parsedFrom.toISOString()
+        : undefined,
+    toDate:
+      hasTo
+        ? parsedTo.toISOString()
+        : undefined,
+  };
+}
+
+
+function resolvePersonalReportPeriod({
+  period,
+  fromDate,
+  toDate,
+  now = new Date(),
+}) {
+  let resolvedFrom = fromDate;
+  let resolvedTo =
+    toDate ||
+    now.toISOString();
+
+  if (
+    period &&
+    period !== 'custom' &&
     !fromDate
   ) {
-    const now = new Date();
+    let start;
 
     if (period === 'today') {
-      const start = new Date(now);
-      start.setHours(
-        0,
-        0,
-        0,
-        0
+      start = new Date(
+        Date.UTC(
+          now.getUTCFullYear(),
+          now.getUTCMonth(),
+          now.getUTCDate()
+        )
       );
-      resolvedFrom =
-        start.toISOString();
     }
 
     if (period === 'week') {
-      const start = new Date(now);
-      start.setDate(
-        start.getDate() - 7
+      const day =
+        now.getUTCDay();
+
+      const daysSinceMonday =
+        (day + 6) % 7;
+
+      start = new Date(
+        Date.UTC(
+          now.getUTCFullYear(),
+          now.getUTCMonth(),
+          now.getUTCDate()
+        )
       );
-      resolvedFrom =
-        start.toISOString();
+
+      start.setUTCDate(
+        start.getUTCDate() -
+        daysSinceMonday
+      );
     }
 
     if (period === 'month') {
-      const start = new Date(now);
-      start.setDate(1);
-      start.setHours(
-        0,
-        0,
-        0,
-        0
+      start = new Date(
+        Date.UTC(
+          now.getUTCFullYear(),
+          now.getUTCMonth(),
+          1
+        )
       );
-      resolvedFrom =
-        start.toISOString();
     }
 
     if (period === 'year') {
-      const start = new Date(now);
-      start.setMonth(
-        0,
-        1
+      start = new Date(
+        Date.UTC(
+          now.getUTCFullYear(),
+          0,
+          1
+        )
       );
-      start.setHours(
-        0,
-        0,
-        0,
-        0
-      );
-      resolvedFrom =
-        start.toISOString();
     }
+
+    resolvedFrom =
+      start?.toISOString();
   }
 
   return {
@@ -93,7 +254,6 @@ function resolvePersonalReportPeriod({
     resolvedTo,
   };
 }
-
 
 function buildPersonalReportQueryParts({
   userId,
@@ -386,14 +546,25 @@ exports.transactionReport =
       req.user.id;
 
     try {
+      const validated =
+        validatePersonalReportRequest({
+          format,
+          period,
+          fromDate: from_date,
+          toDate: to_date,
+        });
+
       const {
         resolvedFrom,
         resolvedTo,
       } =
         resolvePersonalReportPeriod({
-          period,
-          fromDate: from_date,
-          toDate: to_date,
+          period:
+            validated.period,
+          fromDate:
+            validated.fromDate,
+          toDate:
+            validated.toDate,
         });
 
       const {
@@ -431,7 +602,7 @@ exports.transactionReport =
       const title =
         `My Transaction Report — ${periodLabel}`;
 
-      if (format === 'csv') {
+      if (validated.format === 'csv') {
         res.setHeader(
           'Content-Type',
           'text/csv; charset=utf-8'
@@ -484,6 +655,19 @@ exports.transactionReport =
       return res.end();
 
     } catch (error) {
+      if (
+        error instanceof
+          PersonalReportValidationError
+      ) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+            message:
+              error.message,
+          });
+      }
+
       logger.error(
         'Personal transaction report error:',
         error
@@ -513,6 +697,8 @@ exports.transactionReport =
 
 
 module.exports._test = {
+  validatePersonalReportRequest,
+  parsePersonalReportIsoDate,
   resolvePersonalReportPeriod,
   buildPersonalReportQueryParts,
   personalTransactionRowSql,
