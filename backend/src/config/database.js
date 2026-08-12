@@ -1,4 +1,5 @@
 const { Pool } = require('pg');
+const Cursor = require('pg-cursor');
 const { logger } = require('../utils/logger');
 
 const pool = new Pool({
@@ -45,6 +46,74 @@ async function query(text, params) {
 }
 
 /**
+ * Stream a SELECT query in bounded batches using a PostgreSQL cursor.
+ *
+ * `onRows` is awaited before the next batch is read, so callers can
+ * respect downstream backpressure (HTTP, files, etc.) without loading
+ * the complete result set into Node.js memory.
+ */
+async function streamQueryBatches(
+  text,
+  params,
+  {
+    batchSize = 500,
+    onRows,
+  } = {}
+) {
+  if (
+    !Number.isInteger(batchSize) ||
+    batchSize < 1 ||
+    batchSize > 5000
+  ) {
+    throw new TypeError(
+      'batchSize must be an integer between 1 and 5000'
+    );
+  }
+
+  if (typeof onRows !== 'function') {
+    throw new TypeError(
+      'streamQueryBatches requires an onRows callback'
+    );
+  }
+
+  const client = await pool.connect();
+  let cursor;
+
+  try {
+    cursor = client.query(
+      new Cursor(text, params)
+    );
+
+    while (true) {
+      const rows = await cursor.read(batchSize);
+
+      if (rows.length === 0) {
+        break;
+      }
+
+      await onRows(rows);
+
+      if (rows.length < batchSize) {
+        break;
+      }
+    }
+  } finally {
+    if (cursor) {
+      try {
+        await cursor.close();
+      } catch (error) {
+        logger.warn(
+          'Failed to close PostgreSQL cursor cleanly:',
+          error.message
+        );
+      }
+    }
+
+    client.release();
+  }
+}
+
+/**
  * Execute within a transaction
  */
 async function withTransaction(callback) {
@@ -62,4 +131,10 @@ async function withTransaction(callback) {
   }
 }
 
-module.exports = { pool, query, withTransaction, connectDB };
+module.exports = {
+  pool,
+  query,
+  streamQueryBatches,
+  withTransaction,
+  connectDB,
+};

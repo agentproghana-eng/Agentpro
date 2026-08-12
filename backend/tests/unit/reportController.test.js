@@ -1,8 +1,13 @@
+const { EventEmitter } = require('events');
+
 const mockQuery = jest.fn();
+const mockStreamQueryBatches = jest.fn();
 const mockGenerateCSV = jest.fn(() => 'csv-output');
 
 jest.mock('../../src/config/database', () => ({
   query: (...args) => mockQuery(...args),
+  streamQueryBatches: (...args) =>
+    mockStreamQueryBatches(...args),
 }));
 
 jest.mock('../../src/utils/logger', () => ({
@@ -36,12 +41,19 @@ const {
 } = require('../../src/config/reportClassification');
 
 function makeRes() {
-  return {
-    setHeader: jest.fn(),
-    send: jest.fn(),
-    status: jest.fn().mockReturnThis(),
-    json: jest.fn(),
-  };
+  const res = new EventEmitter();
+
+  res.setHeader = jest.fn();
+  res.send = jest.fn();
+  res.status = jest.fn().mockReturnValue(res);
+  res.json = jest.fn();
+  res.write = jest.fn(() => true);
+  res.end = jest.fn();
+  res.destroy = jest.fn();
+  res.headersSent = false;
+  res.writableEnded = false;
+
+  return res;
 }
 
 describe('reportController transaction report accounting', () => {
@@ -75,7 +87,7 @@ describe('reportController transaction report accounting', () => {
         role: 'agent',
       },
       query: {
-        format: 'csv',
+        format: 'pdf',
         from_date: '2026-08-01T00:00:00.000Z',
         to_date: '2026-08-11T23:59:59.999Z',
       },
@@ -110,13 +122,13 @@ describe('reportController transaction report accounting', () => {
     expect(summarySql).toContain(
       "WHEN t.status = 'success'",
     );
-    expect(summarySql).toContain(
-      't.transaction_type::text = ANY($4::text[])',
+    expect(summarySql).toMatch(
+      /t\.transaction_type::text\s*=\s*ANY\(\$4::text\[\]\)/
     );
 
     // Commission is recognized only for successful transactions.
     expect(summarySql).toMatch(
-      /WHEN t\.status = 'success' THEN cm\.net_commission/
+      /WHEN\s+t\.status\s*=\s*'success'\s+THEN\s+cm\.net_commission/
     );
 
     expect(summaryParams).toEqual([
@@ -140,7 +152,179 @@ describe('reportController transaction report accounting', () => {
     expect(summaryParams[3]).not.toContain('working_to_float');
     expect(summaryParams[3]).not.toContain('float_to_working');
 
-    expect(res.send).toHaveBeenCalledWith('csv-output');
+    expect(res.send).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe('reportController transaction CSV streaming', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  function makeTransaction(index) {
+    return {
+      id: `tx-id-${index}`,
+      created_at: '2026-08-12T10:00:00.000Z',
+      reference: `REF-${index}`,
+      network_reference: `NET-${index}`,
+      transaction_type: 'cash_in',
+      provider: 'mtn',
+      customer_phone: '0240000000',
+      customer_name: `Customer ${index}`,
+      amount: '100.00',
+      fee: '1.00',
+      net_commission: '0.50',
+      status: 'success',
+      agent_name: 'Agent One',
+      branch_name: 'Main Branch',
+    };
+  }
+
+  test('streams more than 5000 transactions without the legacy export cap', async () => {
+    mockStreamQueryBatches.mockImplementation(
+      async (sql, params, options) => {
+        expect(options.batchSize).toBe(500);
+
+        let nextIndex = 1;
+
+        for (let batch = 0; batch < 10; batch++) {
+          const rows = Array.from(
+            { length: 500 },
+            () => makeTransaction(nextIndex++)
+          );
+
+          await options.onRows(rows);
+        }
+
+        await options.onRows([
+          makeTransaction(nextIndex++),
+        ]);
+      }
+    );
+
+    const req = {
+      user: {
+        id: 'agent-1',
+        company_id: 'company-1',
+        role: 'agent',
+      },
+      query: {
+        format: 'csv',
+        from_date: '2026-08-01T00:00:00.000Z',
+        to_date: '2026-08-12T23:59:59.999Z',
+      },
+    };
+
+    const res = makeRes();
+
+    await reportController.transactionReport(req, res);
+
+    expect(mockQuery).not.toHaveBeenCalled();
+
+    expect(mockStreamQueryBatches)
+      .toHaveBeenCalledTimes(1);
+
+    const [
+      sql,
+      params,
+      options,
+    ] = mockStreamQueryBatches.mock.calls[0];
+
+    expect(sql).not.toMatch(
+      /LIMIT\s+5000/i
+    );
+
+    expect(sql).toContain(
+      'ORDER BY'
+    );
+
+    expect(sql).toContain(
+      't.id DESC'
+    );
+
+    expect(params).toEqual([
+      'agent-1',
+      '2026-08-01T00:00:00.000Z',
+      '2026-08-12T23:59:59.999Z',
+    ]);
+
+    expect(options.batchSize).toBe(500);
+
+    // Header + 11 data chunks:
+    // 10 x 500 rows + 1 final row = 5,001 rows.
+    expect(res.write).toHaveBeenCalledTimes(12);
+
+    const output = res.write.mock.calls
+      .map(([chunk]) => String(chunk))
+      .join('');
+
+    expect(output).toContain(
+      '"REF-1"'
+    );
+
+    expect(output).toContain(
+      '"REF-5000"'
+    );
+
+    expect(output).toContain(
+      '"REF-5001"'
+    );
+
+    const dataLineCount =
+      output.trim().split('\n').length - 1;
+
+    expect(dataLineCount).toBe(5001);
+
+    expect(res.setHeader)
+      .toHaveBeenCalledWith(
+        'Content-Type',
+        'text/csv; charset=utf-8'
+      );
+
+    expect(res.end).toHaveBeenCalledTimes(1);
+  });
+
+  test('waits for response drain when CSV backpressure is applied', async () => {
+    mockStreamQueryBatches.mockImplementation(
+      async (sql, params, options) => {
+        await options.onRows([
+          makeTransaction(1),
+        ]);
+      }
+    );
+
+    // Header writes immediately. The first data chunk fills the
+    // response buffer and must wait for a drain event.
+    const res = makeRes();
+
+    res.write
+      .mockImplementationOnce(() => true)
+      .mockImplementationOnce(() => {
+        setImmediate(() => {
+          res.emit('drain');
+        });
+
+        return false;
+      });
+
+    const req = {
+      user: {
+        id: 'agent-1',
+        company_id: 'company-1',
+        role: 'agent',
+      },
+      query: {
+        format: 'csv',
+        period: 'today',
+      },
+    };
+
+    await reportController.transactionReport(req, res);
+
+    expect(res.write).toHaveBeenCalledTimes(2);
+    expect(res.end).toHaveBeenCalledTimes(1);
+    expect(res.destroy).not.toHaveBeenCalled();
   });
 });
 

@@ -1,4 +1,7 @@
-const { query } = require('../config/database');
+const {
+  query,
+  streamQueryBatches,
+} = require('../config/database');
 const { logger } = require('../utils/logger');
 const {
   generateTransactionReportPDF,
@@ -26,12 +29,16 @@ function parseMultiValue(value) {
   )];
 }
 
-async function fetchTransactions(filters, userContext) {
+function buildTransactionQueryParts(
+  filters,
+  userContext
+) {
   const conditions = [];
   const params = [];
   let idx = 1;
 
-  // Role-based scoping
+  // Role-based scoping is enforced on the server. An agent can only
+  // report on their own transactions regardless of client filters.
   if (userContext.role === 'agent') {
     conditions.push(`t.agent_id = $${idx++}`);
     params.push(userContext.id);
@@ -40,64 +47,152 @@ async function fetchTransactions(filters, userContext) {
     params.push(userContext.company_id);
   }
 
-  if (filters.branch_id) { conditions.push(`t.branch_id = $${idx++}`); params.push(filters.branch_id); }
-  if (filters.agent_id) { conditions.push(`t.agent_id = $${idx++}`); params.push(filters.agent_id); }
-  const providers = parseMultiValue(filters.provider);
-  const transactionTypes = parseMultiValue(filters.transaction_type);
-  const statuses = parseMultiValue(filters.status);
+  if (filters.branch_id) {
+    conditions.push(`t.branch_id = $${idx++}`);
+    params.push(filters.branch_id);
+  }
+
+  if (
+    filters.agent_id &&
+    userContext.role !== 'agent'
+  ) {
+    conditions.push(`t.agent_id = $${idx++}`);
+    params.push(filters.agent_id);
+  }
+
+  const providers =
+    parseMultiValue(filters.provider);
+
+  const transactionTypes =
+    parseMultiValue(filters.transaction_type);
+
+  const statuses =
+    parseMultiValue(filters.status);
 
   if (providers.length) {
-    conditions.push(`t.provider::text = ANY($${idx++}::text[])`);
+    conditions.push(
+      `t.provider::text = ANY($${idx++}::text[])`
+    );
     params.push(providers);
   }
 
   if (transactionTypes.length) {
-    conditions.push(`t.transaction_type::text = ANY($${idx++}::text[])`);
+    conditions.push(
+      `t.transaction_type::text = ANY($${idx++}::text[])`
+    );
     params.push(transactionTypes);
   }
 
   if (statuses.length) {
-    conditions.push(`t.status::text = ANY($${idx++}::text[])`);
+    conditions.push(
+      `t.status::text = ANY($${idx++}::text[])`
+    );
     params.push(statuses);
   }
-  if (filters.sim_iccid) { conditions.push(`t.sim_iccid = $${idx++}`); params.push(filters.sim_iccid); }
-  if (filters.from_date) { conditions.push(`t.created_at >= $${idx++}`); params.push(filters.from_date); }
-  if (filters.to_date) { conditions.push(`t.created_at <= $${idx++}`); params.push(filters.to_date); }
 
-  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  if (filters.sim_iccid) {
+    conditions.push(`t.sim_iccid = $${idx++}`);
+    params.push(filters.sim_iccid);
+  }
 
-  // Strict allowlist mapping a client-facing sort key to a safe SQL
-  // column expression - never interpolate filters.sort_by directly
-  // into ORDER BY, which would be a SQL injection surface. Mirrors
-  // the same pattern already used in transactionController.listTransactions.
+  if (filters.from_date) {
+    conditions.push(`t.created_at >= $${idx++}`);
+    params.push(filters.from_date);
+  }
+
+  if (filters.to_date) {
+    conditions.push(`t.created_at <= $${idx++}`);
+    params.push(filters.to_date);
+  }
+
+  const where = conditions.length
+    ? `WHERE ${conditions.join(' AND ')}`
+    : '';
+
+  // Never interpolate an arbitrary client value into ORDER BY.
   const SORT_COLUMNS = {
     date: 't.created_at',
     amount: 't.amount',
     commission: 'cm.net_commission',
     fee: 't.fee',
   };
-  const sortColumn = SORT_COLUMNS[filters.sort_by] || SORT_COLUMNS.date;
-  const sortDirection = filters.sort_order === 'asc' ? 'ASC' : 'DESC';
 
-  const customerVolumeTypeParam = params.length + 1;
+  const sortColumn =
+    SORT_COLUMNS[filters.sort_by] ||
+    SORT_COLUMNS.date;
+
+  const sortDirection =
+    filters.sort_order === 'asc'
+      ? 'ASC'
+      : 'DESC';
+
+  return {
+    where,
+    params,
+    sortColumn,
+    sortDirection,
+  };
+}
+
+function transactionRowSql({
+  where,
+  sortColumn,
+  sortDirection,
+  limitClause = '',
+}) {
+  return `SELECT t.*,
+                 u.first_name || ' ' || u.last_name as agent_name,
+                 b.name as branch_name,
+                 cm.net_commission
+          FROM transactions t
+          LEFT JOIN users u
+            ON t.agent_id = u.id
+          LEFT JOIN branches b
+            ON t.branch_id = b.id
+          LEFT JOIN commissions cm
+            ON cm.transaction_id = t.id
+          ${where}
+          ORDER BY
+            ${sortColumn} ${sortDirection},
+            t.id ${sortDirection}
+          ${limitClause}`;
+}
+
+async function fetchTransactions(
+  filters,
+  userContext
+) {
+  const {
+    where,
+    params,
+    sortColumn,
+    sortDirection,
+  } = buildTransactionQueryParts(
+    filters,
+    userContext
+  );
+
+  const customerVolumeTypeParam =
+    params.length + 1;
+
   const summaryParams = [
     ...params,
     CUSTOMER_VOLUME_TRANSACTION_TYPES,
   ];
 
-  const [txResult, summaryResult] = await Promise.all([
+  const [
+    txResult,
+    summaryResult,
+  ] = await Promise.all([
     query(
-      `SELECT t.*,
-              u.first_name || ' ' || u.last_name as agent_name,
-              b.name as branch_name,
-              cm.net_commission
-       FROM transactions t
-       LEFT JOIN users u ON t.agent_id = u.id
-       LEFT JOIN branches b ON t.branch_id = b.id
-       LEFT JOIN commissions cm ON cm.transaction_id = t.id
-       ${where}
-       ORDER BY ${sortColumn} ${sortDirection}
-       LIMIT 5000`, // Safety cap
+      transactionRowSql({
+        where,
+        sortColumn,
+        sortDirection,
+        // PDF and non-streaming Excel remain protected until their
+        // bounded-memory writers are implemented in the next phases.
+        limitClause: 'LIMIT 5000',
+      }),
       params
     ),
     query(
@@ -107,7 +202,8 @@ async function fetchTransactions(filters, userContext) {
            SUM(
              CASE
                WHEN t.status = 'success'
-                AND t.transaction_type::text = ANY($${customerVolumeTypeParam}::text[])
+                AND t.transaction_type::text =
+                    ANY($${customerVolumeTypeParam}::text[])
                THEN t.amount
                ELSE 0
              END
@@ -117,25 +213,173 @@ async function fetchTransactions(filters, userContext) {
          COALESCE(
            SUM(
              CASE
-               WHEN t.status = 'success' THEN cm.net_commission
+               WHEN t.status = 'success'
+               THEN cm.net_commission
                ELSE 0
              END
            ),
            0
          ) as total_commission,
          ROUND(
-           100.0 * COUNT(CASE WHEN t.status = 'success' THEN 1 END) / NULLIF(COUNT(*), 0), 1
+           100.0 *
+           COUNT(
+             CASE
+               WHEN t.status = 'success'
+               THEN 1
+             END
+           ) /
+           NULLIF(COUNT(*), 0),
+           1
          ) as success_rate
        FROM transactions t
-       LEFT JOIN commissions cm ON cm.transaction_id = t.id
+       LEFT JOIN commissions cm
+         ON cm.transaction_id = t.id
        ${where}`,
       summaryParams
     ),
   ]);
 
-  return { transactions: txResult.rows, summary: summaryResult.rows[0] };
+  return {
+    transactions: txResult.rows,
+    summary: summaryResult.rows[0],
+  };
 }
 
+function csvCell(value) {
+  return `"${String(value ?? '')
+    .replace(/"/g, '""')}"`;
+}
+
+function transactionCsvRow(tx) {
+  return [
+    tx.created_at
+      ? new Date(tx.created_at)
+          .toLocaleString('en-GH')
+      : '',
+    tx.reference,
+    tx.network_reference,
+    tx.transaction_type,
+    tx.provider,
+    tx.customer_phone,
+    tx.customer_name,
+    tx.amount,
+    tx.fee,
+    tx.net_commission,
+    tx.status,
+    tx.agent_name,
+    tx.branch_name,
+  ].map(csvCell).join(',');
+}
+
+const TRANSACTION_CSV_HEADER = [
+  'Date',
+  'Reference',
+  'Network Ref',
+  'Type',
+  'Provider',
+  'Customer Phone',
+  'Customer Name',
+  'Amount (GHS)',
+  'Recorded Network Charge (GHS)',
+  'Commission (GHS)',
+  'Status',
+  'Agent',
+  'Branch',
+].map(csvCell).join(',');
+
+function waitForResponseDrain(res) {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      res.removeListener('drain', onDrain);
+      res.removeListener('error', onError);
+      res.removeListener('close', onClose);
+    };
+
+    const onDrain = () => {
+      cleanup();
+      resolve();
+    };
+
+    const onError = (error) => {
+      cleanup();
+      reject(error);
+    };
+
+    const onClose = () => {
+      cleanup();
+      reject(
+        new Error(
+          'Report download connection closed'
+        )
+      );
+    };
+
+    res.once('drain', onDrain);
+    res.once('error', onError);
+    res.once('close', onClose);
+  });
+}
+
+async function writeResponseChunk(
+  res,
+  chunk
+) {
+  if (res.write(chunk)) {
+    return;
+  }
+
+  await waitForResponseDrain(res);
+}
+
+async function streamTransactionCsv(
+  filters,
+  userContext,
+  res
+) {
+  const {
+    where,
+    params,
+    sortColumn,
+    sortDirection,
+  } = buildTransactionQueryParts(
+    filters,
+    userContext
+  );
+
+  const sql = transactionRowSql({
+    where,
+    sortColumn,
+    sortDirection,
+  });
+
+  await writeResponseChunk(
+    res,
+    `${TRANSACTION_CSV_HEADER}\n`
+  );
+
+  await streamQueryBatches(
+    sql,
+    params,
+    {
+      batchSize: 500,
+      onRows: async (rows) => {
+        if (rows.length === 0) {
+          return;
+        }
+
+        const chunk =
+          `${rows
+            .map(transactionCsvRow)
+            .join('\n')}\n`;
+
+        await writeResponseChunk(
+          res,
+          chunk
+        );
+      },
+    }
+  );
+}
 
 function resolvePeriodRange(period, fromDate, toDate) {
   let resolvedFrom = fromDate;
@@ -343,8 +587,44 @@ exports.transactionReport = async (req, res) => {
       to_date
     );
 
-    const { transactions, summary } = await fetchTransactions(
-      { from_date: resolvedFrom, to_date: resolvedTo, branch_id, agent_id, provider, transaction_type, status, sim_iccid, sort_by, sort_order },
+    const reportFilters = {
+      from_date: resolvedFrom,
+      to_date: resolvedTo,
+      branch_id,
+      agent_id,
+      provider,
+      transaction_type,
+      status,
+      sim_iccid,
+      sort_by,
+      sort_order,
+    };
+
+    if (format === 'csv') {
+      res.setHeader(
+        'Content-Type',
+        'text/csv; charset=utf-8'
+      );
+
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="transactions_${Date.now()}.csv"`
+      );
+
+      await streamTransactionCsv(
+        reportFilters,
+        req.user,
+        res
+      );
+
+      return res.end();
+    }
+
+    const {
+      transactions,
+      summary,
+    } = await fetchTransactions(
+      reportFilters,
       req.user
     );
 
@@ -354,26 +634,6 @@ exports.transactionReport = async (req, res) => {
       ? `Transaction Report — ${branchName} — ${periodLabel}`
       : `Transaction Report — ${periodLabel}`;
 
-    if (format === 'csv') {
-      const csv = generateCSV(transactions, [
-        { label: 'Date', key: 'created_at', getValue: r => new Date(r.created_at).toLocaleString('en-GH') },
-        { label: 'Reference', key: 'reference' },
-        { label: 'Network Ref', key: 'network_reference' },
-        { label: 'Type', key: 'transaction_type' },
-        { label: 'Provider', key: 'provider' },
-        { label: 'Customer Phone', key: 'customer_phone' },
-        { label: 'Customer Name', key: 'customer_name' },
-        { label: 'Amount (GHS)', key: 'amount' },
-        { label: 'Recorded Network Charge (GHS)', key: 'fee' },
-        { label: 'Commission (GHS)', key: 'net_commission' },
-        { label: 'Status', key: 'status' },
-        { label: 'Agent', key: 'agent_name' },
-        { label: 'Branch', key: 'branch_name' },
-      ]);
-      res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', `attachment; filename="transactions_${Date.now()}.csv"`);
-      return res.send(csv);
-    }
 
     if (format === 'excel') {
       const buffer = await generateTransactionReportExcel({ transactions, summary, title });
@@ -389,8 +649,25 @@ exports.transactionReport = async (req, res) => {
     return res.send(buffer);
 
   } catch (error) {
-    logger.error('Transaction report error:', error);
-    res.status(500).json({ success: false, message: 'Failed to generate report' });
+    logger.error(
+      'Transaction report error:',
+      error
+    );
+
+    if (res.headersSent) {
+      if (
+        !res.writableEnded &&
+        typeof res.destroy === 'function'
+      ) {
+        res.destroy(error);
+      }
+      return;
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate report',
+    });
   }
 };
 
