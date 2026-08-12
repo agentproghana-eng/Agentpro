@@ -4,7 +4,7 @@ const {
 } = require('../config/database');
 const { logger } = require('../utils/logger');
 const {
-  generateTransactionReportPDF,
+  generateTransactionReportPDFStream,
   generateTransactionReportExcelStream,
   generateCommissionReportPDF,
   generateCommissionReportExcel,
@@ -156,93 +156,6 @@ function transactionRowSql({
             ${sortColumn} ${sortDirection},
             t.id ${sortDirection}
           ${limitClause}`;
-}
-
-async function fetchTransactions(
-  filters,
-  userContext
-) {
-  const {
-    where,
-    params,
-    sortColumn,
-    sortDirection,
-  } = buildTransactionQueryParts(
-    filters,
-    userContext
-  );
-
-  const customerVolumeTypeParam =
-    params.length + 1;
-
-  const summaryParams = [
-    ...params,
-    CUSTOMER_VOLUME_TRANSACTION_TYPES,
-  ];
-
-  const [
-    txResult,
-    summaryResult,
-  ] = await Promise.all([
-    query(
-      transactionRowSql({
-        where,
-        sortColumn,
-        sortDirection,
-        // PDF remains protected by the legacy safety cap until its
-        // bounded-memory streaming writer is implemented in Phase 2C.
-        limitClause: 'LIMIT 5000',
-      }),
-      params
-    ),
-    query(
-      `SELECT
-         COUNT(*) as count,
-         COALESCE(
-           SUM(
-             CASE
-               WHEN t.status = 'success'
-                AND t.transaction_type::text =
-                    ANY($${customerVolumeTypeParam}::text[])
-               THEN t.amount
-               ELSE 0
-             END
-           ),
-           0
-         ) as total_amount,
-         COALESCE(
-           SUM(
-             CASE
-               WHEN t.status = 'success'
-               THEN cm.net_commission
-               ELSE 0
-             END
-           ),
-           0
-         ) as total_commission,
-         ROUND(
-           100.0 *
-           COUNT(
-             CASE
-               WHEN t.status = 'success'
-               THEN 1
-             END
-           ) /
-           NULLIF(COUNT(*), 0),
-           1
-         ) as success_rate
-       FROM transactions t
-       LEFT JOIN commissions cm
-         ON cm.transaction_id = t.id
-       ${where}`,
-      summaryParams
-    ),
-  ]);
-
-  return {
-    transactions: txResult.rows,
-    summary: summaryResult.rows[0],
-  };
 }
 
 function csvCell(value) {
@@ -776,23 +689,41 @@ exports.transactionReport = async (req, res) => {
       return;
     }
 
-    // PDF remains on the bounded legacy path until Phase 2C.
-    const {
-      transactions,
-      summary,
-    } = await fetchTransactions(
-      reportFilters,
-      req.user
+    const summary =
+      await fetchTransactionSummary(
+        reportFilters,
+        req.user
+      );
+
+    res.setHeader(
+      'Content-Type',
+      'application/pdf'
     );
 
-    const buffer = await generateTransactionReportPDF({
-      transactions,
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="transactions_${Date.now()}.pdf"`
+    );
+
+    await generateTransactionReportPDFStream({
+      stream: res,
       summary,
       title,
+      writeTransactions:
+        async (writeRow) => {
+          await streamTransactionRows(
+            reportFilters,
+            req.user,
+            writeRow
+          );
+        },
     });
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="transactions_${Date.now()}.pdf"`);
-    return res.send(buffer);
+
+    if (!res.writableEnded) {
+      return res.end();
+    }
+
+    return;
 
   } catch (error) {
     logger.error(

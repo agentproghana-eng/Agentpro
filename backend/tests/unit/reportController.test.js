@@ -2,6 +2,8 @@ const { EventEmitter } = require('events');
 
 const mockQuery = jest.fn();
 const mockStreamQueryBatches = jest.fn();
+const mockGenerateTransactionReportPDFStream =
+  jest.fn();
 const mockGenerateTransactionReportExcelStream =
   jest.fn();
 const mockGenerateCSV = jest.fn(() => 'csv-output');
@@ -22,6 +24,11 @@ jest.mock('../../src/utils/logger', () => ({
 
 jest.mock('../../src/services/reportService', () => ({
   generateTransactionReportPDF: jest.fn(),
+  generateTransactionReportPDFStream:
+    (...args) =>
+      mockGenerateTransactionReportPDFStream(
+        ...args
+      ),
   generateTransactionReportExcel: jest.fn(),
   generateTransactionReportExcelStream:
     (...args) =>
@@ -47,6 +54,15 @@ const {
   CUSTOMER_VOLUME_TRANSACTION_TYPES,
 } = require('../../src/config/reportClassification');
 
+function resetReportMocks() {
+  jest.resetAllMocks();
+
+  // resetAllMocks intentionally clears implementations as well as
+  // call history. Restore shared baseline behavior required by tests
+  // that exercise the legacy Commission CSV generator.
+  mockGenerateCSV.mockReturnValue('csv-output');
+}
+
 function makeRes() {
   const res = new EventEmitter();
 
@@ -65,27 +81,32 @@ function makeRes() {
 
 describe('reportController transaction report accounting', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    resetReportMocks();
+
+    mockGenerateTransactionReportPDFStream
+      .mockImplementation(
+        async ({
+          writeTransactions,
+        }) => {
+          await writeTransactions(
+            async () => {}
+          );
+        }
+      );
+
+    mockStreamQueryBatches
+      .mockResolvedValue();
   });
 
   test('uses only successful canonical customer transactions for reported volume', async () => {
-    mockQuery
-      .mockResolvedValueOnce({
-        rows: [
-          { transaction_type: 'cash_in', amount: '100.00' },
-          { transaction_type: 'float_received', amount: '5000.00' },
-          { transaction_type: 'merchant_payment', amount: '300.00' },
-          { transaction_type: 'working_to_float', amount: '2000.00' },
-        ],
-      })
-      .mockResolvedValueOnce({
-        rows: [{
-          count: '4',
-          total_amount: '100.00',
-          total_commission: '1.00',
-          success_rate: '100.0',
-        }],
-      });
+    mockQuery.mockResolvedValueOnce({
+      rows: [{
+        count: '4',
+        total_amount: '100.00',
+        total_commission: '1.00',
+        success_rate: '100.0',
+      }],
+    });
 
     const req = {
       user: {
@@ -104,25 +125,12 @@ describe('reportController transaction report accounting', () => {
 
     await reportController.transactionReport(req, res);
 
-    expect(mockQuery).toHaveBeenCalledTimes(2);
+    expect(mockQuery).toHaveBeenCalledTimes(1);
 
-    const [rowSql, rowParams] = mockQuery.mock.calls[0];
-    const [summarySql, summaryParams] = mockQuery.mock.calls[1];
-
-    // Transaction-history/report rows themselves remain unfiltered by
-    // accounting classification.
-    expect(rowSql).not.toContain(
-      'CUSTOMER_VOLUME_TRANSACTION_TYPES',
-    );
-    expect(rowSql).not.toContain(
-      'transaction_type::text = ANY',
-    );
-
-    expect(rowParams).toEqual([
-      'agent-1',
-      '2026-08-01T00:00:00.000Z',
-      '2026-08-11T23:59:59.999Z',
-    ]);
+    const [
+      summarySql,
+      summaryParams,
+    ] = mockQuery.mock.calls[0];
 
     // Only successful canonical customer-service transactions contribute
     // their principal amount to the volume summary.
@@ -159,14 +167,16 @@ describe('reportController transaction report accounting', () => {
     expect(summaryParams[3]).not.toContain('working_to_float');
     expect(summaryParams[3]).not.toContain('float_to_working');
 
-    expect(res.send).toHaveBeenCalledTimes(1);
+    expect(
+      mockGenerateTransactionReportPDFStream
+    ).toHaveBeenCalledTimes(1);
   });
 });
 
 
 describe('reportController transaction CSV streaming', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    resetReportMocks();
   });
 
   function makeTransaction(index) {
@@ -338,7 +348,7 @@ describe('reportController transaction CSV streaming', () => {
 
 describe('reportController transaction Excel streaming', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    resetReportMocks();
   });
 
   function makeTransaction(index) {
@@ -483,9 +493,208 @@ describe('reportController transaction Excel streaming', () => {
   });
 });
 
+
+describe('reportController transaction PDF streaming', () => {
+  beforeEach(() => {
+    resetReportMocks();
+  });
+
+  function makeTransaction(index) {
+    return {
+      id: `tx-pdf-${index}`,
+      created_at:
+        '2026-08-12T10:00:00.000Z',
+      reference:
+        `PDF-REF-${index}`,
+      transaction_type:
+        'cash_in',
+      provider:
+        'mtn',
+      customer_phone:
+        '0240000000',
+      amount:
+        '100.00',
+      fee:
+        '1.00',
+      net_commission:
+        '0.50',
+      status:
+        'success',
+      agent_name:
+        'Agent One',
+      branch_name:
+        'Main Branch',
+    };
+  }
+
+  test('streams more than 5000 PDF transaction rows without a legacy cap', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{
+        count: '5001',
+        total_amount:
+          '500100.00',
+        total_commission:
+          '2500.50',
+        success_rate:
+          '100.0',
+      }],
+    });
+
+    mockStreamQueryBatches
+      .mockImplementation(
+        async (
+          sql,
+          params,
+          options
+        ) => {
+          let nextIndex = 1;
+
+          for (
+            let batch = 0;
+            batch < 10;
+            batch++
+          ) {
+            const rows =
+              Array.from(
+                {
+                  length: 500,
+                },
+                () =>
+                  makeTransaction(
+                    nextIndex++
+                  )
+              );
+
+            await options.onRows(
+              rows
+            );
+          }
+
+          await options.onRows([
+            makeTransaction(
+              nextIndex++
+            ),
+          ]);
+        }
+      );
+
+    const writtenRows = [];
+
+    mockGenerateTransactionReportPDFStream
+      .mockImplementation(
+        async ({
+          summary,
+          writeTransactions,
+        }) => {
+          expect(summary).toEqual(
+            expect.objectContaining({
+              count: '5001',
+            })
+          );
+
+          await writeTransactions(
+            async (row) => {
+              writtenRows.push(
+                row
+              );
+            }
+          );
+        }
+      );
+
+    const req = {
+      user: {
+        id: 'agent-1',
+        company_id: 'company-1',
+        role: 'agent',
+      },
+      query: {
+        format: 'pdf',
+        from_date:
+          '2026-08-01T00:00:00.000Z',
+        to_date:
+          '2026-08-12T23:59:59.999Z',
+      },
+    };
+
+    const res = makeRes();
+
+    await reportController
+      .transactionReport(
+        req,
+        res
+      );
+
+    expect(mockQuery)
+      .toHaveBeenCalledTimes(1);
+
+    expect(
+      mockStreamQueryBatches
+    ).toHaveBeenCalledTimes(1);
+
+    const [
+      sql,
+      params,
+      options,
+    ] =
+      mockStreamQueryBatches
+        .mock.calls[0];
+
+    expect(sql).not.toMatch(
+      /LIMIT\s+5000/i
+    );
+
+    expect(sql).toContain(
+      't.id DESC'
+    );
+
+    expect(params).toEqual([
+      'agent-1',
+      '2026-08-01T00:00:00.000Z',
+      '2026-08-12T23:59:59.999Z',
+    ]);
+
+    expect(options.batchSize)
+      .toBe(500);
+
+    expect(writtenRows)
+      .toHaveLength(5001);
+
+    expect(
+      writtenRows[4999]
+        .reference
+    ).toBe(
+      'PDF-REF-5000'
+    );
+
+    expect(
+      writtenRows[5000]
+        .reference
+    ).toBe(
+      'PDF-REF-5001'
+    );
+
+    expect(
+      mockGenerateTransactionReportPDFStream
+    ).toHaveBeenCalledTimes(1);
+
+    expect(res.setHeader)
+      .toHaveBeenCalledWith(
+        'Content-Type',
+        'application/pdf'
+      );
+
+    expect(res.end)
+      .toHaveBeenCalledTimes(1);
+
+    expect(res.send)
+      .not.toHaveBeenCalled();
+  });
+});
+
 describe('reportController dashboard accounting', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    resetReportMocks();
   });
 
   test('returns explicit today customer volume, commission, and customer transaction count', async () => {
@@ -554,7 +763,7 @@ describe('reportController dashboard accounting', () => {
 
 describe('reportController dashboard treasury scope', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    resetReportMocks();
   });
 
   test('agent dashboard does not query or expose business branch treasury float', async () => {
@@ -780,7 +989,7 @@ describe('reportController dashboard treasury scope', () => {
 
 describe('reportController dashboard treasury remaining roles', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    resetReportMocks();
   });
 
   test('auditor dashboard treasury is limited to active own-company branches', async () => {
@@ -928,7 +1137,7 @@ describe('reportController dashboard treasury remaining roles', () => {
 
 describe('reportController monthly dashboard accounting', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    resetReportMocks();
   });
 
   test('uses only successful customer transactions for this-month count and volume', async () => {
@@ -996,7 +1205,7 @@ describe('reportController monthly dashboard accounting', () => {
 
 describe('reportController commission report security and periods', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    resetReportMocks();
     jest.useRealTimers();
     mockGetCommissionSummary.mockResolvedValue([]);
   });

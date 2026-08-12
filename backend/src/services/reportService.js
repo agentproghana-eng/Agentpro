@@ -284,6 +284,352 @@ async function generateTransactionReportPDF({ transactions, filters, summary, ti
   return Buffer.concat(buffers);
 }
 
+
+// ── Streaming Transaction Report PDF ──────────────────────────
+//
+// This is the bounded-memory variant used by business transaction
+// exports. PDFKit writes directly to the supplied stream while
+// transaction rows are supplied incrementally by the caller.
+async function generateTransactionReportPDFStream({
+  stream,
+  summary,
+  title,
+  writeTransactions,
+}) {
+  if (
+    !stream ||
+    typeof stream.write !== 'function'
+  ) {
+    throw new TypeError(
+      'PDF report stream must be writable'
+    );
+  }
+
+  if (typeof writeTransactions !== 'function') {
+    throw new TypeError(
+      'writeTransactions callback is required'
+    );
+  }
+
+  const doc = new PDFDocument({
+    size: 'A4',
+    margin: 40,
+  });
+
+  const completed = new Promise(
+    (resolve, reject) => {
+      doc.on('end', resolve);
+      doc.on('error', reject);
+      stream.on('error', reject);
+    }
+  );
+
+  doc.pipe(stream);
+
+  let pageNum = 1;
+  let rowIndex = 0;
+
+  const cols = [
+    { label: 'Date', width: 50 },
+    { label: 'Reference', width: 60 },
+    { label: 'Type', width: 45 },
+    { label: 'Provider', width: 40 },
+    { label: 'Customer', width: 55 },
+    { label: 'Agent', width: 55 },
+    { label: 'Amount', width: 55 },
+    { label: 'Charge', width: 40 },
+    { label: 'Status', width: 80 },
+    { label: 'SIM', width: 35 },
+  ];
+
+  const drawTableHeader = () => {
+    const headerY = doc.y;
+
+    doc
+      .rect(
+        40,
+        headerY,
+        doc.page.width - 80,
+        18
+      )
+      .fill(COLORS.primary);
+
+    let x = 40;
+
+    for (const col of cols) {
+      doc
+        .fontSize(7.5)
+        .fillColor('white')
+        .font('Helvetica-Bold')
+        .text(
+          col.label,
+          x + 4,
+          headerY + 5,
+          {
+            width: col.width - 4,
+            lineBreak: false,
+          }
+        );
+
+      x += col.width;
+    }
+
+    doc.y = headerY + 18;
+  };
+
+  const addReportPage = ({
+    firstPage = false,
+  } = {}) => {
+    if (!firstPage) {
+      doc.addPage();
+      pageNum++;
+    }
+
+    decoratePage(doc, pageNum);
+
+    if (firstPage) {
+      doc
+        .rect(
+          0,
+          0,
+          doc.page.width,
+          70
+        )
+        .fill(COLORS.primary);
+
+      try {
+        doc.image(
+          LOGO_PATH,
+          15,
+          15,
+          {
+            height: 40,
+          }
+        );
+      } catch (e) {
+        logger.warn(
+          'Logo image not found, skipping:',
+          e.message
+        );
+      }
+
+      doc
+        .fillColor(COLORS.secondary)
+        .fontSize(18)
+        .font('Helvetica-Bold')
+        .text(
+          'Agent Pro Ghana',
+          40,
+          15
+        );
+
+      doc
+        .fillColor('white')
+        .fontSize(11)
+        .font('Helvetica')
+        .text(
+          title ||
+            'Transaction Report',
+          40,
+          35
+        );
+
+      doc
+        .fontSize(9)
+        .text(
+          `Generated: ${dateTimeStr(
+            new Date()
+          )}`,
+          40,
+          52
+        );
+
+      doc.fillColor(COLORS.text);
+      doc.moveDown(2.5);
+
+      const summaries = [
+        [
+          'Total Transactions',
+          summary?.count || 0,
+        ],
+        [
+          'Customer Volume',
+          GHS(summary?.total_amount),
+        ],
+        [
+          'Net Commission',
+          GHS(summary?.total_commission),
+        ],
+        [
+          'Success Rate',
+          `${summary?.success_rate || 0}%`,
+        ],
+      ];
+
+      const cardWidth =
+        (
+          doc.page.width -
+          80 -
+          30
+        ) / 4;
+
+      for (
+        let i = 0;
+        i < summaries.length;
+        i++
+      ) {
+        const [
+          label,
+          value,
+        ] = summaries[i];
+
+        const x =
+          40 +
+          i *
+            (
+              cardWidth +
+              10
+            );
+
+        const y = doc.y;
+
+        doc
+          .rect(
+            x,
+            y,
+            cardWidth,
+            48
+          )
+          .fill(COLORS.light);
+
+        doc
+          .fontSize(7)
+          .fillColor(COLORS.muted)
+          .font('Helvetica')
+          .text(
+            label,
+            x + 6,
+            y + 8,
+            {
+              width:
+                cardWidth - 12,
+            }
+          );
+
+        doc
+          .fontSize(12)
+          .fillColor(COLORS.primary)
+          .font('Helvetica-Bold')
+          .text(
+            String(value),
+            x + 6,
+            y + 20,
+            {
+              width:
+                cardWidth - 12,
+            }
+          );
+      }
+
+      doc.moveDown(3.5);
+    } else {
+      doc.moveDown(1);
+    }
+
+    drawTableHeader();
+  };
+
+  addReportPage({
+    firstPage: true,
+  });
+
+  await writeTransactions(
+    async (tx) => {
+      if (
+        doc.y >
+        doc.page.height - 80
+      ) {
+        addReportPage();
+      }
+
+      const rowY = doc.y;
+
+      if (rowIndex % 2 === 0) {
+        doc
+          .rect(
+            40,
+            rowY,
+            doc.page.width - 80,
+            16
+          )
+          .fill('#FAFAFA');
+      }
+
+      const rowData = [
+        dateStr(tx.created_at),
+        tx.reference,
+        (
+          tx.transaction_type ||
+          ''
+        ).replace('_', ' '),
+        (
+          tx.provider ||
+          ''
+        ).toUpperCase(),
+        tx.customer_phone || '—',
+        tx.agent_name || '—',
+        GHS(tx.amount),
+        parseFloat(tx.fee || 0) > 0
+          ? GHS(tx.fee)
+          : '—',
+        (
+          tx.status ||
+          ''
+        ).toUpperCase(),
+        simLabel(tx),
+      ];
+
+      let x = 40;
+
+      for (
+        let i = 0;
+        i < rowData.length;
+        i++
+      ) {
+        const color =
+          i === 8
+            ? statusColor(
+                tx.status
+              )
+            : COLORS.text;
+
+        doc
+          .fontSize(7)
+          .fillColor(color)
+          .font('Helvetica')
+          .text(
+            rowData[i],
+            x + 4,
+            rowY + 4,
+            {
+              width:
+                cols[i].width - 4,
+            }
+          );
+
+        x += cols[i].width;
+      }
+
+      doc.y = rowY + 18;
+      rowIndex++;
+    }
+  );
+
+  doc.end();
+
+  await completed;
+}
+
 // ── Transaction Report Excel ──────────────────────────────────
 
 async function generateTransactionReportExcel({ transactions, filters, summary, title }) {
@@ -847,6 +1193,7 @@ function generateCSV(data, columns) {
 module.exports = {
   generateTransactionReceipt,
   generateTransactionReportPDF,
+  generateTransactionReportPDFStream,
   generateTransactionReportExcel,
   generateTransactionReportExcelStream,
   generateCommissionReportPDF,
