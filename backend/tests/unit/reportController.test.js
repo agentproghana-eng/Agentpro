@@ -1025,6 +1025,86 @@ describe('reportController dashboard accounting', () => {
       CUSTOMER_VOLUME_TRANSACTION_TYPES,
     );
 
+    expect(todaySql).toContain(
+      't.company_id = $3'
+    );
+
+    expect(todaySql).toContain(
+      't.agent_id = $4'
+    );
+
+    expect(todaySql).not.toContain(
+      'company-1'
+    );
+
+    expect(todaySql).not.toContain(
+      'agent-1'
+    );
+
+    expect(
+      todayParams.slice(2)
+    ).toEqual([
+      'company-1',
+      'agent-1',
+    ]);
+
+    const [
+      monthSql,
+      monthParams,
+    ] =
+      mockQuery.mock.calls[1];
+
+    expect(monthSql).toContain(
+      't.company_id = $3'
+    );
+
+    expect(monthSql).toContain(
+      't.agent_id = $4'
+    );
+
+    expect(monthSql).not.toContain(
+      'company-1'
+    );
+
+    expect(monthSql).not.toContain(
+      'agent-1'
+    );
+
+    expect(
+      monthParams.slice(2)
+    ).toEqual([
+      'company-1',
+      'agent-1',
+    ]);
+
+    const [
+      recentSql,
+      recentParams,
+    ] =
+      mockQuery.mock.calls[2];
+
+    expect(recentSql).toContain(
+      't.company_id = $1'
+    );
+
+    expect(recentSql).toContain(
+      't.agent_id = $2'
+    );
+
+    expect(recentSql).not.toContain(
+      'company-1'
+    );
+
+    expect(recentSql).not.toContain(
+      'agent-1'
+    );
+
+    expect(recentParams)
+      .toEqual([
+        'company-1',
+        'agent-1',
+      ]);
+
     expect(res.json).toHaveBeenCalledWith({
       success: true,
       data: expect.objectContaining({
@@ -1400,6 +1480,47 @@ describe('reportController dashboard treasury remaining roles', () => {
       );
     }
 
+    const [
+      superTodaySql,
+      superTodayParams,
+    ] =
+      mockQuery.mock.calls[0];
+
+    const [
+      superMonthSql,
+      superMonthParams,
+    ] =
+      mockQuery.mock.calls[1];
+
+    const [
+      superRecentSql,
+      superRecentParams,
+    ] =
+      mockQuery.mock.calls[2];
+
+    for (const sql of [
+      superTodaySql,
+      superMonthSql,
+      superRecentSql,
+    ]) {
+      expect(sql).not.toContain(
+        't.company_id ='
+      );
+
+      expect(sql).not.toContain(
+        't.agent_id ='
+      );
+    }
+
+    expect(superTodayParams)
+      .toHaveLength(2);
+
+    expect(superMonthParams)
+      .toHaveLength(2);
+
+    expect(superRecentParams)
+      .toEqual([]);
+
     expect(res.json)
       .toHaveBeenCalledWith({
         success: true,
@@ -1459,9 +1580,32 @@ describe('reportController monthly dashboard accounting', () => {
       't.transaction_type::text = ANY($2::text[])',
     );
 
-    expect(monthParams).toHaveLength(2);
+    expect(monthParams).toHaveLength(4);
+
     expect(monthParams[1]).toEqual(
       CUSTOMER_VOLUME_TRANSACTION_TYPES,
+    );
+
+    expect(monthParams.slice(2))
+      .toEqual([
+        'company-1',
+        'agent-1',
+      ]);
+
+    expect(monthSql).toContain(
+      't.company_id = $3'
+    );
+
+    expect(monthSql).toContain(
+      't.agent_id = $4'
+    );
+
+    expect(monthSql).not.toContain(
+      'company-1'
+    );
+
+    expect(monthSql).not.toContain(
+      'agent-1'
     );
 
     expect(res.json).toHaveBeenCalledWith({

@@ -9,10 +9,38 @@ router.use(authenticate);
 // Get commission rules
 router.get('/rules', authorize('superuser', 'business_owner'), async (req, res) => {
   try {
-    const companyFilter = req.user.role === 'superuser' ? '' : `WHERE (company_id = '${req.user.company_id}' OR company_id IS NULL)`;
-    const result = await query(`SELECT * FROM commission_rules ${companyFilter} ORDER BY company_id NULLS LAST, created_at DESC`);
-    res.json({ success: true, data: result.rows });
-  } catch (e) { res.status(500).json({ success: false, message: 'Failed to fetch rules' }); }
+    const isSuperuser =
+      req.user.role === 'superuser';
+
+    const companyFilter =
+      isSuperuser
+        ? ''
+        : 'WHERE (company_id = $1 OR company_id IS NULL)';
+
+    const params =
+      isSuperuser
+        ? []
+        : [req.user.company_id];
+
+    const result = await query(
+      `SELECT *
+       FROM commission_rules
+       ${companyFilter}
+       ORDER BY company_id NULLS LAST, created_at DESC`,
+      params
+    );
+
+    res.json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (e) {
+    res.status(500).json({
+      success: false,
+      message:
+        'Failed to fetch rules',
+    });
+  }
 });
 
 // Create commission rule (superuser only)

@@ -1120,8 +1120,44 @@ exports.dashboardSummary = async (req, res) => {
     const startOfDay = new Date(now); startOfDay.setHours(0, 0, 0, 0);
     const startOfMonth = new Date(now); startOfMonth.setDate(1); startOfMonth.setHours(0, 0, 0, 0);
 
-    const companyFilter = companyId ? `AND t.company_id = '${companyId}'` : '';
-    const agentFilter = agentId ? `AND t.agent_id = '${agentId}'` : '';
+    const buildDashboardScope = (
+      startIndex
+    ) => {
+      const conditions = [];
+      const params = [];
+      let idx = startIndex;
+
+      if (companyId) {
+        conditions.push(
+          `t.company_id = $${idx++}`
+        );
+        params.push(companyId);
+      }
+
+      if (agentId) {
+        conditions.push(
+          `t.agent_id = $${idx++}`
+        );
+        params.push(agentId);
+      }
+
+      return {
+        clause:
+          conditions.length > 0
+            ? ` AND ${conditions.join(' AND ')}`
+            : '',
+        params,
+      };
+    };
+
+    const todayScope =
+      buildDashboardScope(3);
+
+    const monthScope =
+      buildDashboardScope(3);
+
+    const recentScope =
+      buildDashboardScope(1);
 
     let loadFloatSummary;
 
@@ -1204,8 +1240,12 @@ exports.dashboardSummary = async (req, res) => {
                 COUNT(CASE WHEN t.status = 'success' THEN 1 END) as success_count
          FROM transactions t
          LEFT JOIN commissions cm ON cm.transaction_id = t.id
-         WHERE t.created_at >= $1 ${companyFilter} ${agentFilter}`,
-        [startOfDay, CUSTOMER_VOLUME_TRANSACTION_TYPES]
+         WHERE t.created_at >= $1${todayScope.clause}`,
+        [
+          startOfDay,
+          CUSTOMER_VOLUME_TRANSACTION_TYPES,
+          ...todayScope.params,
+        ]
       ),
       query(
         `SELECT
@@ -1229,17 +1269,21 @@ exports.dashboardSummary = async (req, res) => {
          FROM transactions t
          LEFT JOIN commissions cm ON cm.transaction_id = t.id
          WHERE t.created_at >= $1
-           AND t.status = 'success'
-           ${companyFilter} ${agentFilter}`,
-        [startOfMonth, CUSTOMER_VOLUME_TRANSACTION_TYPES]
+           AND t.status = 'success'${monthScope.clause}`,
+        [
+          startOfMonth,
+          CUSTOMER_VOLUME_TRANSACTION_TYPES,
+          ...monthScope.params,
+        ]
       ),
       loadFloatSummary(),
       query(
         `SELECT t.id, t.reference, t.transaction_type, t.provider,
                 t.amount, t.status, t.created_at, t.customer_phone
          FROM transactions t
-         WHERE 1=1 ${companyFilter} ${agentFilter}
-         ORDER BY t.created_at DESC LIMIT 5`
+         WHERE 1=1${recentScope.clause}
+         ORDER BY t.created_at DESC LIMIT 5`,
+        recentScope.params
       ),
     ]);
 

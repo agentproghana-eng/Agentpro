@@ -2,6 +2,7 @@ const express = require('express');
 const request = require('supertest');
 
 const mockGetCommissionSummary = jest.fn();
+const mockQuery = jest.fn();
 
 jest.mock('../../src/services/commissionService', () => ({
   getCommissionSummary: (...args) =>
@@ -9,7 +10,8 @@ jest.mock('../../src/services/commissionService', () => ({
 }));
 
 jest.mock('../../src/config/database', () => ({
-  query: jest.fn(),
+  query: (...args) =>
+    mockQuery(...args),
 }));
 
 jest.mock('../../src/middleware/auth', () => ({
@@ -38,6 +40,9 @@ describe('commission summary route manager scope', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     mockGetCommissionSummary.mockResolvedValue([]);
+    mockQuery.mockResolvedValue({
+      rows: [],
+    });
   });
 
   test('passes authenticated manager identity into commission summary scope', async () => {
@@ -122,3 +127,119 @@ describe('commission summary route manager scope', () => {
       );
   });
 });
+
+
+describe(
+  'commission rules route SQL scope',
+  () => {
+    beforeEach(() => {
+      jest.resetAllMocks();
+
+      mockQuery.mockResolvedValue({
+        rows: [],
+      });
+    });
+
+
+    test(
+      'parameterizes the authenticated business owner company id',
+      async () => {
+        const app =
+          makeApp();
+
+        const response =
+          await request(app)
+            .get('/commission/rules')
+            .set(
+              'x-test-user-id',
+              'owner-1'
+            )
+            .set(
+              'x-test-company-id',
+              'company-sensitive-value'
+            )
+            .set(
+              'x-test-role',
+              'business_owner'
+            );
+
+        expect(response.status)
+          .toBe(200);
+
+        expect(mockQuery)
+          .toHaveBeenCalledTimes(1);
+
+        const [
+          sql,
+          params,
+        ] =
+          mockQuery.mock.calls[0];
+
+        expect(sql)
+          .toContain(
+            'company_id = $1'
+          );
+
+        expect(sql)
+          .not.toContain(
+            'company-sensitive-value'
+          );
+
+        expect(params)
+          .toEqual([
+            'company-sensitive-value',
+          ]);
+      }
+    );
+
+
+    test(
+      'keeps superuser commission rules unscoped without interpolated ids',
+      async () => {
+        const app =
+          makeApp();
+
+        const response =
+          await request(app)
+            .get('/commission/rules')
+            .set(
+              'x-test-user-id',
+              'super-1'
+            )
+            .set(
+              'x-test-company-id',
+              'ignored-company'
+            )
+            .set(
+              'x-test-role',
+              'superuser'
+            );
+
+        expect(response.status)
+          .toBe(200);
+
+        expect(mockQuery)
+          .toHaveBeenCalledTimes(1);
+
+        const [
+          sql,
+          params,
+        ] =
+          mockQuery.mock.calls[0];
+
+        expect(sql)
+          .not.toContain(
+            'company_id = $1'
+          );
+
+        expect(sql)
+          .not.toContain(
+            'ignored-company'
+          );
+
+        expect(params)
+          .toEqual([]);
+      }
+    );
+  }
+);
