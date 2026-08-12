@@ -88,6 +88,12 @@ class _ManagerMoreTab extends StatelessWidget {
             subtitle: 'Monitor branch treasury float for your managed branches',
           ),
           MoreTile(
+            Icons.request_page_outlined,
+            'Float Requests',
+            () => context.push('/float/requests'),
+            subtitle: 'Review float requests for your managed branches',
+          ),
+          MoreTile(
             Icons.bar_chart_outlined,
             'Reports',
             () => context.push('/reports'),

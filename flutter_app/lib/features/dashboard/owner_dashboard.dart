@@ -88,6 +88,12 @@ class _OwnerMoreTab extends StatelessWidget {
             subtitle: 'Monitor branch treasury float across your business',
           ),
           MoreTile(
+            Icons.request_page_outlined,
+            'Float Requests',
+            () => context.push('/float/requests'),
+            subtitle: 'Review branch treasury float requests from agents',
+          ),
+          MoreTile(
             Icons.bar_chart_outlined,
             'Reports',
             () => context.push('/reports'),
