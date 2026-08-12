@@ -33,6 +33,7 @@ router.get('/summary', authorize('superuser', 'business_owner', 'manager', 'agen
   try {
     const data = await getCommissionSummary({
       company_id: req.user.role !== 'superuser' ? req.user.company_id : req.query.company_id,
+      manager_id: req.user.role === 'manager' ? req.user.id : undefined,
       agent_id: req.user.role === 'agent' ? req.user.id : req.query.agent_id,
       branch_id: req.query.branch_id,
       provider: req.query.provider,
