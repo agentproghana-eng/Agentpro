@@ -37,10 +37,26 @@ function buildTransactionQueryParts(
   const params = [];
   let idx = 1;
 
-  // Role-based scoping is enforced on the server. An agent can only
-  // report on their own transactions regardless of client filters.
+  // Role-based scoping is enforced on the server.
+  //
+  // Agents can only report on their own transactions.
+  // Managers are additionally restricted to branches they actually
+  // manage; an explicit branch_id remains an extra intersection, so
+  // requesting an unmanaged branch returns no rows.
   if (userContext.role === 'agent') {
     conditions.push(`t.agent_id = $${idx++}`);
+    params.push(userContext.id);
+  } else if (userContext.role === 'manager') {
+    conditions.push(`t.company_id = $${idx++}`);
+    params.push(userContext.company_id);
+
+    conditions.push(
+      `t.branch_id IN (
+         SELECT branch_id
+         FROM branch_managers
+         WHERE manager_id = $${idx++}
+       )`
+    );
     params.push(userContext.id);
   } else if (userContext.role !== 'superuser') {
     conditions.push(`t.company_id = $${idx++}`);
@@ -435,74 +451,17 @@ function resolvePeriodRange(period, fromDate, toDate) {
   return { resolvedFrom, resolvedTo };
 }
 
-async function fetchTransactionCount(filters, userContext) {
-  const conditions = [];
-  const params = [];
-  let idx = 1;
-
-  if (userContext.role === 'agent') {
-    conditions.push(`t.agent_id = $${idx++}`);
-    params.push(userContext.id);
-  } else if (userContext.role !== 'superuser') {
-    conditions.push(`t.company_id = $${idx++}`);
-    params.push(userContext.company_id);
-  }
-
-  if (filters.branch_id) {
-    conditions.push(`t.branch_id = $${idx++}`);
-    params.push(filters.branch_id);
-  }
-
-  if (filters.agent_id) {
-    conditions.push(`t.agent_id = $${idx++}`);
-    params.push(filters.agent_id);
-  }
-
-  const providers = parseMultiValue(filters.provider);
-  const transactionTypes = parseMultiValue(
-    filters.transaction_type
+async function fetchTransactionCount(
+  filters,
+  userContext
+) {
+  const {
+    where,
+    params,
+  } = buildTransactionQueryParts(
+    filters,
+    userContext
   );
-  const statuses = parseMultiValue(filters.status);
-
-  if (providers.length) {
-    conditions.push(
-      `t.provider::text = ANY($${idx++}::text[])`
-    );
-    params.push(providers);
-  }
-
-  if (transactionTypes.length) {
-    conditions.push(
-      `t.transaction_type::text = ANY($${idx++}::text[])`
-    );
-    params.push(transactionTypes);
-  }
-
-  if (statuses.length) {
-    conditions.push(
-      `t.status::text = ANY($${idx++}::text[])`
-    );
-    params.push(statuses);
-  }
-
-  if (filters.sim_iccid) {
-    conditions.push(`t.sim_iccid = $${idx++}`);
-    params.push(filters.sim_iccid);
-  }
-
-  if (filters.from_date) {
-    conditions.push(`t.created_at >= $${idx++}`);
-    params.push(filters.from_date);
-  }
-
-  if (filters.to_date) {
-    conditions.push(`t.created_at <= $${idx++}`);
-    params.push(filters.to_date);
-  }
-
-  const where = conditions.length
-    ? `WHERE ${conditions.join(' AND ')}`
-    : '';
 
   const result = await query(
     `SELECT COUNT(*)::int AS count
@@ -563,15 +522,91 @@ exports.transactionCount = async (req, res) => {
 };
 
 // ── Resolve a branch's display name for report titles ─────────
-// Returns null if no branch_id was given or it doesn't resolve, so
-// callers can fall back to the existing generic title unchanged.
-async function resolveBranchName(branch_id) {
-  if (!branch_id) return null;
+// Branch-name lookup must obey the same authorization boundary as the
+// report itself. Otherwise an out-of-scope branch_id could still leak
+// the branch name through an otherwise empty PDF/Excel report title.
+async function resolveBranchName(
+  branch_id,
+  userContext
+) {
+  if (!branch_id) {
+    return null;
+  }
+
   try {
-    const result = await query('SELECT name FROM branches WHERE id = $1', [branch_id]);
+    const conditions = [
+      'b.id = $1',
+    ];
+
+    const params = [
+      branch_id,
+    ];
+
+    let idx = 2;
+
+    if (userContext.role === 'manager') {
+      conditions.push(
+        `b.company_id = $${idx++}`
+      );
+      params.push(
+        userContext.company_id
+      );
+
+      conditions.push(
+        `EXISTS (
+           SELECT 1
+           FROM branch_managers bm
+           WHERE bm.branch_id = b.id
+             AND bm.manager_id = $${idx++}
+         )`
+      );
+      params.push(
+        userContext.id
+      );
+    } else if (userContext.role === 'agent') {
+      conditions.push(
+        `b.company_id = $${idx++}`
+      );
+      params.push(
+        userContext.company_id
+      );
+
+      conditions.push(
+        `EXISTS (
+           SELECT 1
+           FROM agent_branches ab
+           WHERE ab.branch_id = b.id
+             AND ab.agent_id = $${idx++}
+         )`
+      );
+      params.push(
+        userContext.id
+      );
+    } else if (
+      userContext.role !== 'superuser'
+    ) {
+      conditions.push(
+        `b.company_id = $${idx++}`
+      );
+      params.push(
+        userContext.company_id
+      );
+    }
+
+    const result = await query(
+      `SELECT b.name
+       FROM branches b
+       WHERE ${conditions.join(' AND ')}`,
+      params
+    );
+
     return result.rows[0]?.name || null;
   } catch (e) {
-    logger.warn('Failed to resolve branch name for report title:', e.message);
+    logger.warn(
+      'Failed to resolve branch name for report title:',
+      e.message
+    );
+
     return null;
   }
 }
@@ -642,7 +677,7 @@ exports.transactionReport = async (req, res) => {
       `${resolvedFrom?.slice(0, 10)} to ${resolvedTo?.slice(0, 10)}`;
 
     const branchName =
-      await resolveBranchName(branch_id);
+      await resolveBranchName(branch_id, req.user);
 
     const title = branchName
       ? `Transaction Report — ${branchName} — ${periodLabel}`
@@ -782,6 +817,10 @@ exports.commissionReport = async (req, res) => {
         req.user.role === 'superuser'
           ? undefined
           : req.user.company_id,
+      manager_id:
+        req.user.role === 'manager'
+          ? req.user.id
+          : undefined,
       branch_id,
       agent_id: effectiveAgentId,
       provider,
@@ -797,7 +836,7 @@ exports.commissionReport = async (req, res) => {
       transaction_count: data.reduce((s, r) => s + parseInt(r.transaction_count || 0), 0),
     };
 
-    const branchName = await resolveBranchName(branch_id);
+    const branchName = await resolveBranchName(branch_id, req.user);
     const title = branchName
       ? `Commission Report — ${branchName} — ${period || 'Custom Period'}`
       : `Commission Report — ${period || 'Custom Period'}`;

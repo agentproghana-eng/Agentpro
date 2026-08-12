@@ -692,6 +692,219 @@ describe('reportController transaction PDF streaming', () => {
   });
 });
 
+
+describe('reportController manager report scope', () => {
+  beforeEach(() => {
+    resetReportMocks();
+  });
+
+  test('transaction report intersects an explicit branch with manager assignments', async () => {
+    mockStreamQueryBatches.mockResolvedValue();
+
+    const req = {
+      user: {
+        id: 'manager-1',
+        company_id: 'company-1',
+        role: 'manager',
+      },
+      query: {
+        format: 'csv',
+        branch_id: 'branch-requested',
+        from_date: '2026-08-01T00:00:00.000Z',
+        to_date: '2026-08-12T23:59:59.999Z',
+      },
+    };
+
+    const res = makeRes();
+
+    await reportController.transactionReport(
+      req,
+      res
+    );
+
+    expect(mockStreamQueryBatches)
+      .toHaveBeenCalledTimes(1);
+
+    const [
+      sql,
+      params,
+    ] = mockStreamQueryBatches.mock.calls[0];
+
+    expect(sql).toContain(
+      't.company_id = $1'
+    );
+
+    expect(sql).toContain(
+      'FROM branch_managers'
+    );
+
+    expect(sql).toContain(
+      'WHERE manager_id = $2'
+    );
+
+    expect(sql).toContain(
+      't.branch_id = $3'
+    );
+
+    expect(params).toEqual([
+      'company-1',
+      'manager-1',
+      'branch-requested',
+      '2026-08-01T00:00:00.000Z',
+      '2026-08-12T23:59:59.999Z',
+    ]);
+  });
+
+  test('transaction count uses the same manager branch scope', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{
+        count: 0,
+      }],
+    });
+
+    const req = {
+      user: {
+        id: 'manager-1',
+        company_id: 'company-1',
+        role: 'manager',
+      },
+      query: {
+        branch_id: 'branch-unmanaged',
+      },
+    };
+
+    const res = makeRes();
+
+    await reportController.transactionCount(
+      req,
+      res
+    );
+
+    expect(mockQuery)
+      .toHaveBeenCalledTimes(1);
+
+    const [
+      sql,
+      params,
+    ] = mockQuery.mock.calls[0];
+
+    expect(sql).toContain(
+      't.company_id = $1'
+    );
+
+    expect(sql).toContain(
+      'FROM branch_managers'
+    );
+
+    expect(sql).toContain(
+      'WHERE manager_id = $2'
+    );
+
+    expect(sql).toContain(
+      't.branch_id = $3'
+    );
+
+    expect(params).toHaveLength(4);
+
+    expect(params.slice(0, 3)).toEqual([
+      'company-1',
+      'manager-1',
+      'branch-unmanaged',
+    ]);
+
+    expect(
+      new Date(params[3]).toString()
+    ).not.toBe('Invalid Date');
+
+    expect(res.json)
+      .toHaveBeenCalledWith({
+        success: true,
+        data: {
+          count: 0,
+        },
+      });
+  });
+
+  test('commission report passes manager identity with explicit branch filter', async () => {
+    mockGetCommissionSummary
+      .mockResolvedValue([]);
+
+    // The requested branch is intentionally unresolved. The title lookup
+    // must still be scoped to the authenticated manager so an unmanaged
+    // branch name cannot leak through the report title.
+    mockQuery.mockResolvedValueOnce({
+      rows: [],
+    });
+
+    const req = {
+      user: {
+        id: 'manager-1',
+        company_id: 'company-1',
+        role: 'manager',
+      },
+      query: {
+        format: 'csv',
+        branch_id: 'branch-unmanaged',
+        from_date: '2026-08-01T00:00:00.000Z',
+        to_date: '2026-08-12T23:59:59.999Z',
+      },
+    };
+
+    const res = makeRes();
+
+    await reportController.commissionReport(
+      req,
+      res
+    );
+
+    expect(mockGetCommissionSummary)
+      .toHaveBeenCalledTimes(1);
+
+    expect(mockGetCommissionSummary)
+      .toHaveBeenCalledWith(
+        expect.objectContaining({
+          company_id: 'company-1',
+          manager_id: 'manager-1',
+          branch_id: 'branch-unmanaged',
+        })
+      );
+
+    expect(mockQuery)
+      .toHaveBeenCalledTimes(1);
+
+    const [
+      branchSql,
+      branchParams,
+    ] = mockQuery.mock.calls[0];
+
+    expect(branchSql).toContain(
+      'b.id = $1'
+    );
+
+    expect(branchSql).toContain(
+      'b.company_id = $2'
+    );
+
+    expect(branchSql).toContain(
+      'FROM branch_managers bm'
+    );
+
+    expect(branchSql).toContain(
+      'bm.branch_id = b.id'
+    );
+
+    expect(branchSql).toContain(
+      'bm.manager_id = $3'
+    );
+
+    expect(branchParams).toEqual([
+      'branch-unmanaged',
+      'company-1',
+      'manager-1',
+    ]);
+  });
+});
+
 describe('reportController dashboard accounting', () => {
   beforeEach(() => {
     resetReportMocks();
