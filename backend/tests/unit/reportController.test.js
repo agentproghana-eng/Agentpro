@@ -21,8 +21,11 @@ jest.mock('../../src/services/reportService', () => ({
   generateCSV: (...args) => mockGenerateCSV(...args),
 }));
 
+const mockGetCommissionSummary = jest.fn();
+
 jest.mock('../../src/services/commissionService', () => ({
-  getCommissionSummary: jest.fn(),
+  getCommissionSummary: (...args) =>
+    mockGetCommissionSummary(...args),
 }));
 
 const reportController =
@@ -649,4 +652,161 @@ describe('reportController monthly dashboard accounting', () => {
       }),
     });
   });
+});
+
+
+describe('reportController commission report security and periods', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useRealTimers();
+    mockGetCommissionSummary.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test('forces an agent commission report to the authenticated agent', async () => {
+    const req = {
+      user: {
+        id: 'agent-authenticated',
+        company_id: 'company-1',
+        role: 'agent',
+      },
+      query: {
+        format: 'csv',
+        from_date: '2026-08-01T00:00:00.000Z',
+        to_date: '2026-08-12T10:00:00.000Z',
+        agent_id: 'agent-other',
+      },
+    };
+
+    const res = makeRes();
+
+    await reportController.commissionReport(req, res);
+
+    expect(mockGetCommissionSummary)
+      .toHaveBeenCalledTimes(1);
+
+    expect(mockGetCommissionSummary)
+      .toHaveBeenCalledWith(
+        expect.objectContaining({
+          company_id: 'company-1',
+          agent_id: 'agent-authenticated',
+          from_date: '2026-08-01T00:00:00.000Z',
+          to_date: '2026-08-12T10:00:00.000Z',
+        })
+      );
+
+    expect(mockGetCommissionSummary)
+      .not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          agent_id: 'agent-other',
+        })
+      );
+
+    expect(res.send)
+      .toHaveBeenCalledWith('csv-output');
+  });
+
+  test('allows owner commission reports to use an explicit agent filter', async () => {
+    const req = {
+      user: {
+        id: 'owner-1',
+        company_id: 'company-1',
+        role: 'business_owner',
+      },
+      query: {
+        format: 'csv',
+        from_date: '2026-08-01T00:00:00.000Z',
+        to_date: '2026-08-12T10:00:00.000Z',
+        agent_id: 'agent-selected',
+      },
+    };
+
+    const res = makeRes();
+
+    await reportController.commissionReport(req, res);
+
+    expect(mockGetCommissionSummary)
+      .toHaveBeenCalledWith(
+        expect.objectContaining({
+          company_id: 'company-1',
+          agent_id: 'agent-selected',
+        })
+      );
+  });
+
+  test.each([
+    ['today'],
+    ['week'],
+    ['month'],
+    ['year'],
+  ])(
+    'uses the shared %s period range for commission reports',
+    async (period) => {
+      const fixedNow =
+        new Date('2026-08-12T10:34:00.000Z');
+
+      jest.useFakeTimers();
+      jest.setSystemTime(fixedNow);
+
+      const req = {
+        user: {
+          id: 'owner-1',
+          company_id: 'company-1',
+          role: 'business_owner',
+        },
+        query: {
+          format: 'csv',
+          period,
+        },
+      };
+
+      const res = makeRes();
+
+      await reportController.commissionReport(req, res);
+
+      expect(mockGetCommissionSummary)
+        .toHaveBeenCalledTimes(1);
+
+      const params =
+        mockGetCommissionSummary.mock.calls[0][0];
+
+      expect(params.to_date)
+        .toBe(fixedNow.toISOString());
+
+      expect(params.from_date)
+        .toEqual(expect.any(String));
+
+      const actualFrom =
+        new Date(params.from_date);
+
+      const expectedFrom =
+        new Date(fixedNow);
+
+      if (period === 'today') {
+        expectedFrom.setHours(0, 0, 0, 0);
+      }
+
+      if (period === 'week') {
+        expectedFrom.setDate(
+          expectedFrom.getDate() - 7
+        );
+      }
+
+      if (period === 'month') {
+        expectedFrom.setDate(1);
+        expectedFrom.setHours(0, 0, 0, 0);
+      }
+
+      if (period === 'year') {
+        expectedFrom.setMonth(0, 1);
+        expectedFrom.setHours(0, 0, 0, 0);
+      }
+
+      expect(actualFrom.toISOString())
+        .toBe(expectedFrom.toISOString());
+    }
+  );
 });

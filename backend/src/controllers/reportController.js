@@ -334,16 +334,14 @@ exports.transactionReport = async (req, res) => {
   } = req.query;
 
   try {
-    // Resolve period shortcuts
-    let resolvedFrom = from_date;
-    let resolvedTo = to_date || new Date().toISOString();
-    if (period && !from_date) {
-      const now = new Date();
-      if (period === 'today') resolvedFrom = new Date(now.setHours(0, 0, 0, 0)).toISOString();
-      if (period === 'week') { const d = new Date(); d.setDate(d.getDate() - 7); resolvedFrom = d.toISOString(); }
-      if (period === 'month') { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); resolvedFrom = d.toISOString(); }
-      if (period === 'year') { const d = new Date(); d.setMonth(0, 1); d.setHours(0, 0, 0, 0); resolvedFrom = d.toISOString(); }
-    }
+    const {
+      resolvedFrom,
+      resolvedTo,
+    } = resolvePeriodRange(
+      period,
+      from_date,
+      to_date
+    );
 
     const { transactions, summary } = await fetchTransactions(
       { from_date: resolvedFrom, to_date: resolvedTo, branch_id, agent_id, provider, transaction_type, status, sim_iccid, sort_by, sort_order },
@@ -411,20 +409,30 @@ exports.commissionReport = async (req, res) => {
   } = req.query;
 
   try {
-    let resolvedFrom = from_date;
-    if (period && !from_date) {
-      const now = new Date();
-      if (period === 'month') { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); resolvedFrom = d.toISOString(); }
-      if (period === 'year') { const d = new Date(); d.setMonth(0, 1); d.setHours(0, 0, 0, 0); resolvedFrom = d.toISOString(); }
-    }
+    const {
+      resolvedFrom,
+      resolvedTo,
+    } = resolvePeriodRange(
+      period,
+      from_date,
+      to_date
+    );
+
+    const effectiveAgentId =
+      req.user.role === 'agent'
+        ? req.user.id
+        : agent_id;
 
     const data = await getCommissionSummary({
-      company_id: req.user.role === 'superuser' ? undefined : req.user.company_id,
+      company_id:
+        req.user.role === 'superuser'
+          ? undefined
+          : req.user.company_id,
       branch_id,
-      agent_id,
+      agent_id: effectiveAgentId,
       provider,
       from_date: resolvedFrom,
-      to_date,
+      to_date: resolvedTo,
       group_by,
     });
 
