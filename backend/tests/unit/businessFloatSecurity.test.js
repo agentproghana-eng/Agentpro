@@ -76,7 +76,8 @@ describe("business branch float security", () => {
       body: {
         branch_id: "branch-other",
         provider: "mtn",
-        amount: 100
+        amount: 100,
+        client_operation_id: "8e42a5ce-21de-4ba9-8aca-6d308cf88e11"
       }
     };
 
@@ -100,7 +101,7 @@ describe("business branch float security", () => {
     ]);
   });
 
-  test("authorized top up locks branch float row before changing balance", async () => {
+  test("authorized top up uses PostgreSQL decimal arithmetic and records idempotency key", async () => {
     query.mockResolvedValueOnce({
       rows: [
         {
@@ -128,6 +129,9 @@ describe("business branch float security", () => {
             current_balance: "500.00"
           }
         ]
+      })
+      .mockResolvedValueOnce({
+        rows: []
       })
       .mockResolvedValueOnce({
         rows: [
@@ -158,7 +162,8 @@ describe("business branch float security", () => {
         provider: "mtn",
         amount: 100,
         reference: "TOP-001",
-        notes: "Treasury refill"
+        notes: "Treasury refill",
+        client_operation_id: "8e42a5ce-21de-4ba9-8aca-6d308cf88e11"
       },
       ip: "127.0.0.1",
       requestId: "req-1"
@@ -166,57 +171,90 @@ describe("business branch float security", () => {
 
     const res = makeResponse();
 
-    await floatController.topUpFloat(req, res);
+    await floatController.topUpFloat(
+      req,
+      res
+    );
 
-    expect(withTransaction).toHaveBeenCalledTimes(1);
+    expect(withTransaction)
+      .toHaveBeenCalledTimes(1);
 
-    const lockSql = client.query.mock.calls[1][0];
+    const lockSql =
+      client.query.mock.calls[1][0];
 
-    expect(lockSql).toContain("FROM float_accounts");
-    expect(lockSql).toContain("FOR UPDATE");
+    expect(lockSql).toContain(
+      "FROM float_accounts"
+    );
 
-    expect(
-      client.query.mock.calls[2][1]
-    ).toEqual([
-      600,
-      "float-1"
-    ]);
+    expect(lockSql).toContain(
+      "FOR UPDATE"
+    );
 
-    const movementSql =
+    const replayLookupSql =
+      client.query.mock.calls[2][0];
+
+    expect(replayLookupSql).toContain(
+      "client_operation_id"
+    );
+
+    const updateSql =
       client.query.mock.calls[3][0];
 
-    expect(movementSql).toContain(
-      "INSERT INTO float_movements"
+    expect(updateSql).toContain(
+      "current_balance + $1::numeric"
     );
 
     expect(
       client.query.mock.calls[3][1]
     ).toEqual([
-      "float-1",
-      100,
-      500,
-      600,
-      "TOP-001",
-      "Treasury refill",
-      "owner-1"
+      "100.00",
+      "float-1"
     ]);
 
-    expect(auditLog).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "owner-1",
-        companyId: "company-1",
-        action: "FLOAT_TOP_UP",
-        entityType: "float_account",
-        entityId: "float-1"
-      })
+    const movementSql =
+      client.query.mock.calls[4][0];
+
+    expect(movementSql).toContain(
+      "INSERT INTO float_movements"
     );
 
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({
-        success: true,
-        message: "Float topped up successfully"
-      })
+    expect(movementSql).toContain(
+      "client_operation_id"
     );
+
+    expect(
+      client.query.mock.calls[4][1]
+    ).toEqual([
+      "float-1",
+      "100.00",
+      "500.00",
+      "600.00",
+      "TOP-001",
+      "Treasury refill",
+      "owner-1",
+      "8e42a5ce-21de-4ba9-8aca-6d308cf88e11"
+    ]);
+
+    expect(auditLog)
+      .toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: "owner-1",
+          companyId: "company-1",
+          action: "FLOAT_TOP_UP",
+          entityType: "float_account",
+          entityId: "float-1"
+        })
+      );
+
+    expect(res.json)
+      .toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          message:
+            "Float topped up successfully",
+          idempotent_replay: false
+        })
+      );
   });
 
   test("top up rejects invalid money before database access", async () => {
@@ -240,6 +278,385 @@ describe("business branch float security", () => {
     expect(res.status).toHaveBeenCalledWith(400);
     expect(query).not.toHaveBeenCalled();
     expect(withTransaction).not.toHaveBeenCalled();
+  });
+
+  test("top up rejects money with more than two decimal places", async () => {
+    const req = {
+      user: {
+        id: "owner-1",
+        role: "business_owner",
+        company_id: "company-1"
+      },
+      body: {
+        branch_id: "branch-1",
+        provider: "mtn",
+        amount: 100.001,
+        client_operation_id:
+          "8e42a5ce-21de-4ba9-8aca-6d308cf88e11"
+      }
+    };
+
+    const res = makeResponse();
+
+    await floatController.topUpFloat(
+      req,
+      res
+    );
+
+    expect(res.status)
+      .toHaveBeenCalledWith(400);
+
+    expect(query).not.toHaveBeenCalled();
+    expect(withTransaction)
+      .not.toHaveBeenCalled();
+  });
+
+  test("top up requires a valid client operation UUID before database access", async () => {
+    const req = {
+      user: {
+        id: "owner-1",
+        role: "business_owner",
+        company_id: "company-1"
+      },
+      body: {
+        branch_id: "branch-1",
+        provider: "mtn",
+        amount: 100,
+        client_operation_id: "not-a-uuid"
+      }
+    };
+
+    const res = makeResponse();
+
+    await floatController.topUpFloat(
+      req,
+      res
+    );
+
+    expect(res.status)
+      .toHaveBeenCalledWith(400);
+
+    expect(query).not.toHaveBeenCalled();
+    expect(withTransaction)
+      .not.toHaveBeenCalled();
+  });
+
+  test.each([
+    null,
+    true,
+    false,
+    "",
+    "   "
+  ])("top up rejects coercive money input %p", async (badAmount) => {
+    const req = {
+      user: {
+        id: "owner-1",
+        role: "business_owner",
+        company_id: "company-1"
+      },
+      body: {
+        branch_id: "branch-1",
+        provider: "mtn",
+        amount: badAmount,
+        client_operation_id:
+          "8e42a5ce-21de-4ba9-8aca-6d308cf88e11"
+      }
+    };
+
+    const res = makeResponse();
+
+    await floatController.topUpFloat(
+      req,
+      res
+    );
+
+    expect(res.status)
+      .toHaveBeenCalledWith(400);
+
+    expect(query).not.toHaveBeenCalled();
+    expect(withTransaction)
+      .not.toHaveBeenCalled();
+  });
+
+  test("same top up operation replays without changing balance again", async () => {
+    query.mockResolvedValueOnce({
+      rows: [
+        {
+          id: "branch-1",
+          company_id: "company-1",
+          name: "Accra"
+        }
+      ]
+    });
+
+    const client = {
+      query: jest.fn()
+    };
+
+    client.query
+      .mockResolvedValueOnce({
+        rows: []
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "float-1",
+            branch_id: "branch-1",
+            provider: "mtn",
+            current_balance: "600.00"
+          }
+        ]
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "float-1",
+            branch_id: "branch-1",
+            provider: "mtn",
+            current_balance: "600.00",
+            movement_id: "movement-1",
+            movement_type: "top_up",
+            movement_amount: "100.00",
+            movement_reference: "TOP-001",
+            movement_notes: "Treasury refill",
+            client_operation_id:
+              "8e42a5ce-21de-4ba9-8aca-6d308cf88e11"
+          }
+        ]
+      });
+
+    withTransaction.mockImplementation(
+      async (callback) => callback(client)
+    );
+
+    const req = {
+      user: {
+        id: "owner-1",
+        role: "business_owner",
+        company_id: "company-1"
+      },
+      body: {
+        branch_id: "branch-1",
+        provider: "mtn",
+        amount: 100,
+        reference: "TOP-001",
+        notes: "Treasury refill",
+        client_operation_id:
+          "8e42a5ce-21de-4ba9-8aca-6d308cf88e11"
+      }
+    };
+
+    const res = makeResponse();
+
+    await floatController.topUpFloat(
+      req,
+      res
+    );
+
+    expect(client.query)
+      .toHaveBeenCalledTimes(3);
+
+    expect(
+      client.query.mock.calls.some(
+        ([sql]) =>
+          String(sql).includes(
+            "UPDATE float_accounts"
+          )
+      )
+    ).toBe(false);
+
+    expect(
+      client.query.mock.calls.some(
+        ([sql]) =>
+          String(sql).includes(
+            "INSERT INTO float_movements"
+          )
+      )
+    ).toBe(false);
+
+    expect(auditLog)
+      .not.toHaveBeenCalled();
+
+    expect(res.json)
+      .toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          idempotent_replay: true
+        })
+      );
+  });
+
+  test("reusing top up operation ID with different payload is rejected", async () => {
+    query.mockResolvedValueOnce({
+      rows: [
+        {
+          id: "branch-1",
+          company_id: "company-1",
+          name: "Accra"
+        }
+      ]
+    });
+
+    const client = {
+      query: jest.fn()
+    };
+
+    client.query
+      .mockResolvedValueOnce({
+        rows: []
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "float-1",
+            branch_id: "branch-1",
+            provider: "mtn",
+            current_balance: "600.00"
+          }
+        ]
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "float-1",
+            branch_id: "branch-1",
+            provider: "mtn",
+            current_balance: "600.00",
+            movement_id: "movement-1",
+            movement_type: "top_up",
+            movement_amount: "50.00",
+            movement_reference: "TOP-001",
+            movement_notes: "Treasury refill",
+            client_operation_id:
+              "8e42a5ce-21de-4ba9-8aca-6d308cf88e11"
+          }
+        ]
+      });
+
+    withTransaction.mockImplementation(
+      async (callback) => callback(client)
+    );
+
+    const req = {
+      user: {
+        id: "owner-1",
+        role: "business_owner",
+        company_id: "company-1"
+      },
+      body: {
+        branch_id: "branch-1",
+        provider: "mtn",
+        amount: 100,
+        reference: "TOP-001",
+        notes: "Treasury refill",
+        client_operation_id:
+          "8e42a5ce-21de-4ba9-8aca-6d308cf88e11"
+      }
+    };
+
+    const res = makeResponse();
+
+    await floatController.topUpFloat(
+      req,
+      res
+    );
+
+    expect(res.status)
+      .toHaveBeenCalledWith(409);
+
+    expect(res.json)
+      .toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          code:
+            "CLIENT_OPERATION_CONFLICT"
+        })
+      );
+
+    expect(
+      client.query.mock.calls.some(
+        ([sql]) =>
+          String(sql).includes(
+            "UPDATE float_accounts"
+          )
+      )
+    ).toBe(false);
+  });
+
+  test("concurrent top up retry resolves committed winner after unique conflict", async () => {
+    query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "branch-1",
+            company_id: "company-1",
+            name: "Accra"
+          }
+        ]
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "float-1",
+            branch_id: "branch-1",
+            provider: "mtn",
+            current_balance: "600.00",
+            movement_id: "movement-1",
+            movement_type: "top_up",
+            movement_amount: "100.00",
+            movement_reference: "TOP-001",
+            movement_notes: "Treasury refill",
+            client_operation_id:
+              "8e42a5ce-21de-4ba9-8aca-6d308cf88e11"
+          }
+        ]
+      });
+
+    const duplicate = new Error(
+      "duplicate key"
+    );
+
+    duplicate.code = "23505";
+    duplicate.constraint =
+      "idx_float_movements_performer_client_operation";
+
+    withTransaction
+      .mockRejectedValueOnce(duplicate);
+
+    const req = {
+      user: {
+        id: "owner-1",
+        role: "business_owner",
+        company_id: "company-1"
+      },
+      body: {
+        branch_id: "branch-1",
+        provider: "mtn",
+        amount: 100,
+        reference: "TOP-001",
+        notes: "Treasury refill",
+        client_operation_id:
+          "8e42a5ce-21de-4ba9-8aca-6d308cf88e11"
+      }
+    };
+
+    const res = makeResponse();
+
+    await floatController.topUpFloat(
+      req,
+      res
+    );
+
+    expect(res.json)
+      .toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          idempotent_replay: true
+        })
+      );
+
+    expect(auditLog)
+      .not.toHaveBeenCalled();
   });
 
   test("manager cannot change threshold for an unmanaged branch", async () => {

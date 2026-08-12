@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_bloc.dart';
@@ -340,16 +341,23 @@ class _FloatScreenState extends State<FloatScreen> {
     }
   }
 
-  void _showTopUpSheet(BuildContext context) {
-    showModalBottomSheet(
+  Future<void> _showTopUpSheet(BuildContext context) async {
+    final completed = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) =>
-          _TopUpSheet(initialBranchId: widget.branchId, onDone: _load),
+      builder: (_) => _TopUpSheet(initialBranchId: widget.branchId),
     );
+
+    if (completed == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Branch float topped up successfully')),
+      );
+
+      await _load();
+    }
   }
 }
 
@@ -554,9 +562,8 @@ String _providerLabel(String provider) {
 
 class _TopUpSheet extends StatefulWidget {
   final String? initialBranchId;
-  final VoidCallback onDone;
 
-  const _TopUpSheet({required this.onDone, this.initialBranchId});
+  const _TopUpSheet({this.initialBranchId});
 
   @override
   State<_TopUpSheet> createState() => _TopUpSheetState();
@@ -573,6 +580,9 @@ class _TopUpSheetState extends State<_TopUpSheet> {
   bool _loadingBranches = true;
   bool _submitting = false;
   String? _error;
+
+  String? _pendingClientOperationId;
+  String? _pendingOperationFingerprint;
 
   @override
   void initState() {
@@ -625,6 +635,17 @@ class _TopUpSheetState extends State<_TopUpSheet> {
     }
   }
 
+  bool _isRetryableError(DioException error) {
+    final statusCode = error.response?.statusCode;
+
+    // No response is ambiguous: the server may already have committed
+    // the treasury movement before the response was lost.
+    return error.response == null ||
+        statusCode == 408 ||
+        statusCode == 429 ||
+        (statusCode != null && statusCode >= 500);
+  }
+
   Future<void> _submit() async {
     final amount = double.tryParse(_amountCtrl.text.replaceAll(',', '').trim());
 
@@ -642,6 +663,37 @@ class _TopUpSheetState extends State<_TopUpSheet> {
       return;
     }
 
+    // Treasury storage is DECIMAL(15, 2). Reject values that would
+    // otherwise be silently rounded to another financial amount.
+    final canonicalAmount = amount.toStringAsFixed(2);
+
+    if ((amount - double.parse(canonicalAmount)).abs() > 0.000000001) {
+      setState(() {
+        _error = 'Enter an amount with no more than 2 decimal places.';
+      });
+      return;
+    }
+
+    final reference = _refCtrl.text.trim();
+
+    final fingerprint = [
+      _branchId!,
+      _provider,
+      canonicalAmount,
+      reference,
+    ].join('|');
+
+    final canReuseOperation =
+        _pendingClientOperationId != null &&
+        _pendingOperationFingerprint == fingerprint;
+
+    final clientOperationId = canReuseOperation
+        ? _pendingClientOperationId!
+        : const Uuid().v4();
+
+    _pendingClientOperationId = clientOperationId;
+    _pendingOperationFingerprint = fingerprint;
+
     setState(() {
       _submitting = true;
       _error = null;
@@ -653,41 +705,59 @@ class _TopUpSheetState extends State<_TopUpSheet> {
         data: {
           'branch_id': _branchId,
           'provider': _provider,
-          'amount': amount,
-          'reference': _refCtrl.text.trim(),
+          'amount': canonicalAmount,
+          'reference': reference,
+          'client_operation_id': clientOperationId,
         },
       );
 
+      // The backend definitively resolved this operation.
+      // A future treasury top-up must receive a fresh UUID.
+      _pendingClientOperationId = null;
+      _pendingOperationFingerprint = null;
+
       if (!mounted) {
         return;
       }
 
-      Navigator.pop(context);
-      widget.onDone();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Branch float topped up successfully')),
-      );
+      Navigator.pop(context, true);
     } on DioException catch (error) {
-      if (!mounted) {
-        return;
-      }
-
       final responseData = error.response?.data;
-      final message = responseData is Map
+
+      final serverMessage = responseData is Map
           ? responseData['message']?.toString()
           : null;
 
-      setState(() {
-        _error = message ?? 'Failed to top up branch float.';
-      });
-    } catch (_) {
+      final retryable = _isRetryableError(error);
+
+      if (!retryable) {
+        // A definite rejection means there is no ambiguous operation
+        // requiring the current UUID to survive another tap.
+        _pendingClientOperationId = null;
+        _pendingOperationFingerprint = null;
+      }
+
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _error = 'Failed to top up branch float.';
+        _error =
+            serverMessage ??
+            (retryable
+                ? 'Connection problem while topping up branch float. Tap Top Up Branch Float again to safely retry the same operation.'
+                : 'Failed to top up branch float.');
+      });
+    } catch (_) {
+      // Preserve the UUID because an unexpected client failure may have
+      // happened after the server committed the treasury operation.
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _error =
+            'Branch float could not be confirmed. Tap Top Up Branch Float again to safely retry the same operation.';
       });
     } finally {
       if (mounted) {

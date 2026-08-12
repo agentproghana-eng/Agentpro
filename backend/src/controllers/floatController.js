@@ -7,10 +7,36 @@ const { sendLowFloatAlert } = require('../services/notificationService');
 
 const VALID_PROVIDERS = new Set(['mtn', 'telecel', 'at_money']);
 
-function positiveMoney(value) {
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function numericMoney(value) {
+  if (
+    value === null ||
+    value === undefined ||
+    typeof value === 'boolean'
+  ) {
+    return null;
+  }
+
+  if (
+    typeof value === 'string' &&
+    value.trim() === ''
+  ) {
+    return null;
+  }
+
   const amount = Number(value);
 
-  if (!Number.isFinite(amount) || amount <= 0) {
+  return Number.isFinite(amount)
+    ? amount
+    : null;
+}
+
+function positiveMoney(value) {
+  const amount = numericMoney(value);
+
+  if (amount === null || amount <= 0) {
     return null;
   }
 
@@ -18,13 +44,81 @@ function positiveMoney(value) {
 }
 
 function nonNegativeMoney(value) {
-  const amount = Number(value);
+  const amount = numericMoney(value);
 
-  if (!Number.isFinite(amount) || amount < 0) {
+  if (amount === null || amount < 0) {
     return null;
   }
 
   return amount;
+}
+
+function isValidUuid(value) {
+  return (
+    typeof value === 'string' &&
+    UUID_PATTERN.test(value.trim())
+  );
+}
+
+function positiveTwoDecimalMoney(value) {
+  const amount = positiveMoney(value);
+
+  if (amount === null) {
+    return null;
+  }
+
+  // float_accounts / float_movements use DECIMAL(15, 2).
+  // Reject precision that cannot be represented rather than silently
+  // rounding a financial request to a different amount.
+  const canonical = amount.toFixed(2);
+  const canonicalNumber = Number(canonical);
+
+  if (
+    Math.abs(amount - canonicalNumber) > 1e-9 ||
+    canonicalNumber > 9999999999999.99
+  ) {
+    return null;
+  }
+
+  return canonical;
+}
+
+function floatAccountResponse(row) {
+  return {
+    id: row.id,
+    branch_id: row.branch_id,
+    provider: row.provider,
+    current_balance: row.current_balance,
+    low_balance_threshold:
+      row.low_balance_threshold,
+    last_updated_at: row.last_updated_at,
+    created_at: row.created_at,
+  };
+}
+
+function normalizedOptionalText(value) {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  return String(value).trim();
+}
+
+function isSameTopUpOperation(existing, {
+  branchId,
+  provider,
+  amount,
+  reference,
+  notes,
+}) {
+  return (
+    String(existing.branch_id || '') === String(branchId) &&
+    existing.provider === provider &&
+    existing.movement_type === 'top_up' &&
+    Number(existing.movement_amount).toFixed(2) === amount &&
+    String(existing.movement_reference || '') === reference &&
+    String(existing.movement_notes || '') === notes
+  );
 }
 
 async function getAccessibleBranch(req, branchId, {
@@ -230,10 +324,16 @@ exports.topUpFloat = async (req, res) => {
     amount,
     reference,
     notes,
+    client_operation_id,
   } = req.body;
 
   const userId = req.user.id;
-  const normalizedAmount = positiveMoney(amount);
+  const normalizedAmount =
+    positiveTwoDecimalMoney(amount);
+  const normalizedReference =
+    normalizedOptionalText(reference);
+  const normalizedNotes =
+    normalizedOptionalText(notes);
 
   if (!branch_id) {
     return res.status(400).json({
@@ -256,8 +356,21 @@ exports.topUpFloat = async (req, res) => {
     });
   }
 
+  if (!isValidUuid(client_operation_id)) {
+    return res.status(400).json({
+      success: false,
+      message:
+        'client_operation_id must be a valid UUID',
+    });
+  }
+
+  const operationId =
+    client_operation_id.trim();
+
+  let branch;
+
   try {
-    const branch = await getAccessibleBranch(
+    branch = await getAccessibleBranch(
       req,
       branch_id,
       {
@@ -268,122 +381,304 @@ exports.topUpFloat = async (req, res) => {
     if (!branch) {
       return res.status(403).json({
         success: false,
-        message: 'Branch not found or access denied',
+        message:
+          'Branch not found or access denied',
       });
     }
 
-    let updatedFloat;
-
-    await withTransaction(async (client) => {
-      // Ensure the row exists, then lock the canonical branch/provider
-      // treasury account before calculating the new balance.
-      await client.query(
-        `INSERT INTO float_accounts (
-           branch_id,
-           provider,
-           current_balance
-         )
-         VALUES ($1, $2, 0)
-         ON CONFLICT (branch_id, provider)
-         DO NOTHING`,
-        [branch_id, provider]
-      );
-
-      const floatResult = await client.query(
-        `SELECT *
-         FROM float_accounts
-         WHERE branch_id = $1
-           AND provider = $2
-         FOR UPDATE`,
-        [branch_id, provider]
-      );
-
-      if (floatResult.rows.length !== 1) {
-        throw new Error(
-          'Unable to lock branch float account'
+    const operation =
+      await withTransaction(async (client) => {
+        // Keep the canonical branch/provider treasury row available,
+        // then serialize changes to that account with FOR UPDATE.
+        await client.query(
+          `INSERT INTO float_accounts (
+             branch_id,
+             provider,
+             current_balance
+           )
+           VALUES ($1, $2, 0)
+           ON CONFLICT (branch_id, provider)
+           DO NOTHING`,
+          [
+            branch_id,
+            provider,
+          ]
         );
-      }
 
-      const float = floatResult.rows[0];
-      const balanceBefore =
-        Number(float.current_balance || 0);
+        const floatResult =
+          await client.query(
+            `SELECT *
+             FROM float_accounts
+             WHERE branch_id = $1
+               AND provider = $2
+             FOR UPDATE`,
+            [
+              branch_id,
+              provider,
+            ]
+          );
 
-      const balanceAfter =
-        balanceBefore + normalizedAmount;
+        if (floatResult.rows.length !== 1) {
+          throw new Error(
+            'Unable to lock branch float account'
+          );
+        }
 
-      const updateResult = await client.query(
-        `UPDATE float_accounts
-         SET current_balance = $1,
-             last_updated_at = NOW()
-         WHERE id = $2
-         RETURNING *`,
-        [balanceAfter, float.id]
-      );
+        const float = floatResult.rows[0];
 
-      if (updateResult.rows.length !== 1) {
-        throw new Error(
-          'Unable to update branch float account'
+        // Re-check the operation after obtaining the account lock.
+        // This catches an identical request that waited behind another
+        // top-up transaction for the same branch/provider.
+        const existingResult =
+          await client.query(
+            `SELECT
+               fm.id as movement_id,
+               fm.movement_type,
+               fm.amount as movement_amount,
+               fm.reference as movement_reference,
+               fm.notes as movement_notes,
+               fm.client_operation_id,
+               fa.*
+             FROM float_movements fm
+             INNER JOIN float_accounts fa
+               ON fa.id = fm.float_account_id
+             WHERE fm.performed_by = $1
+               AND fm.client_operation_id = $2
+             LIMIT 1`,
+            [
+              userId,
+              operationId,
+            ]
+          );
+
+        if (existingResult.rows.length > 0) {
+          const existing =
+            existingResult.rows[0];
+
+          if (
+            !isSameTopUpOperation(existing, {
+              branchId: branch_id,
+              provider,
+              amount: normalizedAmount,
+              reference:
+                normalizedReference,
+              notes: normalizedNotes,
+            })
+          ) {
+            throw {
+              statusCode: 409,
+              code:
+                'CLIENT_OPERATION_CONFLICT',
+              message:
+                'client_operation_id has already been used for a different top-up',
+            };
+          }
+
+          return {
+            updatedFloat:
+              floatAccountResponse(existing),
+            idempotentReplay: true,
+          };
+        }
+
+        const balanceBefore =
+          String(
+            float.current_balance ?? '0'
+          );
+
+        // Let PostgreSQL DECIMAL perform the monetary arithmetic.
+        // Do not convert the stored treasury balance to a JS Number.
+        const updateResult =
+          await client.query(
+            `UPDATE float_accounts
+             SET current_balance =
+                   current_balance + $1::numeric,
+                 last_updated_at = NOW()
+             WHERE id = $2
+             RETURNING *`,
+            [
+              normalizedAmount,
+              float.id,
+            ]
+          );
+
+        if (updateResult.rows.length !== 1) {
+          throw new Error(
+            'Unable to update branch float account'
+          );
+        }
+
+        const updatedFloat =
+          updateResult.rows[0];
+
+        const balanceAfter =
+          String(
+            updatedFloat.current_balance ?? '0'
+          );
+
+        await client.query(
+          `INSERT INTO float_movements (
+             float_account_id,
+             movement_type,
+             amount,
+             balance_before,
+             balance_after,
+             reference,
+             notes,
+             performed_by,
+             client_operation_id
+           )
+           VALUES (
+             $1,
+             'top_up',
+             $2,
+             $3,
+             $4,
+             $5,
+             $6,
+             $7,
+             $8
+           )`,
+          [
+            float.id,
+            normalizedAmount,
+            balanceBefore,
+            balanceAfter,
+            normalizedReference || null,
+            normalizedNotes || null,
+            userId,
+            operationId,
+          ]
         );
-      }
 
-      updatedFloat = updateResult.rows[0];
+        return {
+          updatedFloat:
+            floatAccountResponse(updatedFloat),
+          idempotentReplay: false,
+        };
+      });
 
-      await client.query(
-        `INSERT INTO float_movements (
-           float_account_id,
-           movement_type,
-           amount,
-           balance_before,
-           balance_after,
-           reference,
-           notes,
-           performed_by
-         )
-         VALUES (
-           $1,
-           'top_up',
-           $2,
-           $3,
-           $4,
-           $5,
-           $6,
-           $7
-         )`,
-        [
-          float.id,
-          normalizedAmount,
-          balanceBefore,
-          balanceAfter,
-          reference || null,
-          notes || null,
-          userId,
-        ]
-      );
-    });
-
-    await auditLog({
-      userId,
-      companyId: branch.company_id,
-      action: 'FLOAT_TOP_UP',
-      entityType: 'float_account',
-      entityId: updatedFloat?.id,
-      newValues: {
-        branch_id,
-        provider,
-        amount: normalizedAmount,
-        reference,
-      },
-      ipAddress: req.ip,
-      requestId: req.requestId,
-    });
+    // Replays must not create duplicate audit events.
+    if (!operation.idempotentReplay) {
+      await auditLog({
+        userId,
+        companyId: branch.company_id,
+        action: 'FLOAT_TOP_UP',
+        entityType: 'float_account',
+        entityId:
+          operation.updatedFloat?.id,
+        newValues: {
+          branch_id,
+          provider,
+          amount: normalizedAmount,
+          reference:
+            normalizedReference || null,
+          client_operation_id:
+            operationId,
+        },
+        ipAddress: req.ip,
+        requestId: req.requestId,
+      });
+    }
 
     return res.json({
       success: true,
-      message: 'Float topped up successfully',
-      data: updatedFloat,
+      message:
+        'Float topped up successfully',
+      data: operation.updatedFloat,
+      idempotent_replay:
+        operation.idempotentReplay,
     });
   } catch (error) {
-    logger.error('Float top-up error:', error);
+    if (error.statusCode) {
+      return res
+        .status(error.statusCode)
+        .json({
+          success: false,
+          ...(error.code
+            ? { code: error.code }
+            : {}),
+          message: error.message,
+        });
+    }
+
+    // If two requests using the same operation ID race on different
+    // treasury accounts, the unique index is the final concurrency
+    // barrier. PostgreSQL rolls back the losing transaction, including
+    // its preceding balance UPDATE. Resolve the committed winner here.
+    if (
+      error.code === '23505' &&
+      error.constraint ===
+        'idx_float_movements_performer_client_operation'
+    ) {
+      try {
+        const winnerResult =
+          await query(
+            `SELECT
+               fm.id as movement_id,
+               fm.movement_type,
+               fm.amount as movement_amount,
+               fm.reference as movement_reference,
+               fm.notes as movement_notes,
+               fm.client_operation_id,
+               fa.*
+             FROM float_movements fm
+             INNER JOIN float_accounts fa
+               ON fa.id = fm.float_account_id
+             WHERE fm.performed_by = $1
+               AND fm.client_operation_id = $2
+             LIMIT 1`,
+            [
+              userId,
+              operationId,
+            ]
+          );
+
+        const winner =
+          winnerResult.rows[0];
+
+        if (
+          winner &&
+          isSameTopUpOperation(winner, {
+            branchId: branch_id,
+            provider,
+            amount: normalizedAmount,
+            reference:
+              normalizedReference,
+            notes: normalizedNotes,
+          })
+        ) {
+          return res.json({
+            success: true,
+            message:
+              'Float topped up successfully',
+            data:
+              floatAccountResponse(winner),
+            idempotent_replay: true,
+          });
+        }
+
+        if (winner) {
+          return res.status(409).json({
+            success: false,
+            code:
+              'CLIENT_OPERATION_CONFLICT',
+            message:
+              'client_operation_id has already been used for a different top-up',
+          });
+        }
+      } catch (recoveryError) {
+        logger.error(
+          'Float top-up idempotency recovery error:',
+          recoveryError
+        );
+      }
+    }
+
+    logger.error(
+      'Float top-up error:',
+      error
+    );
 
     return res.status(500).json({
       success: false,
