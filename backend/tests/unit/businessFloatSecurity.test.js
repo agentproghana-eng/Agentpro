@@ -1120,6 +1120,127 @@ describe("business branch float security", () => {
     expect(query).not.toHaveBeenCalled();
   });
 
+  test.each([
+    ["from_date", "not-a-date", "Invalid from_date"],
+    ["to_date", "not-a-date", "Invalid to_date"]
+  ])("float history rejects malformed %s before database access", async (key, value, message) => {
+    const req = {
+      user: {
+        id: "owner-1",
+        role: "business_owner",
+        company_id: "company-1"
+      },
+      query: {
+        [key]: value
+      }
+    };
+
+    const res = makeResponse();
+
+    await floatController.getFloatHistory(
+      req,
+      res
+    );
+
+    expect(res.status)
+      .toHaveBeenCalledWith(400);
+
+    expect(res.json)
+      .toHaveBeenCalledWith({
+        success: false,
+        message
+      });
+
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  test("float history rejects a reversed date range before database access", async () => {
+    const req = {
+      user: {
+        id: "owner-1",
+        role: "business_owner",
+        company_id: "company-1"
+      },
+      query: {
+        from_date:
+          "2026-08-12T23:59:59.999Z",
+        to_date:
+          "2026-08-01T00:00:00.000Z"
+      }
+    };
+
+    const res = makeResponse();
+
+    await floatController.getFloatHistory(
+      req,
+      res
+    );
+
+    expect(res.status)
+      .toHaveBeenCalledWith(400);
+
+    expect(res.json)
+      .toHaveBeenCalledWith({
+        success: false,
+        message:
+          "from_date must be before or equal to to_date"
+      });
+
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  test("float history passes parsed valid dates to PostgreSQL", async () => {
+    query
+      .mockResolvedValueOnce({
+        rows: []
+      })
+      .mockResolvedValueOnce({
+        rows: [{
+          count: "0"
+        }]
+      });
+
+    const req = {
+      user: {
+        id: "owner-1",
+        role: "business_owner",
+        company_id: "company-1"
+      },
+      query: {
+        from_date:
+          "2026-08-01T00:00:00.000Z",
+        to_date:
+          "2026-08-12T23:59:59.999Z"
+      }
+    };
+
+    const res = makeResponse();
+
+    await floatController.getFloatHistory(
+      req,
+      res
+    );
+
+    expect(query)
+      .toHaveBeenCalledTimes(2);
+
+    for (const [, params] of query.mock.calls) {
+      expect(
+        params.some(
+          (value) =>
+            value instanceof Date
+        )
+      ).toBe(true);
+    }
+
+    expect(res.json)
+      .toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+        })
+      );
+  });
+
   test("manager float history is restricted to managed branches", async () => {
     query
       .mockResolvedValueOnce({

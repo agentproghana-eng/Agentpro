@@ -96,6 +96,27 @@ function floatAccountResponse(row) {
   };
 }
 
+function parseDateFilter(value) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (
+    typeof value !== 'string' ||
+    value.trim() === ''
+  ) {
+    return undefined;
+  }
+
+  const parsed = new Date(value.trim());
+
+  if (Number.isNaN(parsed.getTime())) {
+    return undefined;
+  }
+
+  return parsed;
+}
+
 function normalizedOptionalText(value) {
   if (value === null || value === undefined) {
     return '';
@@ -712,6 +733,49 @@ exports.getFloatHistory = async (req, res) => {
   const offset =
     (parsedPage - 1) * parsedLimit;
 
+  const parsedFromDate =
+    from_date === undefined
+      ? null
+      : parseDateFilter(from_date);
+
+  const parsedToDate =
+    to_date === undefined
+      ? null
+      : parseDateFilter(to_date);
+
+  if (
+    from_date !== undefined &&
+    parsedFromDate === undefined
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid from_date',
+    });
+  }
+
+  if (
+    to_date !== undefined &&
+    parsedToDate === undefined
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid to_date',
+    });
+  }
+
+  if (
+    parsedFromDate &&
+    parsedToDate &&
+    parsedFromDate.getTime() >
+      parsedToDate.getTime()
+  ) {
+    return res.status(400).json({
+      success: false,
+      message:
+        'from_date must be before or equal to to_date',
+    });
+  }
+
   if (
     provider &&
     !VALID_PROVIDERS.has(provider)
@@ -741,18 +805,18 @@ exports.getFloatHistory = async (req, res) => {
       params.push(provider);
     }
 
-    if (from_date) {
+    if (parsedFromDate) {
       conditions.push(
         `fm.created_at >= $${idx++}`
       );
-      params.push(from_date);
+      params.push(parsedFromDate);
     }
 
-    if (to_date) {
+    if (parsedToDate) {
       conditions.push(
         `fm.created_at <= $${idx++}`
       );
-      params.push(to_date);
+      params.push(parsedToDate);
     }
 
     if (req.user.role !== 'superuser') {
