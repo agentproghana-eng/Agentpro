@@ -648,6 +648,183 @@ exports.updateThreshold = async (req, res) => {
 };
 
 
+// ── List Float Requests ───────────────────────────────────────
+
+exports.listFloatRequests = async (req, res) => {
+  const {
+    status,
+    page = 1,
+    limit = 30,
+  } = req.query;
+
+  const validStatuses = new Set([
+    'pending',
+    'approved',
+    'rejected',
+  ]);
+
+  if (status && !validStatuses.has(status)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid float request status',
+    });
+  }
+
+  const parsedPage =
+    Math.max(1, Number.parseInt(page, 10) || 1);
+
+  const parsedLimit =
+    Math.min(
+      100,
+      Math.max(1, Number.parseInt(limit, 10) || 30)
+    );
+
+  const offset =
+    (parsedPage - 1) * parsedLimit;
+
+  try {
+    const conditions = [];
+    const params = [];
+
+    // All roles exposed by the route are business-scoped.
+    params.push(req.user.company_id);
+    conditions.push(
+      `b.company_id = $${params.length}`
+    );
+
+    if (req.user.role === 'agent') {
+      params.push(req.user.id);
+      const userParam = `$${params.length}`;
+
+      // Agents can only see their own requests and only for branches
+      // to which they are currently assigned.
+      conditions.push(
+        `fr.requested_by = ${userParam}`
+      );
+
+      conditions.push(
+        `EXISTS (
+           SELECT 1
+           FROM agent_branches ab
+           WHERE ab.branch_id = fr.branch_id
+             AND ab.agent_id = ${userParam}
+         )`
+      );
+    }
+
+    if (req.user.role === 'manager') {
+      params.push(req.user.id);
+
+      conditions.push(
+        `EXISTS (
+           SELECT 1
+           FROM branch_managers bm
+           WHERE bm.branch_id = fr.branch_id
+             AND bm.manager_id = $${params.length}
+         )`
+      );
+    }
+
+    if (status) {
+      params.push(status);
+      conditions.push(
+        `fr.status = $${params.length}`
+      );
+    }
+
+    const where =
+      `WHERE ${conditions.join(' AND ')}`;
+
+    const dataParams = [
+      ...params,
+      parsedLimit,
+      offset,
+    ];
+
+    const limitParam =
+      params.length + 1;
+
+    const offsetParam =
+      params.length + 2;
+
+    const [data, count] =
+      await Promise.all([
+        query(
+          `SELECT
+             fr.id,
+             fr.branch_id,
+             b.name as branch_name,
+             fr.requested_by,
+             requester.first_name ||
+               ' ' ||
+               requester.last_name
+               as requested_by_name,
+             fr.provider,
+             fr.amount_requested,
+             fr.reason,
+             fr.status,
+             fr.reviewed_by,
+             reviewer.first_name ||
+               ' ' ||
+               reviewer.last_name
+               as reviewed_by_name,
+             fr.reviewed_at,
+             fr.review_notes,
+             fr.created_at
+           FROM float_requests fr
+           INNER JOIN branches b
+             ON b.id = fr.branch_id
+           INNER JOIN users requester
+             ON requester.id = fr.requested_by
+           LEFT JOIN users reviewer
+             ON reviewer.id = fr.reviewed_by
+           ${where}
+           ORDER BY fr.created_at DESC
+           LIMIT $${limitParam}
+           OFFSET $${offsetParam}`,
+          dataParams
+        ),
+        query(
+          `SELECT COUNT(*)
+           FROM float_requests fr
+           INNER JOIN branches b
+             ON b.id = fr.branch_id
+           ${where}`,
+          params
+        ),
+      ]);
+
+    const total =
+      Number.parseInt(
+        count.rows[0]?.count || '0',
+        10
+      );
+
+    return res.json({
+      success: true,
+      data: data.rows,
+      meta: {
+        total,
+        page: parsedPage,
+        limit: parsedLimit,
+        total_pages:
+          Math.ceil(total / parsedLimit),
+      },
+    });
+  } catch (error) {
+    logger.error(
+      'List float requests error:',
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch float requests',
+    });
+  }
+};
+
+
 // ── Submit Float Request (Agent → Manager) ────────────────────
 
 exports.submitFloatRequest = async (req, res) => {

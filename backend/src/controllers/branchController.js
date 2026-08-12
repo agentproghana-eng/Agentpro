@@ -21,6 +21,15 @@ exports.listBranches = async (req, res) => {
       params.push(req.user.id);
     }
 
+    // Agents only see branches to which they are explicitly assigned.
+    // This keeps branch discovery aligned with getBranchFloat and
+    // submitFloatRequest, both of which already require agent_branches.
+    if (req.user.role === 'agent') {
+      const idx = params.length + 1;
+      conditions.push(`b.id IN (SELECT branch_id FROM agent_branches WHERE agent_id = $${idx})`);
+      params.push(req.user.id);
+    }
+
     const result = await query(
       `SELECT b.*,
               COUNT(DISTINCT ab.agent_id) as agent_count,

@@ -11,6 +11,7 @@ router.get('/branch/:branch_id', authorize('superuser', 'business_owner', 'manag
 router.get('/history', authorize('superuser', 'business_owner', 'manager', 'auditor'), floatController.getFloatHistory);
 router.post('/top-up', authorize('superuser', 'business_owner', 'manager'), floatController.topUpFloat);
 router.patch('/threshold', authorize('superuser', 'business_owner', 'manager'), floatController.updateThreshold);
+router.get('/requests', authorize('business_owner', 'manager', 'agent'), floatController.listFloatRequests);
 router.post('/request', authorize('agent'), floatController.submitFloatRequest);
 router.patch('/request/:request_id/review', authorize('manager', 'business_owner'), floatController.reviewFloatRequest);
 

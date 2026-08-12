@@ -303,6 +303,221 @@ describe("business branch float security", () => {
     expect(query).not.toHaveBeenCalled();
   });
 
+  test("agent float request list is restricted to own assigned branches", async () => {
+    query
+      .mockResolvedValueOnce({
+        rows: []
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            count: "0"
+          }
+        ]
+      });
+
+    const req = {
+      user: {
+        id: "agent-1",
+        role: "agent",
+        company_id: "company-1"
+      },
+      query: {
+        status: "pending"
+      }
+    };
+
+    const res = makeResponse();
+
+    await floatController.listFloatRequests(
+      req,
+      res
+    );
+
+    expect(query).toHaveBeenCalledTimes(2);
+
+    for (const [sql, params] of query.mock.calls) {
+      expect(String(sql)).toContain(
+        "b.company_id"
+      );
+
+      expect(String(sql)).toContain(
+        "fr.requested_by"
+      );
+
+      expect(String(sql)).toContain(
+        "FROM agent_branches ab"
+      );
+
+      expect(params).toContain(
+        "company-1"
+      );
+
+      expect(params).toContain(
+        "agent-1"
+      );
+
+      expect(params).toContain(
+        "pending"
+      );
+    }
+  });
+
+  test("manager float request list is restricted to managed branches", async () => {
+    query
+      .mockResolvedValueOnce({
+        rows: []
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            count: "0"
+          }
+        ]
+      });
+
+    const req = {
+      user: {
+        id: "manager-1",
+        role: "manager",
+        company_id: "company-1"
+      },
+      query: {}
+    };
+
+    const res = makeResponse();
+
+    await floatController.listFloatRequests(
+      req,
+      res
+    );
+
+    expect(query).toHaveBeenCalledTimes(2);
+
+    for (const [sql, params] of query.mock.calls) {
+      expect(String(sql)).toContain(
+        "FROM branch_managers bm"
+      );
+
+      expect(params).toContain(
+        "company-1"
+      );
+
+      expect(params).toContain(
+        "manager-1"
+      );
+    }
+  });
+
+  test("business owner float request list is scoped to own company", async () => {
+    query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "request-1",
+            branch_id: "branch-1",
+            branch_name: "Accra",
+            requested_by: "agent-1",
+            requested_by_name: "Ama Mensah",
+            provider: "mtn",
+            amount_requested: "500.00",
+            status: "pending"
+          }
+        ]
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            count: "1"
+          }
+        ]
+      });
+
+    const req = {
+      user: {
+        id: "owner-1",
+        role: "business_owner",
+        company_id: "company-1"
+      },
+      query: {
+        status: "pending"
+      }
+    };
+
+    const res = makeResponse();
+
+    await floatController.listFloatRequests(
+      req,
+      res
+    );
+
+    expect(query).toHaveBeenCalledTimes(2);
+
+    for (const [sql, params] of query.mock.calls) {
+      expect(String(sql)).toContain(
+        "b.company_id"
+      );
+
+      expect(params).toContain(
+        "company-1"
+      );
+
+      expect(params).toContain(
+        "pending"
+      );
+
+      expect(String(sql)).not.toContain(
+        "FROM branch_managers bm"
+      );
+
+      expect(String(sql)).not.toContain(
+        "FROM agent_branches ab"
+      );
+    }
+
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: true,
+        data: expect.arrayContaining([
+          expect.objectContaining({
+            id: "request-1",
+            branch_name: "Accra",
+            requested_by_name: "Ama Mensah"
+          })
+        ]),
+        meta: expect.objectContaining({
+          total: 1,
+          page: 1,
+          limit: 30,
+          total_pages: 1
+        })
+      })
+    );
+  });
+
+  test("float request list rejects unknown status", async () => {
+    const req = {
+      user: {
+        id: "owner-1",
+        role: "business_owner",
+        company_id: "company-1"
+      },
+      query: {
+        status: "completed"
+      }
+    };
+
+    const res = makeResponse();
+
+    await floatController.listFloatRequests(
+      req,
+      res
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(query).not.toHaveBeenCalled();
+  });
+
   test("agent cannot submit a float request for an unassigned branch", async () => {
     query.mockResolvedValueOnce({
       rows: []
@@ -573,6 +788,45 @@ describe("business branch float security", () => {
 describe("branch list float aggregation", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  test("agent branch list is restricted to assigned branches", async () => {
+    query.mockResolvedValue({
+      rows: []
+    });
+
+    const req = {
+      user: {
+        id: "agent-1",
+        role: "agent",
+        company_id: "company-1"
+      },
+      query: {}
+    };
+
+    const res = makeResponse();
+
+    await branchController.listBranches(
+      req,
+      res
+    );
+
+    expect(query).toHaveBeenCalledTimes(1);
+
+    const [sql, params] = query.mock.calls[0];
+
+    expect(String(sql)).toContain(
+      "SELECT branch_id FROM agent_branches"
+    );
+
+    expect(String(sql)).toContain(
+      "agent_id"
+    );
+
+    expect(params).toEqual([
+      "company-1",
+      "agent-1"
+    ]);
   });
 
   test("aggregates treasury float before joining agents and managers", async () => {
