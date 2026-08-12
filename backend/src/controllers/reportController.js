@@ -842,8 +842,35 @@ exports.commissionReport = async (req, res) => {
       : `Commission Report — ${period || 'Custom Period'}`;
 
     if (format === 'csv') {
+      const groupLabel =
+        group_by === 'agent'
+          ? 'Agent'
+          : group_by === 'branch'
+            ? 'Branch'
+            : 'Period';
+
       const csv = generateCSV(data, [
-        { label: 'Period', key: 'period', getValue: r => r.period ? new Date(r.period).toLocaleDateString('en-GH') : '' },
+        {
+          label: groupLabel,
+          key:
+            group_by === 'agent' ||
+            group_by === 'branch'
+              ? 'label'
+              : 'period',
+          getValue: (r) => {
+            if (
+              group_by === 'agent' ||
+              group_by === 'branch'
+            ) {
+              return r.label || '';
+            }
+
+            return r.period
+              ? new Date(r.period)
+                  .toLocaleDateString('en-GH')
+              : '';
+          },
+        },
         { label: 'Transactions', key: 'transaction_count' },
         { label: 'Gross Commission (GHS)', key: 'total_gross' },
         { label: 'Provider Share (GHS)', key: 'total_provider_share' },

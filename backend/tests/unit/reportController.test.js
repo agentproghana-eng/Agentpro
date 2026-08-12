@@ -1470,6 +1470,83 @@ describe('reportController commission report security and periods', () => {
       .toHaveBeenCalledWith('csv-output');
   });
 
+  test.each([
+    ['agent', 'Agent', 'Agent One'],
+    ['branch', 'Branch', 'Main Branch'],
+  ])(
+    'uses the correct CSV grouping column for agent and branch reports',
+    async (
+      groupBy,
+      expectedHeader,
+      expectedLabel
+    ) => {
+      const groupedRow = {
+        group_id:
+          groupBy === 'agent'
+            ? 'agent-1'
+            : 'branch-1',
+        label: expectedLabel,
+        transaction_count: '3',
+        total_gross: '10.00',
+        total_provider_share: '3.00',
+        total_net: '7.00',
+      };
+
+      mockGetCommissionSummary
+        .mockResolvedValue([
+          groupedRow,
+        ]);
+
+      const req = {
+        user: {
+          id: 'owner-1',
+          company_id: 'company-1',
+          role: 'business_owner',
+        },
+        query: {
+          format: 'csv',
+          group_by: groupBy,
+        },
+      };
+
+      const res = makeRes();
+
+      await reportController.commissionReport(
+        req,
+        res
+      );
+
+      expect(mockGenerateCSV)
+        .toHaveBeenCalledTimes(1);
+
+      const [
+        rows,
+        columns,
+      ] = mockGenerateCSV.mock.calls[0];
+
+      expect(rows).toEqual([
+        groupedRow,
+      ]);
+
+      expect(columns[0].label)
+        .toBe(expectedHeader);
+
+      expect(columns[0].key)
+        .toBe('label');
+
+      expect(
+        columns[0].getValue(
+          groupedRow
+        )
+      ).toBe(expectedLabel);
+
+      expect(res.send)
+        .toHaveBeenCalledWith(
+          'csv-output'
+        );
+    }
+  );
+
   test('allows owner commission reports to use an explicit agent filter', async () => {
     const req = {
       user: {

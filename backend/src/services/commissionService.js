@@ -90,36 +90,105 @@ async function getCommissionSummary(params) {
       )]
     : [];
 
-  const joinTransactions = providers.length
-    ? `LEFT JOIN transactions t ON c.transaction_id = t.id`
-    : '';
-
   if (providers.length) {
-    conditions.push(`t.provider::text = ANY($${idx++}::text[])`);
+    conditions.push(
+      `t.provider::text = ANY($${idx++}::text[])`
+    );
     queryParams.push(providers);
   }
 
-  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const whereClause =
+    conditions.length > 0
+      ? `WHERE ${conditions.join(' AND ')}`
+      : '';
 
-  const dateGroup = {
-    day: "DATE_TRUNC('day', c.calculated_at)",
-    week: "DATE_TRUNC('week', c.calculated_at)",
-    month: "DATE_TRUNC('month', c.calculated_at)",
-    year: "DATE_TRUNC('year', c.calculated_at)"
-  }[group_by] || "DATE_TRUNC('day', c.calculated_at)";
+  // Strict allowlist: never interpolate the raw client group_by value
+  // into SQL. Agent and branch grouping use stable IDs as grouping keys
+  // and expose a display label for report writers.
+  const GROUP_CONFIG = {
+    day: {
+      select:
+        "DATE_TRUNC('day', c.calculated_at) AS period",
+      joins: '',
+      groupBy:
+        "DATE_TRUNC('day', c.calculated_at)",
+      orderBy: 'period DESC',
+    },
+    week: {
+      select:
+        "DATE_TRUNC('week', c.calculated_at) AS period",
+      joins: '',
+      groupBy:
+        "DATE_TRUNC('week', c.calculated_at)",
+      orderBy: 'period DESC',
+    },
+    month: {
+      select:
+        "DATE_TRUNC('month', c.calculated_at) AS period",
+      joins: '',
+      groupBy:
+        "DATE_TRUNC('month', c.calculated_at)",
+      orderBy: 'period DESC',
+    },
+    year: {
+      select:
+        "DATE_TRUNC('year', c.calculated_at) AS period",
+      joins: '',
+      groupBy:
+        "DATE_TRUNC('year', c.calculated_at)",
+      orderBy: 'period DESC',
+    },
+    agent: {
+      select: `c.agent_id AS group_id,
+               CONCAT_WS(
+                 ' ',
+                 u.first_name,
+                 u.last_name
+               ) AS label`,
+      joins:
+        'LEFT JOIN users u ON u.id = c.agent_id',
+      groupBy:
+        'c.agent_id, u.first_name, u.last_name',
+      orderBy:
+        'label ASC, c.agent_id ASC',
+    },
+    branch: {
+      select: `c.branch_id AS group_id,
+               b.name AS label`,
+      joins:
+        'LEFT JOIN branches b ON b.id = c.branch_id',
+      groupBy:
+        'c.branch_id, b.name',
+      orderBy:
+        'label ASC, c.branch_id ASC',
+    },
+  };
+
+  const grouping =
+    GROUP_CONFIG[group_by] ||
+    GROUP_CONFIG.day;
+
+  const joins = [
+    providers.length
+      ? 'LEFT JOIN transactions t ON c.transaction_id = t.id'
+      : '',
+    grouping.joins,
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   const result = await query(
     `SELECT
-       ${dateGroup} as period,
+       ${grouping.select},
        COUNT(*) as transaction_count,
        SUM(c.gross_commission) as total_gross,
        SUM(c.provider_share) as total_provider_share,
        SUM(c.net_commission) as total_net
      FROM commissions c
-     ${joinTransactions}
+     ${joins}
      ${whereClause}
-     GROUP BY ${dateGroup}
-     ORDER BY period DESC`,
+     GROUP BY ${grouping.groupBy}
+     ORDER BY ${grouping.orderBy}`,
     queryParams
   );
 
