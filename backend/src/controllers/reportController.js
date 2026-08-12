@@ -10,7 +10,10 @@ const {
   generateCommissionReportExcel,
   generateCSV,
 } = require('../services/reportService');
-const { getCommissionSummary } = require('../services/commissionService');
+const {
+  getCommissionSummary,
+  getCommissionTotals,
+} = require('../services/commissionService');
 const {
   CUSTOMER_VOLUME_TRANSACTION_TYPES,
 } = require('../config/reportClassification');
@@ -812,7 +815,7 @@ exports.commissionReport = async (req, res) => {
         ? req.user.id
         : agent_id;
 
-    const data = await getCommissionSummary({
+    const commissionFilters = {
       company_id:
         req.user.role === 'superuser'
           ? undefined
@@ -826,15 +829,20 @@ exports.commissionReport = async (req, res) => {
       provider,
       from_date: resolvedFrom,
       to_date: resolvedTo,
-      group_by,
-    });
-
-    const summary = {
-      total_gross: data.reduce((s, r) => s + parseFloat(r.total_gross || 0), 0),
-      total_provider_share: data.reduce((s, r) => s + parseFloat(r.total_provider_share || 0), 0),
-      total_net: data.reduce((s, r) => s + parseFloat(r.total_net || 0), 0),
-      transaction_count: data.reduce((s, r) => s + parseInt(r.transaction_count || 0), 0),
     };
+
+    const [
+      data,
+      summary,
+    ] = await Promise.all([
+      getCommissionSummary({
+        ...commissionFilters,
+        group_by,
+      }),
+      getCommissionTotals(
+        commissionFilters
+      ),
+    ]);
 
     const branchName = await resolveBranchName(branch_id, req.user);
     const title = branchName

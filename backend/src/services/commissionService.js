@@ -34,10 +34,14 @@ function calculateCommission(amount, ratePercent, threshold, cap, providerShareP
 }
 
 /**
- * Get commission summary for a period
+ * Build the shared authorization and report filters used by both the
+ * grouped commission rows and the exact aggregate totals.
+ *
+ * PostgreSQL placeholders are created here once so the two queries
+ * cannot accidentally drift into different company/manager/branch/
+ * agent/provider/date scopes.
  */
-async function getCommissionSummary(params) {
-  const { query } = require('../config/database');
+function buildCommissionFilterParts(params) {
   const {
     company_id,
     manager_id,
@@ -46,7 +50,6 @@ async function getCommissionSummary(params) {
     provider,
     from_date,
     to_date,
-    group_by = 'day'
   } = params;
 
   const conditions = [];
@@ -54,7 +57,9 @@ async function getCommissionSummary(params) {
   let idx = 1;
 
   if (company_id) {
-    conditions.push(`c.company_id = $${idx++}`);
+    conditions.push(
+      `c.company_id = $${idx++}`
+    );
     queryParams.push(company_id);
   }
 
@@ -70,16 +75,32 @@ async function getCommissionSummary(params) {
   }
 
   if (branch_id) {
-    conditions.push(`c.branch_id = $${idx++}`);
+    conditions.push(
+      `c.branch_id = $${idx++}`
+    );
     queryParams.push(branch_id);
   }
 
   if (agent_id) {
-    conditions.push(`c.agent_id = $${idx++}`);
+    conditions.push(
+      `c.agent_id = $${idx++}`
+    );
     queryParams.push(agent_id);
   }
-  if (from_date) { conditions.push(`c.calculated_at >= $${idx++}`); queryParams.push(from_date); }
-  if (to_date) { conditions.push(`c.calculated_at <= $${idx++}`); queryParams.push(to_date); }
+
+  if (from_date) {
+    conditions.push(
+      `c.calculated_at >= $${idx++}`
+    );
+    queryParams.push(from_date);
+  }
+
+  if (to_date) {
+    conditions.push(
+      `c.calculated_at <= $${idx++}`
+    );
+    queryParams.push(to_date);
+  }
 
   const providers = provider
     ? [...new Set(
@@ -97,10 +118,34 @@ async function getCommissionSummary(params) {
     queryParams.push(providers);
   }
 
-  const whereClause =
-    conditions.length > 0
-      ? `WHERE ${conditions.join(' AND ')}`
-      : '';
+  return {
+    whereClause:
+      conditions.length > 0
+        ? `WHERE ${conditions.join(' AND ')}`
+        : '',
+    queryParams,
+    transactionJoin:
+      providers.length > 0
+        ? 'LEFT JOIN transactions t ON c.transaction_id = t.id'
+        : '',
+  };
+}
+
+/**
+ * Get grouped commission rows for a period.
+ */
+async function getCommissionSummary(params) {
+  const { query } = require('../config/database');
+
+  const {
+    group_by = 'day',
+  } = params;
+
+  const {
+    whereClause,
+    queryParams,
+    transactionJoin,
+  } = buildCommissionFilterParts(params);
 
   // Strict allowlist: never interpolate the raw client group_by value
   // into SQL. Agent and branch grouping use stable IDs as grouping keys
@@ -169,9 +214,7 @@ async function getCommissionSummary(params) {
     GROUP_CONFIG.day;
 
   const joins = [
-    providers.length
-      ? 'LEFT JOIN transactions t ON c.transaction_id = t.id'
-      : '',
+    transactionJoin,
     grouping.joins,
   ]
     .filter(Boolean)
@@ -195,4 +238,52 @@ async function getCommissionSummary(params) {
   return result.rows;
 }
 
-module.exports = { calculateCommission, getCommissionSummary };
+/**
+ * Get exact report totals directly from PostgreSQL NUMERIC columns.
+ *
+ * Do not calculate these by reducing grouped rows in JavaScript:
+ * PostgreSQL keeps the monetary aggregation in exact decimal arithmetic.
+ */
+async function getCommissionTotals(params) {
+  const { query } = require('../config/database');
+
+  const {
+    whereClause,
+    queryParams,
+    transactionJoin,
+  } = buildCommissionFilterParts(params);
+
+  const result = await query(
+    `SELECT
+       COUNT(*) AS transaction_count,
+       COALESCE(
+         SUM(c.gross_commission),
+         0
+       ) AS total_gross,
+       COALESCE(
+         SUM(c.provider_share),
+         0
+       ) AS total_provider_share,
+       COALESCE(
+         SUM(c.net_commission),
+         0
+       ) AS total_net
+     FROM commissions c
+     ${transactionJoin}
+     ${whereClause}`,
+    queryParams
+  );
+
+  return result.rows[0] || {
+    transaction_count: '0',
+    total_gross: '0',
+    total_provider_share: '0',
+    total_net: '0',
+  };
+}
+
+module.exports = {
+  calculateCommission,
+  getCommissionSummary,
+  getCommissionTotals,
+};

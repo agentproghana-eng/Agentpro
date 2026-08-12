@@ -41,10 +41,13 @@ jest.mock('../../src/services/reportService', () => ({
 }));
 
 const mockGetCommissionSummary = jest.fn();
+const mockGetCommissionTotals = jest.fn();
 
 jest.mock('../../src/services/commissionService', () => ({
   getCommissionSummary: (...args) =>
     mockGetCommissionSummary(...args),
+  getCommissionTotals: (...args) =>
+    mockGetCommissionTotals(...args),
 }));
 
 const reportController =
@@ -61,6 +64,13 @@ function resetReportMocks() {
   // call history. Restore shared baseline behavior required by tests
   // that exercise the legacy Commission CSV generator.
   mockGenerateCSV.mockReturnValue('csv-output');
+
+  mockGetCommissionTotals.mockResolvedValue({
+    transaction_count: '0',
+    total_gross: '0',
+    total_provider_share: '0',
+    total_net: '0',
+  });
 }
 
 function makeRes() {
@@ -866,6 +876,22 @@ describe('reportController manager report scope', () => {
           company_id: 'company-1',
           manager_id: 'manager-1',
           branch_id: 'branch-unmanaged',
+        })
+      );
+
+    expect(mockGetCommissionTotals)
+      .toHaveBeenCalledTimes(1);
+
+    expect(mockGetCommissionTotals)
+      .toHaveBeenCalledWith(
+        expect.objectContaining({
+          company_id: 'company-1',
+          manager_id: 'manager-1',
+          branch_id: 'branch-unmanaged',
+          from_date:
+            '2026-08-01T00:00:00.000Z',
+          to_date:
+            '2026-08-12T23:59:59.999Z',
         })
       );
 
