@@ -18,6 +18,7 @@ import '../../features/transactions/transaction_detail_screen.dart';
 import '../../features/transactions/transaction_history_screen.dart';
 import '../../features/sync/sync_queue_screen.dart';
 import '../../features/float/float_screen.dart';
+import '../../features/float/float_history_screen.dart';
 import '../../features/float/float_overview_screen.dart';
 import '../../features/balances/my_balance_screen.dart';
 import '../../features/balances/float_received_screen.dart';
@@ -221,6 +222,10 @@ class AppRouter {
             path: '/float',
             builder: (_, state) =>
                 FloatScreen(branchId: state.uri.queryParameters['branch_id'])),
+        GoRoute(
+            path: '/float/history',
+            builder: (_, state) => FloatHistoryScreen(
+                branchId: state.uri.queryParameters['branch_id'])),
         GoRoute(
             path: '/float-overview',
             builder: (_, __) => const FloatOverviewScreen()),

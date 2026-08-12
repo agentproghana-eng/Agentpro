@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_bloc.dart';
@@ -99,7 +100,24 @@ class _FloatScreenState extends State<FloatScreen> {
     final canManageFloat = _canManageFloat(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Float Balances')),
+      appBar: AppBar(
+        title: const Text('Float Balances'),
+        actions: [
+          IconButton(
+            tooltip: 'Float History',
+            onPressed: () {
+              final branchId = widget.branchId;
+
+              context.push(
+                branchId == null
+                    ? '/float/history'
+                    : '/float/history?branch_id=$branchId',
+              );
+            },
+            icon: const Icon(Icons.history),
+          ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -135,11 +153,19 @@ class _FloatScreenState extends State<FloatScreen> {
                           'Business treasury float will appear here when available.',
                     )
                   else
-                    ..._accounts.map(
-                      (account) => _FloatCard(
-                        account: Map<String, dynamic>.from(account as Map),
-                      ),
-                    ),
+                    ..._accounts.map((account) {
+                      final accountMap = Map<String, dynamic>.from(
+                        account as Map,
+                      );
+
+                      return _FloatCard(
+                        account: accountMap,
+                        canManage: canManageFloat,
+                        onEditThreshold: canManageFloat
+                            ? () => _showThresholdDialog(accountMap)
+                            : null,
+                      );
+                    }),
                 ],
               ),
             ),
@@ -152,6 +178,166 @@ class _FloatScreenState extends State<FloatScreen> {
             )
           : null,
     );
+  }
+
+  Future<void> _showThresholdDialog(Map<String, dynamic> account) async {
+    final branchId = account['branch_id']?.toString();
+
+    final provider = account['provider']?.toString();
+
+    if (branchId == null ||
+        branchId.isEmpty ||
+        provider == null ||
+        provider.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'This float account is missing branch or provider information.',
+          ),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+      return;
+    }
+
+    final currentThreshold =
+        double.tryParse(account['low_balance_threshold']?.toString() ?? '0') ??
+        0;
+
+    final controller = TextEditingController(
+      text: currentThreshold.toStringAsFixed(2),
+    );
+
+    String? validationError;
+
+    final threshold = await showDialog<double>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            void save() {
+              final value = double.tryParse(
+                controller.text.replaceAll(',', '').trim(),
+              );
+
+              if (value == null || value < 0) {
+                setDialogState(() {
+                  validationError = 'Enter a valid amount of zero or greater.';
+                });
+                return;
+              }
+
+              Navigator.pop(dialogContext, value);
+            }
+
+            return AlertDialog(
+              title: const Text('Low Float Threshold'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${_providerLabel(provider)} · '
+                    '${account['branch_name']?.toString() ?? 'Branch'}',
+                    style: TextStyle(
+                      color: context.appSecondaryText,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: 'Alert threshold',
+                      prefixText: 'GH₵ ',
+                      border: const OutlineInputBorder(),
+                      errorText: validationError,
+                    ),
+                    onSubmitted: (_) => save(),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'The business is alerted when this branch provider balance is at or below this amount.',
+                    style: TextStyle(
+                      color: context.appSecondaryText,
+                      fontSize: 11,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                  },
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(onPressed: save, child: const Text('Save')),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    controller.dispose();
+
+    if (threshold == null || !mounted) {
+      return;
+    }
+
+    try {
+      await ApiClient.instance.patch(
+        '/float/threshold',
+        data: {
+          'branch_id': branchId,
+          'provider': provider,
+          'threshold': threshold,
+        },
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Low-float threshold updated')),
+      );
+
+      await _load();
+    } on DioException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      final responseData = error.response?.data;
+      final message = responseData is Map
+          ? responseData['message']?.toString()
+          : null;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message ?? 'Failed to update threshold'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to update threshold'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    }
   }
 
   void _showTopUpSheet(BuildContext context) {
@@ -254,8 +440,14 @@ class _TreasuryExplanationCard extends StatelessWidget {
 
 class _FloatCard extends StatelessWidget {
   final Map<String, dynamic> account;
+  final bool canManage;
+  final VoidCallback? onEditThreshold;
 
-  const _FloatCard({required this.account});
+  const _FloatCard({
+    required this.account,
+    required this.canManage,
+    this.onEditThreshold,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -271,42 +463,60 @@ class _FloatCard extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: CircleAvatar(
-          backgroundColor: AppTheme.providerColor(
-            provider,
-          ).withValues(alpha: 0.15),
-          child: ProviderBadge(provider: provider),
-        ),
-        title: Text(
-          account['branch_name']?.toString() ?? 'Branch',
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Text(
-          isLow
-              ? 'Low float · Threshold GH₵ ${threshold.toStringAsFixed(2)}'
-              : 'Threshold GH₵ ${threshold.toStringAsFixed(2)}',
-          style: TextStyle(
-            color: isLow ? AppTheme.errorColor : context.appSecondaryText,
-            fontSize: 12,
-          ),
-        ),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            GhsAmount(
-              amount: balance,
-              fontSize: 16,
-              color: isLow ? AppTheme.errorColor : null,
+      child: Column(
+        children: [
+          ListTile(
+            contentPadding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            leading: CircleAvatar(
+              backgroundColor: AppTheme.providerColor(
+                provider,
+              ).withValues(alpha: 0.15),
+              child: ProviderBadge(provider: provider),
             ),
-            Text(
-              _updatedLabel(account['last_updated_at']),
-              style: TextStyle(color: context.appSecondaryText, fontSize: 10),
+            title: Text(
+              account['branch_name']?.toString() ?? 'Branch',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              isLow
+                  ? 'Low float · Threshold GH₵ ${threshold.toStringAsFixed(2)}'
+                  : 'Threshold GH₵ ${threshold.toStringAsFixed(2)}',
+              style: TextStyle(
+                color: isLow ? AppTheme.errorColor : context.appSecondaryText,
+                fontSize: 12,
+              ),
+            ),
+            trailing: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                GhsAmount(
+                  amount: balance,
+                  fontSize: 16,
+                  color: isLow ? AppTheme.errorColor : null,
+                ),
+                Text(
+                  _updatedLabel(account['last_updated_at']),
+                  style: TextStyle(
+                    color: context.appSecondaryText,
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (canManage && onEditThreshold != null) ...[
+            Divider(height: 1, color: context.appDivider),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: onEditThreshold,
+                icon: const Icon(Icons.notifications_outlined, size: 17),
+                label: const Text('Edit low-float threshold'),
+              ),
             ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -331,6 +541,15 @@ class _FloatCard extends StatelessWidget {
 
     return 'Updated: $month-$day $hour:$minute';
   }
+}
+
+String _providerLabel(String provider) {
+  return switch (provider) {
+    'mtn' => 'MTN Mobile Money',
+    'telecel' => 'Telecel Cash',
+    'at_money' => 'AT Money',
+    _ => provider,
+  };
 }
 
 class _TopUpSheet extends StatefulWidget {
