@@ -20,8 +20,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
-    final user =
-        authState is AuthAuthenticated ? authState.user : <String, dynamic>{};
+    final user = authState is AuthAuthenticated
+        ? authState.user
+        : <String, dynamic>{};
 
     return Scaffold(
       body: IndexedStack(
@@ -65,8 +66,9 @@ class _ManagerMoreTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
-    final user =
-        authState is AuthAuthenticated ? authState.user : <String, dynamic>{};
+    final user = authState is AuthAuthenticated
+        ? authState.user
+        : <String, dynamic>{};
 
     return Scaffold(
       appBar: AppBar(title: const Text('More')),
@@ -81,9 +83,15 @@ class _ManagerMoreTab extends StatelessWidget {
           ),
           MoreTile(
             Icons.account_balance_wallet_outlined,
-            'Float Overview',
-            () => context.push('/float-overview'),
-            subtitle: 'Monitor float positions and availability',
+            'Float Balances',
+            () => context.push('/float'),
+            subtitle: 'Monitor branch treasury float for your managed branches',
+          ),
+          MoreTile(
+            Icons.request_page_outlined,
+            'Float Requests',
+            () => context.push('/float/requests'),
+            subtitle: 'Review float requests for your managed branches',
           ),
           MoreTile(
             Icons.bar_chart_outlined,

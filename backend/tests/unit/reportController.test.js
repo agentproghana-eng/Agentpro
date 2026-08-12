@@ -158,13 +158,10 @@ describe('reportController dashboard accounting', () => {
       })
       .mockResolvedValueOnce({
         rows: [{
-          count: '10',
-          total: '1000.00',
+          customer_transaction_count: '10',
+          customer_volume: '1000.00',
           commission: '20.00',
         }],
-      })
-      .mockResolvedValueOnce({
-        rows: [],
       })
       .mockResolvedValueOnce({
         rows: [],
@@ -182,7 +179,7 @@ describe('reportController dashboard accounting', () => {
 
     await reportController.dashboardSummary(req, res);
 
-    expect(mockQuery).toHaveBeenCalledTimes(4);
+    expect(mockQuery).toHaveBeenCalledTimes(3);
 
     const [todaySql, todayParams] = mockQuery.mock.calls[0];
 
@@ -213,6 +210,380 @@ describe('reportController dashboard accounting', () => {
   });
 });
 
+describe('reportController dashboard treasury scope', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('agent dashboard does not query or expose business branch treasury float', async () => {
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [{
+          customer_transaction_count: '0',
+          customer_volume: '0',
+          commission: '0',
+          success_count: '0',
+        }],
+      })
+      .mockResolvedValueOnce({
+        rows: [{
+          customer_transaction_count: '0',
+          customer_volume: '0',
+          commission: '0',
+        }],
+      })
+      .mockResolvedValueOnce({
+        rows: [],
+      });
+
+    const req = {
+      user: {
+        id: 'agent-1',
+        company_id: 'company-1',
+        role: 'agent',
+      },
+    };
+
+    const res = makeRes();
+
+    await reportController.dashboardSummary(
+      req,
+      res
+    );
+
+    expect(mockQuery)
+      .toHaveBeenCalledTimes(3);
+
+    for (const [sql] of mockQuery.mock.calls) {
+      expect(String(sql)).not.toContain(
+        'FROM float_accounts'
+      );
+    }
+
+    expect(res.json)
+      .toHaveBeenCalledWith({
+        success: true,
+        data: expect.objectContaining({
+          float_by_provider: [],
+        }),
+      });
+  });
+
+  test('manager dashboard treasury is restricted to managed branches', async () => {
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [{
+          customer_transaction_count: '0',
+          customer_volume: '0',
+          commission: '0',
+          success_count: '0',
+        }],
+      })
+      .mockResolvedValueOnce({
+        rows: [{
+          customer_transaction_count: '0',
+          customer_volume: '0',
+          commission: '0',
+        }],
+      })
+      .mockResolvedValueOnce({
+        rows: [{
+          total: '900.00',
+          provider: 'mtn',
+        }],
+      })
+      .mockResolvedValueOnce({
+        rows: [],
+      });
+
+    const req = {
+      user: {
+        id: 'manager-1',
+        company_id: 'company-1',
+        role: 'manager',
+      },
+    };
+
+    const res = makeRes();
+
+    await reportController.dashboardSummary(
+      req,
+      res
+    );
+
+    expect(mockQuery)
+      .toHaveBeenCalledTimes(4);
+
+    const floatCall =
+      mockQuery.mock.calls.find(
+        ([sql]) =>
+          String(sql).includes(
+            'FROM float_accounts'
+          )
+      );
+
+    expect(floatCall).toBeDefined();
+
+    const [floatSql, floatParams] =
+      floatCall;
+
+    expect(floatSql).toContain(
+      'FROM branch_managers bm'
+    );
+
+    expect(floatSql).toContain(
+      'bm.manager_id = $2'
+    );
+
+    expect(floatParams).toEqual([
+      'company-1',
+      'manager-1',
+    ]);
+
+    expect(res.json)
+      .toHaveBeenCalledWith({
+        success: true,
+        data: expect.objectContaining({
+          float_by_provider: [
+            {
+              total: '900.00',
+              provider: 'mtn',
+            },
+          ],
+        }),
+      });
+  });
+
+  test('business owner dashboard treasury covers active own-company branches', async () => {
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [{
+          customer_transaction_count: '0',
+          customer_volume: '0',
+          commission: '0',
+          success_count: '0',
+        }],
+      })
+      .mockResolvedValueOnce({
+        rows: [{
+          customer_transaction_count: '0',
+          customer_volume: '0',
+          commission: '0',
+        }],
+      })
+      .mockResolvedValueOnce({
+        rows: [{
+          total: '1500.00',
+          provider: 'telecel',
+        }],
+      })
+      .mockResolvedValueOnce({
+        rows: [],
+      });
+
+    const req = {
+      user: {
+        id: 'owner-1',
+        company_id: 'company-1',
+        role: 'business_owner',
+      },
+    };
+
+    const res = makeRes();
+
+    await reportController.dashboardSummary(
+      req,
+      res
+    );
+
+    const floatCall =
+      mockQuery.mock.calls.find(
+        ([sql]) =>
+          String(sql).includes(
+            'FROM float_accounts'
+          )
+      );
+
+    expect(floatCall).toBeDefined();
+
+    const [floatSql, floatParams] =
+      floatCall;
+
+    expect(floatSql).toContain(
+      'b.company_id = $1'
+    );
+
+    expect(floatSql).not.toContain(
+      'FROM branch_managers bm'
+    );
+
+    expect(floatParams).toEqual([
+      'company-1',
+    ]);
+
+    expect(res.json)
+      .toHaveBeenCalledWith({
+        success: true,
+        data: expect.objectContaining({
+          float_by_provider: [
+            {
+              total: '1500.00',
+              provider: 'telecel',
+            },
+          ],
+        }),
+      });
+  });
+});
+
+describe('reportController dashboard treasury remaining roles', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('auditor dashboard treasury is limited to active own-company branches', async () => {
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [{
+          customer_transaction_count: '0',
+          customer_volume: '0',
+          commission: '0',
+          success_count: '0',
+        }],
+      })
+      .mockResolvedValueOnce({
+        rows: [{
+          customer_transaction_count: '0',
+          customer_volume: '0',
+          commission: '0',
+        }],
+      })
+      .mockResolvedValueOnce({
+        rows: [{
+          total: '725.00',
+          provider: 'at_money',
+        }],
+      })
+      .mockResolvedValueOnce({
+        rows: [],
+      });
+
+    const req = {
+      user: {
+        id: 'auditor-1',
+        company_id: 'company-1',
+        role: 'auditor',
+      },
+    };
+
+    const res = makeRes();
+
+    await reportController.dashboardSummary(
+      req,
+      res
+    );
+
+    expect(mockQuery)
+      .toHaveBeenCalledTimes(4);
+
+    const floatCall =
+      mockQuery.mock.calls.find(
+        ([sql]) =>
+          String(sql).includes(
+            'FROM float_accounts'
+          )
+      );
+
+    expect(floatCall).toBeDefined();
+
+    const [floatSql, floatParams] =
+      floatCall;
+
+    expect(floatSql).toContain(
+      'b.company_id = $1'
+    );
+
+    expect(floatSql).toContain(
+      "b.status = 'active'"
+    );
+
+    expect(floatSql).not.toContain(
+      'FROM branch_managers bm'
+    );
+
+    expect(floatParams).toEqual([
+      'company-1',
+    ]);
+
+    expect(res.json)
+      .toHaveBeenCalledWith({
+        success: true,
+        data: expect.objectContaining({
+          float_by_provider: [
+            {
+              total: '725.00',
+              provider: 'at_money',
+            },
+          ],
+        }),
+      });
+  });
+
+  test('superuser dashboard does not expose treasury without explicit company context', async () => {
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [{
+          customer_transaction_count: '0',
+          customer_volume: '0',
+          commission: '0',
+          success_count: '0',
+        }],
+      })
+      .mockResolvedValueOnce({
+        rows: [{
+          customer_transaction_count: '0',
+          customer_volume: '0',
+          commission: '0',
+        }],
+      })
+      .mockResolvedValueOnce({
+        rows: [],
+      });
+
+    const req = {
+      user: {
+        id: 'super-1',
+        company_id: null,
+        role: 'superuser',
+      },
+    };
+
+    const res = makeRes();
+
+    await reportController.dashboardSummary(
+      req,
+      res
+    );
+
+    expect(mockQuery)
+      .toHaveBeenCalledTimes(3);
+
+    for (const [sql] of mockQuery.mock.calls) {
+      expect(String(sql)).not.toContain(
+        'FROM float_accounts'
+      );
+    }
+
+    expect(res.json)
+      .toHaveBeenCalledWith({
+        success: true,
+        data: expect.objectContaining({
+          float_by_provider: [],
+        }),
+      });
+  });
+});
+
 describe('reportController monthly dashboard accounting', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -237,9 +608,6 @@ describe('reportController monthly dashboard accounting', () => {
       })
       .mockResolvedValueOnce({
         rows: [],
-      })
-      .mockResolvedValueOnce({
-        rows: [],
       });
 
     const req = {
@@ -254,7 +622,7 @@ describe('reportController monthly dashboard accounting', () => {
 
     await reportController.dashboardSummary(req, res);
 
-    expect(mockQuery).toHaveBeenCalledTimes(4);
+    expect(mockQuery).toHaveBeenCalledTimes(3);
 
     const [monthSql, monthParams] = mockQuery.mock.calls[1];
 

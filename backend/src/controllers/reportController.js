@@ -485,6 +485,54 @@ exports.dashboardSummary = async (req, res) => {
     const companyFilter = companyId ? `AND t.company_id = '${companyId}'` : '';
     const agentFilter = agentId ? `AND t.agent_id = '${agentId}'` : '';
 
+    let loadFloatSummary;
+
+    if (
+      req.user.role === 'business_owner' ||
+      req.user.role === 'auditor'
+    ) {
+      loadFloatSummary = () => query(
+        `SELECT
+           COALESCE(SUM(fa.current_balance), 0) as total,
+           fa.provider as provider
+         FROM float_accounts fa
+         INNER JOIN branches b
+           ON fa.branch_id = b.id
+         WHERE b.company_id = $1
+           AND b.status = 'active'
+         GROUP BY fa.provider`,
+        [req.user.company_id]
+      );
+    } else if (req.user.role === 'manager') {
+      loadFloatSummary = () => query(
+        `SELECT
+           COALESCE(SUM(fa.current_balance), 0) as total,
+           fa.provider as provider
+         FROM float_accounts fa
+         INNER JOIN branches b
+           ON fa.branch_id = b.id
+         WHERE b.company_id = $1
+           AND b.status = 'active'
+           AND EXISTS (
+             SELECT 1
+             FROM branch_managers bm
+             WHERE bm.branch_id = b.id
+               AND bm.manager_id = $2
+           )
+         GROUP BY fa.provider`,
+        [
+          req.user.company_id,
+          req.user.id,
+        ]
+      );
+    } else {
+      // Agents must never receive business branch treasury totals.
+      // Superuser behavior remains unchanged without explicit company
+      // context: return no branch treasury summary.
+      loadFloatSummary =
+        () => Promise.resolve({ rows: [] });
+    }
+
     const [todayTx, monthTx, floatSummary, recentTx] = await Promise.all([
       query(
         `SELECT
@@ -547,14 +595,7 @@ exports.dashboardSummary = async (req, res) => {
            ${companyFilter} ${agentFilter}`,
         [startOfMonth, CUSTOMER_VOLUME_TRANSACTION_TYPES]
       ),
-      companyId ? query(
-        `SELECT COALESCE(SUM(fa.current_balance), 0) as total, provider
-         FROM float_accounts fa
-         INNER JOIN branches b ON fa.branch_id = b.id
-         WHERE b.company_id = $1 AND b.status = 'active'
-         GROUP BY provider`,
-        [companyId]
-      ) : { rows: [] },
+      loadFloatSummary(),
       query(
         `SELECT t.id, t.reference, t.transaction_type, t.provider,
                 t.amount, t.status, t.created_at, t.customer_phone

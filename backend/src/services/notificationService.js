@@ -110,13 +110,29 @@ async function sendTransactionNotification(agentId, { type, transaction }) {
 
 async function sendLowFloatAlert(branchId, provider, currentBalance) {
   try {
-    // Find business owner and managers for this branch
+    // Business owners receive company alerts. Managers receive alerts
+    // only for branches they are explicitly assigned to manage.
     const result = await query(
       `SELECT DISTINCT u.id
        FROM users u
-       WHERE u.company_id = (SELECT company_id FROM branches WHERE id = $1)
-         AND u.role IN ('business_owner', 'manager')
-         AND u.status = 'active'`,
+       WHERE u.company_id = (
+         SELECT company_id
+         FROM branches
+         WHERE id = $1
+       )
+         AND u.status = 'active'
+         AND (
+           u.role = 'business_owner'
+           OR (
+             u.role = 'manager'
+             AND EXISTS (
+               SELECT 1
+               FROM branch_managers bm
+               WHERE bm.branch_id = $1
+                 AND bm.manager_id = u.id
+             )
+           )
+         )`,
       [branchId]
     );
 

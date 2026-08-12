@@ -92,6 +92,12 @@ class _MoreTab extends StatelessWidget {
             subtitle: 'Monitor your available e-float and cash',
           ),
           MoreTile(
+            Icons.request_page_outlined,
+            'Float Requests',
+            () => context.push('/float/requests'),
+            subtitle: 'Request branch treasury float and track your requests',
+          ),
+          MoreTile(
             Icons.bar_chart_outlined,
             'Reports',
             () => context.push('/reports'),
