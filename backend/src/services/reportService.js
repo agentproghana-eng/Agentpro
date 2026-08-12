@@ -1006,6 +1006,375 @@ async function generateCommissionReportPDF({ commissions, summary, title, groupB
   return Buffer.concat(buffers);
 }
 
+// ── Streaming Commission Report PDF ───────────────────────────
+//
+// PDFKit writes directly to the supplied stream while grouped
+// commission rows are supplied incrementally from PostgreSQL.
+//
+// Monetary values remain PostgreSQL decimal strings in this path;
+// no JavaScript Number conversion is required for rendering.
+async function generateCommissionReportPDFStream({
+  stream,
+  summary,
+  title,
+  groupBy,
+  writeCommissions,
+}) {
+  if (
+    !stream ||
+    typeof stream.write !== 'function'
+  ) {
+    throw new TypeError(
+      'PDF report stream must be writable'
+    );
+  }
+
+  if (typeof writeCommissions !== 'function') {
+    throw new TypeError(
+      'writeCommissions callback is required'
+    );
+  }
+
+  const exactGhs = (value) => {
+    const raw = String(
+      value ?? '0'
+    );
+
+    if (/^-?\d+$/.test(raw)) {
+      return `GHS ${raw}.00`;
+    }
+
+    if (/^-?\d+\.\d$/.test(raw)) {
+      return `GHS ${raw}0`;
+    }
+
+    return `GHS ${raw}`;
+  };
+
+  const doc = new PDFDocument({
+    size: 'A4',
+    margin: 40,
+  });
+
+  const completed = new Promise(
+    (resolve, reject) => {
+      doc.on('end', resolve);
+      doc.on('error', reject);
+      stream.on('error', reject);
+    }
+  );
+
+  doc.pipe(stream);
+
+  let pageNum = 1;
+  let rowIndex = 0;
+
+  const cols = [
+    {
+      label:
+        groupBy === 'agent'
+          ? 'Agent'
+          : groupBy === 'branch'
+            ? 'Branch'
+            : 'Period',
+      width: 140,
+    },
+    {
+      label: 'Transactions',
+      width: 80,
+    },
+    {
+      label: 'Gross',
+      width: 85,
+    },
+    {
+      label: 'Provider Share',
+      width: 90,
+    },
+    {
+      label: 'Net Commission',
+      width: 100,
+    },
+  ];
+
+  const drawTableHeader = () => {
+    const headerY = doc.y;
+
+    doc
+      .rect(
+        40,
+        headerY,
+        doc.page.width - 80,
+        18
+      )
+      .fill(COLORS.primary);
+
+    let x = 40;
+
+    for (const col of cols) {
+      doc
+        .fontSize(7.5)
+        .fillColor('white')
+        .font('Helvetica-Bold')
+        .text(
+          col.label,
+          x + 4,
+          headerY + 5,
+          {
+            width: col.width - 4,
+            lineBreak: false,
+          }
+        );
+
+      x += col.width;
+    }
+
+    doc.y = headerY + 18;
+  };
+
+  const drawFirstPage = () => {
+    decoratePage(
+      doc,
+      pageNum
+    );
+
+    doc
+      .rect(
+        0,
+        0,
+        doc.page.width,
+        70
+      )
+      .fill(COLORS.primary);
+
+    try {
+      doc.image(
+        LOGO_PATH,
+        15,
+        15,
+        {
+          height: 40,
+        }
+      );
+    } catch (e) {
+      logger.warn(
+        'Logo image not found, skipping:',
+        e.message
+      );
+    }
+
+    doc
+      .fillColor(COLORS.secondary)
+      .fontSize(18)
+      .font('Helvetica-Bold')
+      .text(
+        'Agent Pro Ghana',
+        40,
+        15
+      );
+
+    doc
+      .fillColor('white')
+      .fontSize(11)
+      .font('Helvetica')
+      .text(
+        title ||
+          'Commission Report',
+        40,
+        35
+      );
+
+    doc
+      .fontSize(9)
+      .text(
+        `Generated: ${dateTimeStr(
+          new Date()
+        )}`,
+        40,
+        52
+      );
+
+    doc.fillColor(COLORS.text);
+    doc.moveDown(3);
+
+    doc
+      .fontSize(9)
+      .font('Helvetica-Bold')
+      .text('Summary');
+
+    doc.moveDown(0.3);
+
+    const summaryRows = [
+      [
+        'Gross Commission:',
+        exactGhs(
+          summary?.total_gross
+        ),
+      ],
+      [
+        'Provider Share:',
+        exactGhs(
+          summary?.total_provider_share
+        ),
+      ],
+      [
+        'Net Commission:',
+        exactGhs(
+          summary?.total_net
+        ),
+      ],
+      [
+        'Transactions:',
+        String(
+          summary?.transaction_count ||
+            '0'
+        ),
+      ],
+    ];
+
+    for (
+      const [
+        label,
+        value,
+      ] of summaryRows
+    ) {
+      doc
+        .fontSize(8)
+        .fillColor(COLORS.muted)
+        .font('Helvetica')
+        .text(
+          label,
+          40,
+          doc.y,
+          {
+            width: 140,
+            continued: true,
+          }
+        );
+
+      doc
+        .fillColor(COLORS.text)
+        .font('Helvetica-Bold')
+        .text(
+          value
+        );
+
+      doc.moveDown(0.2);
+    }
+
+    doc.moveDown(1);
+
+    drawTableHeader();
+  };
+
+  const addContinuationPage = () => {
+    doc.addPage();
+    pageNum++;
+
+    decoratePage(
+      doc,
+      pageNum
+    );
+
+    doc.moveDown(1);
+
+    drawTableHeader();
+  };
+
+  drawFirstPage();
+
+  await writeCommissions(
+    async (commissionRow) => {
+      if (
+        doc.y >
+        doc.page.height - 60
+      ) {
+        addContinuationPage();
+      }
+
+      const rowY = doc.y;
+
+      if (rowIndex % 2 === 0) {
+        doc
+          .rect(
+            40,
+            rowY,
+            doc.page.width - 80,
+            16
+          )
+          .fill('#FAFAFA');
+      }
+
+      let groupingValue;
+
+      if (
+        groupBy === 'agent' ||
+        groupBy === 'branch'
+      ) {
+        groupingValue =
+          commissionRow.label ||
+          '—';
+      } else {
+        groupingValue =
+          commissionRow.period
+            ? dateStr(
+                commissionRow.period
+              )
+            : '—';
+      }
+
+      const values = [
+        groupingValue,
+        String(
+          commissionRow.transaction_count ||
+            '0'
+        ),
+        exactGhs(
+          commissionRow.total_gross
+        ),
+        exactGhs(
+          commissionRow.total_provider_share
+        ),
+        exactGhs(
+          commissionRow.total_net
+        ),
+      ];
+
+      let x = 40;
+
+      for (
+        let i = 0;
+        i < values.length;
+        i++
+      ) {
+        doc
+          .fontSize(7.5)
+          .fillColor(COLORS.text)
+          .font('Helvetica')
+          .text(
+            values[i],
+            x + 4,
+            rowY + 4,
+            {
+              width:
+                cols[i].width - 4,
+            }
+          );
+
+        x += cols[i].width;
+      }
+
+      doc.y = rowY + 18;
+      rowIndex++;
+    }
+  );
+
+  doc.end();
+
+  await completed;
+}
+
+
 // ── Commission Report Excel ─────────────────────────────────────
 
 async function generateCommissionReportExcel({ commissions, summary, title, groupBy }) {
@@ -1421,6 +1790,7 @@ module.exports = {
   generateTransactionReportExcel,
   generateTransactionReportExcelStream,
   generateCommissionReportPDF,
+  generateCommissionReportPDFStream,
   generateCommissionReportExcel,
   generateCommissionReportExcelStream,
   generatePersonalTransactionReportPDF,

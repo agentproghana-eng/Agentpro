@@ -6,11 +6,10 @@ const { logger } = require('../utils/logger');
 const {
   generateTransactionReportPDFStream,
   generateTransactionReportExcelStream,
-  generateCommissionReportPDF,
+  generateCommissionReportPDFStream,
   generateCommissionReportExcelStream,
 } = require('../services/reportService');
 const {
-  getCommissionSummary,
   getCommissionTotals,
   streamCommissionSummaryRows,
 } = require('../services/commissionService');
@@ -1011,14 +1010,9 @@ exports.commissionReport = async (req, res) => {
     }
 
     const [
-      data,
       summary,
       branchName,
     ] = await Promise.all([
-      getCommissionSummary({
-        ...commissionFilters,
-        group_by,
-      }),
       getCommissionTotals(
         commissionFilters
       ),
@@ -1032,10 +1026,34 @@ exports.commissionReport = async (req, res) => {
       ? `Commission Report — ${branchName} — ${period || 'Custom Period'}`
       : `Commission Report — ${period || 'Custom Period'}`;
 
-    const buffer = await generateCommissionReportPDF({ commissions: data, summary, title, groupBy: group_by });
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="commissions_${Date.now()}.pdf"`);
-    return res.send(buffer);
+    res.setHeader(
+      'Content-Type',
+      'application/pdf'
+    );
+
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="commissions_${Date.now()}.pdf"`
+    );
+
+    await generateCommissionReportPDFStream({
+      stream: res,
+      summary,
+      title,
+      groupBy: group_by,
+      writeCommissions:
+        async (writeRow) => {
+          await streamCommissionSummaryRows(
+            {
+              ...commissionFilters,
+              group_by,
+            },
+            writeRow
+          );
+        },
+    });
+
+    return res.end();
 
   } catch (error) {
     logger.error(

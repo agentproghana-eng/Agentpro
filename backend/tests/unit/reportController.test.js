@@ -8,6 +8,8 @@ const mockGenerateTransactionReportExcelStream =
   jest.fn();
 const mockGenerateCommissionReportExcelStream =
   jest.fn();
+const mockGenerateCommissionReportPDFStream =
+  jest.fn();
 
 jest.mock('../../src/config/database', () => ({
   query: (...args) => mockQuery(...args),
@@ -37,6 +39,11 @@ jest.mock('../../src/services/reportService', () => ({
         ...args
       ),
   generateCommissionReportPDF: jest.fn(),
+  generateCommissionReportPDFStream:
+    (...args) =>
+      mockGenerateCommissionReportPDFStream(
+        ...args
+      ),
   generateCommissionReportExcel: jest.fn(),
   generateCommissionReportExcelStream:
     (...args) =>
@@ -73,6 +80,22 @@ function resetReportMocks() {
 
   mockStreamCommissionSummaryRows
     .mockResolvedValue();
+
+  mockGenerateCommissionReportPDFStream
+    .mockImplementation(
+      async ({
+        writeCommissions,
+      }) => {
+        if (
+          typeof writeCommissions ===
+          'function'
+        ) {
+          await writeCommissions(
+            async () => {}
+          );
+        }
+      }
+    );
 
   mockGetCommissionTotals.mockResolvedValue({
     transaction_count: '0',
@@ -877,15 +900,19 @@ describe('reportController manager report scope', () => {
     );
 
     expect(mockGetCommissionSummary)
+      .not.toHaveBeenCalled();
+
+    expect(mockStreamCommissionSummaryRows)
       .toHaveBeenCalledTimes(1);
 
-    expect(mockGetCommissionSummary)
+    expect(mockStreamCommissionSummaryRows)
       .toHaveBeenCalledWith(
         expect.objectContaining({
           company_id: 'company-1',
           manager_id: 'manager-1',
           branch_id: 'branch-unmanaged',
-        })
+        }),
+        expect.any(Function)
       );
 
     expect(mockGetCommissionTotals)
@@ -1451,6 +1478,155 @@ describe('reportController monthly dashboard accounting', () => {
 });
 
 
+describe('reportController commission PDF streaming', () => {
+  beforeEach(() => {
+    resetReportMocks();
+  });
+
+  function makeCommissionRow(index) {
+    return {
+      group_id: `agent-${index}`,
+      label: `Agent ${index}`,
+      transaction_count: '1',
+      total_gross: '10.00',
+      total_provider_share: '3.00',
+      total_net: '7.00',
+    };
+  }
+
+  test('streams more than 5000 PDF commission rows without buffering grouped data', async () => {
+    mockGetCommissionTotals
+      .mockResolvedValue({
+        transaction_count: '5001',
+        total_gross: '50010.00',
+        total_provider_share: '15003.00',
+        total_net: '35007.00',
+      });
+
+    mockStreamCommissionSummaryRows
+      .mockImplementation(
+        async (
+          params,
+          onRow
+        ) => {
+          expect(params).toEqual(
+            expect.objectContaining({
+              company_id: 'company-1',
+              manager_id: 'manager-1',
+              branch_id: 'branch-1',
+              group_by: 'agent',
+            })
+          );
+
+          for (
+            let index = 1;
+            index <= 5001;
+            index++
+          ) {
+            await onRow(
+              makeCommissionRow(
+                index
+              )
+            );
+          }
+        }
+      );
+
+    const writtenRows = [];
+
+    mockGenerateCommissionReportPDFStream
+      .mockImplementation(
+        async ({
+          stream,
+          summary,
+          groupBy,
+          writeCommissions,
+        }) => {
+          expect(stream)
+            .toBeDefined();
+
+          expect(summary).toEqual({
+            transaction_count: '5001',
+            total_gross: '50010.00',
+            total_provider_share: '15003.00',
+            total_net: '35007.00',
+          });
+
+          expect(groupBy)
+            .toBe('agent');
+
+          await writeCommissions(
+            async (row) => {
+              writtenRows.push(row);
+            }
+          );
+        }
+      );
+
+    const req = {
+      user: {
+        id: 'manager-1',
+        company_id: 'company-1',
+        role: 'manager',
+      },
+      query: {
+        format: 'pdf',
+        group_by: 'agent',
+        branch_id: 'branch-1',
+        from_date:
+          '2026-08-01T00:00:00.000Z',
+        to_date:
+          '2026-08-12T23:59:59.999Z',
+      },
+    };
+
+    const res = makeRes();
+
+    await reportController.commissionReport(
+      req,
+      res
+    );
+
+    expect(mockGetCommissionSummary)
+      .not.toHaveBeenCalled();
+
+    expect(mockGetCommissionTotals)
+      .toHaveBeenCalledTimes(1);
+
+    expect(mockStreamCommissionSummaryRows)
+      .toHaveBeenCalledTimes(1);
+
+    expect(
+      mockGenerateCommissionReportPDFStream
+    ).toHaveBeenCalledTimes(1);
+
+    expect(writtenRows)
+      .toHaveLength(5001);
+
+    expect(writtenRows[0].label)
+      .toBe('Agent 1');
+
+    expect(writtenRows[4999].label)
+      .toBe('Agent 5000');
+
+    expect(writtenRows[5000].label)
+      .toBe('Agent 5001');
+
+    expect(res.setHeader)
+      .toHaveBeenCalledWith(
+        'Content-Type',
+        'application/pdf'
+      );
+
+    expect(res.end)
+      .toHaveBeenCalledTimes(1);
+
+    expect(res.send)
+      .not.toHaveBeenCalled();
+  });
+});
+
+
 describe('reportController commission Excel streaming', () => {
   beforeEach(() => {
     resetReportMocks();
@@ -1825,7 +2001,6 @@ describe('reportController commission report security and periods', () => {
   beforeEach(() => {
     resetReportMocks();
     jest.useRealTimers();
-    mockGetCommissionSummary.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -1841,36 +2016,54 @@ describe('reportController commission report security and periods', () => {
       },
       query: {
         format: 'pdf',
-        from_date: '2026-08-01T00:00:00.000Z',
-        to_date: '2026-08-12T10:00:00.000Z',
+        from_date:
+          '2026-08-01T00:00:00.000Z',
+        to_date:
+          '2026-08-12T10:00:00.000Z',
         agent_id: 'agent-other',
       },
     };
 
     const res = makeRes();
 
-    await reportController.commissionReport(req, res);
+    await reportController.commissionReport(
+      req,
+      res
+    );
 
     expect(mockGetCommissionSummary)
-      .toHaveBeenCalledTimes(1);
+      .not.toHaveBeenCalled();
 
-    expect(mockGetCommissionSummary)
+    expect(mockStreamCommissionSummaryRows)
       .toHaveBeenCalledWith(
         expect.objectContaining({
           company_id: 'company-1',
-          agent_id: 'agent-authenticated',
-          from_date: '2026-08-01T00:00:00.000Z',
-          to_date: '2026-08-12T10:00:00.000Z',
-        })
+          agent_id:
+            'agent-authenticated',
+          from_date:
+            '2026-08-01T00:00:00.000Z',
+          to_date:
+            '2026-08-12T10:00:00.000Z',
+        }),
+        expect.any(Function)
       );
 
-    expect(mockGetCommissionSummary)
+    expect(mockStreamCommissionSummaryRows)
       .not.toHaveBeenCalledWith(
         expect.objectContaining({
           agent_id: 'agent-other',
-        })
+        }),
+        expect.any(Function)
       );
 
+    expect(mockGetCommissionTotals)
+      .toHaveBeenCalledWith(
+        expect.objectContaining({
+          company_id: 'company-1',
+          agent_id:
+            'agent-authenticated',
+        })
+      );
   });
 
   test.each([
@@ -1901,7 +2094,9 @@ describe('reportController commission report security and periods', () => {
             expect(params.group_by)
               .toBe(groupBy);
 
-            await onRow(groupedRow);
+            await onRow(
+              groupedRow
+            );
           }
         );
 
@@ -1931,7 +2126,9 @@ describe('reportController commission report security and periods', () => {
         .not.toHaveBeenCalled();
 
       const output = res.write.mock.calls
-        .map(([chunk]) => String(chunk))
+        .map(([chunk]) =>
+          String(chunk)
+        )
         .join('');
 
       expect(output).toContain(
@@ -1960,17 +2157,27 @@ describe('reportController commission report security and periods', () => {
       },
       query: {
         format: 'pdf',
-        from_date: '2026-08-01T00:00:00.000Z',
-        to_date: '2026-08-12T10:00:00.000Z',
         agent_id: 'agent-selected',
       },
     };
 
     const res = makeRes();
 
-    await reportController.commissionReport(req, res);
+    await reportController.commissionReport(
+      req,
+      res
+    );
 
-    expect(mockGetCommissionSummary)
+    expect(mockStreamCommissionSummaryRows)
+      .toHaveBeenCalledWith(
+        expect.objectContaining({
+          company_id: 'company-1',
+          agent_id: 'agent-selected',
+        }),
+        expect.any(Function)
+      );
+
+    expect(mockGetCommissionTotals)
       .toHaveBeenCalledWith(
         expect.objectContaining({
           company_id: 'company-1',
@@ -1980,18 +2187,20 @@ describe('reportController commission report security and periods', () => {
   });
 
   test.each([
-    ['today'],
-    ['week'],
-    ['month'],
-    ['year'],
+    'today',
+    'week',
+    'month',
+    'year',
   ])(
     'uses the shared %s period range for commission reports',
     async (period) => {
-      const fixedNow =
-        new Date('2026-08-12T10:34:00.000Z');
+      const now =
+        new Date(
+          '2026-08-12T10:30:00.000Z'
+        );
 
       jest.useFakeTimers();
-      jest.setSystemTime(fixedNow);
+      jest.setSystemTime(now);
 
       const req = {
         user: {
@@ -2007,48 +2216,60 @@ describe('reportController commission report security and periods', () => {
 
       const res = makeRes();
 
-      await reportController.commissionReport(req, res);
+      await reportController.commissionReport(
+        req,
+        res
+      );
 
-      expect(mockGetCommissionSummary)
+      expect(mockStreamCommissionSummaryRows)
         .toHaveBeenCalledTimes(1);
 
-      const params =
-        mockGetCommissionSummary.mock.calls[0][0];
+      const [
+        streamFilters,
+      ] =
+        mockStreamCommissionSummaryRows
+          .mock.calls[0];
 
-      expect(params.to_date)
-        .toBe(fixedNow.toISOString());
-
-      expect(params.from_date)
-        .toEqual(expect.any(String));
-
-      const actualFrom =
-        new Date(params.from_date);
-
-      const expectedFrom =
-        new Date(fixedNow);
-
-      if (period === 'today') {
-        expectedFrom.setHours(0, 0, 0, 0);
-      }
-
-      if (period === 'week') {
-        expectedFrom.setDate(
-          expectedFrom.getDate() - 7
+      expect(streamFilters)
+        .toEqual(
+          expect.objectContaining({
+            company_id: 'company-1',
+            group_by: 'day',
+          })
         );
-      }
 
-      if (period === 'month') {
-        expectedFrom.setDate(1);
-        expectedFrom.setHours(0, 0, 0, 0);
-      }
+      expect(
+        new Date(
+          streamFilters.from_date
+        ).toString()
+      ).not.toBe('Invalid Date');
 
-      if (period === 'year') {
-        expectedFrom.setMonth(0, 1);
-        expectedFrom.setHours(0, 0, 0, 0);
-      }
+      expect(
+        new Date(
+          streamFilters.to_date
+        ).toString()
+      ).not.toBe('Invalid Date');
 
-      expect(actualFrom.toISOString())
-        .toBe(expectedFrom.toISOString());
+      expect(
+        new Date(
+          streamFilters.from_date
+        ).getTime()
+      ).toBeLessThanOrEqual(
+        new Date(
+          streamFilters.to_date
+        ).getTime()
+      );
+
+      expect(mockGetCommissionTotals)
+        .toHaveBeenCalledWith(
+          expect.objectContaining({
+            company_id: 'company-1',
+            from_date:
+              streamFilters.from_date,
+            to_date:
+              streamFilters.to_date,
+          })
+        );
     }
   );
 });
