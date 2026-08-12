@@ -54,6 +54,7 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
     'buy_mashup': 'Mash Up',
     'check_momo_balance': 'Check MoMo Balance',
     'check_airtime_balance': 'Check Airtime Balance',
+    'withdraw_cash': 'Withdraw Cash',
   };
   static const _statuses = {
     'all': 'All Statuses',

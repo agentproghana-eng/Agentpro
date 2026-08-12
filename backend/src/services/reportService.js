@@ -539,10 +539,11 @@ async function generatePersonalTransactionReportPDF({ transactions, summary, tit
     // Summary Cards
     const summaries = [
       ['Total Transactions', summary.count || 0],
-      ['Total Amount', GHS(summary.total_amount)],
-      ['Success Rate', `${summary.success_rate || 0}%`],
+      ['Successful', summary.success_count || 0],
+      ['Failed', summary.failed_count || 0],
+      ['Needs Verification', summary.pending_count || 0],
     ];
-    const cardWidth = (doc.page.width - 80 - 20) / 3;
+    const cardWidth = (doc.page.width - 80 - 30) / 4;
     summaries.forEach(([label, value], i) => {
       const x = 40 + i * (cardWidth + 10);
       const y = doc.y;

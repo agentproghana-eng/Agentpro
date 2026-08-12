@@ -3,9 +3,8 @@ const { logger } = require('../utils/logger');
 const { generatePersonalTransactionReportPDF, generateCSV } = require('../services/reportService');
 
 // ─── Personal Transaction Report (CSV + PDF) ─────────────────
-// Paid-Personal-only per spec. Always scoped to the current user -
-// there is no branch/agent/commission concept on the Personal side,
-// so this is deliberately simpler than the Agent transaction report.
+// Paid-Personal-only per spec. Always scoped to the current user.
+// Deliberately simpler than the Agent transaction report.
 
 exports.transactionReport = async (req, res) => {
   const { format = 'pdf', from_date, to_date, provider, transaction_type, status, period } = req.query;
@@ -32,11 +31,21 @@ exports.transactionReport = async (req, res) => {
     if (resolvedTo) { conditions.push(`created_at <= $${idx++}`); params.push(resolvedTo); }
     const where = `WHERE ${conditions.join(' AND ')}`;
 
+    // Personal reporting records app-performed transaction activity.
+    // Keep every filtered transaction in the report and expose simple
+    // status counts for the activity summary.
     const [txResult, summaryResult] = await Promise.all([
       query(`SELECT * FROM personal_transactions ${where} ORDER BY created_at DESC LIMIT 5000`, params),
       query(
-        `SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total_amount,
-                ROUND(100.0 * COUNT(CASE WHEN status = 'success' THEN 1 END) / NULLIF(COUNT(*), 0), 1) as success_rate
+        `SELECT COUNT(*) as count,
+                COUNT(CASE WHEN status = 'success' THEN 1 END) as success_count,
+                COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed_count,
+                COUNT(CASE WHEN status = 'pending_confirmation' THEN 1 END) as pending_count,
+                ROUND(
+                  100.0 * COUNT(CASE WHEN status = 'success' THEN 1 END)
+                  / NULLIF(COUNT(*), 0),
+                  1
+                ) as success_rate
          FROM personal_transactions ${where}`,
         params
       ),
