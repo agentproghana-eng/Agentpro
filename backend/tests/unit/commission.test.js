@@ -170,59 +170,119 @@ describe('Security Rules', () => {
     });
   });
 
-  it('sanitizeUSSDLog redacts the current pin_prompt_seen entry format', () => {
-    // Imports the REAL function from the controller — not a hand-copied
-    // duplicate — so this test can never silently drift from what the
-    // code actually does. See transactionController.js's export comment.
-    const { sanitizeUSSDLog } = require('../../src/controllers/transactionController');
-
-    // This is the exact shape the current engine produces (ussd_service.dart):
-    // a hardcoded safe placeholder is already in `response` by the time
-    // it reaches here, but the server-side function must still actively
-    // assert/overwrite it rather than trust the client sent it correctly.
-    const log = [
-      { type: 'dial', dialed: '*170*1*2*0241234567*250#', timestamp: '2026-07-04T10:00:00.000Z' },
-      { type: 'response', response: 'Enter your PIN', timestamp: '2026-07-04T10:00:04.000Z' },
-      { type: 'pin_prompt_seen', response: '[PIN ENTRY — NOT LOGGED, NOT APP-VISIBLE]', timestamp: '2026-07-04T10:00:04.100Z' },
-      { type: 'final_response', response: 'Cash out successful', timestamp: '2026-07-04T10:00:12.000Z' },
-    ];
-
-    const sanitized = sanitizeUSSDLog(log);
-    const pinEntry = sanitized[2];
-
-    expect(pinEntry.response).toBe('[PIN ENTRY — NOT LOGGED, NOT APP-VISIBLE]');
-    expect(pinEntry.dialed).toBeUndefined();
-    // Non-PIN steps must be completely unaffected
-    expect(sanitized[0].dialed).toBe('*170*1*2*0241234567*250#');
-    expect(sanitized[1].response).toBe('Enter your PIN');
-    expect(sanitized[3].response).toBe('Cash out successful');
-  });
-
-  it('sanitizeUSSDLog still redacts the legacy pre-migration format', () => {
-    // Guards against regressing support for the transitional period
-    // where an old app version might still submit the pre-redesign
-    // step-array format if a phased rollout briefly has both in the wild.
+  it('sanitizeUSSDLog keeps metadata but strips resolved USSD and raw provider text', () => {
     const { sanitizeUSSDLog } = require('../../src/controllers/transactionController');
 
     const log = [
-      { step: 0, type: 'select', input: '1' },
-      { step: 1, type: 'pin', input: '1234', is_pin_step: true },
-      { step: 2, type: 'confirm', input: '1' },
+      {
+        type: 'dial',
+        dialed: '*170*1*2*0241234567*250#',
+        input: '0241234567',
+        value: '250',
+        timestamp: '2026-07-04T10:00:00.000Z',
+      },
+      {
+        type: 'response',
+        response: 'Balance GHS 450.25. Account 0241234567',
+        timestamp: '2026-07-04T10:00:04.000Z',
+      },
+      {
+        type: 'pin_prompt_seen',
+        response: 'malicious client supplied PIN-like text 1234',
+        timestamp: '2026-07-04T10:00:04.100Z',
+      },
+      {
+        type: 'final_response',
+        response: 'Cash out successful. Ref 998877',
+        note: 'customer secret',
+        timestamp: '2026-07-04T10:00:12.000Z',
+      },
     ];
 
     const sanitized = sanitizeUSSDLog(log);
-    const pinStep = sanitized[1];
 
-    expect(pinStep.input).toBeUndefined();
-    expect(pinStep.note).toBe('[PIN ENTRY - NOT LOGGED]');
-    expect(sanitized[0].input).toBe('1');
-    expect(sanitized[2].input).toBe('1');
+    expect(sanitized[0]).toEqual({
+      type: 'dial',
+      timestamp: '2026-07-04T10:00:00.000Z',
+    });
+    expect(sanitized[1]).toEqual({
+      type: 'response',
+      timestamp: '2026-07-04T10:00:04.000Z',
+    });
+    expect(sanitized[2]).toEqual({
+      type: 'pin_prompt_seen',
+      timestamp: '2026-07-04T10:00:04.100Z',
+      response: '[PIN ENTRY — NOT LOGGED, NOT APP-VISIBLE]',
+    });
+    expect(sanitized[3]).toEqual({
+      type: 'final_response',
+      timestamp: '2026-07-04T10:00:12.000Z',
+    });
   });
 
-  it('sanitizeUSSDLog handles null and non-array input safely', () => {
+  it('sanitizeUSSDLog strips legacy input/value/note data and replaces PIN markers', () => {
     const { sanitizeUSSDLog } = require('../../src/controllers/transactionController');
+
+    const log = [
+      { step: 0, type: 'select', input: '0241234567', value: '250' },
+      { step: 1, type: 'pin', input: '1234', note: '1234', is_pin_step: true },
+      { step: 2, type: 'confirm', input: '1', note: 'secret' },
+    ];
+
+    const sanitized = sanitizeUSSDLog(log);
+
+    expect(sanitized[0]).toEqual({ type: 'select' });
+    expect(sanitized[1]).toEqual({
+      type: 'pin',
+      note: '[PIN ENTRY - NOT LOGGED]',
+    });
+    expect(sanitized[2]).toEqual({ type: 'confirm' });
+  });
+
+  it('sanitizeUSSDLog handles null, undefined, and non-array input safely', () => {
+    const { sanitizeUSSDLog } = require('../../src/controllers/transactionController');
+
     expect(sanitizeUSSDLog(null)).toBeNull();
     expect(sanitizeUSSDLog(undefined)).toBeNull();
+    expect(sanitizeUSSDLog({ type: 'dial' })).toBeNull();
+  });
+
+  it('sanitizeFailureReason never persists arbitrary client/provider text', () => {
+    const {
+      sanitizeFailureReason,
+    } = require('../../src/controllers/transactionController');
+
+    expect(
+      sanitizeFailureReason(
+        'Balance GHS 9,876.54 for 0241234567. Account ID SECRET-123',
+        'failed'
+      )
+    ).toBe('The transaction failed due to an automation error.');
+
+    expect(
+      sanitizeFailureReason(
+        'SocketException: host=internal.example token=SECRET',
+        'failed'
+      )
+    ).toBe('The transaction failed due to an automation error.');
+
+    expect(
+      sanitizeFailureReason(
+        'No final network result was received after PIN entry. Please verify.',
+        'pending_confirmation'
+      )
+    ).toBe('The transaction outcome could not be confirmed after PIN entry.');
+
+    expect(
+      sanitizeFailureReason(
+        'The network reported that the transaction failed.',
+        'failed'
+      )
+    ).toBe('The network reported that the transaction failed.');
+
+    expect(
+      sanitizeFailureReason(null, 'success')
+    ).toBeNull();
   });
 
   it('validates password strength requirements', () => {

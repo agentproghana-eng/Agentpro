@@ -1,18 +1,10 @@
 const { query } = require('../config/database');
 const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
-const { sanitizeUSSDLog } = require('./transactionController');
-
-const PERSONAL_TRANSACTION_TYPES = [
-  'send_money_same_network',
-  'send_money_cross_network',
-  'buy_airtime',
-  'buy_data',
-  'buy_mashup',
-  'check_momo_balance',
-  'check_airtime_balance',
-  'withdraw_cash',
-];
+const {
+  sanitizeUSSDLog,
+  sanitizeFailureReason,
+} = require('./transactionController');
 
 // ─── Initiate Personal Transaction ─────────────────────────────
 // Deliberately simpler than the Agent side: no branch/company, no fee,
@@ -23,32 +15,95 @@ exports.initiateTransaction = async (req, res) => {
   const { provider, transaction_type, amount, recipient_phone, merchant_id, sim_iccid, sim_slot, notes, bundle_category, recipient_mode } = req.body;
   const userId = req.user.id;
 
-  if (!PERSONAL_TRANSACTION_TYPES.includes(transaction_type)) {
-    return res.status(400).json({ success: false, message: 'Invalid personal transaction type' });
-  }
-
   try {
-    // Confirm some automation exists before creating the record -
-    // mirrors the same requirement on the Agent side. Checked directly
-    // here (not by calling /ussd-flows/resolve) using the same priority
-    // order: this user's own personal-owned flow, else the global
-    // default.
-    const personalFlow = await query(
-      `SELECT 1 FROM ussd_flows WHERE owner_user_id = $1 AND provider = $2 AND transaction_type = $3 AND is_active = true
-       AND COALESCE(bundle_category,'') = COALESCE($4,'')
-       AND COALESCE(recipient_mode,'') = COALESCE($5,'')`,
-      [userId, provider, transaction_type, bundle_category || null, recipient_mode || null]
-    );
-    const globalFlow = await query(
-      `SELECT 1 FROM ussd_flows WHERE company_id IS NULL AND owner_user_id IS NULL AND provider = $1 AND transaction_type = $2 AND is_active = true
-       AND COALESCE(bundle_category,'') = COALESCE($3,'')
-       AND COALESCE(recipient_mode,'') = COALESCE($4,'')`,
-      [provider, transaction_type, bundle_category || null, recipient_mode || null]
-    );
-    if (personalFlow.rows.length === 0 && globalFlow.rows.length === 0) {
+    // Transaction access and USSD Automation are separate Personal
+    // entitlements. Free Personal users may perform transactions, but
+    // automatic USSD navigation is a Paid feature.
+    //
+    // requirePersonalAccount has already attached the current subscription,
+    // so this decision is server-authoritative and does not trust potentially
+    // stale client-side plan state.
+    const subscription = req.personalSubscription;
+    const automationEntitled =
+      subscription?.plan === 'paid' &&
+      (!subscription.expires_at ||
+        new Date(subscription.expires_at) >= new Date());
+
+    // Paid users resolve their own Personal override first, then Global.
+    // Free users must never consume a Personal override after downgrade:
+    // they use only the centrally managed Global flow as the source of the
+    // provider's manual USSD entry code.
+    let selectedFlow = null;
+
+    if (automationEntitled) {
+      const personalFlow = await query(
+        `SELECT dial_code
+         FROM ussd_flows
+         WHERE owner_user_id = $1
+           AND company_id IS NULL
+           AND provider = $2
+           AND transaction_type = $3
+           AND is_active = true
+           AND COALESCE(bundle_category,'') = COALESCE($4,'')
+           AND COALESCE(recipient_mode,'') = COALESCE($5,'')
+         LIMIT 1`,
+        [
+          userId,
+          provider,
+          transaction_type,
+          bundle_category || null,
+          recipient_mode || null,
+        ]
+      );
+
+      selectedFlow = personalFlow.rows[0] || null;
+    }
+
+    // Match the Personal runtime resolver's precedence exactly:
+    // Personal override first for Paid users, then true Global fallback.
+    // Free users skip the Personal query entirely and always start here.
+    if (!selectedFlow) {
+      const globalFlow = await query(
+        `SELECT dial_code
+         FROM ussd_flows
+         WHERE company_id IS NULL
+           AND owner_user_id IS NULL
+           AND provider = $1
+           AND transaction_type = $2
+           AND is_active = true
+           AND COALESCE(bundle_category,'') = COALESCE($3,'')
+           AND COALESCE(recipient_mode,'') = COALESCE($4,'')
+         LIMIT 1`,
+        [
+          provider,
+          transaction_type,
+          bundle_category || null,
+          recipient_mode || null,
+        ]
+      );
+
+      selectedFlow = globalFlow.rows[0] || null;
+    }
+
+    if (!selectedFlow) {
       return res.status(400).json({
         success: false,
         message: `No USSD flow configured for ${provider} ${transaction_type}`
+      });
+    }
+
+    // Free Personal execution is deliberately non-automated, so it needs a
+    // centrally configured dial entry point. Never fall back to a hard-coded
+    // provider list here: future providers remain data-driven.
+    const manualDialCode = automationEntitled
+      ? null
+      : String(selectedFlow.dial_code || '').trim();
+
+    if (!automationEntitled && !manualDialCode) {
+      return res.status(400).json({
+        success: false,
+        message:
+          `No manual USSD dial code configured for ${provider} ${transaction_type}`
       });
     }
 
@@ -77,25 +132,11 @@ exports.initiateTransaction = async (req, res) => {
       requestId: req.requestId
     });
 
-    // Personal transactions are entirely Flow Builder-based (no
-    // legacy ussd_templates equivalent), so there's no ussd_template
-    // field here - the app resolves the actual flow steps separately
-    // via GET /ussd-flows/resolve after this call succeeds, same as
-    // Agent. What WAS missing until now: automation_params, the
-    // pre-filled values the app fills into that flow's steps
-    // (send_amount, send_customer_phone, etc.) - without this, even a
-    // successfully resolved flow would have nothing to dial with.
-    // transaction_id (not transaction.id/id) matches exactly what
-    // Agent's own initiateTransaction response uses, and what the
-    // shared TransactionProgressScreen on the Flutter side expects
-    // regardless of isPersonal - this was previously spreading the
-    // raw transaction object instead, which kept the database row's
-    // original "id" key and never actually had a "transaction_id"
-    // key at all. That caused transaction['transaction_id'] as String
-    // to throw immediately and synchronously on the null value, right
-    // at the top of _startUSSD() before even the permission check -
-    // explaining why every Personal automation attempt today appeared
-    // to hang instantly with no error and no progress at all.
+    // Paid Personal transactions continue through Flow Builder automation.
+    // Free Personal transactions instead receive only the Global flow's root
+    // dial code and open the real network USSD menu for manual navigation.
+    // automation_params are still returned for transaction recording and for
+    // the Paid automation path; PIN values are never included.
     res.status(201).json({
       success: true,
       data: {
@@ -103,6 +144,11 @@ exports.initiateTransaction = async (req, res) => {
         reference: transaction.reference,
         status: transaction.status,
         created_at: transaction.created_at,
+        // This value comes from the server-side subscription check above.
+        // Flutter must use it before considering native, cached, or resolved
+        // automation so a stale Paid cache cannot survive a downgrade.
+        automation_entitled: automationEntitled,
+        manual_dial_code: manualDialCode,
         // notes doubles as the reference value here rather than adding
         // a dedicated column - Send Money's flow has a send_reference
         // step (confirmed via a real device test), and notes was
@@ -159,6 +205,7 @@ exports.completeTransaction = async (req, res) => {
     // CRITICAL: same PIN-safety check as the Agent side - never store
     // raw USSD trace without stripping PIN entry steps first.
     const sanitizedLog = sanitizeUSSDLog(ussd_session_log);
+    const sanitizedFailureReason = sanitizeFailureReason(failure_reason, status);
 
     const result = await query(
       `UPDATE personal_transactions
@@ -170,7 +217,14 @@ exports.completeTransaction = async (req, res) => {
            completed_at = CASE WHEN $1 IN ('success', 'failed') THEN NOW() ELSE completed_at END
        WHERE id = $6
        RETURNING id, reference, status, completed_at`,
-      [status, network_reference || null, failure_reason || null, JSON.stringify(sanitizedLog), notes || null, transaction_id]
+      [
+        status,
+        network_reference || null,
+        sanitizedFailureReason,
+        JSON.stringify(sanitizedLog),
+        notes || null,
+        transaction_id,
+      ]
     );
 
     await auditLog({
@@ -179,7 +233,11 @@ exports.completeTransaction = async (req, res) => {
       action: `PERSONAL_TRANSACTION_${status.toUpperCase()}`,
       entityType: 'personal_transaction',
       entityId: transaction_id,
-      newValues: { status, network_reference, failure_reason },
+      newValues: {
+        status,
+        network_reference,
+        failure_reason: sanitizedFailureReason,
+      },
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
       requestId: req.requestId

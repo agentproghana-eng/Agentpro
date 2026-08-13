@@ -3,6 +3,9 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const personalTransactionController = require('../controllers/personalTransactionController');
 const { authenticate, requirePersonalAccount } = require('../middleware/auth');
+const {
+  createInitiationCapabilityGuard,
+} = require('../middleware/transactionCapability');
 
 const handleValidation = (req, res, next) => {
   const errors = validationResult(req);
@@ -22,15 +25,26 @@ const handleValidation = (req, res, next) => {
 // confusing empty result.
 router.use(authenticate, requirePersonalAccount);
 
+const personalInitiationCapabilityGuard =
+  createInitiationCapabilityGuard('personal');
+
 // POST /api/v1/personal-transactions — Initiate a transaction
 router.post('/', [
-  body('provider').isIn(['mtn', 'telecel', 'at_money']).withMessage('Invalid provider'),
-  body('transaction_type').isIn([
-    'send_money_same_network', 'send_money_cross_network',
-    'buy_airtime', 'buy_data', 'buy_mashup',
-    'check_momo_balance', 'check_airtime_balance', 'withdraw_cash'
-  ]).withMessage('Invalid transaction type'),
-], handleValidation, personalTransactionController.initiateTransaction);
+  body('provider')
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage('Invalid provider'),
+  body('transaction_type')
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage('Invalid transaction type'),
+],
+  handleValidation,
+  personalInitiationCapabilityGuard,
+  personalTransactionController.initiateTransaction
+);
 
 // PATCH /api/v1/personal-transactions/:transaction_id/complete
 router.patch('/:transaction_id/complete', [

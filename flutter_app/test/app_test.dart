@@ -101,18 +101,28 @@ void main() {
           .where((e) => e['type'] == 'pin_prompt_seen')
           .toList();
       expect(pinEntries.length, 1);
-      // The ONLY acceptable content here is the fixed placeholder —
-      // never the actual PIN, never the raw network prompt text.
-      expect(pinEntries.first['response'],
-          '[PIN ENTRY — NOT LOGGED, NOT APP-VISIBLE]');
-      expect(pinEntries.first.containsKey('input'), isFalse);
 
-      // The dialed string itself must never contain anything PIN-shaped —
-      // confirms automationParams (built from real transaction fields)
-      // never carries a PIN value into the resolved USSD string.
+      // Diagnostic logs are metadata-only. Even the fixed PIN placeholder is
+      // no longer persisted, because keeping no response text at all is safer
+      // than maintaining a special-case response field.
+      expect(pinEntries.first.containsKey('response'), isFalse);
+      expect(pinEntries.first.containsKey('input'), isFalse);
+      expect(pinEntries.first.containsKey('dialed'), isFalse);
+      expect(pinEntries.first.containsKey('timestamp'), isTrue);
+
       final dialEntry =
           result.sessionLog.firstWhere((e) => e['type'] == 'dial');
-      expect(dialEntry['dialed'], '*170*1*2*0241234567*250#');
+      expect(dialEntry.containsKey('dialed'), isFalse);
+      expect(dialEntry.containsKey('response'), isFalse);
+
+      // The complete diagnostic log must not retain transaction/customer
+      // values or raw provider responses.
+      final encodedLog = result.sessionLog.toString();
+      expect(encodedLog, isNot(contains('0241234567')));
+      expect(encodedLog, isNot(contains('*170*1*2*0241234567*250#')));
+      expect(encodedLog, isNot(contains('Enter your PIN')));
+      expect(encodedLog, isNot(contains('Cash out successful')));
+      expect(encodedLog, isNot(contains('AB12345678')));
     });
 
     test('pendingConfirmation when no response ever arrives after a PIN prompt',

@@ -104,9 +104,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = context.read<AuthBloc>().state is AuthAuthenticated
-        ? (context.read<AuthBloc>().state as AuthAuthenticated).user
-        : {};
+    final authState = context.read<AuthBloc>().state;
+    final Map<String, dynamic> user =
+        authState is AuthAuthenticated ? authState.user : <String, dynamic>{};
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -177,9 +177,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ListTile(
           leading: const Icon(Icons.sync, color: AppTheme.primaryColor),
           title: const Text('Offline Sync'),
-          subtitle: Text(OfflineQueueService.pendingCount > 0
-              ? '${OfflineQueueService.pendingCount} pending'
-              : 'All synced'),
+          subtitle: Text(
+            OfflineQueueService.pendingCountForUser(user) > 0
+                ? '${OfflineQueueService.pendingCountForUser(user)} pending'
+                : 'All synced',
+          ),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => context.push('/sync'),
         ),

@@ -166,14 +166,12 @@ class TransactionProgressScreen extends StatefulWidget {
 }
 
 class _TransactionProgressScreenState extends State<TransactionProgressScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   late AnimationController _pulseCtrl;
   USSDStatus _status = USSDStatus.idle;
   String _statusMessage = 'Checking permissions...';
   bool _completed = false;
   bool _wasManuallyConfirmed = false;
-  bool _showConfirmButton = false;
-  Timer? _confirmTimer;
 
   StreamSubscription? _engineProgressSubscription;
   StreamSubscription? _accessibilityProgressSubscription;
@@ -186,19 +184,62 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
   String? _simWarning;
   bool _permissionPermanentlyDenied = false;
   bool _startupInitiationRetryAvailable = false;
+  late final OfflineQueueIdentity? _offlineIdentity;
+
+  // Free Personal transactions open the network-owned USSD screen without
+  // Accessibility automation. ACTION_CALL returns to Flutter immediately,
+  // so completion must wait for a real app background -> resume cycle before
+  // asking the user what the network reported.
+  Completer<void>? _manualDialResumeCompleter;
+  bool _manualDialSawBackground = false;
 
   @override
   void initState() {
     super.initState();
+
+    final authState = context.read<AuthBloc>().state;
+    _offlineIdentity = authState is AuthAuthenticated
+        ? OfflineQueueService.identityFromUser(authState.user)
+        : null;
+
     _pulseCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     )..repeat(reverse: true);
+    WidgetsBinding.instance.addObserver(this);
     _startUSSD();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final completer = _manualDialResumeCompleter;
+    if (completer == null) return;
+
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused) {
+      _manualDialSawBackground = true;
+      return;
+    }
+
+    if (state == AppLifecycleState.resumed && _manualDialSawBackground) {
+      _manualDialResumeCompleter = null;
+      _manualDialSawBackground = false;
+
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+    }
   }
 
   Future<void> _startUSSD() async {
     final provider = widget.data['provider'] as String;
+
+    if (_offlineIdentity == null) {
+      _showStartupFailure(
+        'Your authenticated account identity is unavailable. Sign in again before starting this transaction.',
+      );
+      return;
+    }
 
     // Backend validation/creation and local device preparation begin
     // together. Dialing remains blocked until both have succeeded.
@@ -313,6 +354,91 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       return;
     }
 
+    // Personal transaction access is available on both Free and Paid plans,
+    // but automatic USSD navigation is Paid-only. The backend decides the
+    // entitlement on every initiation request. Branch here before hard-coded,
+    // cached, or remotely resolved automation so an old cached Personal flow
+    // cannot bypass a downgrade.
+    final automationEntitled = transaction['automation_entitled'] == true;
+
+    if (widget.isPersonal && !automationEntitled) {
+      final manualDialCode =
+          transaction['manual_dial_code']?.toString().trim() ?? '';
+
+      if (manualDialCode.isEmpty) {
+        const reason =
+            'No manual USSD dial code is configured for this transaction.';
+        if (mounted) setState(() => _simWarning = reason);
+        await _reportResult(
+          transactionId,
+          const USSDResult(
+            outcome: USSDStatus.failed,
+            failureReason: reason,
+            sessionLog: [],
+          ),
+        );
+        return;
+      }
+
+      if (mounted) {
+        setState(() {
+          _status = USSDStatus.processing;
+          _statusMessage =
+              'Complete the transaction in the network USSD menu, then return to AgentPro.';
+        });
+      }
+
+      // Install the lifecycle waiter BEFORE starting ACTION_CALL so a fast
+      // Android pause event cannot race ahead of the Flutter continuation.
+      final manualDialResumeCompleter = Completer<void>();
+      _manualDialResumeCompleter = manualDialResumeCompleter;
+      _manualDialSawBackground = false;
+
+      try {
+        await UssdAccessibilityEngine.dialManual(
+          dialCode: manualDialCode,
+          simSlot: simSlot,
+        );
+      } catch (_) {
+        if (identical(
+          _manualDialResumeCompleter,
+          manualDialResumeCompleter,
+        )) {
+          _manualDialResumeCompleter = null;
+          _manualDialSawBackground = false;
+        }
+
+        if (!manualDialResumeCompleter.isCompleted) {
+          manualDialResumeCompleter.complete();
+        }
+
+        const reason = 'AgentPro could not open the network USSD menu.';
+        if (mounted) setState(() => _simWarning = reason);
+        await _reportResult(
+          transactionId,
+          const USSDResult(
+            outcome: USSDStatus.failed,
+            failureReason: reason,
+            sessionLog: [],
+          ),
+        );
+        return;
+      }
+
+      // ACTION_CALL only confirms that Android accepted the outgoing USSD
+      // intent. Wait until AgentPro actually resumes after the user finishes
+      // with the network-owned screen before asking for the outcome.
+      await manualDialResumeCompleter.future;
+
+      if (!mounted) return;
+
+      // AgentPro intentionally cannot infer a Free user's result because it
+      // does not observe or navigate the manual USSD session. The user must
+      // report the actual network outcome after returning to the app.
+      await _confirmManually(requiredChoice: true);
+      return;
+    }
+
     final bundleCategory = widget.data['bundle_category'] as String?;
     final recipientMode = widget.data['recipient_mode'] as String?;
     final selectionsInOrder =
@@ -368,7 +494,14 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     final suppliedCachedFlow = transaction['cached_flow'];
     final cachedFlow = suppliedCachedFlow is Map
         ? Map<String, dynamic>.from(suppliedCachedFlow)
-        : OfflineQueueService.getCachedFlow(provider, transactionType);
+        : OfflineQueueService.getCachedFlow(
+            provider,
+            transactionType,
+            identity: _offlineIdentity,
+            isPersonal: widget.isPersonal,
+            bundleCategory: bundleCategory,
+            recipientMode: recipientMode,
+          );
 
     if (cachedFlow != null) {
       unawaited(
@@ -401,7 +534,9 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     // is the normal, expected case, not an error worth surfacing.
     try {
       final resolveRes = await ApiClient.instance.get(
-        '/ussd-flows/resolve',
+        widget.isPersonal
+            ? '/personal-ussd-flows/resolve'
+            : '/ussd-flows/resolve',
         queryParameters: {
           'provider': provider,
           'transaction_type': transactionType,
@@ -417,7 +552,15 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       final flowData = Map<String, dynamic>.from(rawFlowData);
 
       unawaited(
-        OfflineQueueService.cacheFlow(provider, transactionType, flowData),
+        OfflineQueueService.cacheFlow(
+          provider,
+          transactionType,
+          flowData,
+          identity: _offlineIdentity,
+          isPersonal: widget.isPersonal,
+          bundleCategory: bundleCategory,
+          recipientMode: recipientMode,
+        ),
       );
 
       await _startResolvedFlow(
@@ -479,13 +622,17 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         setState(() {
           _status = progress.status;
           _statusMessage = progress.message;
-          _maybeStartConfirmTimer(progress.status);
         });
       }
     });
 
     // Execute USSD
     final result = await _engine!.execute();
+
+    if (_requiresPostPinConfirmation(result)) {
+      await _confirmManually(requiredChoice: true);
+      return;
+    }
 
     // Report result to backend
     await _reportResult(transactionId, result);
@@ -614,7 +761,9 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
   }) async {
     try {
       final response = await ApiClient.instance.get(
-        '/ussd-flows/resolve',
+        widget.isPersonal
+            ? '/personal-ussd-flows/resolve'
+            : '/ussd-flows/resolve',
         queryParameters: {
           'provider': provider,
           'transaction_type': transactionType,
@@ -630,6 +779,10 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         provider,
         transactionType,
         Map<String, dynamic>.from(rawFlowData),
+        identity: _offlineIdentity!,
+        isPersonal: widget.isPersonal,
+        bundleCategory: bundleCategory,
+        recipientMode: recipientMode,
       );
     } catch (_) {
       // Refreshing future-use cache must never delay or interrupt
@@ -661,9 +814,9 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         (provider == 'mtn' && transactionType == 'send_money')
             ? 'cash_in'
             : transactionType;
-    final phoneForAutomation = (transactionType == 'send_money')
-        ? (automationParams['recipient_phone'] ?? '')
-        : (automationParams['customer_phone'] ?? '');
+    final phoneForAutomation = transactionType == 'send_money'
+        ? automationParams['recipient_phone']
+        : automationParams['customer_phone'];
 
     final accessEngine = UssdAccessibilityEngine();
 
@@ -687,20 +840,20 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
     _accessibilityProgressSubscription?.cancel();
 
-    _accessibilityProgressSubscription =
-        accessEngine.progressStream.listen((progress) {
+    _accessibilityProgressSubscription = accessEngine.progressStream.listen((
+      progress,
+    ) {
       if (mounted) {
         setState(() {
           _status = progress.status;
           _statusMessage = progress.message;
-          _maybeStartConfirmTimer(progress.status);
         });
       }
     });
 
     final result = await accessEngine.execute(
       customerPhone: phoneForAutomation,
-      amount: automationParams['amount'] ?? '',
+      amount: automationParams['amount'],
       transactionType: nativeTransactionType,
       provider: provider,
       operatorId: operatorId,
@@ -711,9 +864,16 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       steps: steps,
       successMarkers: successMarkers,
       failureMarkers: failureMarkers,
+      selections: selections,
     );
 
     accessEngine.dispose();
+
+    if (_requiresPostPinConfirmation(result)) {
+      await _confirmManually(requiredChoice: true);
+      return;
+    }
+
     await _reportResult(transactionId, result);
   }
 
@@ -724,36 +884,32 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         _ => provider.toUpperCase(),
       };
 
-  void _maybeStartConfirmTimer(USSDStatus status) {
-    if (status != USSDStatus.awaitingPIN || _confirmTimer != null) return;
-    _confirmTimer = Timer(const Duration(seconds: 10), () {
-      if (mounted && !_completed) setState(() => _showConfirmButton = true);
-    });
-  }
-
-  // Manual fallback for when the automation genuinely cannot tell
-  // whether a transaction succeeded (e.g. an OEM-branded confirmation
-  // dialog the accessibility service fails to read). Never guesses on
-  // the app's own behalf - the agent must state what they actually
-  // saw on the real network screen.
-  Future<void> _confirmManually() async {
+  // Manual resolution for an ambiguous post-PIN outcome. The USSD
+  // engine owns the timeout and invokes this path only after it can no
+  // longer determine a final network result. The app never guesses:
+  // the user must state what the real network screen reported.
+  Future<void> _confirmManually({bool requiredChoice = false}) async {
     final outcome = await showDialog<USSDStatus>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Did the transaction succeed?'),
-        content: const Text(
-          'Check the result shown on your network screen, then choose what it said.',
+      barrierDismissible: !requiredChoice,
+      builder: (ctx) => PopScope(
+        canPop: !requiredChoice,
+        child: AlertDialog(
+          title: const Text('Did the transaction succeed?'),
+          content: const Text(
+            'Check the result shown on your network screen, then choose what it said.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, USSDStatus.failed),
+              child: const Text('Failed'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, USSDStatus.success),
+              child: const Text('Successful'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, USSDStatus.failed),
-            child: const Text('It failed'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, USSDStatus.success),
-            child: const Text('It succeeded'),
-          ),
-        ],
       ),
     );
     if (outcome == null) return;
@@ -781,6 +937,62 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         sessionLog: const [],
       ),
     );
+
+    // A required post-PIN decision must not disappear from the screen
+    // unless AgentPro actually persisted it or safely queued it for sync.
+    // _reportResult sets _completedTransaction for server success and for
+    // offline/pending-sync completion. A real server-side rejection leaves
+    // it null so the user remains on the result screen instead of assuming
+    // their Successful/Failed choice was recorded.
+    if (requiredChoice &&
+        _completedTransaction != null &&
+        mounted &&
+        context.canPop()) {
+      context.pop();
+    }
+  }
+
+  bool _requiresPostPinConfirmation(USSDResult result) {
+    if (result.outcome != USSDStatus.pendingConfirmation) {
+      return false;
+    }
+
+    final reason = result.failureReason?.toLowerCase() ?? '';
+
+    return reason.contains(
+          'no final network result was received after pin entry',
+        ) ||
+        reason.contains('could not confirm the outcome after pin entry');
+  }
+
+  bool _shouldReturnAfterMissingResult(USSDResult result) {
+    final reason = result.failureReason?.toLowerCase() ?? '';
+
+    final noResponseBeforePin = result.outcome == USSDStatus.failed &&
+        (reason.contains('no response received from the network') ||
+            reason.contains('no response received from the ussd session'));
+
+    return noResponseBeforePin;
+  }
+
+  Future<void> _returnToTransactionAfterMissingResult(USSDResult result) async {
+    if (!mounted) return;
+
+    _pulseCtrl.stop();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'No USSD response was received. Returning to the transaction page in 10 seconds.',
+        ),
+      ),
+    );
+
+    await Future<void>.delayed(const Duration(seconds: 10));
+
+    if (mounted && context.canPop()) {
+      context.pop();
+    }
   }
 
   Future<void> _reportResult(String transactionId, USSDResult result) async {
@@ -803,11 +1015,13 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         widget.data['request_fields'] as Map,
       );
       await OfflineQueueService.queueTransaction(
+        identity: _offlineIdentity!,
         requestFields: requestFields,
         status: statusString,
         networkReference: result.networkReference,
         failureReason: result.failureReason,
         sessionLog: result.sessionLog,
+        isPersonal: widget.isPersonal,
       );
       if (mounted) {
         setState(() {
@@ -820,6 +1034,10 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             'offline_pending_sync': true,
           };
         });
+      }
+
+      if (_shouldReturnAfterMissingResult(result)) {
+        await _returnToTransactionAfterMissingResult(result);
       }
       return;
     }
@@ -843,6 +1061,10 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
           _completedTransaction = res.data['data'];
         });
       }
+
+      if (_shouldReturnAfterMissingResult(result)) {
+        await _returnToTransactionAfterMissingResult(result);
+      }
     } on DioException catch (e) {
       // e.response == null means the request never reached the server
       // (dropped connectivity, timeout) - genuinely retryable, so queue
@@ -852,11 +1074,13 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       // that as before.
       if (e.response == null) {
         await OfflineQueueService.queuePendingCompletion(
+          identity: _offlineIdentity!,
           transactionId: transactionId,
           status: statusString,
           networkReference: result.networkReference,
           failureReason: result.failureReason,
           sessionLog: result.sessionLog,
+          isPersonal: widget.isPersonal,
         );
         if (mounted) {
           setState(() {
@@ -869,6 +1093,10 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
               'offline_pending_sync': true,
             };
           });
+        }
+
+        if (_shouldReturnAfterMissingResult(result)) {
+          await _returnToTransactionAfterMissingResult(result);
         }
         return;
       }
@@ -1162,43 +1390,6 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
               ),
             ),
           ],
-          if (_showConfirmButton) ...[
-            const SizedBox(height: 18),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: context.isDarkMode
-                    ? const Color(0xFF172943)
-                    : const Color(0xFFEAF3FF),
-                borderRadius: BorderRadius.circular(15),
-                border: Border.all(
-                  color: const Color(0xFF6FA5E6).withValues(alpha: 0.55),
-                ),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    'No final response has returned from the network yet. '
-                    'Confirm only after checking the result shown on your phone.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: context.appSecondaryText,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _confirmManually,
-                      icon: const Icon(Icons.fact_check_outlined),
-                      label: const Text('Confirm Transaction Result'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
           const SizedBox(height: 20),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -1413,9 +1604,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       final rawTransaction = response.data['data'];
 
       if (rawTransaction is! Map) {
-        throw const FormatException(
-          'Invalid transaction initiation response',
-        );
+        throw const FormatException('Invalid transaction initiation response');
       }
 
       _resolvedTransaction = Map<String, dynamic>.from(rawTransaction);
@@ -1762,8 +1951,18 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+
+    final manualDialResumeCompleter = _manualDialResumeCompleter;
+    _manualDialResumeCompleter = null;
+    _manualDialSawBackground = false;
+
+    if (manualDialResumeCompleter != null &&
+        !manualDialResumeCompleter.isCompleted) {
+      manualDialResumeCompleter.complete();
+    }
+
     _pulseCtrl.dispose();
-    _confirmTimer?.cancel();
 
     _engineProgressSubscription?.cancel();
     _accessibilityProgressSubscription?.cancel();

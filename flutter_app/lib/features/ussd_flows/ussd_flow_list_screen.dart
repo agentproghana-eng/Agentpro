@@ -3,8 +3,6 @@ import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
 import 'ussd_flow_editor_screen.dart';
-import '../transactions/personal_transaction_screen.dart'
-    show kPersonalTransactionLabels;
 
 // Lists USSD flows: global (superuser-owned, shared by every company,
 // read-only here) and this company's own flows (editable). Business
@@ -39,8 +37,9 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
       _error = null;
     });
     try {
-      final res = await ApiClient.instance
-          .get(widget.isPersonal ? '/personal-ussd-flows' : '/ussd-flows');
+      final res = await ApiClient.instance.get(
+        widget.isPersonal ? '/personal-ussd-flows' : '/ussd-flows',
+      );
       setState(() {
         _flows = res.data['data'] ?? [];
         _loading = false;
@@ -63,37 +62,64 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
   Future<void> _openFlow(Map<String, dynamic> flow) async {
     final isGlobal = !widget.isPersonal && flow['company_id'] == null;
     if (isGlobal) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
           content: Text(
-              'Global flows are managed centrally and are read-only here.')));
+            'Global flows are managed centrally and are read-only here.',
+          ),
+        ),
+      );
       return;
     }
-    final result = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(
+
+    try {
+      final basePath =
+          widget.isPersonal ? '/personal-ussd-flows' : '/ussd-flows';
+
+      final response = await ApiClient.instance.get('$basePath/${flow['id']}');
+
+      if (!mounted) return;
+
+      final raw = response.data['data'];
+      if (raw is! Map) {
+        throw StateError('Invalid flow response');
+      }
+
+      final fullFlow = Map<String, dynamic>.from(raw);
+
+      final result = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
           builder: (_) => UssdFlowEditorScreen(
-                existingFlow: flow,
-                apiBasePath:
-                    widget.isPersonal ? '/personal-ussd-flows' : '/ussd-flows',
-                transactionTypes: widget.isPersonal
-                    ? kPersonalTransactionLabels.keys.toList()
-                    : null,
-              )),
-    );
-    if (result == true) _load();
+            existingFlow: fullFlow,
+            apiBasePath: basePath,
+          ),
+        ),
+      );
+
+      if (result == true && mounted) {
+        _load();
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to load the complete USSD flow'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    }
   }
 
   Future<void> _createFlow() async {
     final result = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-          builder: (_) => UssdFlowEditorScreen(
-                apiBasePath:
-                    widget.isPersonal ? '/personal-ussd-flows' : '/ussd-flows',
-                transactionTypes: widget.isPersonal
-                    ? kPersonalTransactionLabels.keys.toList()
-                    : null,
-              )),
+        builder: (_) => UssdFlowEditorScreen(
+          apiBasePath:
+              widget.isPersonal ? '/personal-ussd-flows' : '/ussd-flows',
+        ),
+      ),
     );
     if (result == true) _load();
   }
@@ -108,8 +134,11 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
               ? Center(child: Text(_error!))
               : _flows.isEmpty
                   ? const Center(
-                      child: Text('No USSD flows yet.\nTap + to create one.',
-                          textAlign: TextAlign.center))
+                      child: Text(
+                        'No USSD flows yet.\nTap + to create one.',
+                        textAlign: TextAlign.center,
+                      ),
+                    )
                   : RefreshIndicator(
                       onRefresh: _load,
                       child: ListView.builder(
@@ -125,7 +154,9 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
                               title: Text(
                                 '${_providerLabel(flow['provider'] ?? '')} · ${(flow['transaction_type'] ?? '').toString().replaceAll('_', ' ')}',
                                 style: const TextStyle(
-                                    fontWeight: FontWeight.w600, fontSize: 13),
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
                               ),
                               subtitle: Text(
                                 '${flow['dial_code'] ?? ''} · ${isGlobal ? 'Managed centrally' : 'Your company'}',
@@ -133,7 +164,9 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
                               ),
                               trailing: Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 3),
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
                                 decoration: BoxDecoration(
                                   color: isGlobal
                                       ? (context.isDarkMode

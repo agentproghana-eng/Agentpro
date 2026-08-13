@@ -48,8 +48,9 @@ CREATE UNIQUE INDEX idx_ussd_flows_company_unique
 --                         anything not covered by the above)
 --   pin_prompt          - marks this step as where automation stops
 --                         entirely for sensitive PIN entry
---   auto_confirm_once   - after PIN, sends action_value exactly once
---                         (Telecel's non-sensitive "press 1 to confirm")
+--   auto_confirm_once   - after PIN, sends one numeric menu digit exactly once
+--                         (e.g. Telecel's non-sensitive "press 1 to confirm");
+--                         backend/native validation rejects arbitrary text
 CREATE TYPE ussd_flow_action AS ENUM (
   'send_digit',
   'send_customer_phone',

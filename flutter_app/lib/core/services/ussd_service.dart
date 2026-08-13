@@ -12,10 +12,10 @@ import 'package:flutter/services.dart';
 /// has no mechanism for a third-party app to reply to an already-open
 /// interactive USSD session (confirmed against multiple independent
 /// sources; see migration 002_ussd_single_dial_redesign.sql for the
-/// full explanation). The only way to automate a multi-step MoMo menu
-/// without Android's AccessibilityService — which this app deliberately
-/// does not use — is to submit the entire pre-PIN menu path as one
-/// concatenated string in a single dial.
+/// full explanation). Single-dial-compatible flows use that public API.
+/// Interactive provider flows that cannot be represented safely as one
+/// concatenated dial are handled separately below by
+/// [UssdAccessibilityEngine].
 ///
 /// ── CRITICAL SECURITY RULE ──
 /// This engine NEVER requests, captures, logs, or transmits a MoMo PIN.
@@ -67,8 +67,9 @@ class USSDTemplate {
     return USSDTemplate(
       id: map['id'] ?? '',
       ussdStringPattern: map['ussd_string_pattern'] ?? '',
-      pinPromptStrings:
-          List<String>.from(map['pin_prompt_strings'] ?? const ['pin']),
+      pinPromptStrings: List<String>.from(
+        map['pin_prompt_strings'] ?? const ['pin'],
+      ),
       successStrings: List<String>.from(map['success_strings'] ?? const []),
       failureStrings: List<String>.from(map['failure_strings'] ?? const []),
       timeoutSeconds: map['timeout_seconds'] ?? 30,
@@ -159,8 +160,10 @@ class USSDEngine {
         _logStep('dial', resolvedCode);
 
         _emitProgress(USSDStatus.processing, 'Processing transaction...');
-        final firstResponse =
-            await _waitForUSSDResponse(sessionId, template.timeoutSeconds);
+        final firstResponse = await _waitForUSSDResponse(
+          sessionId,
+          template.timeoutSeconds,
+        );
         _logStep('response', null, firstResponse);
 
         final gotNoResponseAtAll =
@@ -170,8 +173,11 @@ class USSDEngine {
           // Nothing engaged with this dial at all — safe to retry, since
           // no money could plausibly have moved. Only retry if attempts remain.
           if (attempt < maxAttempts) {
-            _logStep('retry', null,
-                'No response — retrying (attempt $attempt of $maxAttempts)');
+            _logStep(
+              'retry',
+              null,
+              'No response — retrying (attempt $attempt of $maxAttempts)',
+            );
             continue;
           }
           return USSDResult(
@@ -200,7 +206,7 @@ class USSDEngine {
           // for the agent watching the screen.
           return USSDResult(
             outcome: USSDStatus.failed,
-            failureReason: firstResponse,
+            failureReason: 'The network reported that the transaction failed.',
             sessionLog: _sessionLog,
           );
         }
@@ -215,7 +221,7 @@ class USSDEngine {
         // retry — genuinely unknown outcomes are never retried.
         return USSDResult(
           outcome: USSDStatus.pendingConfirmation,
-          failureReason: 'Unrecognized network response: "$firstResponse". '
+          failureReason: 'The network returned an unrecognized response. '
               'Please verify manually before repeating this transaction.',
           sessionLog: _sessionLog,
         );
@@ -226,7 +232,7 @@ class USSDEngine {
         }
         return USSDResult(
           outcome: USSDStatus.failed,
-          failureReason: e.toString(),
+          failureReason: 'USSD automation could not complete.',
           sessionLog: _sessionLog,
         );
       }
@@ -256,7 +262,10 @@ class USSDEngine {
       'Enter your PIN on the network screen to complete this transaction.',
     );
     _logStep(
-        'pin_prompt_seen', null, '[PIN ENTRY — NOT LOGGED, NOT APP-VISIBLE]');
+      'pin_prompt_seen',
+      null,
+      '[PIN ENTRY — NOT LOGGED, NOT APP-VISIBLE]',
+    );
 
     // Extended wait: give the user real time to enter their PIN.
     // We deliberately do NOT know whether a second callback is
@@ -293,17 +302,17 @@ class USSDEngine {
     if (_matches(secondResponse, template.failureStrings)) {
       return USSDResult(
         outcome: USSDStatus.failed,
-        failureReason: secondResponse,
+        failureReason: 'The network reported that the transaction failed.',
         sessionLog: _sessionLog,
       );
     }
 
     // Got a second response, but it matches neither known success
-    // nor failure pattern. Still don't guess — surface it for
-    // manual verification along with the raw text for support.
+    // nor failure pattern. Still don't guess — require manual
+    // verification without exposing or persisting the raw provider text.
     return USSDResult(
       outcome: USSDStatus.pendingConfirmation,
-      failureReason: 'Unrecognized network response: "$secondResponse". '
+      failureReason: 'The network returned an unrecognized response. '
           'Please verify manually before repeating this transaction.',
       sessionLog: _sessionLog,
     );
@@ -311,7 +320,7 @@ class USSDEngine {
 
   // Longer timeout specifically for the post-PIN wait, since this
   // includes real human data-entry time, not just network latency.
-  static const _pinEntryTimeoutSeconds = 60;
+  static const _pinEntryTimeoutSeconds = 20;
 
   // ── Native method calls ──────────────────────────────────────
 
@@ -323,7 +332,9 @@ class USSDEngine {
   }
 
   Future<String> _waitForUSSDResponse(
-      String sessionId, int timeoutSeconds) async {
+    String sessionId,
+    int timeoutSeconds,
+  ) async {
     final result = await _channel.invokeMethod('waitForResponse', {
       'session_id': sessionId,
       'timeout_seconds': timeoutSeconds,
@@ -379,11 +390,13 @@ class USSDEngine {
     }
   }
 
+  // Diagnostic logs intentionally contain metadata only. Never persist
+  // the resolved USSD dial string or raw network response here: either
+  // can contain phone numbers, amounts, references, account details or
+  // other transaction-specific customer data.
   void _logStep(String type, String? dialedCode, [String? response]) {
     _sessionLog.add({
       'type': type,
-      if (dialedCode != null) 'dialed': dialedCode,
-      if (response != null) 'response': response,
       'timestamp': DateTime.now().toIso8601String(),
     });
   }
@@ -393,24 +406,28 @@ class USSDEngine {
   }
 }
 
-/// USSD Accessibility Engine - MTN Cash In ONLY
+/// Interactive USSD Accessibility Engine
 ///
-/// Handles the one provider/type combo where the single-dial approach
-/// above genuinely does not work (confirmed via live testing - even a
-/// 2-step concatenated dial closes the session immediately on MTN Cash
-/// In). Delegates to UssdAccessibilityService via the native platform
+/// Handles provider flows that require step-by-step interaction with the
+/// system USSD dialog rather than a single concatenated dial. Proven legacy
+/// MTN/Telecel paths coexist with the generic data-driven Flow Builder
+/// interpreter. Delegates to UssdAccessibilityService via the native platform
 /// channel, which reads and responds to the real system USSD dialog
 /// screen by screen. This class never touches the PIN - once the
 /// service reports the PIN prompt was reached, the agent completes it
 /// on the same visible system dialog themselves.
 class UssdAccessibilityEngine {
-  static const _channel =
-      MethodChannel('com.agentpro.ghana/ussd_accessibility');
+  static const _channel = MethodChannel(
+    'com.agentpro.ghana/ussd_accessibility',
+  );
 
   final _progressController = StreamController<USSDProgress>.broadcast();
   Stream<USSDProgress> get progressStream => _progressController.stream;
 
   Completer<USSDResult>? _resultCompleter;
+  Timer? _prePinTimeout;
+  Timer? _postPinTimeout;
+  bool _pinPromptReached = false;
 
   UssdAccessibilityEngine() {
     _channel.setMethodCallHandler(_handleNativeCall);
@@ -419,23 +436,61 @@ class UssdAccessibilityEngine {
   Future<dynamic> _handleNativeCall(MethodCall call) async {
     switch (call.method) {
       case 'onPinPromptReached':
-        _progressController.add(const USSDProgress(
-          status: USSDStatus.awaitingPIN,
-          message:
-              'Enter your Mobile Money PIN on the dialer screen to continue.',
-        ));
+        _pinPromptReached = true;
+        _prePinTimeout?.cancel();
+        _prePinTimeout = null;
+
+        _postPinTimeout?.cancel();
+        _postPinTimeout = Timer(const Duration(seconds: 20), () async {
+          final completer = _resultCompleter;
+
+          if (completer == null || completer.isCompleted) {
+            return;
+          }
+
+          await cancelAutomation();
+
+          if (!completer.isCompleted) {
+            completer.complete(
+              const USSDResult(
+                outcome: USSDStatus.pendingConfirmation,
+                failureReason:
+                    'No final network result was received after PIN entry. '
+                    'Please verify the transaction before trying again.',
+                sessionLog: [],
+              ),
+            );
+          }
+        });
+
+        _progressController.add(
+          const USSDProgress(
+            status: USSDStatus.awaitingPIN,
+            message:
+                'Enter your Mobile Money PIN on the dialer screen to continue.',
+          ),
+        );
         break;
       case 'onResult':
+        _prePinTimeout?.cancel();
+        _prePinTimeout = null;
+        _postPinTimeout?.cancel();
+        _postPinTimeout = null;
         final args = call.arguments as Map;
         final outcome = args['outcome'] as String? ?? 'failure';
         final success = outcome == 'success';
-        final message = args['message'] as String? ?? '';
-        _resultCompleter?.complete(USSDResult(
-          outcome: success ? USSDStatus.success : USSDStatus.failed,
-          failureReason:
-              success ? null : 'Transaction did not complete: $message',
-          sessionLog: const [],
-        ));
+        final completer = _resultCompleter;
+        if (completer != null && !completer.isCompleted) {
+          completer.complete(
+            USSDResult(
+              outcome: success ? USSDStatus.success : USSDStatus.failed,
+              failureReason: success
+                  ? null
+                  : 'The network reported that the transaction failed.',
+              sessionLog: const [],
+            ),
+          );
+        }
         break;
     }
   }
@@ -449,32 +504,96 @@ class UssdAccessibilityEngine {
     await _channel.invokeMethod('openAccessibilitySettings');
   }
 
-  /// No client-side timeout here deliberately - the agent may take any
-  /// amount of time to type their PIN on the native dialog. The native
-  /// side (UssdAccessibilityService) is the sole source of truth for
-  /// when this session actually ends.
-  Future<USSDResult> execute(
-      {required String customerPhone,
-      required String amount,
-      required String transactionType,
-      required String provider,
-      String? operatorId,
-      String? reference,
-      String? merchantId,
-      int? simSlot,
-      String? dialCode,
-      List<Map<String, dynamic>>? steps,
-      List<String>? successMarkers,
-      List<String>? failureMarkers,
-      Map<String, String>? selections}) async {
+  /// Opens a provider's real USSD menu without starting the Accessibility
+  /// automation service. Used for Free Personal transactions, where AgentPro
+  /// may select the correct SIM but must not navigate the menu automatically.
+  static Future<void> dialManual({
+    required String dialCode,
+    int? simSlot,
+  }) async {
+    final normalizedDialCode = dialCode.trim();
+    if (normalizedDialCode.isEmpty) {
+      throw ArgumentError.value(dialCode, 'dialCode', 'must not be empty');
+    }
+
+    await _channel.invokeMethod('dialManual', {
+      'dial_code': normalizedDialCode,
+      if (simSlot != null) 'sim_slot': simSlot,
+    });
+  }
+
+  Future<void> cancelAutomation() async {
+    _prePinTimeout?.cancel();
+    _prePinTimeout = null;
+    _postPinTimeout?.cancel();
+    _postPinTimeout = null;
+
+    try {
+      await _channel.invokeMethod('cancelAutomation');
+    } catch (_) {
+      // Best-effort cleanup. The Flutter result still completes so the
+      // processing screen never remains stuck indefinitely.
+    }
+  }
+
+  /// Before the PIN prompt, a USSD session that produces no result must
+  /// not leave the Processing screen running forever. Once the PIN prompt
+  /// is reached, however, this timeout is cancelled because money may
+  /// already move after manual authorization and the result is no longer
+  /// safe to classify as a definite failure automatically.
+  Future<USSDResult> execute({
+    String? customerPhone,
+    String? amount,
+    required String transactionType,
+    required String provider,
+    String? operatorId,
+    String? reference,
+    String? merchantId,
+    int? simSlot,
+    String? dialCode,
+    List<Map<String, dynamic>>? steps,
+    List<String>? successMarkers,
+    List<String>? failureMarkers,
+    Map<String, String>? selections,
+  }) async {
+    _prePinTimeout?.cancel();
+    _postPinTimeout?.cancel();
+    _pinPromptReached = false;
     _resultCompleter = Completer<USSDResult>();
-    _progressController.add(const USSDProgress(
-        status: USSDStatus.dialing, message: 'Dialing network...'));
+
+    _progressController.add(
+      const USSDProgress(
+        status: USSDStatus.dialing,
+        message: 'Dialing network...',
+      ),
+    );
+
+    _prePinTimeout = Timer(const Duration(seconds: 45), () async {
+      final completer = _resultCompleter;
+
+      if (_pinPromptReached || completer == null || completer.isCompleted) {
+        return;
+      }
+
+      await cancelAutomation();
+
+      if (!completer.isCompleted) {
+        completer.complete(
+          const USSDResult(
+            outcome: USSDStatus.failed,
+            failureReason:
+                'No response received from the USSD session. Please check your network and try again.',
+            sessionLog: [],
+          ),
+        );
+      }
+    });
 
     try {
       await _channel.invokeMethod('startAutomation', {
-        'customer_phone': customerPhone,
-        'amount': amount,
+        if (customerPhone != null && customerPhone.isNotEmpty)
+          'customer_phone': customerPhone,
+        if (amount != null && amount.isNotEmpty) 'amount': amount,
         'transaction_type': transactionType,
         'provider': provider,
         if (operatorId != null) 'operator_id': operatorId,
@@ -488,10 +607,16 @@ class UssdAccessibilityEngine {
         if (selections != null) 'selections': selections,
       });
     } catch (e) {
-      return USSDResult(
+      _prePinTimeout?.cancel();
+      _prePinTimeout = null;
+      _postPinTimeout?.cancel();
+      _postPinTimeout = null;
+      await cancelAutomation();
+
+      return const USSDResult(
         outcome: USSDStatus.failed,
-        failureReason: 'Failed to start automation: $e',
-        sessionLog: const [],
+        failureReason: 'USSD automation could not start.',
+        sessionLog: [],
       );
     }
 
@@ -499,6 +624,10 @@ class UssdAccessibilityEngine {
   }
 
   void dispose() {
+    _prePinTimeout?.cancel();
+    _prePinTimeout = null;
+    _postPinTimeout?.cancel();
+    _postPinTimeout = null;
     if (!_progressController.isClosed) _progressController.close();
   }
 }

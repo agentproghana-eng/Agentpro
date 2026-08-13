@@ -207,7 +207,17 @@ exports.initiateTransaction = async (req, res) => {
                 (
                   SELECT json_build_object(
                     'id', ut.id,
-                    'ussd_string_pattern', ut.ussd_string_pattern,
+                    'ussd_string_pattern', COALESCE(
+                      (
+                        SELECT auo.ussd_string_pattern
+                        FROM agent_ussd_overrides auo
+                        WHERE auo.agent_id = transactions.agent_id
+                          AND auo.provider = transactions.provider
+                          AND auo.transaction_type = transactions.transaction_type
+                        LIMIT 1
+                      ),
+                      ut.ussd_string_pattern
+                    ),
                     'pin_prompt_strings', ut.pin_prompt_strings,
                     'success_strings', ut.success_strings,
                     'failure_strings', ut.failure_strings,
@@ -414,12 +424,19 @@ exports.initiateTransaction = async (req, res) => {
       }),
 
       query(
-        `SELECT *
-         FROM ussd_templates
-         WHERE provider = $1
-           AND transaction_type = $2
-           AND is_active = TRUE`,
-        [provider, transaction_type]
+        `SELECT
+           ut.*,
+           COALESCE(auo.ussd_string_pattern, ut.ussd_string_pattern)
+             AS ussd_string_pattern
+         FROM ussd_templates ut
+         LEFT JOIN agent_ussd_overrides auo
+           ON auo.agent_id = $3
+          AND auo.provider = ut.provider
+          AND auo.transaction_type = ut.transaction_type
+         WHERE ut.provider = $1
+           AND ut.transaction_type = $2
+           AND ut.is_active = TRUE`,
+        [provider, transaction_type, agentId]
       ),
 
       query(
@@ -428,7 +445,11 @@ exports.initiateTransaction = async (req, res) => {
          WHERE provider = $1
            AND transaction_type = $2
            AND is_active = TRUE
-           AND (company_id = $3 OR company_id IS NULL)
+           AND (
+             (company_id = $3 AND owner_user_id IS NULL)
+             OR
+             (company_id IS NULL AND owner_user_id IS NULL)
+           )
          LIMIT 1`,
         [provider, transaction_type, companyId]
       )
@@ -531,7 +552,17 @@ exports.initiateTransaction = async (req, res) => {
                   (
                     SELECT json_build_object(
                       'id', ut.id,
-                      'ussd_string_pattern', ut.ussd_string_pattern,
+                      'ussd_string_pattern', COALESCE(
+                      (
+                        SELECT auo.ussd_string_pattern
+                        FROM agent_ussd_overrides auo
+                        WHERE auo.agent_id = transactions.agent_id
+                          AND auo.provider = transactions.provider
+                          AND auo.transaction_type = transactions.transaction_type
+                        LIMIT 1
+                      ),
+                      ut.ussd_string_pattern
+                    ),
                       'pin_prompt_strings', ut.pin_prompt_strings,
                       'success_strings', ut.success_strings,
                       'failure_strings', ut.failure_strings,
@@ -669,6 +700,7 @@ exports.completeTransaction = async (req, res) => {
   try {
     // CRITICAL: Validate no PIN data in session log before persisting it.
     const sanitizedLog = sanitizeUSSDLog(ussd_session_log);
+    const sanitizedFailureReason = sanitizeFailureReason(failure_reason, status);
 
     // status is validated by the route as one of: success, failed,
     // pending_confirmation. Do NOT collapse pending_confirmation into
@@ -738,7 +770,7 @@ exports.completeTransaction = async (req, res) => {
         [
           finalStatus,
           network_reference,
-          failure_reason,
+          sanitizedFailureReason,
           JSON.stringify(sanitizedLog),
           transaction_id
         ]
@@ -971,7 +1003,7 @@ exports.completeTransaction = async (req, res) => {
           ...tx,
           status: finalStatus,
           network_reference,
-          failure_reason
+          failure_reason: sanitizedFailureReason
         }
       });
 
@@ -981,7 +1013,11 @@ exports.completeTransaction = async (req, res) => {
         action: `TRANSACTION_${finalStatus.toUpperCase()}`,
         entityType: 'transaction',
         entityId: transaction_id,
-        newValues: { status: finalStatus, network_reference, failure_reason },
+        newValues: {
+          status: finalStatus,
+          network_reference,
+          failure_reason: sanitizedFailureReason
+        },
         ipAddress: req.ip,
         requestId: req.requestId
       });
@@ -1226,40 +1262,129 @@ exports.listTransactions = async (req, res) => {
 // ─── Helper: Calculate and Record Commission ──────────────────
 
 
-// ─── Helper: Sanitize USSD Log (remove any PIN-related data) ─
+// ─── Helper: Sanitize transaction failure reasons ─────────────
 //
-// The current engine (see ussd_service.dart) hardcodes a safe
-// placeholder string for its 'pin_prompt_seen' log entries and never
-// has a code path that could substitute a real PIN value there — the
-// app architecturally never receives the PIN from the OS/network. This
-// function is a defense-in-depth backstop, not the primary control: if
-// a future change to the Flutter engine ever accidentally logged
-// something PIN-like, this is what would catch it before it reaches
-// storage. It must be kept in sync with whatever log entry shape the
-// engine currently produces, or that backstop silently stops working
-// while still claiming to be active.
+// failure_reason comes from a mobile client, so it must never be trusted as
+// arbitrary text. Older builds could include raw provider responses or
+// exception strings containing phone numbers, balances, account details,
+// dial strings, or device internals.
+//
+// Keep only stable diagnostic categories generated by AgentPro itself.
+// Anything unknown is reduced to a generic status-appropriate message rather
+// than copied into transactions, notifications, or audit logs.
+function sanitizeFailureReason(reason, status) {
+  if (status === 'success') return null;
+
+  const raw = typeof reason === 'string' ? reason.trim() : '';
+  const normalized = raw.toLowerCase();
+
+  if (!raw) {
+    return status === 'pending_confirmation'
+      ? 'The transaction outcome could not be confirmed.'
+      : 'The transaction failed.';
+  }
+
+  if (
+    normalized.includes('no final network result was received after pin entry') ||
+    normalized.includes('could not confirm the outcome after pin entry')
+  ) {
+    return 'The transaction outcome could not be confirmed after PIN entry.';
+  }
+
+  if (normalized.includes('network returned an unrecognized response')) {
+    return 'The network returned an unrecognized transaction result.';
+  }
+
+  if (
+    normalized.includes('no response received from the network') ||
+    normalized.includes('no response received from the ussd session')
+  ) {
+    return 'No response was received from the network.';
+  }
+
+  if (normalized.includes('network reported that the transaction failed')) {
+    return 'The network reported that the transaction failed.';
+  }
+
+  if (normalized.includes('manually confirmed as failed')) {
+    return 'Manually confirmed as failed by the user.';
+  }
+
+  if (normalized.includes('ussd template is misconfigured')) {
+    return 'USSD automation is not configured correctly for this transaction.';
+  }
+
+  if (
+    normalized.includes('no ussd automation is configured') ||
+    normalized.includes('no ussd flow configured')
+  ) {
+    return 'No USSD automation is configured for this transaction.';
+  }
+
+  if (
+    normalized.includes('accessibility permission is required') ||
+    normalized.includes('accessibility service is not enabled')
+  ) {
+    return 'Accessibility permission is required for USSD automation.';
+  }
+
+  if (
+    normalized.includes('sim') &&
+    (
+      normalized.includes('required') ||
+      normalized.includes('unavailable') ||
+      normalized.includes('not found') ||
+      normalized.includes('could not')
+    )
+  ) {
+    return 'The required SIM could not be prepared for this transaction.';
+  }
+
+  if (status === 'pending_confirmation') {
+    return 'The transaction outcome could not be confirmed.';
+  }
+
+  return 'The transaction failed due to an automation error.';
+}
+
+// ─── Helper: Sanitize USSD Log ────────────────────────────────
+//
+// Persist diagnostic metadata only. Never persist resolved USSD strings,
+// raw provider responses, transaction inputs, or client-supplied notes.
+// PIN markers are replaced with fixed server-owned placeholders.
+//
 function sanitizeUSSDLog(log) {
   if (!log) return null;
-  if (!Array.isArray(log)) return log;
+  if (!Array.isArray(log)) return null;
 
   return log.map(step => {
-    const sanitized = { ...step };
-
-    // Current format (single-dial engine, see migration 002):
-    // { type: 'pin_prompt_seen', response: '[placeholder]', ... }
-    if (step.type === 'pin_prompt_seen') {
-      delete sanitized.response;
-      delete sanitized.dialed;
-      sanitized.response = '[PIN ENTRY — NOT LOGGED, NOT APP-VISIBLE]';
-      return sanitized;
+    if (!step || typeof step !== 'object' || Array.isArray(step)) {
+      return { type: 'invalid_log_entry' };
     }
 
-    // Legacy format (pre-migration-002 app versions, kept during any
-    // phased rollout where old and new clients briefly coexist):
-    // { is_pin_step: true, type: 'pin', input: ... }
-    if (step.is_pin_step || step.type === 'pin') {
-      delete sanitized.input;
-      delete sanitized.value;
+    // Keep only non-sensitive diagnostic metadata. Older mobile clients
+    // could send:
+    //   dialed   - fully resolved USSD strings containing customer data
+    //   response - raw provider text containing balances/account details
+    //   input/value/note - legacy step payloads
+    //
+    // Those fields are deliberately not copied into persisted storage.
+    const sanitized = {};
+
+    if (typeof step.type === 'string' && step.type.trim()) {
+      sanitized.type = step.type.trim();
+    } else {
+      sanitized.type = 'unknown';
+    }
+
+    if (typeof step.timestamp === 'string' && step.timestamp.trim()) {
+      sanitized.timestamp = step.timestamp;
+    }
+
+    // Preserve only a fixed PIN marker, never data supplied by the client.
+    if (step.type === 'pin_prompt_seen') {
+      sanitized.response = '[PIN ENTRY — NOT LOGGED, NOT APP-VISIBLE]';
+    } else if (step.is_pin_step || step.type === 'pin') {
       sanitized.note = '[PIN ENTRY - NOT LOGGED]';
     }
 
@@ -1271,3 +1396,4 @@ function sanitizeUSSDLog(log) {
 // this ensures the test always verifies the real implementation, not a
 // hand-copied duplicate that could silently drift out of sync with it.
 module.exports.sanitizeUSSDLog = sanitizeUSSDLog;
+module.exports.sanitizeFailureReason = sanitizeFailureReason;

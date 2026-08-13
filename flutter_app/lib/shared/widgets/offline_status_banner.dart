@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../core/auth/auth_bloc.dart';
 import '../../core/services/offline_queue_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_colors.dart';
@@ -25,6 +27,13 @@ class _OfflineStatusBannerState extends State<OfflineStatusBanner>
   int _pendingCount = 0;
 
   bool get _visible => _offline || _pendingCount > 0;
+
+  OfflineQueueIdentity? get _identity {
+    final state = context.read<AuthBloc>().state;
+    return state is AuthAuthenticated
+        ? OfflineQueueService.identityFromUser(state.user)
+        : null;
+  }
 
   @override
   void initState() {
@@ -87,7 +96,9 @@ class _OfflineStatusBannerState extends State<OfflineStatusBanner>
 
   void _refreshQueueCount({bool autoSyncIfIncreased = false}) {
     final previousCount = _pendingCount;
-    final count = OfflineQueueService.pendingCount;
+    final identity = _identity;
+    final count =
+        identity == null ? 0 : OfflineQueueService.pendingCount(identity);
 
     if (!mounted) return;
 
@@ -127,10 +138,13 @@ class _OfflineStatusBannerState extends State<OfflineStatusBanner>
   Future<void> _syncNow({bool automatic = false}) async {
     if (_offline || _syncing || _pendingCount == 0) return;
 
+    final identity = _identity;
+    if (identity == null) return;
+
     setState(() => _syncing = true);
 
     try {
-      final result = await OfflineQueueService.syncNow();
+      final result = await OfflineQueueService.syncNow(identity);
       final succeeded = result['succeeded'] ?? 0;
       final failed = result['failed'] ?? 0;
 

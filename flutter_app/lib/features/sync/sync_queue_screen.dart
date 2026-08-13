@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../core/auth/auth_bloc.dart';
 import '../../core/services/offline_queue_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
@@ -14,18 +17,35 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
   bool _syncing = false;
   String? _lastResultMessage;
 
-  int get _pendingCount => OfflineQueueService.pendingCount;
+  OfflineQueueIdentity? get _identity {
+    final state = context.read<AuthBloc>().state;
+    return state is AuthAuthenticated
+        ? OfflineQueueService.identityFromUser(state.user)
+        : null;
+  }
 
-  List<Map<String, dynamic>> get _pendingTransactions =>
-      OfflineQueueService.getPendingTransactions();
+  int get _pendingCount {
+    final identity = _identity;
+    return identity == null ? 0 : OfflineQueueService.pendingCount(identity);
+  }
+
+  List<Map<String, dynamic>> get _pendingTransactions {
+    final identity = _identity;
+    return identity == null
+        ? const <Map<String, dynamic>>[]
+        : OfflineQueueService.getPendingTransactions(identity);
+  }
 
   Future<void> _handleSyncNow() async {
+    final identity = _identity;
+    if (identity == null) return;
+
     setState(() {
       _syncing = true;
       _lastResultMessage = null;
     });
 
-    final result = await OfflineQueueService.syncNow();
+    final result = await OfflineQueueService.syncNow(identity);
     final succeeded = result['succeeded'] ?? 0;
     final failed = result['failed'] ?? 0;
 

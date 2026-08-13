@@ -1,37 +1,15 @@
 const { query, withTransaction } = require('../config/database');
 const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
+const { validateFlowSteps } = require('../utils/ussdFlowValidation');
+const {
+  getFlowBuilderCapabilities,
+} = require('../utils/ussdFlowCapabilities');
 
 // Mirrors the ussd_flow_action enum - kept in sync manually since
 // node-postgres doesn't validate enum membership until the query
 // actually runs; validating here gives a clear 422 instead of a
 // confusing database error.
-const VALID_ACTIONS = [
-  'send_digit', 'send_customer_phone', 'send_amount',
-  'send_operator_id', 'send_literal', 'pin_prompt', 'auto_confirm_once',
-];
-
-function validateSteps(steps) {
-  if (!Array.isArray(steps) || steps.length === 0) {
-    return 'At least one step is required';
-  }
-  for (const step of steps) {
-    if (!Array.isArray(step.match_all) || step.match_all.length === 0) {
-      return 'Each step needs at least one match_all condition';
-    }
-    if (!VALID_ACTIONS.includes(step.action)) {
-      return `Invalid action: ${step.action}`;
-    }
-    if (['send_digit', 'send_literal', 'auto_confirm_once'].includes(step.action) && !step.action_value) {
-      return `Step with action "${step.action}" requires action_value`;
-    }
-  }
-  return null;
-}
-
-// Exported so the Personal USSD Flow controller can reuse the same
-// validation rules rather than duplicate them.
-exports.validateSteps = validateSteps;
 
 // ── List flows ────────────────────────────────────────────────
 // Superuser sees every flow. Business owners see every global flow
@@ -44,7 +22,19 @@ exports.listFlows = async (req, res) => {
     let idx = 1;
 
     if (req.user.role !== 'superuser') {
-      conditions.push(`(f.company_id IS NULL OR f.company_id = $${idx++})`);
+      // Business owners may see only:
+      // - true Global flows: no company and no personal owner
+      // - their own Company flows: matching company and no personal owner
+      //
+      // Personal flows also have company_id NULL, so company_id alone
+      // must never be used as the definition of "Global".
+      conditions.push(
+        `(
+          (f.company_id IS NULL AND f.owner_user_id IS NULL)
+          OR
+          (f.company_id = $${idx++} AND f.owner_user_id IS NULL)
+        )`
+      );
       params.push(req.user.company_id);
     }
 
@@ -78,8 +68,25 @@ exports.getFlow = async (req, res) => {
     }
     const flow = flowResult.rows[0];
 
-    if (req.user.role !== 'superuser' && flow.company_id !== null && flow.company_id !== req.user.company_id) {
-      return res.status(403).json({ success: false, message: 'Access denied' });
+    if (req.user.role !== 'superuser') {
+      // Personal-owned flows are never part of Business Flow Builder,
+      // even though Personal rows also have company_id NULL.
+      if (flow.owner_user_id !== null) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied',
+        });
+      }
+
+      if (
+        flow.company_id !== null &&
+        flow.company_id !== req.user.company_id
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied',
+        });
+      }
     }
 
     const stepsResult = await query(
@@ -94,6 +101,22 @@ exports.getFlow = async (req, res) => {
   }
 };
 
+// ── Flow Builder capabilities ────────────────────────────────────
+// Providers come directly from PostgreSQL's provider enum. Transaction
+// types come from the mode-aware ussd_flow_capabilities registry.
+exports.getCapabilities = async (req, res) => {
+  try {
+    const data = await getFlowBuilderCapabilities('business');
+    res.json({ success: true, data });
+  } catch (error) {
+    logger.error('Get Business USSD flow capabilities error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch USSD flow capabilities',
+    });
+  }
+};
+
 // ── Create a flow + its steps ────────────────────────────────────
 // Superuser creates GLOBAL flows only via this endpoint (company_id is
 // always null, regardless of what's in the request body). Business
@@ -102,13 +125,22 @@ exports.getFlow = async (req, res) => {
 // owner can never create a flow for another company no matter what
 // they send.
 exports.createFlow = async (req, res) => {
-  const { provider, transaction_type, dial_code, success_markers, failure_markers, steps } = req.body;
+  const {
+    provider,
+    transaction_type,
+    dial_code,
+    success_markers,
+    failure_markers,
+    bundle_category,
+    recipient_mode,
+    steps,
+  } = req.body;
 
   if (!provider || !transaction_type || !dial_code) {
     return res.status(422).json({ success: false, message: 'provider, transaction_type, and dial_code are required' });
   }
 
-  const stepError = validateSteps(steps);
+  const stepError = validateFlowSteps(steps);
   if (stepError) {
     return res.status(422).json({ success: false, message: stepError });
   }
@@ -118,9 +150,30 @@ exports.createFlow = async (req, res) => {
   try {
     const flow = await withTransaction(async (client) => {
       const flowResult = await client.query(
-        `INSERT INTO ussd_flows (company_id, provider, transaction_type, dial_code, success_markers, failure_markers, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-        [companyId, provider, transaction_type, dial_code, success_markers || [], failure_markers || [], req.user.id]
+        `INSERT INTO ussd_flows (
+           company_id,
+           provider,
+           transaction_type,
+           dial_code,
+           success_markers,
+           failure_markers,
+           bundle_category,
+           recipient_mode,
+           created_by
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         RETURNING *`,
+        [
+          companyId,
+          provider,
+          transaction_type,
+          dial_code,
+          success_markers || [],
+          failure_markers || [],
+          bundle_category || null,
+          recipient_mode || null,
+          req.user.id,
+        ]
       );
       const newFlow = flowResult.rows[0];
 
@@ -142,7 +195,14 @@ exports.createFlow = async (req, res) => {
       action: 'USSD_FLOW_CREATED',
       entityType: 'ussd_flow',
       entityId: flow.id,
-      newValues: { provider, transaction_type, company_id: companyId, step_count: steps.length },
+      newValues: {
+        provider,
+        transaction_type,
+        bundle_category: bundle_category || null,
+        recipient_mode: recipient_mode || null,
+        company_id: companyId,
+        step_count: steps.length,
+      },
       ipAddress: req.ip,
       requestId: req.requestId,
     });
@@ -150,7 +210,18 @@ exports.createFlow = async (req, res) => {
     res.status(201).json({ success: true, data: flow });
   } catch (error) {
     if (error.code === '23505') {
-      return res.status(409).json({ success: false, message: 'An active flow already exists for this provider and transaction type' });
+      return res.status(409).json({
+        success: false,
+        message:
+          'An active flow already exists for this provider, transaction type, and flow variant.',
+      });
+    }
+    if (error.code === '22P02') {
+      return res.status(422).json({
+        success: false,
+        code: 'USSD_SCHEMA_VALUE_NOT_REGISTERED',
+        message: 'Provider or transaction type is not registered in the database schema yet. Add the new value through a database migration before creating this USSD configuration.',
+      });
     }
     logger.error('Create USSD flow error:', error);
     res.status(500).json({ success: false, message: 'Failed to create USSD flow' });
@@ -163,7 +234,20 @@ exports.createFlow = async (req, res) => {
 // the same rule enforced on create. Superuser can edit any flow.
 exports.updateFlow = async (req, res) => {
   const { id } = req.params;
-  const { dial_code, success_markers, failure_markers, is_active, steps } = req.body;
+  const {
+    dial_code,
+    success_markers,
+    failure_markers,
+    bundle_category,
+    recipient_mode,
+    is_active,
+    steps,
+  } = req.body;
+
+  const hasBundleCategory =
+      Object.prototype.hasOwnProperty.call(req.body, 'bundle_category');
+  const hasRecipientMode =
+      Object.prototype.hasOwnProperty.call(req.body, 'recipient_mode');
 
   try {
     const existing = await query('SELECT * FROM ussd_flows WHERE id = $1', [id]);
@@ -182,7 +266,7 @@ exports.updateFlow = async (req, res) => {
     }
 
     if (steps !== undefined) {
-      const stepError = validateSteps(steps);
+      const stepError = validateFlowSteps(steps);
       if (stepError) {
         return res.status(422).json({ success: false, message: stepError });
       }
@@ -194,10 +278,23 @@ exports.updateFlow = async (req, res) => {
            dial_code = COALESCE($1, dial_code),
            success_markers = COALESCE($2, success_markers),
            failure_markers = COALESCE($3, failure_markers),
-           is_active = COALESCE($4, is_active),
+           bundle_category = CASE WHEN $4 THEN $5 ELSE bundle_category END,
+           recipient_mode = CASE WHEN $6 THEN $7 ELSE recipient_mode END,
+           is_active = COALESCE($8, is_active),
            updated_at = NOW()
-         WHERE id = $5 RETURNING *`,
-        [dial_code, success_markers, failure_markers, is_active, id]
+         WHERE id = $9
+         RETURNING *`,
+        [
+          dial_code,
+          success_markers,
+          failure_markers,
+          hasBundleCategory,
+          bundle_category || null,
+          hasRecipientMode,
+          recipient_mode || null,
+          is_active,
+          id,
+        ]
       );
 
       if (steps !== undefined) {
@@ -221,13 +318,31 @@ exports.updateFlow = async (req, res) => {
       action: 'USSD_FLOW_UPDATED',
       entityType: 'ussd_flow',
       entityId: id,
-      newValues: { dial_code, is_active, steps_replaced: steps !== undefined },
+      newValues: {
+        dial_code,
+        ...(hasBundleCategory
+          ? { bundle_category: bundle_category || null }
+          : {}),
+        ...(hasRecipientMode
+          ? { recipient_mode: recipient_mode || null }
+          : {}),
+        is_active,
+        steps_replaced: steps !== undefined,
+      },
       ipAddress: req.ip,
       requestId: req.requestId,
     });
 
     res.json({ success: true, data: updated });
   } catch (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({
+        success: false,
+        message:
+          'An active flow already exists for this provider, transaction type, and flow variant.',
+      });
+    }
+
     logger.error('Update USSD flow error:', error);
     res.status(500).json({ success: false, message: 'Failed to update USSD flow' });
   }
@@ -283,70 +398,102 @@ exports.deleteFlow = async (req, res) => {
 // otherwise 404 (nothing configured, caller should fall back to
 // whatever non-automated path it already has).
 exports.resolveFlow = async (req, res) => {
-  const { provider, transaction_type, bundle_category, recipient_mode } = req.query;
+  const {
+    provider,
+    transaction_type,
+    bundle_category,
+    recipient_mode,
+  } = req.query;
 
   if (!provider || !transaction_type) {
-    return res.status(422).json({ success: false, message: 'provider and transaction_type are required' });
+    return res.status(422).json({
+      success: false,
+      message: 'provider and transaction_type are required',
+    });
   }
 
   try {
     let flow = null;
 
-    // Personal-owned flow takes priority - a Personal subscriber's own
-    // custom flow (owner_user_id) overrides both the company default
-    // and the global default for that individual.
-    const personalResult = await query(
-      `SELECT * FROM ussd_flows
-       WHERE owner_user_id = $1 AND provider = $2 AND transaction_type = $3 AND is_active = true
-       AND COALESCE(bundle_category,'') = COALESCE($4,'')
-       AND COALESCE(recipient_mode,'') = COALESCE($5,'')`,
-      [req.user.id, provider, transaction_type, bundle_category || null, recipient_mode || null]
-    );
-    if (personalResult.rows.length > 0) {
-      flow = personalResult.rows[0];
-    }
-
-    if (!flow && req.user.company_id) {
+    if (req.user.company_id) {
+      // Business mode resolves only the caller's Company override first.
+      // owner_user_id IS NULL is explicit so Personal-owned or malformed
+      // mixed-ownership rows can never cross into Business execution.
       const companyResult = await query(
         `SELECT * FROM ussd_flows
-         WHERE company_id = $1 AND provider = $2 AND transaction_type = $3 AND is_active = true
-         AND COALESCE(bundle_category,'') = COALESCE($4,'')
-         AND COALESCE(recipient_mode,'') = COALESCE($5,'')`,
-        [req.user.company_id, provider, transaction_type, bundle_category || null, recipient_mode || null]
+         WHERE company_id = $1
+           AND owner_user_id IS NULL
+           AND provider = $2
+           AND transaction_type = $3
+           AND is_active = TRUE
+           AND COALESCE(bundle_category,'') = COALESCE($4,'')
+           AND COALESCE(recipient_mode,'') = COALESCE($5,'')`,
+        [
+          req.user.company_id,
+          provider,
+          transaction_type,
+          bundle_category || null,
+          recipient_mode || null,
+        ]
       );
+
       if (companyResult.rows.length > 0) {
         flow = companyResult.rows[0];
       }
     }
 
     if (!flow) {
-      // owner_user_id IS NULL is required too, not just company_id -
-      // a personal-owned flow also has company_id NULL, and without
-      // this it could be mistaken for someone else's global default.
+      // Global means BOTH ownership columns are NULL.
       const globalResult = await query(
         `SELECT * FROM ussd_flows
-         WHERE company_id IS NULL AND owner_user_id IS NULL AND provider = $1 AND transaction_type = $2 AND is_active = true
-         AND COALESCE(bundle_category,'') = COALESCE($3,'')
-         AND COALESCE(recipient_mode,'') = COALESCE($4,'')`,
-        [provider, transaction_type, bundle_category || null, recipient_mode || null]
+         WHERE company_id IS NULL
+           AND owner_user_id IS NULL
+           AND provider = $1
+           AND transaction_type = $2
+           AND is_active = TRUE
+           AND COALESCE(bundle_category,'') = COALESCE($3,'')
+           AND COALESCE(recipient_mode,'') = COALESCE($4,'')`,
+        [
+          provider,
+          transaction_type,
+          bundle_category || null,
+          recipient_mode || null,
+        ]
       );
+
       if (globalResult.rows.length > 0) {
         flow = globalResult.rows[0];
       }
     }
 
     if (!flow) {
-      return res.status(404).json({ success: false, message: 'No USSD flow configured for this provider and transaction type' });
+      return res.status(404).json({
+        success: false,
+        message:
+          'No USSD flow configured for this provider and transaction type',
+      });
     }
 
     const stepsResult = await query(
-      'SELECT match_all, action, action_value FROM ussd_flow_steps WHERE flow_id = $1 ORDER BY step_order',
+      `SELECT match_all, action, action_value
+       FROM ussd_flow_steps
+       WHERE flow_id = $1
+       ORDER BY step_order`,
       [flow.id]
     );
 
-    res.json({ success: true, data: { ...flow, steps: stepsResult.rows } });
+    res.json({
+      success: true,
+      data: {
+        ...flow,
+        steps: stepsResult.rows,
+      },
+    });
   } catch (error) {
     logger.error('Resolve USSD flow error:', error);
-    res.status(500).json({ success: false, message: 'Failed to resolve USSD flow' });
+    res.status(500).json({
+      success: false,
+      message: 'Failed to resolve USSD flow',
+    });
   }
 };

@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/api/api_client.dart';
+import '../../core/auth/auth_bloc.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/utils/transaction_labels.dart';
 import '../../shared/theme/app_colors.dart';
@@ -72,6 +74,13 @@ class TransactionScreen extends StatefulWidget {
 }
 
 class _TransactionScreenState extends State<TransactionScreen> {
+  OfflineQueueIdentity? get _offlineIdentity {
+    final state = context.read<AuthBloc>().state;
+    return state is AuthAuthenticated
+        ? OfflineQueueService.identityFromUser(state.user)
+        : null;
+  }
+
   final _formKey = GlobalKey<FormState>();
   final _customerPhoneCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
@@ -304,11 +313,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
             .toList()
           ..sort((a, b) => a.slot.compareTo(b.slot));
 
-        final requestedIccid =
-            (widget.initialSimIccid ?? '').trim();
+        final requestedIccid = (widget.initialSimIccid ?? '').trim();
 
-        final routeRequestedExactSim =
-            widget.initialSimSlot != null ||
+        final routeRequestedExactSim = widget.initialSimSlot != null ||
             requestedIccid.isNotEmpty ||
             widget.initialSimSubscriptionId != null;
 
@@ -316,22 +323,18 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
         if (routeRequestedExactSim) {
           for (final sim in providerSims) {
-            final slotMatches =
-                widget.initialSimSlot == null ||
+            final slotMatches = widget.initialSimSlot == null ||
                 sim.slot == widget.initialSimSlot;
 
-            final identityMatches =
-                requestedIccid.isNotEmpty
-                    // Identified SIM: ICCID + slot is canonical.
-                    // Subscription ID must not split an ICCID wallet.
-                    ? sim.iccid.trim() == requestedIccid &&
-                        slotMatches
-                    // Unresolved SIM: current subscription + slot selects
-                    // the exact installation-local physical SIM.
-                    : slotMatches &&
-                        widget.initialSimSubscriptionId != null &&
-                        sim.subscriptionId ==
-                            widget.initialSimSubscriptionId;
+            final identityMatches = requestedIccid.isNotEmpty
+                // Identified SIM: ICCID + slot is canonical.
+                // Subscription ID must not split an ICCID wallet.
+                ? sim.iccid.trim() == requestedIccid && slotMatches
+                // Unresolved SIM: current subscription + slot selects
+                // the exact installation-local physical SIM.
+                : slotMatches &&
+                    widget.initialSimSubscriptionId != null &&
+                    sim.subscriptionId == widget.initialSimSubscriptionId;
 
             if (identityMatches) {
               requestedSim = sim;
@@ -342,15 +345,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
         if (providerSims.isEmpty) {
           _selectedSimSlot = null;
-          _initialSimIdentityUnavailable =
-              routeRequestedExactSim;
+          _initialSimIdentityUnavailable = routeRequestedExactSim;
         } else if (routeRequestedExactSim) {
           _selectedSimSlot = requestedSim?.slot;
-          _initialSimIdentityUnavailable =
-              requestedSim == null;
-        } else if (!providerSims.any(
-          (sim) => sim.slot == _selectedSimSlot,
-        )) {
+          _initialSimIdentityUnavailable = requestedSim == null;
+        } else if (!providerSims.any((sim) => sim.slot == _selectedSimSlot)) {
           _selectedSimSlot = providerSims.first.slot;
           _initialSimIdentityUnavailable = false;
         } else {
@@ -365,11 +364,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
       if (!mounted) return;
 
       setState(() {
-        _simMap = const {
-          'mtn': null,
-          'telecel': null,
-          'at_money': null,
-        };
+        _simMap = const {'mtn': null, 'telecel': null, 'at_money': null};
         _simCards = const [];
         _selectedSimSlot = null;
         _simDetectionComplete = true;
@@ -379,11 +374,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
       if (!mounted) return;
 
       setState(() {
-        _simMap = const {
-          'mtn': null,
-          'telecel': null,
-          'at_money': null,
-        };
+        _simMap = const {'mtn': null, 'telecel': null, 'at_money': null};
         _simCards = const [];
         _selectedSimSlot = null;
         _simDetectionComplete = true;
@@ -410,10 +401,19 @@ class _TransactionScreenState extends State<TransactionScreen> {
     final provider = _selectedProvider;
     final transactionType = widget.transactionType;
     final cacheKey = '$provider:$transactionType';
+    final identity = _offlineIdentity;
+
+    if (identity == null) return;
 
     // The progress screen can already start immediately when this
     // definition is present, so no network refresh is needed here.
-    if (OfflineQueueService.getCachedFlow(provider, transactionType) != null) {
+    if (OfflineQueueService.getCachedFlow(
+          provider,
+          transactionType,
+          identity: identity,
+          isPersonal: false,
+        ) !=
+        null) {
       return;
     }
 
@@ -429,6 +429,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         queryParameters: {
           'provider': provider,
           'transaction_type': transactionType,
+          'mode': 'business',
         },
       );
 
@@ -439,6 +440,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
         provider,
         transactionType,
         Map<String, dynamic>.from(rawFlow),
+        identity: identity,
+        isPersonal: false,
       );
     } catch (_) {
       // Some combinations use hardcoded automation or have no custom
@@ -481,11 +484,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
     if (!_simDetectionComplete) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'SIM detection is still in progress.',
-          ),
-        ),
+        const SnackBar(content: Text('SIM detection is still in progress.')),
       );
       return;
     }
@@ -547,14 +546,24 @@ class _TransactionScreenState extends State<TransactionScreen> {
     // work offline.
     final connectivity = await Connectivity().checkConnectivity();
     final isOffline = connectivity.every((r) => r == ConnectivityResult.none);
-    final cachedTemplate = OfflineQueueService.getCachedTemplate(
-      _selectedProvider,
-      widget.transactionType,
-    );
-    final cachedFlow = OfflineQueueService.getCachedFlow(
-      _selectedProvider,
-      widget.transactionType,
-    );
+    final identity = _offlineIdentity;
+
+    final cachedTemplate = identity == null
+        ? null
+        : OfflineQueueService.getCachedTemplate(
+            _selectedProvider,
+            widget.transactionType,
+            identity: identity,
+          );
+
+    final cachedFlow = identity == null
+        ? null
+        : OfflineQueueService.getCachedFlow(
+            _selectedProvider,
+            widget.transactionType,
+            identity: identity,
+            isPersonal: false,
+          );
 
     // MTN Cash In/Out/Send Money and Telecel Deposit never need a
     // cached template - their dial code and menu steps are hardcoded
@@ -723,12 +732,16 @@ class _TransactionScreenState extends State<TransactionScreen> {
     required String transactionType,
     Map<String, dynamic>? template,
   }) async {
+    final identity = _offlineIdentity;
+    if (identity == null) return;
+
     if (template != null) {
       try {
         await OfflineQueueService.cacheTemplate(
           provider,
           transactionType,
           template,
+          identity: identity,
         );
       } catch (_) {
         // Caching must never delay or fail the live transaction.
@@ -741,6 +754,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         queryParameters: {
           'provider': provider,
           'transaction_type': transactionType,
+          'mode': 'business',
         },
       );
 
@@ -751,6 +765,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
         provider,
         transactionType,
         Map<String, dynamic>.from(rawData),
+        identity: identity,
+        isPersonal: false,
       );
     } catch (_) {
       // No custom flow, no network, or cache failure. The active
@@ -875,9 +891,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Cash Out recorded successfully'),
-          ),
+          const SnackBar(content: Text('Cash Out recorded successfully')),
         );
         context.pop();
       }
@@ -931,7 +945,17 @@ class _TransactionScreenState extends State<TransactionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_title)),
+      appBar: AppBar(
+        title: Text(_title),
+        actions: [
+          TextButton.icon(
+            onPressed: () => context.pop(),
+            icon: const Icon(Icons.arrow_back),
+            label: const Text('Return'),
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
       body: Form(
         key: _formKey,
         child: SingleChildScrollView(
@@ -955,16 +979,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
                         SizedBox(
                           width: 18,
                           height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                          ),
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         ),
                         SizedBox(width: 10),
                         Text(
                           'Detecting MTN SIMs…',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: TextStyle(fontWeight: FontWeight.w600),
                         ),
                       ],
                     ),
@@ -976,9 +996,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     decoration: BoxDecoration(
                       color: context.appSurface,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: context.appDivider,
-                      ),
+                      border: Border.all(color: context.appDivider),
                     ),
                     child: Row(
                       children: [
@@ -1009,9 +1027,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     decoration: BoxDecoration(
                       color: context.appSurface,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: context.appDivider,
-                      ),
+                      border: Border.all(color: context.appDivider),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1052,8 +1068,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                       spacing: 8,
                       runSpacing: 8,
                       children: _selectedProviderSims.map((sim) {
-                        final color =
-                            AppTheme.providerColor(_selectedProvider);
+                        final color = AppTheme.providerColor(_selectedProvider);
 
                         return ChoiceChip(
                           selected: false,
@@ -1063,8 +1078,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                               _initialSimIdentityUnavailable = false;
                             });
                           },
-                          selectedColor:
-                              color.withValues(alpha: 0.16),
+                          selectedColor: color.withValues(alpha: 0.16),
                           avatar: Icon(
                             Icons.sim_card_outlined,
                             size: 18,
@@ -1088,9 +1102,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     decoration: BoxDecoration(
                       color: context.appSurface,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: context.appDivider,
-                      ),
+                      border: Border.all(color: context.appDivider),
                     ),
                     child: Row(
                       children: [
@@ -1108,10 +1120,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             ),
                           ),
                         ),
-                        const Icon(
-                          Icons.lock_outline,
-                          size: 18,
-                        ),
+                        const Icon(Icons.lock_outline, size: 18),
                       ],
                     ),
                   ),
@@ -1219,9 +1228,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     decoration: BoxDecoration(
                       color: context.appSurface,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: context.appDivider,
-                      ),
+                      border: Border.all(color: context.appDivider),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1262,8 +1269,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                       spacing: 8,
                       runSpacing: 8,
                       children: _selectedProviderSims.map((sim) {
-                        final color =
-                            AppTheme.providerColor(_selectedProvider);
+                        final color = AppTheme.providerColor(_selectedProvider);
 
                         return ChoiceChip(
                           selected: false,
@@ -1273,8 +1279,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                               _initialSimIdentityUnavailable = false;
                             });
                           },
-                          selectedColor:
-                              color.withValues(alpha: 0.16),
+                          selectedColor: color.withValues(alpha: 0.16),
                           avatar: Icon(
                             Icons.sim_card_outlined,
                             size: 18,
@@ -1312,7 +1317,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             'Using ${{
                               'mtn': 'MTN',
                               'telecel': 'Telecel',
-                              'at_money': 'AT Money',
+                              'at_money': 'AT Money'
                             }[_selectedProvider]} SIM ${_selectedSim!.slot + 1}',
                             style: const TextStyle(
                               fontWeight: FontWeight.w700,
@@ -1371,10 +1376,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 ] else ...[
                   const Text(
                     'Using SIM',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                   ),
                   const SizedBox(height: 8),
                   Row(

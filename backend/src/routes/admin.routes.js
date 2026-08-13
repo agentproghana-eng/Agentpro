@@ -1,4 +1,5 @@
 const express = require('express');
+const { validateFlowSteps } = require('../utils/ussdFlowValidation');
 const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
 const { query } = require('../config/database');
@@ -525,36 +526,6 @@ router.patch('/ussd-templates/:id', async (req, res) => {
 // (the older single-dial-string system) - a provider/transaction_type
 // combo uses whichever of the two actually has an active row; this is
 // checked first by the app.
-const VALID_FLOW_ACTIONS = [
-  'send_digit', 'send_customer_phone', 'send_amount', 'send_operator_id',
-  'send_reference', 'send_merchant_id', 'send_literal', 'pin_prompt', 'auto_confirm_once'
-];
-const VALUE_REQUIRED_FLOW_ACTIONS = ['send_digit', 'send_literal', 'auto_confirm_once'];
-
-// Server-side safety net mirroring whatever the admin portal checks
-// client-side - this is the layer that actually matters, since a
-// direct API call could bypass any UI-level check entirely.
-function validateFlowSteps(steps) {
-  if (!Array.isArray(steps) || steps.length === 0) {
-    return 'At least one step is required.';
-  }
-  for (const [i, step] of steps.entries()) {
-    if (!Array.isArray(step.match_all) || step.match_all.length === 0) {
-      return `Step ${i + 1}: match_all cannot be empty — a step with no match text can never fire.`;
-    }
-    if (!VALID_FLOW_ACTIONS.includes(step.action)) {
-      return `Step ${i + 1}: "${step.action}" is not a valid action. Must be one of: ${VALID_FLOW_ACTIONS.join(', ')}.`;
-    }
-    if (VALUE_REQUIRED_FLOW_ACTIONS.includes(step.action) && !step.action_value) {
-      return `Step ${i + 1}: action "${step.action}" requires an action_value.`;
-    }
-  }
-  if (!steps.some(s => s.action === 'pin_prompt')) {
-    return 'Flow has no pin_prompt step — without one, the app will never pause for real PIN entry, and may try to auto-submit a sensitive screen.';
-  }
-  return null;
-}
-
 router.get('/ussd-flows', async (req, res) => {
   try {
     const result = await query(
@@ -582,7 +553,17 @@ router.get('/ussd-flows/:id', async (req, res) => {
 });
 
 router.post('/ussd-flows', async (req, res) => {
-  const { provider, transaction_type, dial_code, success_markers, failure_markers, steps, company_id } = req.body;
+  const {
+    provider,
+    transaction_type,
+    dial_code,
+    success_markers,
+    failure_markers,
+    bundle_category,
+    recipient_mode,
+    steps,
+    company_id,
+  } = req.body;
 
   if (!provider || !transaction_type) {
     return res.status(422).json({ success: false, message: 'provider and transaction_type are required.' });
@@ -598,9 +579,30 @@ router.post('/ussd-flows', async (req, res) => {
   try {
     const flow = await withTransaction(async (client) => {
       const flowResult = await client.query(
-        `INSERT INTO ussd_flows (provider, transaction_type, dial_code, success_markers, failure_markers, company_id, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-        [provider, transaction_type, dial_code, success_markers || [], failure_markers || [], company_id || null, req.user.id]
+        `INSERT INTO ussd_flows (
+           provider,
+           transaction_type,
+           dial_code,
+           success_markers,
+           failure_markers,
+           company_id,
+           bundle_category,
+           recipient_mode,
+           created_by
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         RETURNING *`,
+        [
+          provider,
+          transaction_type,
+          dial_code,
+          success_markers || [],
+          failure_markers || [],
+          company_id || null,
+          bundle_category || null,
+          recipient_mode || null,
+          req.user.id,
+        ]
       );
       const newFlow = flowResult.rows[0];
       for (const [i, step] of steps.entries()) {
@@ -616,13 +618,31 @@ router.post('/ussd-flows', async (req, res) => {
     await auditLog({
       userId: req.user.id, companyId: company_id || null,
       action: 'USSD_FLOW_CREATED', entityType: 'ussd_flow', entityId: flow.id,
-      newValues: { provider, transaction_type, dial_code, step_count: steps.length },
+      newValues: {
+        provider,
+        transaction_type,
+        dial_code,
+        bundle_category: bundle_category || null,
+        recipient_mode: recipient_mode || null,
+        step_count: steps.length,
+      },
       ipAddress: req.ip, requestId: req.requestId,
     });
     res.json({ success: true, data: flow });
   } catch (e) {
     if (e.code === '23505') {
-      return res.status(409).json({ success: false, message: 'An active flow already exists for this provider + transaction type.' });
+      return res.status(409).json({
+        success: false,
+        message:
+          'An active flow already exists for this provider, transaction type, and flow variant.',
+      });
+    }
+    if (e.code === '22P02') {
+      return res.status(422).json({
+        success: false,
+        code: 'USSD_SCHEMA_VALUE_NOT_REGISTERED',
+        message: 'Provider or transaction type is not registered in the database schema yet. Add the new value through a database migration before creating this USSD configuration.',
+      });
     }
     logger.error('Create flow error:', e);
     res.status(500).json({ success: false, message: 'Failed to create flow' });
@@ -630,7 +650,20 @@ router.post('/ussd-flows', async (req, res) => {
 });
 
 router.patch('/ussd-flows/:id', async (req, res) => {
-  const { dial_code, success_markers, failure_markers, is_active, steps } = req.body;
+  const {
+    dial_code,
+    success_markers,
+    failure_markers,
+    bundle_category,
+    recipient_mode,
+    is_active,
+    steps,
+  } = req.body;
+
+  const hasBundleCategory =
+    Object.prototype.hasOwnProperty.call(req.body, 'bundle_category');
+  const hasRecipientMode =
+    Object.prototype.hasOwnProperty.call(req.body, 'recipient_mode');
 
   if (dial_code && (!dial_code.startsWith('*') || !dial_code.endsWith('#'))) {
     return res.status(422).json({ success: false, message: 'dial_code must start with * and end with #.' });
@@ -649,10 +682,29 @@ router.patch('/ussd-flows/:id', async (req, res) => {
            dial_code = COALESCE($1, dial_code),
            success_markers = COALESCE($2, success_markers),
            failure_markers = COALESCE($3, failure_markers),
-           is_active = COALESCE($4, is_active),
+           bundle_category = CASE
+             WHEN $4 THEN $5
+             ELSE bundle_category
+           END,
+           recipient_mode = CASE
+             WHEN $6 THEN $7
+             ELSE recipient_mode
+           END,
+           is_active = COALESCE($8, is_active),
            updated_at = NOW()
-         WHERE id = $5 RETURNING *`,
-        [dial_code, success_markers, failure_markers, is_active, req.params.id]
+         WHERE id = $9
+         RETURNING *`,
+        [
+          dial_code,
+          success_markers,
+          failure_markers,
+          hasBundleCategory,
+          bundle_category || null,
+          hasRecipientMode,
+          recipient_mode || null,
+          is_active,
+          req.params.id,
+        ]
       );
       if (!flowResult.rows.length) {
         throw { statusCode: 404, message: 'Flow not found' };
@@ -673,13 +725,30 @@ router.patch('/ussd-flows/:id', async (req, res) => {
     await auditLog({
       userId: req.user.id, companyId: flow.company_id,
       action: 'USSD_FLOW_UPDATED', entityType: 'ussd_flow', entityId: req.params.id,
-      newValues: { dial_code, is_active, step_count: steps ? steps.length : undefined },
+      newValues: {
+        dial_code,
+        ...(hasBundleCategory
+          ? { bundle_category: bundle_category || null }
+          : {}),
+        ...(hasRecipientMode
+          ? { recipient_mode: recipient_mode || null }
+          : {}),
+        is_active,
+        step_count: steps ? steps.length : undefined,
+      },
       ipAddress: req.ip, requestId: req.requestId,
     });
     res.json({ success: true, data: flow });
   } catch (e) {
     if (e.statusCode) {
       return res.status(e.statusCode).json({ success: false, message: e.message });
+    }
+    if (e.code === '23505') {
+      return res.status(409).json({
+        success: false,
+        message:
+          'An active flow already exists for this provider, transaction type, and flow variant.',
+      });
     }
     logger.error('Update flow error:', e);
     res.status(500).json({ success: false, message: 'Failed to update flow' });

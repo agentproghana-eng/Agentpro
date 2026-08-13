@@ -57,7 +57,13 @@ class UssdAccessibilityChannel(
                 openAccessibilitySettings()
                 result.success(null)
             }
+            "dialManual" -> dialManual(call, result)
             "startAutomation" -> startAutomation(call, result)
+            "cancelAutomation" -> {
+                UssdAccessibilityService.endSession()
+                UssdForegroundService.stop(context)
+                result.success(null)
+            }
             else -> result.notImplemented()
         }
     }
@@ -119,11 +125,70 @@ class UssdAccessibilityChannel(
         return handles.getOrNull(simSlot)
     }
 
+    // Opens the real provider USSD menu without starting an Accessibility
+    // automation session. This is the Free-Personal path: AgentPro selects
+    // the correct SIM and places the call, while every menu choice and PIN
+    // entry remains entirely manual on the network-owned screen.
+    private fun dialManual(call: MethodCall, result: MethodChannel.Result) {
+        val dialCode = call.argument<String>("dial_code")
+        val simSlot = call.argument<Int>("sim_slot")
+
+        if (dialCode.isNullOrBlank()) {
+            result.error("INVALID_ARGS", "dial_code is required", null)
+            return
+        }
+
+        try {
+            val phoneAccountHandle = if (simSlot != null) {
+                phoneAccountHandleForSimSlot(simSlot)
+            } else {
+                null
+            }
+
+            // TransactionDevicePreparationService has already verified the
+            // physical SIM. If Android cannot map that verified slot to an
+            // outgoing PhoneAccountHandle, fail closed instead of silently
+            // falling back to the device's default SIM or SIM picker.
+            if (simSlot != null && phoneAccountHandle == null) {
+                result.error(
+                    "SIM_UNAVAILABLE",
+                    "The selected SIM is unavailable for dialing",
+                    null
+                )
+                return
+            }
+
+            val dialIntent = Intent(
+                Intent.ACTION_CALL,
+                Uri.parse("tel:" + Uri.encode(dialCode))
+            )
+            dialIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+            phoneAccountHandle?.let { handle ->
+                dialIntent.putExtra(
+                    TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE,
+                    handle
+                )
+            }
+
+            context.startActivity(dialIntent)
+            result.success(true)
+        } catch (e: SecurityException) {
+            result.error(
+                "PERMISSION_DENIED",
+                "CALL_PHONE permission is required",
+                null
+            )
+        } catch (e: Exception) {
+            result.error("DIAL_ERROR", e.message, null)
+        }
+    }
+
     private fun startAutomation(call: MethodCall, result: MethodChannel.Result) {
         val customerPhone = call.argument<String>("customer_phone")
         val amount = call.argument<String>("amount")
         val transactionType = call.argument<String>("transaction_type")
-        val provider = call.argument<String>("provider") ?: "mtn"
+        val provider = call.argument<String>("provider")
         val operatorId = call.argument<String>("operator_id")
         val reference = call.argument<String>("reference")
         val merchantId = call.argument<String>("merchant_id")
@@ -134,8 +199,79 @@ class UssdAccessibilityChannel(
         val successMarkers = call.argument<List<String>>("success_markers")
         val failureMarkers = call.argument<List<String>>("failure_markers")
 
-        if (customerPhone == null || amount == null || transactionType == null) {
-            result.error("INVALID_ARGS", "customer_phone and amount are required", null)
+        if (transactionType.isNullOrBlank()) {
+            result.error(
+                "INVALID_ARGS",
+                "transaction_type is required",
+                null
+            )
+            return
+        }
+
+        if (provider.isNullOrBlank()) {
+            result.error(
+                "INVALID_ARGS",
+                "provider is required",
+                null
+            )
+            return
+        }
+
+        // Data-driven flows declare which transaction values they actually
+        // consume through their step actions. Do not require customer_phone
+        // or amount globally: balance enquiries and future flow types may
+        // legitimately use neither.
+        //
+        // The legacy hardcoded path still requires both because its MTN /
+        // Telecel branches explicitly send customer phone and amount.
+        val needsCustomerPhone = if (steps != null) {
+            steps.any { it.action == "send_customer_phone" }
+        } else {
+            true
+        }
+
+        val needsAmount = if (steps != null) {
+            steps.any { it.action == "send_amount" }
+        } else {
+            true
+        }
+
+        // send_selection values are indexed by the actual flow-step index.
+        // Validate every required selection before dialing so a malformed or
+        // stale client payload cannot enter the USSD session and stall later.
+        if (steps != null) {
+            val missingSelectionIndex = steps.withIndex()
+                .firstOrNull { (index, step) ->
+                    step.action == "send_selection" &&
+                        selections?.get(index.toString()).isNullOrBlank()
+                }
+                ?.index
+
+            if (missingSelectionIndex != null) {
+                result.error(
+                    "MISSING_SELECTION",
+                    "A selection is required for USSD flow step $missingSelectionIndex",
+                    null
+                )
+                return
+            }
+        }
+
+        if (needsCustomerPhone && customerPhone.isNullOrBlank()) {
+            result.error(
+                "MISSING_CUSTOMER_PHONE",
+                "customer_phone is required by this USSD flow",
+                null
+            )
+            return
+        }
+
+        if (needsAmount && amount.isNullOrBlank()) {
+            result.error(
+                "MISSING_AMOUNT",
+                "amount is required by this USSD flow",
+                null
+            )
             return
         }
 

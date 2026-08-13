@@ -79,6 +79,16 @@ class UssdAccessibilityService : AccessibilityService() {
         @Volatile var reachedPinPrompt: Boolean = false
         @Volatile var confirmSent: Boolean = false
 
+        // Duplicate-event suppression is session state too. lastScreenText
+        // may contain raw provider text, while lastResponseValue may contain
+        // a phone number, amount, operator ID, reference, or menu selection.
+        // Keep them alongside the other session fields so start/end can
+        // explicitly wipe them rather than leaving them in service memory.
+        @Volatile private var lastScreenText: String? = null
+        @Volatile private var lastScreenHandledAt: Long = 0L
+        @Volatile private var lastResponseValue: String? = null
+        @Volatile private var lastResponseAt: Long = 0L
+
         // Generic-flow-only state. Null for every MTN/Telecel session -
         // those never set these, so their behavior is 100% unchanged
         // from before this interpreter existed.
@@ -92,8 +102,8 @@ class UssdAccessibilityService : AccessibilityService() {
         var listener: UssdAccessibilityListener? = null
 
         fun startSession(
-            customerPhone: String,
-            amount: String,
+            customerPhone: String?,
+            amount: String?,
             transactionType: String,
             provider: String,
             operatorId: String? = null,
@@ -116,6 +126,13 @@ class UssdAccessibilityService : AccessibilityService() {
             currentStepIndex = 0
             pendingSuccessMarkers = successMarkers
             pendingFailureMarkers = failureMarkers
+            // Never let duplicate-detection state bleed from a previous
+            // transaction into the new one.
+            lastScreenText = null
+            lastScreenHandledAt = 0L
+            lastResponseValue = null
+            lastResponseAt = 0L
+
             isSessionActive = true
             reachedPinPrompt = false
             confirmSent = false
@@ -137,6 +154,13 @@ class UssdAccessibilityService : AccessibilityService() {
             currentStepIndex = 0
             pendingSuccessMarkers = null
             pendingFailureMarkers = null
+
+            // Raw USSD screen text and the last value written into the USSD
+            // input field must not survive the transaction lifecycle.
+            lastScreenText = null
+            lastScreenHandledAt = 0L
+            lastResponseValue = null
+            lastResponseAt = 0L
         }
     }
 
@@ -154,13 +178,6 @@ class UssdAccessibilityService : AccessibilityService() {
         fun onPinPromptReached()
         fun onResult(outcome: String, message: String)
     }
-
-    // Prevent duplicate Android accessibility events from causing
-    // repeated USSD submissions.
-    private var lastScreenText: String? = null
-    private var lastScreenHandledAt: Long = 0L
-    private var lastResponseValue: String? = null
-    private var lastResponseAt: Long = 0L
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -264,20 +281,46 @@ class UssdAccessibilityService : AccessibilityService() {
     // pendingSteps was actually supplied (i.e. never for MTN/Telecel).
     private fun handleAfterPinPrompt(root: AccessibilityNodeInfo, screenText: String) {
         if (pendingProvider == "telecel" && !confirmSent && screenText.contains("press 1 to confirm")) {
-            confirmSent = true
-            respond(root, "1")
-            Log.d(TAG, "Telecel: auto-confirmed transaction (non-sensitive step)")
-            return
+            if (respond(root, "1")) {
+                confirmSent = true
+                Log.d(TAG, "Telecel: auto-confirmed transaction (non-sensitive step)")
+                return
+            }
+
+            Log.w(
+                TAG,
+                "Telecel confirmation UI was not ready; waiting for another accessibility event"
+            )
         }
 
         val steps = pendingSteps
         if (steps != null && !confirmSent) {
             val confirmStep = steps.find { it.action == "auto_confirm_once" && it.matchAll.all { m -> screenText.contains(m) } }
             if (confirmStep != null) {
-                confirmSent = true
-                confirmStep.actionValue?.let { respond(root, it) }
-                Log.d(TAG, "Generic flow: auto-confirmed transaction (non-sensitive step)")
-                return
+                val confirmValue = confirmStep.actionValue
+
+                // Backend validation enforces this too, but the device must
+                // never trust persisted/configured flow data blindly. A
+                // post-PIN automatic action is restricted to one menu digit.
+                // Anything else is ignored so Flutter's 20-second post-PIN
+                // watchdog can fall back to mandatory manual confirmation.
+                if (confirmValue != null && confirmValue.matches(Regex("^[0-9]$"))) {
+                    if (respond(root, confirmValue)) {
+                        confirmSent = true
+                        Log.d(
+                            TAG,
+                            "Generic flow: auto-confirmed transaction (non-sensitive step)"
+                        )
+                        return
+                    }
+
+                    Log.w(
+                        TAG,
+                        "Generic confirmation UI was not ready; waiting for another accessibility event"
+                    )
+                }
+
+                Log.w(TAG, "Blocked unsafe auto_confirm_once action value")
             }
         }
 
@@ -308,7 +351,10 @@ class UssdAccessibilityService : AccessibilityService() {
         val isFailure = failureMarkers.any { screenText.contains(it) } || (hasConnectionProblemText && !hasMmiComplete)
 
         if (isSuccess || isFailure) {
-            listener?.onResult(if (isSuccess) "success" else "failure", screenText)
+            listener?.onResult(
+                if (isSuccess) "success" else "failure",
+                if (isSuccess) "Provider reported success" else "Provider reported failure"
+            )
             endSession()
             UssdForegroundService.stop(this)
         }
@@ -331,69 +377,129 @@ class UssdAccessibilityService : AccessibilityService() {
         for ((index, step) in steps.withIndex()) {
             if (index < currentStepIndex) continue
             if (step.matchAll.isNotEmpty() && step.matchAll.all { screenText.contains(it) }) {
-                currentStepIndex = index + 1
-                when (step.action) {
-                    "send_digit", "send_literal" -> step.actionValue?.let { respond(root, it) }
-                    "send_customer_phone" -> pendingCustomerPhone?.let { respond(root, it) }
-                    "send_amount" -> pendingAmount?.let { respond(root, it) }
-                    "send_operator_id" -> pendingOperatorId?.let { respond(root, it) }
-                    "send_reference" -> pendingReference?.let { respond(root, it) }
-                    "send_merchant_id" -> pendingMerchantId?.let { respond(root, it) }
+                val completed = when (step.action) {
+                    "send_digit", "send_literal" ->
+                        step.actionValue?.let { respond(root, it) } ?: false
+
+                    "send_customer_phone" ->
+                        pendingCustomerPhone?.let { respond(root, it) } ?: false
+
+                    "send_amount" ->
+                        pendingAmount?.let { respond(root, it) } ?: false
+
+                    "send_operator_id" ->
+                        pendingOperatorId?.let { respond(root, it) } ?: false
+
+                    "send_reference" ->
+                        pendingReference?.let { respond(root, it) } ?: false
+
+                    "send_merchant_id" ->
+                        pendingMerchantId?.let { respond(root, it) } ?: false
+
                     "send_selection" -> {
                         val digit = pendingSelections?.get(index.toString())
                         if (digit != null) {
                             respond(root, digit)
                         } else {
-                            Log.w(TAG, "send_selection at step index $index has no selection provided — session will stall")
+                            Log.w(
+                                TAG,
+                                "send_selection at step index $index has no selection provided — session will stall"
+                            )
+                            false
                         }
                     }
+
                     "pin_prompt" -> {
                         reachedPinPrompt = true
                         listener?.onPinPromptReached()
                         Log.d(TAG, "Generic flow: PIN prompt reached")
+                        true
                     }
+
                     // auto_confirm_once is only ever actioned from
                     // handleAfterPinPrompt(), never here.
+                    "auto_confirm_once" -> false
+
+                    else -> {
+                        Log.w(TAG, "Unsupported generic USSD action: ${step.action}")
+                        false
+                    }
                 }
+
+                if (completed) {
+                    currentStepIndex = index + 1
+                } else {
+                    Log.d(
+                        TAG,
+                        "Generic flow step $index was not submitted; waiting for another accessibility event"
+                    )
+                }
+
                 return
             }
         }
     }
 
     // Finds the single EditText on screen, sets its text, then finds and
-    // clicks the Send button. Only ever called for menu digits, phone
-    // numbers, amounts, Operator ID, and non-sensitive post-PIN confirm
-    // digits - never for PIN entry itself.
-    private fun respond(root: AccessibilityNodeInfo, value: String) {
+    // clicks the Send button. Returns true only when the value was actually
+    // submitted. Flow progression and one-shot confirmation state must only
+    // advance after a true result.
+    //
+    // Only ever called for menu digits, phone numbers, amounts, Operator ID,
+    // references, selections, and non-sensitive post-PIN confirm digits -
+    // never for PIN entry itself.
+    private fun respond(root: AccessibilityNodeInfo, value: String): Boolean {
         val now = SystemClock.elapsedRealtime()
 
-        // Prevent duplicate menu selections caused by repeated Android
-        // accessibility events.
+        // Prevent duplicate submissions caused by repeated Android
+        // accessibility events after a successful response.
         if (
             value == lastResponseValue &&
             now - lastResponseAt < 500L
         ) {
-            Log.d(TAG, "Ignored duplicate USSD response: $value")
-            return
+            Log.d(TAG, "Ignored duplicate USSD response")
+            return false
         }
 
         val editText = findByClassName(root, "android.widget.EditText") ?: run {
             Log.w(TAG, "No EditText found on screen")
-            return
+            return false
         }
+
         val args = Bundle()
         args.putCharSequence(
-            AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value
+            AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+            value
         )
-        editText.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-        val sendButton = findByText(root, "send")
-        if (sendButton != null) {
-            sendButton.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-            lastResponseValue = value
-            lastResponseAt = now
-        } else {
-            Log.w(TAG, "No Send button found on screen")
+
+        val textSet = editText.performAction(
+            AccessibilityNodeInfo.ACTION_SET_TEXT,
+            args
+        )
+
+        if (!textSet) {
+            Log.w(TAG, "USSD input field rejected ACTION_SET_TEXT")
+            return false
         }
+
+        val sendButton = findByText(root, "send")
+        if (sendButton == null) {
+            Log.w(TAG, "No Send button found on screen")
+            return false
+        }
+
+        val clicked = sendButton.performAction(
+            AccessibilityNodeInfo.ACTION_CLICK
+        )
+
+        if (!clicked) {
+            Log.w(TAG, "USSD Send button rejected ACTION_CLICK")
+            return false
+        }
+
+        lastResponseValue = value
+        lastResponseAt = now
+        return true
     }
 
     // recycle() deliberately omitted below - node pooling was removed

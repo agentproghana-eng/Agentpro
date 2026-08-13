@@ -3,6 +3,9 @@ const router = express.Router();
 const { body, query, validationResult } = require('express-validator');
 const transactionController = require('../controllers/transactionController');
 const { authenticate, authorize, requireActiveSubscription } = require('../middleware/auth');
+const {
+  createInitiationCapabilityGuard,
+} = require('../middleware/transactionCapability');
 
 const handleValidation = (req, res, next) => {
   const errors = validationResult(req);
@@ -20,9 +23,16 @@ const handleValidation = (req, res, next) => {
 router.use(authenticate);
 router.use(requireActiveSubscription);
 
+const businessInitiationCapabilityGuard =
+  createInitiationCapabilityGuard('business');
+
 // POST /api/v1/transactions — Initiate a transaction
 router.post('/', [
-  body('provider').isIn(['mtn', 'telecel', 'at_money']).withMessage('Invalid provider'),
+  body('provider')
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage('Invalid provider'),
   body('client_operation_id')
     .optional({ nullable: true, checkFalsy: true })
     .isUUID()
@@ -46,14 +56,11 @@ router.post('/', [
     .isInt({ min: 0 })
     .withMessage('sim_subscription_id must be a non-negative integer')
     .toInt(),
-  body('transaction_type').isIn([
-    'cash_in', 'cash_out', 'send_money', 'merchant_payment',
-    'commission_balance', 'cash_in_commission', 'commission_transfer',
-    'working_to_float', 'float_to_working',
-    'business_deposit', 'business_withdrawal',
-    'bill_payment', 'airtime', 'data_bundle', 'balance_enquiry',
-    'mini_statement', 'reversal'
-  ]).withMessage('Invalid transaction type'),
+  body('transaction_type')
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage('Invalid transaction type'),
   body('amount').custom((value, { req }) => {
     // These four transaction types dial and get PIN-prompted with no
     // amount ever entered by the agent, so the app never fills in
@@ -67,6 +74,7 @@ router.post('/', [
   }),
 ],
   handleValidation,
+  businessInitiationCapabilityGuard,
   authorize('agent', 'business_owner', 'manager'),
   transactionController.initiateTransaction
 );

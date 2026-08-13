@@ -3,12 +3,24 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../api/api_client.dart';
 
+class OfflineQueueIdentity {
+  final String userId;
+  final String? companyId;
+
+  const OfflineQueueIdentity({
+    required this.userId,
+    this.companyId,
+  });
+
+  String get queueScopeKey => '$userId|${companyId ?? '-'}';
+}
+
 class OfflineQueueService {
   static const _boxName = 'offline_transaction_queue';
   static const _templateBoxName = 'cached_ussd_templates';
   static const int _maxSyncAttempts = 10;
 
-  static Future<Map<String, int>>? _activeSync;
+  static final Map<String, Future<Map<String, int>>> _activeSyncs = {};
 
   static Future<void> init() async {
     await Hive.initFlutter();
@@ -19,60 +31,166 @@ class OfflineQueueService {
   static Box get _box => Hive.box(_boxName);
   static Box get _templateBox => Hive.box(_templateBoxName);
 
-  static String _templateKey(String provider, String type) =>
-      '${provider}_$type';
+  static OfflineQueueIdentity? identityFromUser(
+    Map<String, dynamic>? user,
+  ) {
+    if (user == null) return null;
+
+    final userId = user['id']?.toString().trim() ?? '';
+    if (userId.isEmpty) return null;
+
+    final rawCompanyId = user['company_id']?.toString().trim();
+    final companyId =
+        rawCompanyId == null || rawCompanyId.isEmpty ? null : rawCompanyId;
+
+    return OfflineQueueIdentity(
+      userId: userId,
+      companyId: companyId,
+    );
+  }
+
+  static String? _cacheOwner(
+    OfflineQueueIdentity identity, {
+    required bool isPersonal,
+  }) {
+    if (isPersonal) {
+      return 'user:${identity.userId}';
+    }
+
+    final companyId = identity.companyId;
+    if (companyId == null || companyId.isEmpty) {
+      return null;
+    }
+
+    return 'company:$companyId';
+  }
+
+  static String? _templateKey(
+    OfflineQueueIdentity identity,
+    String provider,
+    String type,
+  ) {
+    final owner = _cacheOwner(identity, isPersonal: false);
+    if (owner == null) return null;
+
+    return [
+      'template',
+      owner,
+      provider,
+      type,
+    ].join('_');
+  }
 
   static Future<void> cacheTemplate(
     String provider,
     String transactionType,
-    Map<String, dynamic> template,
-  ) async {
+    Map<String, dynamic> template, {
+    required OfflineQueueIdentity identity,
+  }) async {
+    final key = _templateKey(identity, provider, transactionType);
+    if (key == null) return;
+
     await _templateBox.put(
-      _templateKey(provider, transactionType),
+      key,
       jsonEncode(template),
     );
   }
 
   static Map<String, dynamic>? getCachedTemplate(
     String provider,
-    String transactionType,
-  ) {
-    final raw = _templateBox.get(_templateKey(provider, transactionType));
+    String transactionType, {
+    required OfflineQueueIdentity identity,
+  }) {
+    final key = _templateKey(identity, provider, transactionType);
+    if (key == null) return null;
+
+    final raw = _templateBox.get(key);
     if (raw == null) return null;
     return jsonDecode(raw as String) as Map<String, dynamic>;
   }
 
-  static String _flowKey(String provider, String type) =>
-      'flow_${provider}_$type';
+  static String? _flowKey(
+    OfflineQueueIdentity identity,
+    String provider,
+    String type, {
+    required bool isPersonal,
+    String? bundleCategory,
+    String? recipientMode,
+  }) {
+    final bundle = (bundleCategory ?? '').trim();
+    final recipient = (recipientMode ?? '').trim();
+    final owner = _cacheOwner(identity, isPersonal: isPersonal);
 
-  // Caches the Flow Builder resolve() result (dial_code, steps,
-  // success/failure markers) - the actual automation source for any
-  // provider/type combo that's been migrated off the legacy
-  // ussd_templates table. The transaction-create response never
-  // includes this; only GET /ussd-flows/resolve does, which itself
-  // needs connectivity, so it's cached here the moment it's fetched
-  // online so a later offline attempt has something to use.
+    if (owner == null) return null;
+
+    return [
+      'flow',
+      owner,
+      isPersonal ? 'personal' : 'business',
+      provider,
+      type,
+      bundle.isEmpty ? '-' : bundle,
+      recipient.isEmpty ? '-' : recipient,
+    ].join('_');
+  }
+
+  // Caches the Flow Builder resolve() result. Identity is part of the key:
+  // Personal overrides belong to one user, while Business overrides belong
+  // to one company. Legacy device-global keys are intentionally not read.
   static Future<void> cacheFlow(
     String provider,
     String transactionType,
-    Map<String, dynamic> flow,
-  ) async {
+    Map<String, dynamic> flow, {
+    required OfflineQueueIdentity identity,
+    bool isPersonal = false,
+    String? bundleCategory,
+    String? recipientMode,
+  }) async {
+    final key = _flowKey(
+      identity,
+      provider,
+      transactionType,
+      isPersonal: isPersonal,
+      bundleCategory: bundleCategory,
+      recipientMode: recipientMode,
+    );
+
+    if (key == null) return;
+
     await _templateBox.put(
-      _flowKey(provider, transactionType),
+      key,
       jsonEncode(flow),
     );
   }
 
   static Map<String, dynamic>? getCachedFlow(
     String provider,
-    String transactionType,
-  ) {
-    final raw = _templateBox.get(_flowKey(provider, transactionType));
+    String transactionType, {
+    required OfflineQueueIdentity identity,
+    bool isPersonal = false,
+    String? bundleCategory,
+    String? recipientMode,
+  }) {
+    final key = _flowKey(
+      identity,
+      provider,
+      transactionType,
+      isPersonal: isPersonal,
+      bundleCategory: bundleCategory,
+      recipientMode: recipientMode,
+    );
+
+    if (key == null) return null;
+
+    final raw = _templateBox.get(key);
+
     if (raw == null) return null;
+
     return jsonDecode(raw as String) as Map<String, dynamic>;
   }
 
   static Future<String> queueTransaction({
+    required OfflineQueueIdentity identity,
     required Map<String, dynamic> requestFields,
     required String status,
     String? networkReference,
@@ -80,11 +198,19 @@ class OfflineQueueService {
     required List<Map<String, dynamic>> sessionLog,
     bool isPersonal = false,
   }) async {
+    if (!isPersonal && identity.companyId == null) {
+      throw StateError(
+        'Business offline transactions require a company identity.',
+      );
+    }
+
     final localId = 'local_${const Uuid().v4()}';
     await _box.put(
       localId,
       jsonEncode({
         'local_id': localId,
+        'owner_user_id': identity.userId,
+        'owner_company_id': isPersonal ? null : identity.companyId,
         'request_fields': requestFields,
         'provider': requestFields['provider'],
         'sim_slot': requestFields['sim_slot'],
@@ -107,23 +233,55 @@ class OfflineQueueService {
     return localId;
   }
 
-  static List<Map<String, dynamic>> getPendingTransactions() {
+  static String? _normalizeOwnerValue(dynamic value) {
+    final normalized = value?.toString().trim();
+    return normalized == null || normalized.isEmpty ? null : normalized;
+  }
+
+  static bool _belongsToIdentity(
+    Map<String, dynamic> transaction,
+    OfflineQueueIdentity identity,
+  ) {
+    final ownerUserId = _normalizeOwnerValue(transaction['owner_user_id']);
+
+    // Legacy records created before identity scoping are deliberately
+    // quarantined. There is no safe way to infer which account owned them.
+    if (ownerUserId == null || ownerUserId != identity.userId) {
+      return false;
+    }
+
+    final isPersonal = transaction['is_personal'] == true;
+    final ownerCompanyId =
+        _normalizeOwnerValue(transaction['owner_company_id']);
+
+    if (isPersonal) {
+      return ownerCompanyId == null;
+    }
+
+    final companyId = identity.companyId;
+    if (companyId == null || ownerCompanyId == null) {
+      return false;
+    }
+
+    return ownerCompanyId == companyId;
+  }
+
+  static List<Map<String, dynamic>> getPendingTransactions(
+    OfflineQueueIdentity identity,
+  ) {
     final transactions = _box.values
-        .map(
-          (raw) => jsonDecode(raw as String) as Map<String, dynamic>,
-        )
+        .map((raw) => jsonDecode(raw as String) as Map<String, dynamic>)
         .where(
-          (tx) => tx['synced'] != true && tx['dead_letter'] != true,
+          (tx) =>
+              tx['synced'] != true &&
+              tx['dead_letter'] != true &&
+              _belongsToIdentity(tx, identity),
         )
         .toList();
 
     transactions.sort((a, b) {
-      final aQueued = DateTime.tryParse(
-        a['queued_at']?.toString() ?? '',
-      );
-      final bQueued = DateTime.tryParse(
-        b['queued_at']?.toString() ?? '',
-      );
+      final aQueued = DateTime.tryParse(a['queued_at']?.toString() ?? '');
+      final bQueued = DateTime.tryParse(b['queued_at']?.toString() ?? '');
 
       if (aQueued == null && bQueued == null) return 0;
       if (aQueued == null) return 1;
@@ -135,7 +293,13 @@ class OfflineQueueService {
     return transactions;
   }
 
-  static int get pendingCount => getPendingTransactions().length;
+  static int pendingCount(OfflineQueueIdentity identity) =>
+      getPendingTransactions(identity).length;
+
+  static int pendingCountForUser(Map<String, dynamic> user) {
+    final identity = identityFromUser(user);
+    return identity == null ? 0 : pendingCount(identity);
+  }
 
   static String providerLabel(String? provider) {
     return switch (provider) {
@@ -179,25 +343,30 @@ class OfflineQueueService {
     await _box.put(localId, jsonEncode(tx));
   }
 
-  static Future<Map<String, int>> syncNow() {
-    final existingSync = _activeSync;
+  static Future<Map<String, int>> syncNow(
+    OfflineQueueIdentity identity,
+  ) {
+    final syncKey = identity.queueScopeKey;
+    final existingSync = _activeSyncs[syncKey];
 
     if (existingSync != null) {
       return existingSync;
     }
 
-    final sync = _performSync();
-    _activeSync = sync;
+    final sync = _performSync(identity);
+    _activeSyncs[syncKey] = sync;
 
     return sync.whenComplete(() {
-      if (identical(_activeSync, sync)) {
-        _activeSync = null;
+      if (identical(_activeSyncs[syncKey], sync)) {
+        _activeSyncs.remove(syncKey);
       }
     });
   }
 
-  static Future<Map<String, int>> _performSync() async {
-    final pending = getPendingTransactions();
+  static Future<Map<String, int>> _performSync(
+    OfflineQueueIdentity identity,
+  ) async {
+    final pending = getPendingTransactions(identity);
     var succeeded = 0;
     var failed = 0;
 
@@ -235,10 +404,7 @@ class OfflineQueueService {
         await _markSynced(localId);
         succeeded++;
       } catch (error) {
-        await _recordSyncFailure(
-          localId,
-          error.toString(),
-        );
+        await _recordSyncFailure(localId, error.toString());
         failed++;
       }
     }
@@ -246,10 +412,7 @@ class OfflineQueueService {
     return {'succeeded': succeeded, 'failed': failed};
   }
 
-  static Future<void> _recordSyncFailure(
-    String localId,
-    String error,
-  ) async {
+  static Future<void> _recordSyncFailure(String localId, String error) async {
     final raw = _box.get(localId);
     if (raw == null) return;
 
@@ -282,6 +445,7 @@ class OfflineQueueService {
   /// sync - remote_transaction_id is already known, so syncNow()'s
   /// existing existingRemoteId branch goes straight to the PATCH.
   static Future<String> queuePendingCompletion({
+    required OfflineQueueIdentity identity,
     required String transactionId,
     required String status,
     String? networkReference,
@@ -289,11 +453,19 @@ class OfflineQueueService {
     required List<Map<String, dynamic>> sessionLog,
     bool isPersonal = false,
   }) async {
+    if (!isPersonal && identity.companyId == null) {
+      throw StateError(
+        'Business offline transactions require a company identity.',
+      );
+    }
+
     final localId = 'local_${const Uuid().v4()}';
     await _box.put(
       localId,
       jsonEncode({
         'local_id': localId,
+        'owner_user_id': identity.userId,
+        'owner_company_id': isPersonal ? null : identity.companyId,
         'remote_transaction_id': transactionId,
         'status': status,
         'network_reference': networkReference,

@@ -24,11 +24,9 @@ import androidx.core.app.ServiceCompat
  *
  * Uses the "shortService" foreground service type (Android 14+),
  * purpose-built for exactly this kind of brief, user-initiated task -
- * capped at 3 minutes by the OS on Android 15+, comfortably longer
- * than any real USSD session. If an agent takes unusually long
- * entering their PIN and the OS times this out, it just degrades back
- * to normal background behavior for that one session - the existing
- * manual "Confirm Transaction" fallback already covers that edge case.
+ * capped at 3 minutes by the OS on Android 15+. AgentPro's own
+ * pre-PIN and post-PIN watchdogs normally finish substantially earlier,
+ * so this OS timeout is only a final native cleanup backstop.
  * On Android 8-13, foreground service types aren't enforced this way,
  * so the service just starts normally there.
  */
@@ -78,10 +76,11 @@ class UssdForegroundService : Service() {
     }
 
     override fun onTimeout(startId: Int, fgsType: Int) {
-        // Android 15+ shortService 3-minute cap. Stop cleanly rather
-        // than letting the system force-kill it - degrades gracefully
-        // to normal background behavior for that one long-running
-        // session instead of crashing.
+        // Android 15+ shortService cap. Flutter's transaction watchdogs
+        // should normally have completed first, but if native state somehow
+        // survives this long, clear it as well as stopping the foreground
+        // service so no stale automation session remains active.
+        UssdAccessibilityService.endSession()
         stopSelf()
     }
 
