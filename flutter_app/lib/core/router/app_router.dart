@@ -105,6 +105,14 @@ class AppRouter {
         if (authState is AuthAuthenticated) {
           final role = authState.user['role']?.toString();
           final location = state.matchedLocation;
+          final hasPersonalCapability =
+              authState.user['personal_subscription_plan'] != null;
+
+          if (location.startsWith('/personal-') && !hasPersonalCapability) {
+            return role == 'customer'
+                ? '/unsupported-account'
+                : _homeForRole(authState);
+          }
 
           if (location == '/agent' && role != 'agent') {
             return _homeForRole(authState);

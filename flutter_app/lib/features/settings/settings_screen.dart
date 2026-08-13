@@ -104,7 +104,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final authState = context.read<AuthBloc>().state;
+    final authState = context.watch<AuthBloc>().state;
     final Map<String, dynamic> user =
         authState is AuthAuthenticated ? authState.user : <String, dynamic>{};
 
