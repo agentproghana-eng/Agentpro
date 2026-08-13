@@ -22,37 +22,26 @@ function validateFlowSteps(steps) {
     return 'At least one step is required.';
   }
 
-  const pinPromptIndex = steps.findIndex(
-    (step) => step.action === 'pin_prompt'
-  );
-  const autoConfirmIndexes = steps
-    .map((step, index) =>
-      step.action === 'auto_confirm_once' ? index : -1
-    )
-    .filter((index) => index >= 0);
-
-  if (autoConfirmIndexes.length > 1) {
-    return (
-      'Flow may contain at most one auto_confirm_once step — ' +
-      'post-PIN automatic confirmation is deliberately one-shot.'
-    );
-  }
-
-  if (
-    autoConfirmIndexes.length === 1 &&
-    (pinPromptIndex < 0 || autoConfirmIndexes[0] <= pinPromptIndex)
-  ) {
-    return (
-      `Step ${autoConfirmIndexes[0] + 1}: auto_confirm_once must appear ` +
-      'after the pin_prompt step.'
-    );
-  }
-
   for (const [i, step] of steps.entries()) {
+    if (!step || typeof step !== 'object' || Array.isArray(step)) {
+      return `Step ${i + 1}: step must be an object.`;
+    }
+
     if (!Array.isArray(step.match_all) || step.match_all.length === 0) {
       return (
         `Step ${i + 1}: match_all cannot be empty — ` +
-        'a step with no match text can never fire.'
+        'a step with no match text can never fire safely.'
+      );
+    }
+
+    const hasUnsafeMatcher = step.match_all.some(
+      (marker) => typeof marker !== 'string' || marker.trim().length === 0
+    );
+
+    if (hasUnsafeMatcher) {
+      return (
+        `Step ${i + 1}: every match_all entry must be a non-empty string — ` +
+        'blank or non-string matchers are unsafe.'
       );
     }
 
@@ -91,11 +80,56 @@ function validateFlowSteps(steps) {
     }
   }
 
-  if (!steps.some((step) => step.action === 'pin_prompt')) {
+  const pinPromptIndexes = steps
+    .map((step, index) => (step.action === 'pin_prompt' ? index : -1))
+    .filter((index) => index >= 0);
+
+  if (pinPromptIndexes.length === 0) {
     return (
       'Flow has no pin_prompt step — without one, the app will never ' +
       'pause for real PIN entry, and may try to auto-submit a sensitive screen.'
     );
+  }
+
+  if (pinPromptIndexes.length > 1) {
+    return (
+      'Flow must contain exactly one pin_prompt step — multiple PIN ' +
+      'boundaries are ambiguous and are not supported safely.'
+    );
+  }
+
+  const pinPromptIndex = pinPromptIndexes[0];
+
+  const autoConfirmIndexes = steps
+    .map((step, index) =>
+      step.action === 'auto_confirm_once' ? index : -1
+    )
+    .filter((index) => index >= 0);
+
+  if (autoConfirmIndexes.length > 1) {
+    return (
+      'Flow may contain at most one auto_confirm_once step — ' +
+      'post-PIN automatic confirmation is deliberately one-shot.'
+    );
+  }
+
+  if (
+    autoConfirmIndexes.length === 1 &&
+    autoConfirmIndexes[0] <= pinPromptIndex
+  ) {
+    return (
+      `Step ${autoConfirmIndexes[0] + 1}: auto_confirm_once must appear ` +
+      'after the pin_prompt step.'
+    );
+  }
+
+  for (let i = pinPromptIndex + 1; i < steps.length; i++) {
+    if (steps[i].action !== 'auto_confirm_once') {
+      return (
+        `Step ${i + 1}: action "${steps[i].action}" is not allowed after ` +
+        'pin_prompt; only auto_confirm_once may run after PIN entry.'
+      );
+    }
   }
 
   return null;

@@ -7,6 +7,8 @@ jest.mock('../../src/config/database', () => ({
 const {
   getRegisteredProviders,
   getTransactionCapabilities,
+  getFlowBuilderEligibility,
+  getGlobalFlowBuilderEligibility,
   getInitiationCapability,
   getFlowBuilderCapabilities,
 } = require('../../src/utils/ussdFlowCapabilities');
@@ -61,6 +63,89 @@ describe('USSD Flow Builder capabilities', () => {
     ).rejects.toThrow('accountMode must be either business or personal');
 
     expect(queryFn).not.toHaveBeenCalled();
+  });
+
+  test.each(['business', 'personal'])(
+    'Flow Builder eligibility uses active configuration for %s mode without requiring initiation',
+    async (mode) => {
+      const queryFn = jest.fn().mockResolvedValue({
+        rows: [{
+          provider_registered: true,
+          transaction_type_builder_enabled: true,
+        }],
+      });
+
+      await expect(
+        getFlowBuilderEligibility(
+          mode,
+          'future_provider',
+          'future_type',
+          queryFn
+        )
+      ).resolves.toEqual({
+        provider_registered: true,
+        transaction_type_builder_enabled: true,
+      });
+
+      const [sql, params] = queryFn.mock.calls[0];
+
+      expect(sql).toContain("t.typname = 'provider'");
+      expect(sql).toContain('is_active = TRUE');
+      expect(sql).not.toContain('can_initiate = TRUE');
+      expect(params).toEqual([
+        'future_provider',
+        mode,
+        'future_type',
+      ]);
+    }
+  );
+
+  test('Flow Builder eligibility rejects invalid account mode before querying', async () => {
+    const queryFn = jest.fn();
+
+    await expect(
+      getFlowBuilderEligibility(
+        'anything',
+        'mtn',
+        'cash_in',
+        queryFn
+      )
+    ).rejects.toThrow(
+      'accountMode must be either business or personal'
+    );
+
+    expect(queryFn).not.toHaveBeenCalled();
+  });
+
+  test('Global Flow Builder eligibility accepts a type active in any account mode', async () => {
+    const queryFn = jest.fn().mockResolvedValue({
+      rows: [{
+        provider_registered: true,
+        transaction_type_builder_enabled: true,
+      }],
+    });
+
+    await expect(
+      getGlobalFlowBuilderEligibility(
+        'future_provider',
+        'personal_only_type',
+        queryFn
+      )
+    ).resolves.toEqual({
+      provider_registered: true,
+      transaction_type_builder_enabled: true,
+    });
+
+    const [sql, params] = queryFn.mock.calls[0];
+
+    expect(sql).toContain("t.typname = 'provider'");
+    expect(sql).toContain('is_active = TRUE');
+    expect(sql).not.toContain('account_mode =');
+    expect(sql).not.toContain('can_initiate = TRUE');
+    expect(params).toEqual([
+      'future_provider',
+      'personal_only_type',
+    ]);
   });
 
   test('initiation capability is resolved from registered provider and mode-specific flag', async () => {

@@ -273,6 +273,21 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
     });
   }
 
+  void _moveStep(int from, int to) {
+    if (from < 0 ||
+        from >= _steps.length ||
+        to < 0 ||
+        to >= _steps.length ||
+        from == to) {
+      return;
+    }
+
+    setState(() {
+      final step = _steps.removeAt(from);
+      _steps.insert(to, step);
+    });
+  }
+
   Future<void> _save() async {
     if (_provider.isEmpty || _transactionType.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -642,16 +657,52 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          'Step ${i + 1}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
+                        Expanded(
+                          child: Text(
+                            'Step ${i + 1}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
                         IconButton(
+                          tooltip: 'Move step up',
+                          icon: const Icon(
+                            Icons.keyboard_arrow_up,
+                            size: 22,
+                          ),
+                          color: context.appSecondaryText,
+                          disabledColor:
+                              context.appSecondaryText.withValues(alpha: 0.3),
+                          onPressed: i == 0 ? null : () => _moveStep(i, i - 1),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 34,
+                            minHeight: 34,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Move step down',
+                          icon: const Icon(
+                            Icons.keyboard_arrow_down,
+                            size: 22,
+                          ),
+                          color: context.appSecondaryText,
+                          disabledColor:
+                              context.appSecondaryText.withValues(alpha: 0.3),
+                          onPressed: i == _steps.length - 1
+                              ? null
+                              : () => _moveStep(i, i + 1),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 34,
+                            minHeight: 34,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Remove step',
                           icon: Icon(
                             Icons.close,
                             size: 18,
@@ -659,7 +710,10 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
                           ),
                           onPressed: () => _removeStep(i),
                           padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
+                          constraints: const BoxConstraints(
+                            minWidth: 34,
+                            minHeight: 34,
+                          ),
                         ),
                       ],
                     ),

@@ -295,7 +295,13 @@ class UssdAccessibilityService : AccessibilityService() {
 
         val steps = pendingSteps
         if (steps != null && !confirmSent) {
-            val confirmStep = steps.find { it.action == "auto_confirm_once" && it.matchAll.all { m -> screenText.contains(m) } }
+            val confirmStep = steps.find {
+                it.action == "auto_confirm_once" &&
+                    it.matchAll.isNotEmpty() &&
+                    it.matchAll.all { marker ->
+                        marker.isNotBlank() && screenText.contains(marker)
+                    }
+            }
             if (confirmStep != null) {
                 val confirmValue = confirmStep.actionValue
 
@@ -376,7 +382,12 @@ class UssdAccessibilityService : AccessibilityService() {
         // forever instead of ever reaching the real PIN prompt.
         for ((index, step) in steps.withIndex()) {
             if (index < currentStepIndex) continue
-            if (step.matchAll.isNotEmpty() && step.matchAll.all { screenText.contains(it) }) {
+            if (
+                step.matchAll.isNotEmpty() &&
+                step.matchAll.all { marker ->
+                    marker.isNotBlank() && screenText.contains(marker)
+                }
+            ) {
                 val completed = when (step.action) {
                     "send_digit", "send_literal" ->
                         step.actionValue?.let { respond(root, it) } ?: false
