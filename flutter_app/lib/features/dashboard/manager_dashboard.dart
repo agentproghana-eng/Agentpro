@@ -20,9 +20,8 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
-    final user = authState is AuthAuthenticated
-        ? authState.user
-        : <String, dynamic>{};
+    final user =
+        authState is AuthAuthenticated ? authState.user : <String, dynamic>{};
 
     return Scaffold(
       body: IndexedStack(
@@ -66,9 +65,8 @@ class _ManagerMoreTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
-    final user = authState is AuthAuthenticated
-        ? authState.user
-        : <String, dynamic>{};
+    final user =
+        authState is AuthAuthenticated ? authState.user : <String, dynamic>{};
 
     return Scaffold(
       appBar: AppBar(title: const Text('More')),
@@ -123,7 +121,7 @@ class _ManagerMoreTab extends StatelessWidget {
             Icons.store_outlined,
             'Branches',
             () => context.push('/branches'),
-            subtitle: 'View and manage business locations',
+            subtitle: 'View your managed business locations',
           ),
           const MoreGroupLabel('Account'),
           if (user['personal_subscription_plan'] != null)

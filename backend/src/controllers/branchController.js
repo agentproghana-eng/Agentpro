@@ -1,6 +1,7 @@
-const { query } = require('../config/database');
+const { query, withTransaction } = require('../config/database');
 const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
+const { getRegisteredProviders } = require('../utils/ussdFlowCapabilities');
 
 exports.listBranches = async (req, res) => {
   const companyId = req.user.role === 'superuser'
@@ -63,52 +64,88 @@ exports.listBranches = async (req, res) => {
 };
 
 exports.createBranch = async (req, res) => {
-  const { name, location, phone } = req.body;
+  const { name, location, phone, company_id } = req.body;
+
+  const companyId = req.user.role === 'superuser'
+    ? company_id
+    : req.user.company_id;
+
+  if (!companyId) {
+    return res.status(422).json({
+      success: false,
+      message: 'company_id is required when creating a branch as superuser',
+    });
+  }
 
   try {
-    const result = await query(
-      `INSERT INTO branches (company_id, name, location, phone, created_by)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [req.user.company_id, name, location, phone, req.user.id]
-    );
-
-    // Create default float accounts for all providers
-    const providers = ['mtn', 'telecel', 'at_money'];
-    for (const provider of providers) {
-      await query(
-        'INSERT INTO float_accounts (branch_id, provider) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-        [result.rows[0].id, provider]
+    const branch = await withTransaction(async (client) => {
+      const result = await client.query(
+        `INSERT INTO branches (company_id, name, location, phone, created_by)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [companyId, name, location, phone, req.user.id]
       );
-    }
 
-    // If the creating user is the Business Owner and has no branch
-    // assignment yet, this becomes their default branch for recording
-    // their own transactions (owners have no separate branch_id column
-    // on users - agent_branches is the single source of truth for
-    // which branch a transaction gets recorded under).
-    if (req.user.role === 'business_owner') {
-      const existingAssignment = await query(
-        'SELECT id FROM agent_branches WHERE agent_id = $1',
-        [req.user.id]
-      );
-      if (existingAssignment.rows.length === 0) {
-        await query(
-          'INSERT INTO agent_branches (agent_id, branch_id, assigned_by) VALUES ($1, $2, $3)',
-          [req.user.id, result.rows[0].id, req.user.id]
+      const createdBranch = result.rows[0];
+
+      // Keep treasury setup data-driven. Every provider registered in the
+      // PostgreSQL provider enum gets its own branch-level float account.
+      // New providers therefore require no Branch Management code change.
+      const providers = await getRegisteredProviders(client.query.bind(client));
+
+      for (const provider of providers) {
+        await client.query(
+          `INSERT INTO float_accounts (branch_id, provider)
+           VALUES ($1, $2)
+           ON CONFLICT DO NOTHING`,
+          [createdBranch.id, provider]
         );
       }
-    }
 
-    await auditLog({
-      userId: req.user.id, companyId: req.user.company_id,
-      action: 'BRANCH_CREATED', entityType: 'branch', entityId: result.rows[0].id,
-      newValues: { name, location }, ipAddress: req.ip, requestId: req.requestId,
+      // The owner's first branch also becomes their initial operating branch.
+      // Keep this inside the same transaction so a partial branch setup can
+      // never survive if treasury or assignment initialization fails.
+      if (req.user.role === 'business_owner') {
+        const existingAssignment = await client.query(
+          'SELECT id FROM agent_branches WHERE agent_id = $1',
+          [req.user.id]
+        );
+
+        if (existingAssignment.rows.length === 0) {
+          await client.query(
+            `INSERT INTO agent_branches
+               (agent_id, branch_id, assigned_by)
+             VALUES ($1, $2, $3)`,
+            [req.user.id, createdBranch.id, req.user.id]
+          );
+        }
+      }
+
+      return createdBranch;
     });
 
-    res.status(201).json({ success: true, data: result.rows[0] });
+    await auditLog({
+      userId: req.user.id,
+      companyId,
+      action: 'BRANCH_CREATED',
+      entityType: 'branch',
+      entityId: branch.id,
+      newValues: {
+        name: branch.name,
+        location: branch.location,
+        phone: branch.phone,
+        status: branch.status,
+      },
+      ipAddress: req.ip,
+      requestId: req.requestId,
+    });
+
+    res.status(201).json({ success: true, data: branch });
   } catch (error) {
     logger.error('Create branch error:', error);
-    res.status(500).json({ success: false, message: 'Failed to create branch' });
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create branch',
+    });
   }
 };
 
@@ -117,20 +154,55 @@ exports.updateBranch = async (req, res) => {
   const { name, location, phone, status } = req.body;
 
   try {
-    const result = await query(
-      `UPDATE branches SET
+    const updateParams = [
+      name,
+      location,
+      phone,
+      status,
+      branch_id,
+    ];
+
+    let updateSql = `UPDATE branches SET
          name = COALESCE($1, name), location = COALESCE($2, location),
          phone = COALESCE($3, phone), status = COALESCE($4, status),
          updated_at = NOW()
-       WHERE id = $5 AND company_id = $6 RETURNING *`,
-      [name, location, phone, status, branch_id, req.user.company_id]
-    );
+       WHERE id = $5`;
+
+    // Business owners remain strictly company-scoped. Superusers are
+    // platform-wide administrators and may update a branch by its globally
+    // unique branch ID without needing a company_id on their user record.
+    if (req.user.role !== 'superuser') {
+      updateParams.push(req.user.company_id);
+      updateSql += ' AND company_id = $6';
+    }
+
+    updateSql += ' RETURNING *';
+
+    const result = await query(updateSql, updateParams);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Branch not found' });
     }
 
-    res.json({ success: true, data: result.rows[0] });
+    const updatedBranch = result.rows[0];
+
+    await auditLog({
+      userId: req.user.id,
+      companyId: updatedBranch.company_id || req.user.company_id,
+      action: 'BRANCH_UPDATED',
+      entityType: 'branch',
+      entityId: updatedBranch.id,
+      newValues: {
+        name: updatedBranch.name,
+        location: updatedBranch.location,
+        phone: updatedBranch.phone,
+        status: updatedBranch.status,
+      },
+      ipAddress: req.ip,
+      requestId: req.requestId,
+    });
+
+    res.json({ success: true, data: updatedBranch });
   } catch (error) {
     logger.error('Update branch error:', error);
     res.status(500).json({ success: false, message: 'Failed to update branch' });
@@ -167,10 +239,19 @@ exports.getBranch = async (req, res) => {
         return res.status(403).json({ success: false, message: 'Access denied' });
       }
       if (['agent', 'manager'].includes(req.user.role)) {
-        const isAssigned = agents.rows.some(a => a.id === req.user.id) ||
-                            managers.rows.some(m => m.id === req.user.id);
+        // agent_branches represents an agent's operating assignment;
+        // branch_managers is the authoritative manager oversight relation.
+        // Do not let a manager gain direct branch-management visibility
+        // merely because they also have an operating/default assignment.
+        const isAssigned = req.user.role === 'manager'
+          ? managers.rows.some((manager) => manager.id === req.user.id)
+          : agents.rows.some((agent) => agent.id === req.user.id);
+
         if (!isAssigned) {
-          return res.status(403).json({ success: false, message: 'You are not assigned to this branch' });
+          return res.status(403).json({
+            success: false,
+            message: 'You are not assigned to this branch',
+          });
         }
       }
     }

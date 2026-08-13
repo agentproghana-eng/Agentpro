@@ -121,7 +121,8 @@ class AppRouter {
           }
 
           if ((location == '/users' || location == '/branches') &&
-              role != 'business_owner') {
+              role != 'business_owner' &&
+              role != 'manager') {
             return _homeForRole(authState);
           }
         }
@@ -209,8 +210,11 @@ class AppRouter {
           },
         ),
         GoRoute(
-            path: '/transactions/history',
-            builder: (_, __) => const TransactionHistoryScreen()),
+          path: '/transactions/history',
+          builder: (_, state) => TransactionHistoryScreen(
+            initialBranchId: state.uri.queryParameters['branch_id'],
+          ),
+        ),
         GoRoute(
           path: '/transactions/:id',
           builder: (_, state) => TransactionDetailScreen(
@@ -247,10 +251,8 @@ class AppRouter {
               );
             }
 
-            final simSlotStr =
-                state.uri.queryParameters['sim_slot'];
-            final simIccid =
-                state.uri.queryParameters['sim_iccid'];
+            final simSlotStr = state.uri.queryParameters['sim_slot'];
+            final simIccid = state.uri.queryParameters['sim_iccid'];
             final simSubscriptionIdStr =
                 state.uri.queryParameters['sim_subscription_id'];
 
@@ -259,10 +261,9 @@ class AppRouter {
               initialSimSlot:
                   simSlotStr != null ? int.tryParse(simSlotStr) : null,
               initialSimIccid: simIccid,
-              initialSimSubscriptionId:
-                  simSubscriptionIdStr != null
-                      ? int.tryParse(simSubscriptionIdStr)
-                      : null,
+              initialSimSubscriptionId: simSubscriptionIdStr != null
+                  ? int.tryParse(simSubscriptionIdStr)
+                  : null,
             );
           },
         ),
@@ -278,10 +279,8 @@ class AppRouter {
               );
             }
 
-            final simSlotStr =
-                state.uri.queryParameters['sim_slot'];
-            final simIccid =
-                state.uri.queryParameters['sim_iccid'];
+            final simSlotStr = state.uri.queryParameters['sim_slot'];
+            final simIccid = state.uri.queryParameters['sim_iccid'];
             final simSubscriptionIdStr =
                 state.uri.queryParameters['sim_subscription_id'];
 
@@ -290,10 +289,9 @@ class AppRouter {
               initialSimSlot:
                   simSlotStr != null ? int.tryParse(simSlotStr) : null,
               initialSimIccid: simIccid,
-              initialSimSubscriptionId:
-                  simSubscriptionIdStr != null
-                      ? int.tryParse(simSubscriptionIdStr)
-                      : null,
+              initialSimSubscriptionId: simSubscriptionIdStr != null
+                  ? int.tryParse(simSubscriptionIdStr)
+                  : null,
             );
           },
         ),
