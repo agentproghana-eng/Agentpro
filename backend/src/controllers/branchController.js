@@ -32,12 +32,18 @@ exports.listBranches = async (req, res) => {
 
     const result = await query(
       `SELECT b.*,
-              COUNT(DISTINCT ab.agent_id) as agent_count,
-              COUNT(DISTINCT bm.manager_id) as manager_count,
+              COUNT(DISTINCT assigned_agent.id) as agent_count,
+              COUNT(DISTINCT assigned_manager.id) as manager_count,
               COALESCE(MAX(fa.total_float), 0) as total_float
        FROM branches b
        LEFT JOIN agent_branches ab ON ab.branch_id = b.id
+       LEFT JOIN users assigned_agent
+         ON assigned_agent.id = ab.agent_id
+        AND assigned_agent.status <> 'deactivated'
        LEFT JOIN branch_managers bm ON bm.branch_id = b.id
+       LEFT JOIN users assigned_manager
+         ON assigned_manager.id = bm.manager_id
+        AND assigned_manager.status <> 'deactivated'
        LEFT JOIN (
          SELECT branch_id, SUM(current_balance) as total_float
          FROM float_accounts
@@ -140,10 +146,12 @@ exports.getBranch = async (req, res) => {
              LEFT JOIN companies c ON b.company_id = c.id WHERE b.id = $1`, [branch_id]),
       query(`SELECT u.id, u.first_name, u.last_name, u.phone, u.status
              FROM users u INNER JOIN agent_branches ab ON ab.agent_id = u.id
-             WHERE ab.branch_id = $1`, [branch_id]),
+             WHERE ab.branch_id = $1
+               AND u.status <> 'deactivated'`, [branch_id]),
       query(`SELECT u.id, u.first_name, u.last_name, u.phone, u.status
              FROM users u INNER JOIN branch_managers bm ON bm.manager_id = u.id
-             WHERE bm.branch_id = $1`, [branch_id]),
+             WHERE bm.branch_id = $1
+               AND u.status <> 'deactivated'`, [branch_id]),
     ]);
 
     if (branch.rows.length === 0) {

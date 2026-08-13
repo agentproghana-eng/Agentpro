@@ -440,13 +440,43 @@ exports.refreshToken = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid token type' });
     }
 
-    // Check if blacklisted
+    // Check the fast Redis blacklist first.
     const blacklisted = await isTokenBlacklisted(refresh_token);
     if (blacklisted) {
       return res.status(401).json({ success: false, message: 'Token has been revoked' });
     }
 
-    // Fetch user
+    // A valid JWT signature is not sufficient on its own. Refresh tokens
+    // are persisted as bcrypt hashes so password changes, logout, staff
+    // suspension/deactivation, and other server-side revocations remain
+    // authoritative even if the signed token has not expired yet.
+    const storedTokens = await query(
+      `SELECT token_hash
+       FROM refresh_tokens
+       WHERE user_id = $1
+         AND revoked_at IS NULL
+         AND expires_at > NOW()
+       ORDER BY created_at DESC`,
+      [decoded.id]
+    );
+
+    let storedTokenMatches = false;
+    for (const storedToken of storedTokens.rows) {
+      if (await bcrypt.compare(refresh_token, storedToken.token_hash)) {
+        storedTokenMatches = true;
+        break;
+      }
+    }
+
+    if (!storedTokenMatches) {
+      return res.status(401).json({
+        success: false,
+        message: 'Refresh token is no longer valid',
+      });
+    }
+
+    // Fetch user only after the refresh session itself has been validated.
+    // Suspended/deactivated users cannot exchange even a still-stored token.
     const result = await query(
       `SELECT u.*, c.name as company_name
        FROM users u
