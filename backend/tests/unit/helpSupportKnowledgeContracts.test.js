@@ -71,13 +71,21 @@ describe('Help and Support knowledge contracts', () => {
     );
   });
 
-  test('AI staff onboarding copy does not promise an unimplemented SMS password', () => {
+  test('AI staff onboarding copy matches implemented email and SMS delivery', () => {
     const source = readSource(
       'src/controllers/aiController.js',
     );
 
-    expect(source).not.toContain(
-      'emailed and texted to them',
+    expect(source).toContain(
+      'temporary password by email',
+    );
+
+    expect(source).toContain(
+      'the same temporary password is also sent by SMS',
+    );
+
+    expect(source).toContain(
+      'when a phone number is saved for the staff member',
     );
 
     expect(source).toContain(

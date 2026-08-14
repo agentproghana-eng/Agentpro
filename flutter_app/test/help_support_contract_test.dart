@@ -399,15 +399,22 @@ void main() {
       );
     });
 
-    test('Help Guide keeps staff onboarding delivery wording future-proof', () {
+    test('Help Guide reflects implemented email and SMS password delivery', () {
       final source = readSource(
         'lib/features/support/help_guide_screen.dart',
       );
 
       expect(
         source,
-        isNot(
-          contains('sent by email and text message'),
+        contains(
+          'same temporary password is also sent by SMS',
+        ),
+      );
+
+      expect(
+        source,
+        contains(
+          'If a phone number is saved for the staff member',
         ),
       );
 

@@ -46,7 +46,7 @@ Transactions:
 
 Staff Management (for owners and managers):
 - Owners can add managers, agents, and auditors; managers can also add staff
-- New staff receive an auto-generated temporary password and must change it the first time they log in
+- New staff receive an auto-generated temporary password by email; when a phone number is saved for the staff member, the same temporary password is also sent by SMS. They must change it the first time they log in
 - Owners can suspend, activate, or delete (deactivate) a staff member at any time
 - Deleting a staff member preserves their transaction history; if someone with the same email is added again later, their original account and history are reactivated rather than losing anything
 - Staff can be reassigned to a different branch at any time - branch allocation is never permanent

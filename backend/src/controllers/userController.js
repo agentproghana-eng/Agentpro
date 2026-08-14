@@ -210,7 +210,7 @@ exports.createUser = async (req, res) => {
   }
 
   // Generate a cryptographically secure temporary password if none was provided.
-  // This is NEVER returned in the API response and is only ever sent via email.
+  // It is NEVER returned in the API response or persisted in plaintext; it is passed only to the configured one-time delivery channels.
   const tempPassword = password || generateTempPassword();
 
   try {
@@ -311,18 +311,33 @@ exports.createUser = async (req, res) => {
       logger.error("Failed to fetch company name for notifications:", e);
     }
 
-    // Email the temporary password - this is the only place it is ever transmitted
-    let emailSent = true;
+    // Deliver the temporary password through the configured one-time staff channels after account creation succeeds.
+    let emailSent = false;
     try {
-      await sendNewEmployeeEmail(user.email, first_name, last_name, role, companyName, tempPassword);
+      const emailResult = await sendNewEmployeeEmail(
+        user.email,
+        first_name,
+        last_name,
+        role,
+        companyName,
+        tempPassword
+      );
+      emailSent = emailResult?.skipped !== true;
     } catch (emailError) {
       logger.error("Failed to send new employee email:", emailError);
-      emailSent = false;
     }
 
+    let smsSent = false;
     if (phone) {
       try {
-        await sendNewEmployeeSMS(phone, first_name, role, companyName);
+        const smsResult = await sendNewEmployeeSMS(
+          phone,
+          first_name,
+          role,
+          companyName,
+          tempPassword
+        );
+        smsSent = smsResult?.skipped !== true;
       } catch (smsErr) {
         logger.error("Failed to send new employee SMS:", smsErr);
       }
@@ -341,12 +356,25 @@ exports.createUser = async (req, res) => {
     }
 
 
+    let deliveryMessage;
+    if (emailSent && smsSent) {
+      deliveryMessage =
+        `Temporary login details were sent to ${user.email} and the staff phone by SMS.`;
+    } else if (emailSent) {
+      deliveryMessage =
+        `Temporary login details were sent to ${user.email}.`;
+    } else if (smsSent) {
+      deliveryMessage =
+        'Temporary login details were sent to the staff phone by SMS.';
+    } else {
+      deliveryMessage =
+        'The account was created, but login details could not be delivered. Please use password reset to set the initial password.';
+    }
+
     res.status(201).json({
       success: true,
       data: user,
-      message: emailSent
-        ? `${role} account created. Login details have been emailed to ${user.email}.`
-        : `${role} account created, but the welcome email could not be sent. Please use password reset to set their initial password.`,
+      message: `${role} account created. ${deliveryMessage}`,
     });
   } catch (error) {
     // Race condition safety net: two concurrent requests could both pass
@@ -666,7 +694,7 @@ exports.reactivateStaffMember = async (req, res, existingUserId, fields) => {
 
     if (phone) {
       try {
-        await sendNewEmployeeSMS(phone, first_name, role, companyName);
+        await sendNewEmployeeSMS(phone, first_name, role, companyName, tempPassword);
       } catch (smsErr) {
         logger.error("Failed to send reactivation SMS:", smsErr);
       }
