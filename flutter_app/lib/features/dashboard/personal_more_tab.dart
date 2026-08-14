@@ -100,14 +100,14 @@ class PersonalMoreTab extends StatelessWidget {
           MoreTile(
             Icons.settings_outlined,
             'Settings',
-            () => context.push('/settings'),
+            () => context.push('/settings?mode=personal'),
             subtitle: 'Manage preferences, security and app configuration',
           ),
           const MoreGroupLabel('Help & Support'),
           MoreTile(
             Icons.support_agent_outlined,
             'Help & Support',
-            () => context.push('/support'),
+            () => context.push('/support?mode=personal'),
             subtitle: 'Guides, assistance and support options',
           ),
           const Divider(),

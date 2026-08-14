@@ -310,7 +310,12 @@ class AppRouter {
         GoRoute(
             path: '/balances/pending-approvals',
             builder: (_, __) => const PendingApprovalsScreen()),
-        GoRoute(path: '/support', builder: (_, __) => const SupportScreen()),
+        GoRoute(
+          path: '/support',
+          builder: (_, state) => SupportScreen(
+            isPersonal: state.uri.queryParameters['mode'] == 'personal',
+          ),
+        ),
         GoRoute(
             path: '/help-guide', builder: (_, __) => const HelpGuideScreen()),
         GoRoute(
@@ -447,7 +452,12 @@ class AppRouter {
             builder: (_, __) => const NotificationsScreen()),
 
         // Settings
-        GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
+        GoRoute(
+          path: '/settings',
+          builder: (_, state) => SettingsScreen(
+            isPersonal: state.uri.queryParameters['mode'] == 'personal',
+          ),
+        ),
         GoRoute(
             path: '/settings/sim-purpose',
             builder: (_, __) => const SimPurposeSettingsScreen()),

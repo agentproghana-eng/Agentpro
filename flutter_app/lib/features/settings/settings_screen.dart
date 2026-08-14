@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:dio/dio.dart';
 import '../../core/auth/auth_bloc.dart';
 import '../../core/api/api_client.dart';
@@ -13,7 +12,13 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  final bool isPersonal;
+
+  const SettingsScreen({
+    super.key,
+    this.isPersonal = false,
+  });
+
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
@@ -278,31 +283,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ListTile(
           leading: const Icon(Icons.support_agent),
           title: const Text('Contact Support'),
-          subtitle: const Text('support@agentproghana.com'),
-          onTap: () async {
-            // launchUrl() returns false (not a thrown exception) when no
-            // email app is available to handle the intent — a realistic
-            // case on budget Android devices. Must check the return value,
-            // not just catch exceptions, or this silently does nothing.
-            final uri = Uri(
-              scheme: 'mailto',
-              path: 'support@agentproghana.com',
-              queryParameters: {'subject': 'Agent Pro Ghana Support'},
-            );
-            bool launched = false;
-            try {
-              launched = await launchUrl(uri);
-            } catch (_) {
-              launched = false;
-            }
-            if (!launched && context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                    content:
-                        Text('Please email us at support@agentproghana.com')),
-              );
-            }
-          },
+          subtitle: const Text('Help, guides and contact options'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => context.push(
+            widget.isPersonal
+                ? '/support?mode=personal'
+                : '/support?mode=business',
+          ),
         ),
 
         const Divider(),

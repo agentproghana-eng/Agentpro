@@ -134,14 +134,14 @@ class _ManagerMoreTab extends StatelessWidget {
           MoreTile(
             Icons.settings_outlined,
             'Settings',
-            () => context.push('/settings'),
+            () => context.push('/settings?mode=business'),
             subtitle: 'Manage preferences, security and app configuration',
           ),
           const MoreGroupLabel('Help & Support'),
           MoreTile(
             Icons.support_agent_outlined,
             'Help & Support',
-            () => context.push('/support'),
+            () => context.push('/support?mode=business'),
             subtitle: 'Guides, assistance and support options',
           ),
           const Divider(),
