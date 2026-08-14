@@ -25,6 +25,13 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _refCtrl.dispose();
+    _phoneCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
     try {
       final res = await ApiClient.instance.get('/subscriptions/status');

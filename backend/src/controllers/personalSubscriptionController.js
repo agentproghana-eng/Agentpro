@@ -1,6 +1,7 @@
 const { query, withTransaction } = require('../config/database');
 const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
+const { sendToUser } = require('../services/notificationService');
 
 // ─── Get Own Personal Subscription Status ─────────────────────
 
@@ -49,12 +50,51 @@ exports.submitPayment = async (req, res) => {
   const { momo_reference, payment_phone } = req.body;
 
   try {
-    const result = await query(
-      `INSERT INTO personal_subscription_payments (user_id, amount, momo_reference, payment_phone)
-       VALUES ($1, 5.00, $2, $3) RETURNING *`,
-      [req.user.id, momo_reference, payment_phone]
-    );
-    res.status(201).json({ success: true, data: result.rows[0], message: 'Payment submitted for verification.' });
+    let result;
+    let pendingExists = false;
+
+    // requirePersonalAccount guarantees this row exists on the public
+    // route. Lock it so concurrent submissions for the same Personal
+    // account cannot both pass the pending-payment check.
+    await withTransaction(async (client) => {
+      await client.query(
+        'SELECT user_id FROM personal_subscriptions WHERE user_id = $1 FOR UPDATE',
+        [req.user.id]
+      );
+
+      const pending = await client.query(
+        `SELECT id
+         FROM personal_subscription_payments
+         WHERE user_id = $1
+           AND status = 'pending'
+         LIMIT 1`,
+        [req.user.id]
+      );
+
+      if (pending.rows.length > 0) {
+        pendingExists = true;
+        return;
+      }
+
+      result = await client.query(
+        `INSERT INTO personal_subscription_payments (user_id, amount, momo_reference, payment_phone)
+         VALUES ($1, 5.00, $2, $3) RETURNING *`,
+        [req.user.id, momo_reference, payment_phone]
+      );
+    });
+
+    if (pendingExists) {
+      return res.status(409).json({
+        success: false,
+        message: 'You already have a payment under review. Please wait for verification.',
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      data: result.rows[0],
+      message: 'Payment submitted for verification.',
+    });
   } catch (error) {
     logger.error('Submit personal subscription payment error:', error);
     res.status(500).json({ success: false, message: 'Failed to submit payment' });
@@ -67,20 +107,42 @@ exports.verifyPayment = async (req, res) => {
   const { payment_id } = req.params;
   const { action, rejection_reason } = req.body; // 'approve' or 'reject'
 
+  if (!['approve', 'reject'].includes(action)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Action must be approve or reject',
+    });
+  }
+
   try {
-    const paymentResult = await query(
-      'SELECT * FROM personal_subscription_payments WHERE id = $1',
-      [payment_id]
-    );
-    if (paymentResult.rows.length === 0) {
-      return res.status(404).json({ success: false, message: 'Payment not found' });
-    }
-    const payment = paymentResult.rows[0];
-    if (payment.status !== 'pending') {
-      return res.status(400).json({ success: false, message: `Payment already ${payment.status}` });
-    }
+    let payment;
+    let verificationError = null;
+    let approvedExpiresAt = null;
 
     await withTransaction(async (client) => {
+      const paymentResult = await client.query(
+        'SELECT * FROM personal_subscription_payments WHERE id = $1 FOR UPDATE',
+        [payment_id]
+      );
+
+      if (paymentResult.rows.length === 0) {
+        verificationError = {
+          status: 404,
+          message: 'Payment not found',
+        };
+        return;
+      }
+
+      payment = paymentResult.rows[0];
+
+      if (payment.status !== 'pending') {
+        verificationError = {
+          status: 400,
+          message: `Payment already ${payment.status}`,
+        };
+        return;
+      }
+
       if (action === 'approve') {
         const now = new Date();
         const expiresAt = new Date(now);
@@ -98,6 +160,8 @@ exports.verifyPayment = async (req, res) => {
           expiresAt.setTime(new Date(sub.rows[0].expires_at).getTime());
           expiresAt.setMonth(expiresAt.getMonth() + 1);
         }
+
+        approvedExpiresAt = expiresAt;
 
         await client.query(
           `UPDATE personal_subscriptions SET plan = 'paid', expires_at = $1, updated_at = NOW() WHERE user_id = $2`,
@@ -125,6 +189,28 @@ exports.verifyPayment = async (req, res) => {
         userAgent: req.headers['user-agent'],
         requestId: req.requestId
       });
+    });
+
+    if (verificationError) {
+      return res.status(verificationError.status).json({
+        success: false,
+        message: verificationError.message,
+      });
+    }
+
+    await sendToUser(payment.user_id, {
+      type: action === 'approve'
+        ? 'personal_subscription_approved'
+        : 'personal_subscription_rejected',
+      title: action === 'approve'
+        ? '✅ Personal Subscription Activated'
+        : '❌ Personal Subscription Payment Not Verified',
+      body: action === 'approve'
+        ? `Your Personal Plan is active until ${approvedExpiresAt.toLocaleDateString('en-GH')}.`
+        : `Your Personal subscription payment could not be verified. Reason: ${rejection_reason || 'Please contact support.'}`,
+      data: action === 'approve'
+        ? { expires_at: approvedExpiresAt.toISOString() }
+        : {},
     });
 
     res.json({

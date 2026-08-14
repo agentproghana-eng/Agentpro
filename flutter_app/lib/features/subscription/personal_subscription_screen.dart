@@ -1,7 +1,9 @@
 // personal_subscription_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../../core/api/api_client.dart';
+import '../../core/auth/auth_bloc.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
@@ -37,9 +39,17 @@ class _PersonalSubscriptionScreenState
   Future<void> _load() async {
     try {
       final res = await ApiClient.instance.get('/personal-subscription/status');
+      final data = res.data['data'];
+      final subscription = data['subscription'];
+
       if (mounted) {
+        context.read<AuthBloc>().add(AuthUpdateUserEvent({
+              'personal_subscription_plan': subscription['plan'],
+              'personal_subscription_expires_at': subscription['expires_at'],
+            }));
+
         setState(() {
-          _data = res.data['data'];
+          _data = data;
           _loading = false;
         });
       }
@@ -178,7 +188,7 @@ class _PersonalSubscriptionScreenState
                         ],
                       ))),
               const SizedBox(height: 16),
-              if (instructions != null && !isPaid)
+              if (instructions != null)
                 Card(
                   color: context.isDarkMode
                       ? const Color(0xFF332B15)
@@ -207,50 +217,49 @@ class _PersonalSubscriptionScreenState
                       )),
                 ),
               const SizedBox(height: 16),
-              if (!isPaid)
-                AppButton(
-                  label: 'Upgrade to Paid',
-                  icon: Icons.upgrade,
-                  onPressed: () => showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    shape: const RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.vertical(top: Radius.circular(20))),
-                    builder: (_) => Padding(
-                      padding: EdgeInsets.fromLTRB(16, 16, 16,
-                          MediaQuery.of(context).viewInsets.bottom + 16),
-                      child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            const Text('Submit Payment Reference',
-                                style: TextStyle(
-                                    fontSize: 18, fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 16),
-                            TextField(
-                                controller: _refCtrl,
-                                decoration: const InputDecoration(
-                                    labelText: 'MTN MoMo Reference',
-                                    border: OutlineInputBorder(),
-                                    prefixIcon: Icon(Icons.receipt))),
-                            const SizedBox(height: 12),
-                            TextField(
-                                controller: _phoneCtrl,
-                                keyboardType: TextInputType.phone,
-                                decoration: const InputDecoration(
-                                    labelText: 'Phone used to pay',
-                                    border: OutlineInputBorder(),
-                                    prefixIcon: Icon(Icons.phone))),
-                            const SizedBox(height: 20),
-                            AppButton(
-                                label: 'Submit Reference',
-                                onPressed: _submitPayment,
-                                isLoading: _submitting),
-                          ]),
-                    ),
+              AppButton(
+                label: isPaid ? 'Submit Renewal Payment' : 'Upgrade to Paid',
+                icon: isPaid ? Icons.payment : Icons.upgrade,
+                onPressed: () => showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  shape: const RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.vertical(top: Radius.circular(20))),
+                  builder: (_) => Padding(
+                    padding: EdgeInsets.fromLTRB(16, 16, 16,
+                        MediaQuery.of(context).viewInsets.bottom + 16),
+                    child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text('Submit Payment Reference',
+                              style: TextStyle(
+                                  fontSize: 18, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 16),
+                          TextField(
+                              controller: _refCtrl,
+                              decoration: const InputDecoration(
+                                  labelText: 'MTN MoMo Reference',
+                                  border: OutlineInputBorder(),
+                                  prefixIcon: Icon(Icons.receipt))),
+                          const SizedBox(height: 12),
+                          TextField(
+                              controller: _phoneCtrl,
+                              keyboardType: TextInputType.phone,
+                              decoration: const InputDecoration(
+                                  labelText: 'Phone used to pay',
+                                  border: OutlineInputBorder(),
+                                  prefixIcon: Icon(Icons.phone))),
+                          const SizedBox(height: 20),
+                          AppButton(
+                              label: 'Submit Reference',
+                              onPressed: _submitPayment,
+                              isLoading: _submitting),
+                        ]),
                   ),
                 ),
+              ),
             ]),
     );
   }

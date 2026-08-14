@@ -161,6 +161,9 @@ class NotificationService {
       case 'subscription_suspended':
       case 'renewal_approved':
         return '/subscription';
+      case 'personal_subscription_approved':
+      case 'personal_subscription_rejected':
+        return '/personal-subscription';
       case 'ad_approved':
       case 'ad_rejected':
       case 'ad_expiring':
