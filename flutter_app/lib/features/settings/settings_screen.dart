@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:dio/dio.dart';
 import '../../core/auth/auth_bloc.dart';
 import '../../core/api/api_client.dart';
-import '../../core/services/storage_service.dart';
 import '../../core/services/biometric_service.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/services/offline_queue_service.dart';
@@ -22,6 +22,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _biometricEnabled = false;
   bool _canBiometric = false;
   String _biometricLabel = 'Biometrics';
+  String _appVersion = '';
 
   @override
   void initState() {
@@ -33,11 +34,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final availability = await BiometricService.checkAvailability();
     final enabled = await BiometricService.isBiometricEnabled();
     final label = await BiometricService.getBiometricLabel();
+    final packageInfo = await PackageInfo.fromPlatform();
+
     if (mounted) {
       setState(() {
         _canBiometric = availability == BiometricAvailability.available;
         _biometricEnabled = enabled;
         _biometricLabel = label;
+        _appVersion = 'v${packageInfo.version}+${packageInfo.buildNumber}';
       });
     }
   }
@@ -45,32 +49,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _toggleBiometric(bool value) async {
     if (value) {
       final success = await BiometricService.enableBiometric();
+
       if (!success) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-                content: Text(
-                    'Could not verify your biometrics. Please try again.')),
+              content: Text(
+                'Could not verify your phone authentication. Please try again.',
+              ),
+            ),
           );
         }
         return;
       }
     } else {
+      // This is a local device preference only. Do not use account logout
+      // as a side effect of changing the preference.
       await BiometricService.disableBiometric();
-
-      // Disabling phone authentication removes standing trusted-device
-      // access by revoking the preserved refresh token.
-      try {
-        final refreshToken = await StorageService.getRefreshToken();
-        if (refreshToken != null) {
-          await ApiClient.instance.post(
-            '/auth/logout',
-            data: {'refresh_token': refreshToken},
-          );
-        }
-      } catch (_) {}
     }
-    if (mounted) setState(() => _biometricEnabled = value);
+
+    if (mounted) {
+      setState(() => _biometricEnabled = value);
+    }
   }
 
   // Idempotent on the backend (safe even if already added), and only
@@ -268,10 +268,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   fontWeight: FontWeight.bold,
                   letterSpacing: 1)),
         ),
-        const ListTile(
-            leading: Icon(Icons.info_outline),
-            title: Text('Version'),
-            trailing: Text('2.0.0')),
+        ListTile(
+          leading: const Icon(Icons.info_outline),
+          title: const Text('Version'),
+          trailing: Text(
+            _appVersion.isEmpty ? '—' : _appVersion,
+          ),
+        ),
         ListTile(
           leading: const Icon(Icons.support_agent),
           title: const Text('Contact Support'),
@@ -355,18 +358,26 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
     try {
-      // The password change is implemented as a self-reset via the API:
-      // verify current password by re-authenticating, then update.
-      // Using PATCH /auth/me/password (to be added) — for now uses the
-      // existing forgot-password email flow as a fallback.
+      // The backend verifies the current password, updates the hash,
+      // and revokes all refresh sessions. End this local session
+      // immediately as well so the user re-authenticates cleanly.
       await ApiClient.instance.patch('/users/me/password', data: {
         'current_password': _currentCtrl.text,
         'new_password': _newCtrl.text,
       });
       if (mounted) {
-        Navigator.pop(context);
+        final authBloc = context.read<AuthBloc>();
+
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Password changed successfully.')));
+          const SnackBar(
+            content: Text(
+              'Password changed. Please sign in again.',
+            ),
+          ),
+        );
+
+        Navigator.pop(context);
+        authBloc.add(AuthLogoutEvent());
       }
     } on DioException catch (e) {
       final msg = e.response?.data?['message'] ?? 'Failed to change password.';

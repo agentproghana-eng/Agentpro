@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../auth/auth_bloc.dart';
 
-/// Monitors user inactivity and logs out after timeout.
+/// Monitors user inactivity and locks the session after timeout.
 /// Wraps the entire app to detect any touch/interaction.
 class InactivityDetector extends StatefulWidget {
   final Widget child;
@@ -57,14 +57,14 @@ class _InactivityDetectorState extends State<InactivityDetector>
     if (!mounted) return;
     final authBloc = context.read<AuthBloc>();
     if (authBloc.state is AuthAuthenticated) {
-      authBloc.add(AuthLogoutEvent());
+      authBloc.add(AuthLockEvent());
       widget.onTimeout?.call();
-      // Show snackbar on next frame after logout navigates to login
+      // Show snackbar after the lock navigates to the login screen
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('You were logged out due to inactivity.'),
+              content: Text('AgentPro was locked due to inactivity.'),
               duration: Duration(seconds: 4),
             ),
           );

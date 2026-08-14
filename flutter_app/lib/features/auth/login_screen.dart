@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/auth/auth_bloc.dart';
 import '../../core/services/biometric_service.dart';
+import '../../core/services/storage_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_button.dart';
@@ -31,9 +32,18 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _checkBiometric() async {
     final enabled = await BiometricService.isBiometricEnabled();
+    final refreshToken = await StorageService.getRefreshToken();
+    final canResume = refreshToken != null && refreshToken.isNotEmpty;
+
     if (!mounted) return;
-    setState(() => _biometricAvailable = enabled);
-    if (_biometricAvailable) _tryBiometric();
+
+    setState(
+      () => _biometricAvailable = enabled && canResume,
+    );
+
+    if (_biometricAvailable) {
+      _tryBiometric();
+    }
   }
 
   Future<void> _tryBiometric() async {
@@ -44,7 +54,7 @@ class _LoginScreenState extends State<LoginScreen> {
       case BiometricResult.success:
         // Biometric unlocks the app only — it is never used as, or in place
         // of, the Mobile Money PIN. Restore the existing session.
-        context.read<AuthBloc>().add(AuthCheckEvent());
+        context.read<AuthBloc>().add(AuthUnlockEvent());
         break;
       case BiometricResult.lockedOut:
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

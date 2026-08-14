@@ -17,6 +17,10 @@ class AuthLoginEvent extends AuthEvent {
 
 class AuthLogoutEvent extends AuthEvent {}
 
+class AuthLockEvent extends AuthEvent {}
+
+class AuthUnlockEvent extends AuthEvent {}
+
 // Personal Subscriber registration - lightweight, no company involved,
 // mirrors AuthLoginEvent's save-tokens-and-emit pattern but posts to
 // register-personal instead of login, since there's no separate login
@@ -73,24 +77,22 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthCheckEvent>(_onCheck);
     on<AuthLoginEvent>(_onLogin);
     on<AuthRegisterPersonalEvent>(_onRegisterPersonal);
+    on<AuthLockEvent>(_onLock);
+    on<AuthUnlockEvent>(_onUnlock);
     on<AuthLogoutEvent>(_onLogout);
     on<AuthUpdateUserEvent>(_onUpdateUser);
   }
 
-  Future<void> _onCheck(AuthCheckEvent event, Emitter<AuthState> emit) async {
+  Future<void> _onCheck(
+    AuthCheckEvent event,
+    Emitter<AuthState> emit,
+  ) async {
     final user = await StorageService.getUser();
-    var token = await StorageService.getAccessToken();
+    final token = await StorageService.getAccessToken();
 
-    // No access token yet, but a refresh token may still be present
-    // after a device-authentication soft logout. Try to silently obtain
-    // a fresh access token before giving up.
-    if (token == null && user != null) {
-      final refreshed = await ApiClient.refreshToken();
-      if (refreshed) {
-        token = await StorageService.getAccessToken();
-      }
-    }
-
+    // A normal startup check may restore only an already-open session.
+    // It must never exchange a preserved refresh token because doing so
+    // would bypass an inactivity/device-authentication lock.
     if (user != null && token != null) {
       emit(AuthAuthenticated(user));
     } else {
@@ -150,27 +152,76 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
-  Future<void> _onLogout(
-    AuthLogoutEvent event,
+  Future<void> _onLock(
+    AuthLockEvent event,
     Emitter<AuthState> emit,
   ) async {
     final deviceAuthEnabled = await BiometricService.isBiometricEnabled();
 
     if (deviceAuthEnabled) {
-      // End the visible app session while preserving the trusted
-      // device's refresh token for phone-authentication re-entry.
+      // Soft-lock: preserve the refresh token so a successful device
+      // authentication challenge can restore this same session.
       await StorageService.clearAccessTokenOnly();
     } else {
+      // Without device authentication there is no trusted unlock path,
+      // so inactivity becomes a normal session termination.
       try {
         final refreshToken = await StorageService.getRefreshToken();
-        await ApiClient.instance.post(
-          '/auth/logout',
-          data: {'refresh_token': refreshToken},
-        );
+
+        if (refreshToken != null && refreshToken.isNotEmpty) {
+          await ApiClient.instance.post(
+            '/auth/logout',
+            data: {'refresh_token': refreshToken},
+          );
+        }
       } catch (_) {}
 
       await StorageService.clearSession();
     }
+
+    emit(AuthUnauthenticated());
+  }
+
+  Future<void> _onUnlock(
+    AuthUnlockEvent event,
+    Emitter<AuthState> emit,
+  ) async {
+    final user = await StorageService.getUser();
+    final refreshToken = await StorageService.getRefreshToken();
+
+    if (user == null || refreshToken == null || refreshToken.isEmpty) {
+      emit(AuthUnauthenticated());
+      return;
+    }
+
+    final refreshed = await ApiClient.refreshToken();
+    final token = await StorageService.getAccessToken();
+
+    if (refreshed && token != null) {
+      emit(AuthAuthenticated(user));
+    } else {
+      emit(AuthUnauthenticated());
+    }
+  }
+
+  Future<void> _onLogout(
+    AuthLogoutEvent event,
+    Emitter<AuthState> emit,
+  ) async {
+    try {
+      final refreshToken = await StorageService.getRefreshToken();
+
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        await ApiClient.instance.post(
+          '/auth/logout',
+          data: {'refresh_token': refreshToken},
+        );
+      }
+    } catch (_) {}
+
+    // Explicit Sign Out is always a true local sign-out regardless of
+    // whether device authentication is enabled.
+    await StorageService.clearSession();
 
     emit(AuthUnauthenticated());
   }
