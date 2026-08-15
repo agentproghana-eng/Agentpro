@@ -230,6 +230,7 @@ class _FloatRequestsScreenState extends State<FloatRequestsScreen> {
                   ? null
                   : ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.errorColor,
+                      foregroundColor: Colors.white,
                     ),
               child: Text(isApprove ? 'Approve Request' : 'Reject Request'),
             ),
@@ -460,6 +461,7 @@ class _FloatRequestsScreenState extends State<FloatRequestsScreen> {
               icon: const Icon(Icons.add),
               label: const Text('Request Float'),
               backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
             )
           : null,
     );
@@ -605,6 +607,7 @@ class _FloatRequestCard extends StatelessWidget {
                       onPressed: onApprove,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.primaryColor,
+                        foregroundColor: Colors.white,
                       ),
                       child: const Text('Approve'),
                     ),
@@ -945,8 +948,8 @@ class _SubmitFloatRequestSheetState extends State<_SubmitFloatRequestSheet> {
                 const SizedBox(height: 12),
                 Text(
                   _error!,
-                  style: const TextStyle(
-                    color: AppTheme.errorColor,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),

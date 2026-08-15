@@ -176,6 +176,7 @@ class _FloatScreenState extends State<FloatScreen> {
               icon: const Icon(Icons.add),
               label: const Text('Top Up Branch Float'),
               backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
             )
           : null,
     );
@@ -351,7 +352,7 @@ class _FloatScreenState extends State<FloatScreen> {
       builder: (_) => _TopUpSheet(initialBranchId: widget.branchId),
     );
 
-    if (completed == true && mounted) {
+    if (completed == true && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Branch float topped up successfully')),
       );
@@ -378,7 +379,7 @@ class _TotalFloatCard extends StatelessWidget {
           children: [
             const Text(
               'Business Float Balance',
-              style: TextStyle(color: Colors.white70, fontSize: 13),
+              style: TextStyle(color: Colors.white, fontSize: 13),
             ),
             const SizedBox(height: 8),
             Text(
@@ -394,7 +395,7 @@ class _TotalFloatCard extends StatelessWidget {
               branchScoped
                   ? 'Branch treasury · All providers'
                   : 'All active branches · All providers',
-              style: const TextStyle(color: Colors.white60, fontSize: 12),
+              style: const TextStyle(color: Colors.white, fontSize: 12),
             ),
           ],
         ),
@@ -468,6 +469,7 @@ class _FloatCard extends StatelessWidget {
 
     final isLow = balance <= threshold;
     final provider = account['provider']?.toString() ?? '';
+    final lowColor = Theme.of(context).colorScheme.error;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -490,7 +492,7 @@ class _FloatCard extends StatelessWidget {
                   ? 'Low float · Threshold GH₵ ${threshold.toStringAsFixed(2)}'
                   : 'Threshold GH₵ ${threshold.toStringAsFixed(2)}',
               style: TextStyle(
-                color: isLow ? AppTheme.errorColor : context.appSecondaryText,
+                color: isLow ? lowColor : context.appSecondaryText,
                 fontSize: 12,
               ),
             ),
@@ -501,7 +503,7 @@ class _FloatCard extends StatelessWidget {
                 GhsAmount(
                   amount: balance,
                   fontSize: 16,
-                  color: isLow ? AppTheme.errorColor : null,
+                  color: isLow ? lowColor : null,
                 ),
                 Text(
                   _updatedLabel(account['last_updated_at']),
@@ -885,8 +887,8 @@ class _TopUpSheetState extends State<_TopUpSheet> {
                 const SizedBox(height: 12),
                 Text(
                   _error!,
-                  style: const TextStyle(
-                    color: AppTheme.errorColor,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
