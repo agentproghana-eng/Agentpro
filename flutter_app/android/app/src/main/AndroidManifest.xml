@@ -68,7 +68,7 @@
     <uses-feature android:name="android.hardware.fingerprint" android:required="false" />
 
     <application
-        android:label="Agent Pro Ghana"
+        android:label="AgentPro"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"

@@ -50,7 +50,7 @@ void main() {
   });
 
   test('unrated listings still communicate rating state elsewhere', () {
-    expect(source, contains("ratingCount > 0"));
+    expect(source, contains('ratingCount > 0'));
     expect(source, contains(": 'New'"));
   });
 
@@ -67,7 +67,7 @@ void main() {
   test('owners keep ad status controls while buyers get item details', () {
     expect(detailSource, contains("ad['is_owner'] == true"));
     expect(detailSource, contains("'Ad Status' : 'Item Details'"));
-    expect(detailSource, contains("if (isOwner)"));
+    expect(detailSource, contains('if (isOwner)'));
     expect(detailSource, contains("if (!isOwner && status == 'active')"));
   });
 

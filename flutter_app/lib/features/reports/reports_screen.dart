@@ -880,9 +880,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
-                  vertical: 14,
+                  vertical: 16,
                 ),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
                       width: 40,
@@ -898,30 +899,38 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    const Expanded(
-                      child: Text(
-                        'Export Format',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    Wrap(
-                      spacing: 6,
-                      children: [
-                        for (final f in ['pdf', 'excel', 'csv'])
-                          ChoiceChip(
-                            label: Text(
-                              f == 'excel' ? 'Excel' : f.toUpperCase(),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Export Format',
+                            maxLines: 1,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
                             ),
-                            selected: _format == f,
-                            visualDensity: VisualDensity.compact,
-                            onSelected: (_) {
-                              setState(() => _format = f);
-                            },
                           ),
-                      ],
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final f in ['pdf', 'excel', 'csv'])
+                                ChoiceChip(
+                                  label: Text(
+                                    f == 'excel' ? 'Excel' : f.toUpperCase(),
+                                  ),
+                                  selected: _format == f,
+                                  visualDensity: VisualDensity.compact,
+                                  onSelected: (_) {
+                                    setState(() => _format = f);
+                                  },
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),

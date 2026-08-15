@@ -44,9 +44,13 @@ class DashboardHeader extends StatelessWidget {
                 children: [
                   Image.asset(
                     'assets/images/agentpro-icon.png',
-                    height: 26,
+                    width: 32,
+                    height: 32,
+                    fit: BoxFit.contain,
+                    filterQuality: FilterQuality.high,
+                    isAntiAlias: true,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 9),
                   const Text.rich(
                     TextSpan(
                       children: [
@@ -54,16 +58,20 @@ class DashboardHeader extends StatelessWidget {
                           text: 'Agent',
                           style: TextStyle(
                             color: Colors.white,
-                            fontSize: 17,
+                            fontSize: 20,
+                            height: 1,
                             fontWeight: FontWeight.w800,
+                            letterSpacing: -0.65,
                           ),
                         ),
                         TextSpan(
                           text: 'Pro',
                           style: TextStyle(
                             color: AppTheme.secondaryColor,
-                            fontSize: 17,
+                            fontSize: 20,
+                            height: 1,
                             fontWeight: FontWeight.w800,
+                            letterSpacing: -0.65,
                           ),
                         ),
                       ],
