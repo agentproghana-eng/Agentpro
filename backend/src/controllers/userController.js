@@ -9,6 +9,9 @@ const { auditLog } = require('../services/auditService');
 const { sendEmail, sendNewEmployeeEmail } = require('../services/emailService');
 const { sendNewEmployeeSMS } = require('../services/smsService');
 const { sendEphemeral } = require('../services/notificationService');
+const {
+  getRegisteredProviders,
+} = require('../utils/ussdFlowCapabilities');
 
 exports.changePassword = async (req, res) => {
   const { current_password, new_password } = req.body;
@@ -788,8 +791,6 @@ exports.updateMySettings = async (req, res) => {
   }
 };
 
-const QUICK_ACTION_PROVIDERS = ['mtn', 'telecel', 'at_money'];
-
 const QUICK_ACTION_ICON_COLORS = new Set([
   '#00897B',
   '#1565C0',
@@ -803,7 +804,7 @@ const QUICK_ACTION_ICON_COLORS = new Set([
   '#D81B60',
 ]);
 
-function validateQuickActionPreferences(value, fieldName) {
+function validateQuickActionPreferences(value, fieldName, registeredProviders) {
   if (value === undefined) return null;
 
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -811,7 +812,7 @@ function validateQuickActionPreferences(value, fieldName) {
   }
 
   for (const [provider, actions] of Object.entries(value)) {
-    if (!QUICK_ACTION_PROVIDERS.includes(provider)) {
+    if (!registeredProviders.has(provider)) {
       return `Invalid provider in ${fieldName}: ${provider}`;
     }
 
@@ -914,6 +915,177 @@ function validateQuickActionPreferences(value, fieldName) {
   return null;
 }
 
+
+function quickActionGroupForType(transactionType) {
+  const normalized = String(transactionType || '').trim().toLowerCase();
+
+  if (
+    normalized.includes('airtime') ||
+    normalized.includes('data') ||
+    normalized.includes('bundle') ||
+    normalized.includes('mashup')
+  ) {
+    return 'Airtime & Data';
+  }
+
+  if (
+    normalized.includes('balance') ||
+    normalized.includes('statement') ||
+    normalized.includes('commission')
+  ) {
+    return 'Balances & Commission';
+  }
+
+  if (
+    normalized.includes('cash') ||
+    normalized.includes('deposit') ||
+    normalized.includes('withdraw') ||
+    normalized.includes('float') ||
+    normalized.includes('working')
+  ) {
+    return 'Cash & Float';
+  }
+
+  if (
+    normalized.includes('send') ||
+    normalized.includes('transfer') ||
+    normalized.includes('payment') ||
+    normalized.includes('merchant') ||
+    normalized.includes('bill') ||
+    normalized.startsWith('pay_')
+  ) {
+    return 'Transfers & Payments';
+  }
+
+  return 'Other Services';
+}
+
+exports.getMyQuickActionCatalog = async (req, res) => {
+  const requestedMode = String(req.query.mode || 'business')
+    .trim()
+    .toLowerCase();
+
+  const accountMode = requestedMode === 'agent'
+    ? 'business'
+    : requestedMode;
+
+  if (accountMode !== 'business' && accountMode !== 'personal') {
+    return res.status(422).json({
+      success: false,
+      message: 'mode must be business, agent, or personal',
+    });
+  }
+
+  try {
+    const result = await query(
+      `SELECT
+         f.provider::text AS provider,
+         f.transaction_type::text AS transaction_type,
+         COALESCE(
+           NULLIF(BTRIM(c.display_label), ''),
+           INITCAP(REPLACE(f.transaction_type::text, '_', ' '))
+         ) AS display_label,
+         f.bundle_category,
+         f.recipient_mode
+       FROM ussd_flows f
+       INNER JOIN ussd_flow_capabilities c
+         ON c.transaction_type = f.transaction_type
+        AND c.account_mode = $1
+       WHERE f.company_id IS NULL
+         AND f.owner_user_id IS NULL
+         AND f.is_active = TRUE
+         AND c.is_active = TRUE
+         AND c.can_initiate = TRUE
+       ORDER BY
+         f.provider::text,
+         display_label,
+         f.transaction_type::text,
+         COALESCE(f.bundle_category, ''),
+         COALESCE(f.recipient_mode, '')`,
+      [accountMode]
+    );
+
+    const providerMap = new Map();
+
+    for (const row of result.rows) {
+      const provider = String(row.provider || '').trim();
+      const transactionType = String(row.transaction_type || '').trim();
+
+      if (!provider || !transactionType) {
+        continue;
+      }
+
+      if (!providerMap.has(provider)) {
+        providerMap.set(provider, new Map());
+      }
+
+      const actions = providerMap.get(provider);
+
+      if (!actions.has(transactionType)) {
+        actions.set(transactionType, {
+          provider,
+          transaction_type: transactionType,
+          display_label:
+            String(row.display_label || '').trim() ||
+            transactionType.replace(/_/g, ' '),
+          quick_action_group: quickActionGroupForType(transactionType),
+          variants: [],
+        });
+      }
+
+      const bundleCategory =
+        row.bundle_category === null || row.bundle_category === undefined
+          ? null
+          : String(row.bundle_category).trim() || null;
+
+      const recipientMode =
+        row.recipient_mode === null || row.recipient_mode === undefined
+          ? null
+          : String(row.recipient_mode).trim() || null;
+
+      if (bundleCategory !== null || recipientMode !== null) {
+        const action = actions.get(transactionType);
+
+        const alreadyPresent = action.variants.some(
+          (variant) =>
+            variant.bundle_category === bundleCategory &&
+            variant.recipient_mode === recipientMode
+        );
+
+        if (!alreadyPresent) {
+          action.variants.push({
+            bundle_category: bundleCategory,
+            recipient_mode: recipientMode,
+          });
+        }
+      }
+    }
+
+    const providers = [];
+
+    for (const [provider, actionMap] of providerMap.entries()) {
+      providers.push({
+        provider,
+        actions: Array.from(actionMap.values()),
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        mode: accountMode,
+        providers,
+      },
+    });
+  } catch (error) {
+    logger.error('Get my Quick Action catalog error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch Quick Action catalog',
+    });
+  }
+};
+
 exports.getMyQuickActions = async (req, res) => {
   try {
     const result = await query(
@@ -962,9 +1134,24 @@ exports.updateMyQuickActions = async (req, res) => {
     });
   }
 
+  let registeredQuickActionProviders;
+
+  try {
+    registeredQuickActionProviders = new Set(
+      await getRegisteredProviders()
+    );
+  } catch (error) {
+    logger.error('Load registered Quick Action providers error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to validate Quick Action providers',
+    });
+  }
+
   const agentError = validateQuickActionPreferences(
     agent_quick_actions,
-    'agent_quick_actions'
+    'agent_quick_actions',
+    registeredQuickActionProviders
   );
 
   if (agentError) {
@@ -976,7 +1163,8 @@ exports.updateMyQuickActions = async (req, res) => {
 
   const personalError = validateQuickActionPreferences(
     personal_quick_actions,
-    'personal_quick_actions'
+    'personal_quick_actions',
+    registeredQuickActionProviders
   );
 
   if (personalError) {

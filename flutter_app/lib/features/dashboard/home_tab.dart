@@ -6,6 +6,7 @@ import '../../core/services/dashboard_refresh_service.dart';
 import '../../core/services/app_cache_service.dart';
 import '../../core/router/app_router.dart';
 import '../ussd_settings/quick_action_preference.dart';
+import '../ussd_settings/quick_action_catalog.dart';
 import '../../shared/widgets/offline_status_banner.dart';
 import 'widgets/dashboard_quick_actions_section.dart';
 import 'widgets/dashboard_header.dart';
@@ -31,6 +32,8 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   Map<int, String> _simPurposes = {};
   Map<String, List<QuickActionPreference>> _agentQuickActions = {};
   Map<String, List<QuickActionPreference>> _personalQuickActions = {};
+  QuickActionCatalog? _agentQuickActionCatalog;
+  QuickActionCatalog? _personalQuickActionCatalog;
   StreamSubscription<DashboardRefreshEvent>? _dashboardRefreshSubscription;
   final DashboardRecentTransactionsController _recentTransactionsController =
       DashboardRecentTransactionsController();
@@ -94,10 +97,13 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
 
       if (raw is! Map) return result;
 
-      for (final provider in ['mtn', 'telecel', 'at_money']) {
-        final value = raw[provider];
+      for (final entry in raw.entries) {
+        final provider = entry.key.toString().trim();
+        final value = entry.value;
 
-        if (value is! List) continue;
+        if (provider.isEmpty || value is! List) {
+          continue;
+        }
 
         final items = <QuickActionPreference>[];
 
@@ -169,29 +175,33 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
         'personal': serializeProfile(personal),
       });
 
+      if (mounted) {
+        setState(() {
+          _agentQuickActions = agent;
+          _personalQuickActions = personal;
+        });
+      }
+    } catch (_) {
+      // Keep cached values when the preference request fails.
+    }
+
+    try {
+      final catalogs = await Future.wait([
+        QuickActionCatalog.load(mode: 'business'),
+        QuickActionCatalog.load(mode: 'personal'),
+      ]);
+
       if (!mounted) return;
 
       setState(() {
-        _agentQuickActions = agent;
-        _personalQuickActions = personal;
+        _agentQuickActionCatalog = catalogs[0];
+        _personalQuickActionCatalog = catalogs[1];
       });
     } catch (_) {
-      // Keep cached/default values when request fails.
+      // Saved actions can still render with generic metadata fallbacks.
     }
   }
 
-  // Fetches the admin-controlled kill-switch list once per screen load.
-  // Fails silently (leaves _disabledTypes empty) on any error - a
-  // feature-flag fetch failure should never block the home screen or
-  // make tiles look disabled when they're actually fine; the same
-  // check is enforced server-side regardless as the real safety net.
-  // Lets Home dynamically switch its Quick Actions to Personal's own
-  // set when the currently-selected provider's SIM has been tagged
-  // 'personal' in Settings > SIM Purpose - someone holding both
-  // capabilities can use their personal SIM's actions right from
-  // Agent Home, without navigating away to the separate Personal
-  // dashboard. Fails silently, same as feature flags - a pure Agent
-  // account (no purposes ever saved) simply never triggers this.
   Future<void> _loadSimPurposes() async {
     const cacheKey = 'dashboard_sim_purposes';
 
@@ -365,6 +375,8 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
                     simPurposes: _simPurposes,
                     agentQuickActions: _agentQuickActions,
                     personalQuickActions: _personalQuickActions,
+                    agentCatalog: _agentQuickActionCatalog,
+                    personalCatalog: _personalQuickActionCatalog,
                   ),
                 ),
                 DashboardRecentTransactionsSection(
