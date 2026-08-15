@@ -40,6 +40,7 @@ import '../../features/ussd_settings/quick_action_customization_screen.dart';
 import '../../features/ussd_flows/ussd_flow_list_screen.dart';
 import '../../features/community/community_feed_screen.dart';
 import '../../features/shifts/close_shift_screen.dart';
+import '../../features/shifts/open_shift_screen.dart';
 import '../../features/shifts/shift_history_screen.dart';
 import '../../features/community/post_detail_screen.dart';
 import '../../features/community/post_moderation_screen.dart';
@@ -356,6 +357,8 @@ class AppRouter {
         GoRoute(
             path: '/community',
             builder: (_, __) => const CommunityFeedScreen()),
+        GoRoute(
+            path: '/shifts/open', builder: (_, __) => const OpenShiftScreen()),
         GoRoute(
             path: '/shifts/close/:shiftId',
             builder: (_, state) =>
