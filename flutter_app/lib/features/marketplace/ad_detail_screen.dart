@@ -242,10 +242,10 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
 
     final companyLogo = ad['company_logo_url']?.toString().trim();
 
-    final sellerImageUrl = companyLogo != null && companyLogo.isNotEmpty
-        ? companyLogo
-        : sellerImage != null && sellerImage.isNotEmpty
-            ? sellerImage
+    final sellerImageUrl = sellerImage != null && sellerImage.isNotEmpty
+        ? sellerImage
+        : companyLogo != null && companyLogo.isNotEmpty
+            ? companyLogo
             : null;
 
     final isVerified = ad['is_verified'] == true;
