@@ -719,6 +719,8 @@ class _FullScreenGalleryState extends State<_FullScreenGallery> {
   late final PageController _pageController;
   late int _index;
 
+  bool _currentImageZoomed = false;
+
   @override
   void initState() {
     super.initState();
@@ -749,6 +751,14 @@ class _FullScreenGalleryState extends State<_FullScreenGallery> {
     );
   }
 
+  void _handleZoomChanged(int index, bool zoomed) {
+    if (index != _index || _currentImageZoomed == zoomed) {
+      return;
+    }
+
+    setState(() => _currentImageZoomed = zoomed);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -758,13 +768,23 @@ class _FullScreenGalleryState extends State<_FullScreenGallery> {
           children: [
             PageView.builder(
               controller: _pageController,
+              physics: _currentImageZoomed
+                  ? const NeverScrollableScrollPhysics()
+                  : null,
               itemCount: widget.images.length,
               onPageChanged: (index) {
-                setState(() => _index = index);
+                setState(() {
+                  _index = index;
+                  _currentImageZoomed = false;
+                });
               },
               itemBuilder: (context, index) {
                 return _ZoomableGalleryImage(
                   url: widget.images[index],
+                  isActive: index == _index,
+                  onZoomChanged: (zoomed) {
+                    _handleZoomChanged(index, zoomed);
+                  },
                 );
               },
             ),
@@ -870,9 +890,13 @@ class _FullScreenGalleryState extends State<_FullScreenGallery> {
 
 class _ZoomableGalleryImage extends StatefulWidget {
   final String url;
+  final bool isActive;
+  final ValueChanged<bool> onZoomChanged;
 
   const _ZoomableGalleryImage({
     required this.url,
+    required this.isActive,
+    required this.onZoomChanged,
   });
 
   @override
@@ -880,9 +904,24 @@ class _ZoomableGalleryImage extends StatefulWidget {
 }
 
 class _ZoomableGalleryImageState extends State<_ZoomableGalleryImage> {
+  static const double _doubleTapScale = 2.5;
+  static const double _zoomThreshold = 1.01;
+
   final TransformationController _controller = TransformationController();
 
-  bool _zoomed = false;
+  TapDownDetails? _doubleTapDetails;
+  bool _lastReportedZoomed = false;
+
+  @override
+  void didUpdateWidget(covariant _ZoomableGalleryImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.isActive && !widget.isActive) {
+      _doubleTapDetails = null;
+      _lastReportedZoomed = false;
+      _controller.value = Matrix4.identity();
+    }
+  }
 
   @override
   void dispose() {
@@ -890,23 +929,73 @@ class _ZoomableGalleryImageState extends State<_ZoomableGalleryImage> {
     super.dispose();
   }
 
-  void _toggleZoom() {
-    setState(() {
-      _zoomed = !_zoomed;
+  void _reportZoomState() {
+    if (!widget.isActive) {
+      return;
+    }
 
-      _controller.value =
-          _zoomed ? Matrix4.diagonal3Values(2.5, 2.5, 1) : Matrix4.identity();
-    });
+    final zoomed = _controller.value.getMaxScaleOnAxis() > _zoomThreshold;
+
+    if (zoomed == _lastReportedZoomed) {
+      return;
+    }
+
+    _lastReportedZoomed = zoomed;
+    widget.onZoomChanged(zoomed);
+  }
+
+  void _toggleZoom() {
+    final currentScale = _controller.value.getMaxScaleOnAxis();
+
+    if (currentScale > _zoomThreshold) {
+      _controller.value = Matrix4.identity();
+      _reportZoomState();
+      return;
+    }
+
+    final position = _doubleTapDetails?.localPosition;
+
+    if (position == null) {
+      return;
+    }
+
+    const translationScale = _doubleTapScale - 1;
+
+    _controller.value = Matrix4(
+      _doubleTapScale,
+      0,
+      0,
+      0,
+      0,
+      _doubleTapScale,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      -position.dx * translationScale,
+      -position.dy * translationScale,
+      0,
+      1,
+    );
+
+    _reportZoomState();
   }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
+      onDoubleTapDown: (details) {
+        _doubleTapDetails = details;
+      },
       onDoubleTap: _toggleZoom,
       child: InteractiveViewer(
         transformationController: _controller,
         minScale: 1,
         maxScale: 4,
+        onInteractionUpdate: (_) => _reportZoomState(),
+        onInteractionEnd: (_) => _reportZoomState(),
         child: Center(
           child: AppNetworkImage(
             url: widget.url,
