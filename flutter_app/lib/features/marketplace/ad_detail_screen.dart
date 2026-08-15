@@ -7,6 +7,7 @@ import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_network_image.dart';
 import '../../shared/widgets/app_widgets.dart';
 import '../../shared/theme/app_colors.dart';
+import 'marketplace_data_utils.dart';
 
 class AdDetailScreen extends StatefulWidget {
   final String adId;
@@ -103,7 +104,7 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
   }
 
   void _openGallery(
-    List<dynamic> images, {
+    List<String> images, {
     int initialIndex = 0,
   }) {
     if (images.isEmpty) return;
@@ -112,10 +113,7 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
       MaterialPageRoute<void>(
         fullscreenDialog: true,
         builder: (_) => _FullScreenGallery(
-          images: images
-              .map((image) => image.toString())
-              .where((image) => image.trim().isNotEmpty)
-              .toList(growable: false),
+          images: images,
           initialIndex: initialIndex,
         ),
       ),
@@ -206,9 +204,9 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
 
     final fee = double.tryParse(ad['publishing_fee']?.toString() ?? '0') ?? 0;
 
-    final images = ad['image_urls'] is List
-        ? List<dynamic>.from(ad['image_urls'] as List)
-        : <dynamic>[];
+    final images = normalizedMarketplaceImageUrls(
+      ad['image_urls'],
+    );
 
     final rating = double.tryParse(ad['avg_rating']?.toString() ?? '0') ?? 0;
 
@@ -256,6 +254,10 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
 
     final contactPhone = ad['contact_phone']?.toString().trim() ?? '';
 
+    final publishedAt = parseMarketplaceDateTime(
+      ad['published_at'],
+    );
+
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
@@ -264,10 +266,7 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
         children: [
           if (images.isNotEmpty) ...[
             _DetailImageGallery(
-              images: images
-                  .map((image) => image.toString())
-                  .where((image) => image.trim().isNotEmpty)
-                  .toList(growable: false),
+              images: images,
               onOpenGallery: (index) => _openGallery(
                 images,
                 initialIndex: index,
@@ -357,14 +356,12 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
                       text: contactPhone,
                     ),
                   ],
-                  if (ad['published_at'] != null) ...[
+                  if (publishedAt != null) ...[
                     const SizedBox(height: 8),
                     _DetailMeta(
                       icon: Icons.calendar_today_outlined,
                       text: 'Published ${DateFormat('MMM d, y').format(
-                        DateTime.parse(
-                          ad['published_at'].toString(),
-                        ).toLocal(),
+                        publishedAt.toLocal(),
                       )}',
                     ),
                   ],
@@ -1098,6 +1095,8 @@ class _StatusExplainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final expiresAtDate = parseMarketplaceDateTime(expiresAt);
+
     final (icon, color, title, body) = switch (status) {
       'pending_review' => (
           Icons.hourglass_top,
@@ -1117,9 +1116,9 @@ class _StatusExplainer extends StatelessWidget {
           Icons.check_circle,
           AppTheme.successColor,
           'Live on Business Hub',
-          expiresAt != null
+          expiresAtDate != null
               ? 'Your ad is published and visible to all users until '
-                  '${DateFormat('dd MMM yyyy').format(DateTime.parse(expiresAt!))}.'
+                  '${DateFormat('dd MMM yyyy').format(expiresAtDate)}.'
               : 'Your ad is published and visible to all users.',
         ),
       'rejected' => (

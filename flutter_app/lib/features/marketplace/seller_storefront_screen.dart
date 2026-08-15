@@ -7,6 +7,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_network_image.dart';
 import '../../shared/widgets/app_widgets.dart';
+import 'marketplace_data_utils.dart';
 
 class SellerStorefrontScreen extends StatefulWidget {
   final String sellerId;
@@ -481,8 +482,9 @@ class _StorefrontAdCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final images = ad['image_urls'];
-    final hasImage = images is List && images.isNotEmpty;
+    final images = normalizedMarketplaceImageUrls(
+      ad['image_urls'],
+    );
 
     final price = double.tryParse(ad['price']?.toString() ?? '0') ?? 0;
 
@@ -499,9 +501,9 @@ class _StorefrontAdCard extends StatelessWidget {
               child: Container(
                 width: double.infinity,
                 color: AppTheme.primaryColor.withValues(alpha: 0.08),
-                child: hasImage
+                child: images.isNotEmpty
                     ? AppNetworkImage(
-                        url: images.first.toString(),
+                        url: images.first,
                         fit: BoxFit.contain,
                         memCacheWidth: 700,
                         errorWidget: const Icon(

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_network_image.dart';
+import 'marketplace_data_utils.dart';
 
 class SavedAdsScreen extends StatefulWidget {
   const SavedAdsScreen({super.key});
@@ -171,8 +172,9 @@ class _SavedAdsScreenState extends State<SavedAdsScreen> {
                         itemBuilder: (context, index) {
                           final ad = _ads[index];
                           final id = ad['id']?.toString() ?? '';
-                          final images = ad['image_urls'];
-                          final hasImage = images is List && images.isNotEmpty;
+                          final images = normalizedMarketplaceImageUrls(
+                            ad['image_urls'],
+                          );
                           final price = double.tryParse(
                                 ad['price']?.toString() ?? '',
                               ) ??
@@ -194,9 +196,9 @@ class _SavedAdsScreenState extends State<SavedAdsScreen> {
                                         Container(
                                           color: AppTheme.primaryColor
                                               .withValues(alpha: 0.1),
-                                          child: hasImage
+                                          child: images.isNotEmpty
                                               ? AppNetworkImage(
-                                                  url: images.first.toString(),
+                                                  url: images.first,
                                                   fit: BoxFit.contain,
                                                   memCacheWidth: 600,
                                                   errorWidget: const Icon(

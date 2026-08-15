@@ -8,6 +8,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_network_image.dart';
 import '../../shared/widgets/app_widgets.dart';
+import 'marketplace_data_utils.dart';
 
 class MarketplaceScreen extends StatefulWidget {
   const MarketplaceScreen({super.key});
@@ -1057,9 +1058,9 @@ class _AdCard extends StatelessWidget {
 
     final ratingCount = int.tryParse(ad['rating_count']?.toString() ?? '') ?? 0;
 
-    final images = ad['image_urls'] is List
-        ? List<dynamic>.from(ad['image_urls'] as List)
-        : <dynamic>[];
+    final images = normalizedMarketplaceImageUrls(
+      ad['image_urls'],
+    );
 
     final firstName = ad['seller_first_name']?.toString().trim() ?? '';
 
@@ -1097,7 +1098,7 @@ class _AdCard extends StatelessWidget {
                     ),
                     child: images.isNotEmpty
                         ? AppNetworkImage(
-                            url: images.first.toString(),
+                            url: images.first,
                             fit: BoxFit.cover,
                             memCacheWidth: 700,
                             errorWidget: Center(
