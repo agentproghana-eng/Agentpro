@@ -168,15 +168,31 @@ mpRouter.get('/', async (req, res) => {
       SELECT
         a.*,
         ac.name AS category_name,
+        seller.first_name AS seller_first_name,
+        seller.last_name AS seller_last_name,
+        company.name AS company_name,
+        COALESCE(company.marketplace_verified, FALSE) AS seller_verified,
         COALESCE(AVG(ar.rating), 0)::float AS avg_rating,
         COUNT(ar.id)::int AS rating_count
       FROM advertisements a
       LEFT JOIN ad_categories ac
         ON ac.id = a.category_id
+      INNER JOIN users seller
+        ON seller.id = a.posted_by
+      LEFT JOIN companies company
+        ON company.id = seller.company_id
       LEFT JOIN ad_ratings ar
         ON ar.advertisement_id = a.id
       ${where}
-      GROUP BY a.id, ac.name
+      GROUP BY
+        a.id,
+        ac.name,
+        seller.id,
+        seller.first_name,
+        seller.last_name,
+        company.id,
+        company.name,
+        company.marketplace_verified
       ${having}
       ORDER BY ${orderBy}
       LIMIT $${limitParameter}
@@ -1137,6 +1153,10 @@ mpRouter.get('/recently-viewed', async (req, res) => {
       `SELECT
          a.*,
          ac.name AS category_name,
+         seller.first_name AS seller_first_name,
+         seller.last_name AS seller_last_name,
+         company.name AS company_name,
+         COALESCE(company.marketplace_verified, FALSE) AS seller_verified,
          recent.last_viewed_at,
          COALESCE(AVG(ar.rating), 0)::float AS avg_rating,
          COUNT(ar.id)::int AS rating_count
@@ -1153,9 +1173,22 @@ mpRouter.get('/recently-viewed', async (req, res) => {
         AND a.status = 'active'
        LEFT JOIN ad_categories ac
          ON ac.id = a.category_id
+       INNER JOIN users seller
+         ON seller.id = a.posted_by
+       LEFT JOIN companies company
+         ON company.id = seller.company_id
        LEFT JOIN ad_ratings ar
          ON ar.advertisement_id = a.id
-       GROUP BY a.id, ac.name, recent.last_viewed_at
+       GROUP BY
+         a.id,
+         ac.name,
+         seller.id,
+         seller.first_name,
+         seller.last_name,
+         company.id,
+         company.name,
+         company.marketplace_verified,
+         recent.last_viewed_at
        ORDER BY recent.last_viewed_at DESC
        LIMIT $2`,
       [req.user.id, limit]
@@ -1203,12 +1236,20 @@ mpRouter.get('/recommendations', async (req, res) => {
        SELECT
          a.*,
          ac.name AS category_name,
+         seller.first_name AS seller_first_name,
+         seller.last_name AS seller_last_name,
+         company.name AS company_name,
+         COALESCE(company.marketplace_verified, FALSE) AS seller_verified,
          COALESCE(vc.interest_score, 0)::int AS recommendation_score,
          COALESCE(AVG(ar.rating), 0)::float AS avg_rating,
          COUNT(ar.id)::int AS rating_count
        FROM advertisements a
        LEFT JOIN ad_categories ac
          ON ac.id = a.category_id
+       INNER JOIN users seller
+         ON seller.id = a.posted_by
+       LEFT JOIN companies company
+         ON company.id = seller.company_id
        LEFT JOIN viewed_categories vc
          ON vc.category_id = a.category_id
        LEFT JOIN ad_ratings ar
@@ -1221,6 +1262,12 @@ mpRouter.get('/recommendations', async (req, res) => {
        GROUP BY
          a.id,
          ac.name,
+         seller.id,
+         seller.first_name,
+         seller.last_name,
+         company.id,
+         company.name,
+         company.marketplace_verified,
          vc.interest_score,
          vc.last_interest_at
        ORDER BY
@@ -1425,7 +1472,21 @@ mpRouter.get('/:ad_id', async (req, res) => {
          COALESCE(c.marketplace_verified, FALSE) AS is_verified,
          COALESCE(c.marketplace_featured, FALSE) AS is_featured,
          COALESCE(AVG(ar.rating), 0)::float AS avg_rating,
-         COUNT(ar.id)::int AS rating_count
+         COUNT(ar.id)::int AS rating_count,
+         (
+           SELECT COALESCE(AVG(seller_rating.rating), 0)::float
+           FROM ad_ratings seller_rating
+           INNER JOIN advertisements seller_ad
+             ON seller_ad.id = seller_rating.advertisement_id
+           WHERE seller_ad.posted_by = u.id
+         ) AS seller_average_rating,
+         (
+           SELECT COUNT(*)::int
+           FROM ad_ratings seller_rating_count
+           INNER JOIN advertisements seller_ad_count
+             ON seller_ad_count.id = seller_rating_count.advertisement_id
+           WHERE seller_ad_count.posted_by = u.id
+         ) AS seller_review_count
        FROM advertisements a
        LEFT JOIN ad_categories ac
          ON ac.id = a.category_id
@@ -1458,6 +1519,8 @@ mpRouter.get('/:ad_id', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Ad not found' });
     }
     const ad = result.rows[0];
+    ad.is_owner = ad.posted_by === req.user.id;
+
     // Owners can always view their own ad regardless of status.
     // Anyone else can only view it once it's actually published.
     if (ad.posted_by !== req.user.id && ad.status !== 'active') {
