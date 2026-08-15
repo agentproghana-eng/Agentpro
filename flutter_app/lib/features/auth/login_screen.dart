@@ -117,15 +117,15 @@ class _LoginScreenState extends State<LoginScreen> {
                           alignment: Alignment.center,
                           child: Column(
                             children: [
-                              Container(
-                                width: 80,
-                                height: 80,
-                                decoration: BoxDecoration(
-                                  color: AppTheme.primaryColor,
-                                  borderRadius: BorderRadius.circular(20),
+                              Semantics(
+                                label: 'Agent Pro Ghana logo',
+                                image: true,
+                                child: Image.asset(
+                                  'assets/images/agentpro-logo-lockup.png',
+                                  width: 220,
+                                  fit: BoxFit.contain,
+                                  filterQuality: FilterQuality.high,
                                 ),
-                                child: const Icon(Icons.account_balance_wallet,
-                                    color: Colors.white, size: 44),
                               ),
                               const SizedBox(height: 16),
                               Text(

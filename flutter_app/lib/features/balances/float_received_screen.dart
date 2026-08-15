@@ -31,8 +31,7 @@ class FloatReceivedScreen extends StatefulWidget {
 class _FloatReceivedScreenState extends State<FloatReceivedScreen> {
   late String _provider;
 
-  String get _floatLabel =>
-      _provider == 'telecel' ? 'Float' : 'e-Float';
+  String get _floatLabel => _provider == 'telecel' ? 'Float' : 'e-Float';
 
   final _amountCtrl = TextEditingController();
   final _refCtrl = TextEditingController();
@@ -182,11 +181,9 @@ class _FloatReceivedScreenState extends State<FloatReceivedScreen> {
         _simDetectionComplete = true;
         _simPermissionDenied = false;
 
-        final requestedIccid =
-            (widget.initialSimIccid ?? '').trim();
+        final requestedIccid = (widget.initialSimIccid ?? '').trim();
 
-        final routeRequestedExactSim =
-            widget.initialSimSlot != null ||
+        final routeRequestedExactSim = widget.initialSimSlot != null ||
             requestedIccid.isNotEmpty ||
             widget.initialSimSubscriptionId != null;
 
@@ -205,18 +202,14 @@ class _FloatReceivedScreenState extends State<FloatReceivedScreen> {
 
         if (routeRequestedExactSim) {
           for (final sim in providerSims) {
-            final slotMatches =
-                widget.initialSimSlot == null ||
+            final slotMatches = widget.initialSimSlot == null ||
                 sim.slot == widget.initialSimSlot;
 
-            final identityMatches =
-                requestedIccid.isNotEmpty
-                    ? sim.iccid.trim() == requestedIccid &&
-                        slotMatches
-                    : slotMatches &&
-                        widget.initialSimSubscriptionId != null &&
-                        sim.subscriptionId ==
-                            widget.initialSimSubscriptionId;
+            final identityMatches = requestedIccid.isNotEmpty
+                ? sim.iccid.trim() == requestedIccid && slotMatches
+                : slotMatches &&
+                    widget.initialSimSubscriptionId != null &&
+                    sim.subscriptionId == widget.initialSimSubscriptionId;
 
             if (identityMatches) {
               requestedSim = sim;
@@ -227,12 +220,10 @@ class _FloatReceivedScreenState extends State<FloatReceivedScreen> {
 
         if (providerSims.isEmpty) {
           _selectedSimSlot = null;
-          _initialSimIdentityUnavailable =
-              routeRequestedExactSim;
+          _initialSimIdentityUnavailable = routeRequestedExactSim;
         } else if (routeRequestedExactSim) {
           _selectedSimSlot = requestedSim?.slot;
-          _initialSimIdentityUnavailable =
-              requestedSim == null;
+          _initialSimIdentityUnavailable = requestedSim == null;
         } else if (!providerSims.any(
           (sim) => sim.slot == _selectedSimSlot,
         )) {
@@ -280,8 +271,7 @@ class _FloatReceivedScreenState extends State<FloatReceivedScreen> {
 
     setState(() {
       _provider = provider;
-      _selectedSimSlot =
-          providerSims.isEmpty ? null : providerSims.first.slot;
+      _selectedSimSlot = providerSims.isEmpty ? null : providerSims.first.slot;
       _initialSimIdentityUnavailable = false;
       _error = null;
     });
@@ -586,8 +576,7 @@ class _FloatReceivedScreenState extends State<FloatReceivedScreen> {
               ),
               const SizedBox(height: 8),
               if (providerSims.length > 1 ||
-                  (_initialSimIdentityUnavailable &&
-                      providerSims.isNotEmpty))
+                  (_initialSimIdentityUnavailable && providerSims.isNotEmpty))
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,

@@ -23,6 +23,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   String _period = 'month';
   String _format = 'pdf';
   bool _loading = false;
+  bool _filtersExpanded = false;
 
   Timer? _countDebounce;
   int _countRequestId = 0;
@@ -590,6 +591,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
             .toList();
     final showSimFilter = _isAgent && _simCards.length >= 2;
 
+    final activeTransactionFilterCount = _typeFilters.length +
+        _providerFilters.length +
+        _statusFilters.length +
+        (_simIccidFilter != null ? 1 : 0) +
+        (_agentId != null ? 1 : 0) +
+        (_branchId != null ? 1 : 0) +
+        ((_sortBy != 'date' || _sortOrder != 'desc') ? 1 : 0);
+
+    final transactionFilterSummary = activeTransactionFilterCount == 0
+        ? 'All transactions'
+        : '$activeTransactionFilterCount '
+            '${activeTransactionFilterCount == 1 ? 'filter' : 'filters'} applied';
+
     return Scaffold(
       appBar: AppBar(title: const Text('Reports')),
       body: LoadingOverlay(
@@ -607,10 +621,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     _sectionLabel('Period'),
                     Wrap(
                       spacing: 8,
+                      runSpacing: 8,
                       children: [
                         for (final p in ['today', 'week', 'month', 'year'])
                           ChoiceChip(
-                            label: Text(p[0].toUpperCase() + p.substring(1)),
+                            label: Text(
+                              p == 'today'
+                                  ? 'Today'
+                                  : p == 'week'
+                                      ? 'Week'
+                                      : p == 'month'
+                                          ? 'Month'
+                                          : 'Year',
+                            ),
                             selected: _period == p,
                             onSelected: (_) =>
                                 _setReportFilter(() => _period = p),
@@ -618,140 +641,285 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    _sectionLabel('Type'),
-                    _multiChipRow(_types, _typeFilters),
-                    const SizedBox(height: 16),
-                    _sectionLabel('Provider'),
-                    if (noSimsDetected)
-                      Text(
-                        'No SIM card detected. Insert a SIM to filter by provider.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: context.appSecondaryText,
-                        ),
-                      )
-                    else
-                      _multiChipRow(visibleProviders, _providerFilters),
-                    const SizedBox(height: 16),
-                    if (showSimFilter) ...[
-                      _sectionLabel('SIM'),
-                      _chipRow(
-                        [
-                          {'value': 'all', 'label': 'All'},
-                          for (final c in _simCards)
-                            {
-                              'value': c.iccid,
-                              'label':
-                                  'SIM ${c.slot + 1} · ${_simNetworkLabel(c.network)}',
-                            },
-                        ],
-                        _simIccidFilter ?? 'all',
-                        (v) => _setReportFilter(
-                          () => _simIccidFilter = v == 'all' ? null : v,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                    _sectionLabel('Status'),
-                    _multiChipRow(_statuses, _statusFilters),
-                    const SizedBox(height: 16),
-                    if (showAgentPicker) ...[
-                      _sectionLabel('Agent'),
-                      DropdownButtonFormField<String?>(
-                        initialValue: _agentId,
-                        decoration: InputDecoration(
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        hint: const Text('All Agents'),
-                        items: [
-                          const DropdownMenuItem<String?>(
-                            value: null,
-                            child: Text('All Agents'),
-                          ),
-                          for (final a in _agents)
-                            DropdownMenuItem<String?>(
-                              value: a['id'] as String,
-                              child: Text(
-                                '${a['first_name'] ?? ''} ${a['last_name'] ?? ''}'
-                                    .trim(),
-                              ),
-                            ),
-                        ],
-                        onChanged: (v) => _setReportFilter(() => _agentId = v),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                    if (showBranchPicker) ...[
-                      _sectionLabel('Branch'),
-                      DropdownButtonFormField<String?>(
-                        initialValue: _branchId,
-                        decoration: InputDecoration(
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        hint: const Text('All Branches'),
-                        items: [
-                          const DropdownMenuItem<String?>(
-                            value: null,
-                            child: Text('All Branches'),
-                          ),
-                          for (final b in _branches)
-                            DropdownMenuItem<String?>(
-                              value: b['id'] as String,
-                              child: Text(b['name'] ?? ''),
-                            ),
-                        ],
-                        onChanged: (v) => _setReportFilter(() => _branchId = v),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                    _sectionLabel('Sort'),
+                    Divider(
+                      height: 1,
+                      color: context.appDivider,
+                    ),
+                    const SizedBox(height: 8),
                     InkWell(
-                      onTap: _showSortSheet,
-                      borderRadius: BorderRadius.circular(10),
-                      child: Container(
+                      onTap: () {
+                        setState(() {
+                          _filtersExpanded = !_filtersExpanded;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
+                          horizontal: 2,
                           vertical: 10,
                         ),
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: context.appDivider,
-                          ),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
                         child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(_sortLabel()),
-                            const Icon(Icons.swap_vert, size: 18),
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: AppTheme.primaryColor
+                                    .withValues(alpha: 0.10),
+                                borderRadius: BorderRadius.circular(11),
+                              ),
+                              child: const Icon(
+                                Icons.tune_rounded,
+                                color: AppTheme.primaryColor,
+                                size: 21,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Transaction Filters',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    transactionFilterSummary,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: context.appSecondaryText,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            AnimatedRotation(
+                              turns: _filtersExpanded ? 0.5 : 0,
+                              duration: const Duration(milliseconds: 180),
+                              child: Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                color: context.appSecondaryText,
+                              ),
+                            ),
                           ],
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    _sectionLabel('Format'),
+                    AnimatedCrossFade(
+                      duration: const Duration(milliseconds: 180),
+                      crossFadeState: _filtersExpanded
+                          ? CrossFadeState.showSecond
+                          : CrossFadeState.showFirst,
+                      firstChild: const SizedBox.shrink(),
+                      secondChild: Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _sectionLabel('Type'),
+                            _multiChipRow(_types, _typeFilters),
+                            const SizedBox(height: 18),
+                            _sectionLabel('Provider'),
+                            if (noSimsDetected)
+                              Text(
+                                'No SIM card detected. Insert a SIM to filter by provider.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: context.appSecondaryText,
+                                ),
+                              )
+                            else
+                              _multiChipRow(
+                                visibleProviders,
+                                _providerFilters,
+                              ),
+                            if (showSimFilter) ...[
+                              const SizedBox(height: 18),
+                              _sectionLabel('SIM'),
+                              _chipRow(
+                                [
+                                  {'value': 'all', 'label': 'All'},
+                                  for (final c in _simCards)
+                                    {
+                                      'value': c.iccid,
+                                      'label':
+                                          'SIM ${c.slot + 1} · ${_simNetworkLabel(c.network)}',
+                                    },
+                                ],
+                                _simIccidFilter ?? 'all',
+                                (v) => _setReportFilter(
+                                  () => _simIccidFilter = v == 'all' ? null : v,
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 18),
+                            _sectionLabel('Status'),
+                            _multiChipRow(_statuses, _statusFilters),
+                            if (showAgentPicker) ...[
+                              const SizedBox(height: 18),
+                              _sectionLabel('Agent'),
+                              DropdownButtonFormField<String?>(
+                                initialValue: _agentId,
+                                decoration: InputDecoration(
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 12,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                hint: const Text('All Agents'),
+                                items: [
+                                  const DropdownMenuItem<String?>(
+                                    value: null,
+                                    child: Text('All Agents'),
+                                  ),
+                                  for (final a in _agents)
+                                    DropdownMenuItem<String?>(
+                                      value: a['id'] as String,
+                                      child: Text(
+                                        '${a['first_name'] ?? ''} '
+                                                '${a['last_name'] ?? ''}'
+                                            .trim(),
+                                      ),
+                                    ),
+                                ],
+                                onChanged: (v) => _setReportFilter(
+                                  () => _agentId = v,
+                                ),
+                              ),
+                            ],
+                            if (showBranchPicker) ...[
+                              const SizedBox(height: 18),
+                              _sectionLabel('Branch'),
+                              DropdownButtonFormField<String?>(
+                                initialValue: _branchId,
+                                decoration: InputDecoration(
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 12,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                hint: const Text('All Branches'),
+                                items: [
+                                  const DropdownMenuItem<String?>(
+                                    value: null,
+                                    child: Text('All Branches'),
+                                  ),
+                                  for (final b in _branches)
+                                    DropdownMenuItem<String?>(
+                                      value: b['id'] as String,
+                                      child: Text(b['name'] ?? ''),
+                                    ),
+                                ],
+                                onChanged: (v) => _setReportFilter(
+                                  () => _branchId = v,
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 18),
+                            _sectionLabel('Sort'),
+                            InkWell(
+                              onTap: _showSortSheet,
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 13,
+                                ),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: context.appDivider,
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.sort_rounded,
+                                      size: 19,
+                                      color: AppTheme.primaryColor,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        _sortLabel(),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    const Icon(
+                                      Icons.swap_vert_rounded,
+                                      size: 19,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryColor.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      child: const Icon(
+                        Icons.file_download_outlined,
+                        color: AppTheme.primaryColor,
+                        size: 21,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Export Format',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
                     Wrap(
-                      spacing: 8,
+                      spacing: 6,
                       children: [
                         for (final f in ['pdf', 'excel', 'csv'])
                           ChoiceChip(
-                            label: Text(f.toUpperCase()),
+                            label: Text(
+                              f == 'excel' ? 'Excel' : f.toUpperCase(),
+                            ),
                             selected: _format == f,
-                            onSelected: (_) => setState(() => _format = f),
+                            visualDensity: VisualDensity.compact,
+                            onSelected: (_) {
+                              setState(() => _format = f);
+                            },
                           ),
                       ],
                     ),

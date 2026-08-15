@@ -42,9 +42,8 @@ class _FloatScreenState extends State<FloatScreen> {
     try {
       final res = await ApiClient.instance.get(
         '/float/overview',
-        queryParameters: widget.branchId != null
-            ? {'branch_id': widget.branchId}
-            : null,
+        queryParameters:
+            widget.branchId != null ? {'branch_id': widget.branchId} : null,
       );
 
       if (!mounted) {
@@ -64,9 +63,8 @@ class _FloatScreenState extends State<FloatScreen> {
       }
 
       final responseData = error.response?.data;
-      final message = responseData is Map
-          ? responseData['message']?.toString()
-          : null;
+      final message =
+          responseData is Map ? responseData['message']?.toString() : null;
 
       setState(() {
         _error = message ?? 'Failed to load business float balances';
@@ -122,54 +120,54 @@ class _FloatScreenState extends State<FloatScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-          ? EmptyState(
-              icon: Icons.error_outline,
-              title: 'Could not load float balances',
-              subtitle: _error,
-              actionLabel: 'Retry',
-              onAction: _load,
-            )
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                children: [
-                  _TotalFloatCard(
-                    total: _total,
-                    branchScoped: widget.branchId != null,
-                  ),
-                  const SizedBox(height: 12),
-                  _TreasuryExplanationCard(
-                    branchScoped: widget.branchId != null,
-                  ),
-                  const SizedBox(height: 20),
-                  const SectionHeader(title: 'BRANCH TREASURY BY PROVIDER'),
-                  const SizedBox(height: 8),
-                  if (_accounts.isEmpty)
-                    const EmptyState(
-                      icon: Icons.account_balance_wallet_outlined,
-                      title: 'No branch float accounts yet',
-                      subtitle:
-                          'Business treasury float will appear here when available.',
-                    )
-                  else
-                    ..._accounts.map((account) {
-                      final accountMap = Map<String, dynamic>.from(
-                        account as Map,
-                      );
+              ? EmptyState(
+                  icon: Icons.error_outline,
+                  title: 'Could not load float balances',
+                  subtitle: _error,
+                  actionLabel: 'Retry',
+                  onAction: _load,
+                )
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      _TotalFloatCard(
+                        total: _total,
+                        branchScoped: widget.branchId != null,
+                      ),
+                      const SizedBox(height: 12),
+                      _TreasuryExplanationCard(
+                        branchScoped: widget.branchId != null,
+                      ),
+                      const SizedBox(height: 20),
+                      const SectionHeader(title: 'BRANCH TREASURY BY PROVIDER'),
+                      const SizedBox(height: 8),
+                      if (_accounts.isEmpty)
+                        const EmptyState(
+                          icon: Icons.account_balance_wallet_outlined,
+                          title: 'No branch float accounts yet',
+                          subtitle:
+                              'Business treasury float will appear here when available.',
+                        )
+                      else
+                        ..._accounts.map((account) {
+                          final accountMap = Map<String, dynamic>.from(
+                            account as Map,
+                          );
 
-                      return _FloatCard(
-                        account: accountMap,
-                        canManage: canManageFloat,
-                        onEditThreshold: canManageFloat
-                            ? () => _showThresholdDialog(accountMap)
-                            : null,
-                      );
-                    }),
-                ],
-              ),
-            ),
+                          return _FloatCard(
+                            account: accountMap,
+                            canManage: canManageFloat,
+                            onEditThreshold: canManageFloat
+                                ? () => _showThresholdDialog(accountMap)
+                                : null,
+                          );
+                        }),
+                    ],
+                  ),
+                ),
       floatingActionButton: canManageFloat && !_loading && _error == null
           ? FloatingActionButton.extended(
               onPressed: () => _showTopUpSheet(context),
@@ -204,7 +202,7 @@ class _FloatScreenState extends State<FloatScreen> {
 
     final currentThreshold =
         double.tryParse(account['low_balance_threshold']?.toString() ?? '0') ??
-        0;
+            0;
 
     final controller = TextEditingController(
       text: currentThreshold.toStringAsFixed(2),
@@ -318,9 +316,8 @@ class _FloatScreenState extends State<FloatScreen> {
       }
 
       final responseData = error.response?.data;
-      final message = responseData is Map
-          ? responseData['message']?.toString()
-          : null;
+      final message =
+          responseData is Map ? responseData['message']?.toString() : null;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -465,7 +462,7 @@ class _FloatCard extends StatelessWidget {
 
     final threshold =
         double.tryParse(account['low_balance_threshold']?.toString() ?? '0') ??
-        0;
+            0;
 
     final isLow = balance <= threshold;
     final provider = account['provider']?.toString() ?? '';
@@ -613,14 +610,12 @@ class _TopUpSheetState extends State<_TopUpSheet> {
       setState(() {
         _branches = branches;
 
-        final requestedBranchExists =
-            _branchId != null &&
+        final requestedBranchExists = _branchId != null &&
             branches.any((branch) => branch['id']?.toString() == _branchId);
 
         if (!requestedBranchExists) {
-          _branchId = branches.isNotEmpty
-              ? branches.first['id']?.toString()
-              : null;
+          _branchId =
+              branches.isNotEmpty ? branches.first['id']?.toString() : null;
         }
 
         _loadingBranches = false;
@@ -685,13 +680,11 @@ class _TopUpSheetState extends State<_TopUpSheet> {
       reference,
     ].join('|');
 
-    final canReuseOperation =
-        _pendingClientOperationId != null &&
+    final canReuseOperation = _pendingClientOperationId != null &&
         _pendingOperationFingerprint == fingerprint;
 
-    final clientOperationId = canReuseOperation
-        ? _pendingClientOperationId!
-        : const Uuid().v4();
+    final clientOperationId =
+        canReuseOperation ? _pendingClientOperationId! : const Uuid().v4();
 
     _pendingClientOperationId = clientOperationId;
     _pendingOperationFingerprint = fingerprint;
@@ -726,9 +719,8 @@ class _TopUpSheetState extends State<_TopUpSheet> {
     } on DioException catch (error) {
       final responseData = error.response?.data;
 
-      final serverMessage = responseData is Map
-          ? responseData['message']?.toString()
-          : null;
+      final serverMessage =
+          responseData is Map ? responseData['message']?.toString() : null;
 
       final retryable = _isRetryableError(error);
 
@@ -744,8 +736,7 @@ class _TopUpSheetState extends State<_TopUpSheet> {
       }
 
       setState(() {
-        _error =
-            serverMessage ??
+        _error = serverMessage ??
             (retryable
                 ? 'Connection problem while topping up branch float. Tap Top Up Branch Float again to safely retry the same operation.'
                 : 'Failed to top up branch float.');
@@ -897,9 +888,8 @@ class _TopUpSheetState extends State<_TopUpSheet> {
               const SizedBox(height: 20),
               AppButton(
                 label: 'Top Up Branch Float',
-                onPressed: _loadingBranches || _branches.isEmpty
-                    ? null
-                    : _submit,
+                onPressed:
+                    _loadingBranches || _branches.isEmpty ? null : _submit,
                 isLoading: _submitting,
               ),
             ],
