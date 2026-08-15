@@ -606,7 +606,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
       };
 
       if (!mounted) return;
-      context.push(
+      final progressAction = await context.push<String>(
         '/transactions/progress',
         extra: {
           'transaction': {
@@ -633,6 +633,10 @@ class _TransactionScreenState extends State<TransactionScreen> {
         },
       );
       if (mounted) setState(() => _loading = false);
+
+      if (mounted && progressAction == 'retry_now') {
+        await _proceed();
+      }
       return;
     }
 
@@ -670,7 +674,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
     if (!mounted) return;
 
-    context.push(
+    final progressAction = await context.push<String>(
       '/transactions/progress',
       extra: {
         'transaction_future': transactionFuture,
@@ -692,6 +696,10 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
     if (mounted) {
       setState(() => _loading = false);
+    }
+
+    if (mounted && progressAction == 'retry_now') {
+      await _proceed();
     }
   }
 

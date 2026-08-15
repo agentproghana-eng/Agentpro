@@ -238,6 +238,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     }
     if (_needsAmount && !_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
+    String? progressAction;
 
     try {
       final res = await ApiClient.instance.post(
@@ -258,7 +259,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       final transaction = res.data['data'];
       if (!mounted) return;
 
-      context.push(
+      progressAction = await context.push<String>(
         '/transactions/progress',
         extra: {
           'is_personal': true,
@@ -284,10 +285,15 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+
+    if (mounted && progressAction == 'retry_now') {
+      await _submit();
+    }
   }
 
   Future<void> _submitDataBundle() async {
     setState(() => _loading = true);
+    String? progressAction;
     final recipientPhone =
         _recipientMode == 'other' ? _phoneCtrl.text.trim() : null;
     final flexiAmount =
@@ -311,7 +317,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       final transaction = res.data['data'];
       if (!mounted) return;
 
-      context.push(
+      progressAction = await context.push<String>(
         '/transactions/progress',
         extra: {
           'is_personal': true,
@@ -340,24 +346,25 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+
+    if (mounted && progressAction == 'retry_now') {
+      await _submitDataBundle();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final label = kPersonalTransactionLabels[widget.transactionType] ??
         widget.transactionType;
+    final appBarLabel = switch (widget.transactionType) {
+      'send_money_same_network' => 'Send Money',
+      'send_money_cross_network' => 'Send Money',
+      _ => label,
+    };
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(label),
-        actions: [
-          TextButton.icon(
-            onPressed: () => context.pop(),
-            icon: const Icon(Icons.arrow_back),
-            label: const Text('Return'),
-          ),
-          const SizedBox(width: 4),
-        ],
+        title: Text(appBarLabel),
       ),
       body: Padding(
         padding: const EdgeInsets.all(20),
