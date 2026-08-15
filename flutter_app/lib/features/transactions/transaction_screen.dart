@@ -133,7 +133,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
     _scheduleFlowPreload(immediate: true);
 
     _amountCtrl.addListener(() {
-      if (!_isSendMoney || !_feeAutoCalculated) return;
+      if (!_isTransferChargeFlow || !_feeAutoCalculated) return;
       final amount = double.tryParse(_amountCtrl.text.replaceAll(',', '')) ?? 0;
       final fee = amount * 0.01;
       _feeCtrl.text = fee > 0 ? fee.toStringAsFixed(2) : '';
@@ -195,7 +195,16 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'float_to_working',
         'commission_transfer',
       ].contains(widget.transactionType);
-  bool get _isSendMoney => widget.transactionType == 'send_money';
+  bool get _isMtnCashIn =>
+      widget.transactionType == 'send_money' && _selectedProvider == 'mtn';
+
+  bool get _isDeposit =>
+      widget.transactionType == 'cash_in' &&
+      (_selectedProvider == 'telecel' || _selectedProvider == 'at_money');
+
+  // Transfer Charges default to 1% but remain editable because the
+  // provider's actual charge can vary.
+  bool get _isTransferChargeFlow => _isMtnCashIn || _isDeposit;
 
   // Telecel/AirtelTigo Cash Out: e-cash moves directly SIM-to-SIM,
   // invisible to USSD automation. No dial happens at all for this
@@ -594,7 +603,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'account_number': '',
         'payment_reference': _referenceCtrl.text.trim(),
         'merchant_id': _merchantIdCtrl.text.trim(),
-        'fee': _isSendMoney
+        'fee': _isTransferChargeFlow
             ? (double.tryParse(_feeCtrl.text.replaceAll(',', '')) ?? 0)
             : 0,
         'notes': '',
@@ -647,7 +656,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
       'account_number': '',
       'payment_reference': _referenceCtrl.text.trim(),
       'merchant_id': _merchantIdCtrl.text.trim(),
-      'fee': _isSendMoney
+      'fee': _isTransferChargeFlow
           ? (double.tryParse(_feeCtrl.text.replaceAll(',', '')) ?? 0)
           : 0,
       'notes': '',
@@ -1615,10 +1624,10 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 const SizedBox(height: 14),
               ],
 
-              // Network charge estimate (Send Money only). This is captured
-              // before the USSD transaction and stored as metadata; it is not
-              // treated as a confirmed cash/e-float movement until reconciled.
-              if (_isSendMoney) ...[
+              // Transfer Charges default to 1% of the principal.
+              // The field remains editable because the actual provider
+              // charge can vary for a transaction.
+              if (_isTransferChargeFlow) ...[
                 TextFormField(
                   controller: _feeCtrl,
                   keyboardType: const TextInputType.numberWithOptions(
@@ -1628,7 +1637,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                   ],
                   decoration: InputDecoration(
-                    labelText: 'Network Charge (Estimated) (GH₵)',
+                    labelText: 'Transfer Charges (GH₵)',
                     hintText: '0.00',
                     prefixIcon: const Icon(Icons.receipt_long_outlined),
                     prefixText: 'GH₵  ',
@@ -1637,7 +1646,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     ),
                     filled: true,
                     fillColor: context.appSurface,
-                    helperText: 'Pre-filled at 1% - editable before sending',
+                    helperText:
+                        'Defaults to 1% • edit if the actual charge differs',
                   ),
                   onChanged: (_) => _feeAutoCalculated = false,
                   validator: (v) {

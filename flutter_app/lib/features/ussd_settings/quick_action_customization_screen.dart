@@ -19,7 +19,7 @@ class QuickActionDefinition {
 const List<QuickActionDefinition> kAgentQuickActionDefinitions = [
   QuickActionDefinition(
     type: 'cash_in',
-    label: 'Cash In / Deposit',
+    label: 'Deposit',
     icon: Icons.call_received,
   ),
   QuickActionDefinition(
@@ -29,8 +29,8 @@ const List<QuickActionDefinition> kAgentQuickActionDefinitions = [
   ),
   QuickActionDefinition(
     type: 'send_money',
-    label: 'Send Money',
-    icon: Icons.send_outlined,
+    label: 'Cash In',
+    icon: Icons.call_received,
   ),
   QuickActionDefinition(
     type: 'merchant_payment',
@@ -139,7 +139,6 @@ const List<QuickActionDefinition> kPersonalQuickActionDefinitions = [
 
 const Map<String, Set<String>> kAgentQuickActionSupport = {
   'mtn': {
-    'cash_in',
     'cash_out',
     'send_money',
     'merchant_payment',
@@ -166,7 +165,6 @@ const Map<String, Set<String>> kAgentQuickActionSupport = {
   'at_money': {
     'cash_in',
     'cash_out',
-    'send_money',
     'merchant_payment',
     'bill_payment',
     'airtime',
@@ -212,7 +210,6 @@ const Map<String, Set<String>> kPersonalQuickActionSupport = {
 
 const Map<String, List<String>> kAgentQuickActionDefaults = {
   'mtn': [
-    'cash_in',
     'cash_out',
     'send_money',
     'merchant_payment',
@@ -236,7 +233,6 @@ const Map<String, List<String>> kAgentQuickActionDefaults = {
   'at_money': [
     'cash_in',
     'cash_out',
-    'send_money',
     'airtime',
     'data_bundle',
     'balance_enquiry',

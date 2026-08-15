@@ -67,6 +67,23 @@ async function postSendMoney(
     );
   }
 
+  // MTN's internal send_money operation is Agent Cash In.
+  // Transfer Charges are additional physical cash received from
+  // the customer. The electronic principal remains unchanged.
+  const transferCharge =
+    transaction.provider === "mtn"
+      ? money(transaction.fee || 0)
+      : 0;
+
+  if (transferCharge < 0) {
+    throw new Error(
+      "Transfer Charges cannot be negative"
+    );
+  }
+
+  const cashReceived =
+    money(amount + transferCharge);
+
   // Keep lock ordering consistent with Manual Cash Out:
   // exact SIM wallet first, then the agent's single cash drawer.
   const simWallet =
@@ -137,7 +154,7 @@ async function postSendMoney(
     money(cashBalance.cash_at_hand);
 
   const cashAfter =
-    money(cashBefore + amount);
+    money(cashBefore + cashReceived);
 
   const walletUpdate =
     await client.query(
@@ -306,7 +323,7 @@ async function postSendMoney(
     [
       agentId,
       transaction.provider,
-      amount,
+      cashReceived,
       cashBefore,
       cashAfter,
       reference,
@@ -325,6 +342,8 @@ async function postSendMoney(
     simWalletId: simWallet.id,
     cashBalanceId: cashBalance.id,
     amount,
+    transferCharge,
+    cashReceived,
     eFloatBefore,
     eFloatAfter,
     cashBefore,

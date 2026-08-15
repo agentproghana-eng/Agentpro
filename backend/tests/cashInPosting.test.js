@@ -212,6 +212,85 @@ describe("postCashIn", () => {
     ]);
   });
 
+  test.each([
+    ["telecel", "1.00", 1, 301],
+    ["at_money", "1.00", 1, 301],
+    ["telecel", "1.20", 1.2, 301.2],
+    ["at_money", "1.20", 1.2, 301.2]
+  ])(
+    "%s Deposit GHS 100 with GHS %s Transfer Charges adds the actual charge to cash",
+    async (
+      provider,
+      fee,
+      expectedCharge,
+      expectedCashAfter
+    ) => {
+      const client = makeClient();
+
+      getOrCreateAgentSimWallet.mockResolvedValue({
+        id: "wallet-1",
+        identity_status: "identified",
+        e_float_balance: "500.00"
+      });
+
+      const result = await postCashIn(
+        client,
+        baseTransaction({
+          provider,
+          amount: "100.00",
+          fee
+        }),
+        "agent-1"
+      );
+
+      expect(result.amount).toBe(100);
+
+      expect(result.transferCharge).toBeCloseTo(
+        expectedCharge,
+        2
+      );
+
+      expect(result.cashReceived).toBeCloseTo(
+        100 + expectedCharge,
+        2
+      );
+
+      // Deposit electronic side is principal only.
+      expect(result.eFloatBefore).toBe(500);
+      expect(result.eFloatAfter).toBe(400);
+
+      // Physical side includes the actual Transfer Charges.
+      expect(result.cashBefore).toBe(200);
+      expect(result.cashAfter).toBeCloseTo(
+        expectedCashAfter,
+        2
+      );
+
+      const movements =
+        client.query.mock.calls.filter(
+          ([sql]) =>
+            sql.includes(
+              "INSERT INTO agent_balance_movements"
+            )
+        );
+
+      expect(movements).toHaveLength(2);
+
+      expect(movements[0][1][2]).toBe(-100);
+      expect(movements[0][1][4]).toBe(400);
+
+      expect(movements[1][1][2]).toBeCloseTo(
+        100 + expectedCharge,
+        2
+      );
+
+      expect(movements[1][1][4]).toBeCloseTo(
+        expectedCashAfter,
+        2
+      );
+    }
+  );
+
   test("posts unresolved SIM provenance without inventing ICCID", async () => {
     const client = makeClient();
 

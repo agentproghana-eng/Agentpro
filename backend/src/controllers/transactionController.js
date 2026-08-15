@@ -141,8 +141,15 @@ exports.initiateTransaction = async (req, res) => {
   const agentId = req.user.id;
   const companyId = req.user.company_id;
 
+  const isTransferChargeTransaction =
+    (provider === 'mtn' &&
+      transaction_type === 'send_money') ||
+    ((provider === 'telecel' ||
+      provider === 'at_money') &&
+      transaction_type === 'cash_in');
+
   const feeValue =
-    transaction_type === 'send_money'
+    isTransferChargeTransaction
       ? (parseFloat(fee) || 0)
       : 0;
 

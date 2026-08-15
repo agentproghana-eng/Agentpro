@@ -87,7 +87,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     {'value': 'date', 'label': 'Date'},
     {'value': 'amount', 'label': 'Amount'},
     {'value': 'commission', 'label': 'Commission'},
-    {'value': 'fee', 'label': 'Recorded Network Charge'},
+    {'value': 'fee', 'label': 'Transfer Charges'},
   ];
 
   @override

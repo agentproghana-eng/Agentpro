@@ -44,7 +44,16 @@ class DashboardQuickActionsSection extends StatelessWidget {
         personal ? personalQuickActions[provider] : agentQuickActions[provider];
 
     if (saved != null) {
-      return saved.where((item) => item.isVisible).take(9).toList();
+      final supported = personal
+          ? kPersonalQuickActionSupport[provider] ?? const <String>{}
+          : kAgentQuickActionSupport[provider] ?? const <String>{};
+
+      return saved
+          .where(
+            (item) => item.isVisible && supported.contains(item.actionKey),
+          )
+          .take(9)
+          .toList();
     }
 
     final defaults = personal

@@ -1,15 +1,25 @@
 // Maps a transaction_type + provider combo to its user-facing label.
-// Provider-aware because Telecel brands its own USSD menu options
-// "Deposit"/"Withdrawal" rather than "Cash In"/"Cash Out" - a single
-// generic mapping would be wrong for Telecel specifically. This is
-// the one shared source of truth for this mapping, used by both the
-// Home screen's recent-transactions list and the transaction form's
-// own title, so they can never drift out of sync with each other
-// again the way they did before this fix.
+//
+// Agent provider terminology:
+//   MTN send_money  -> Cash In
+//   Telecel cash_in -> Deposit
+//   AT Money cash_in -> Deposit
+//
+// Internal transaction types remain stable for API/database compatibility.
+// This shared mapper keeps forms and transaction-history labels consistent.
 String transactionTypeLabel(String type, String provider) {
-  if (provider == 'telecel') {
-    if (type == 'cash_in') return 'Deposit';
-    if (type == 'cash_out') return 'Withdrawal';
+  // MTN Agent's internal send_money flow is the customer Cash In flow.
+  if (provider == 'mtn' && type == 'send_money') {
+    return 'Cash In';
+  }
+
+  // Telecel and AT Money call their customer cash-in operation Deposit.
+  if ((provider == 'telecel' || provider == 'at_money') && type == 'cash_in') {
+    return 'Deposit';
+  }
+
+  if (provider == 'telecel' && type == 'cash_out') {
+    return 'Withdrawal';
   }
   switch (type) {
     case 'cash_in':

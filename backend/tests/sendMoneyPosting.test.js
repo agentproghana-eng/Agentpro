@@ -65,7 +65,7 @@ function baseTransaction(overrides = {}) {
     provider: "mtn",
     transaction_type: "send_money",
     amount: "100.00",
-    fee: "1.00",
+    fee: "0.00",
     reference: "APG-SEND-MONEY-1",
     notes: "",
     recipient_phone: "0240000000",
@@ -185,8 +185,8 @@ describe("postSendMoney", () => {
 
       expect(movements).toHaveLength(2);
 
-      // The recorded network fee is metadata only.
-      // Principal movement remains exactly the GHS 100 transaction amount.
+      // With no Transfer Charges, both principal movements remain
+      // exactly GHS 100.
       expect(movements[0][1]).toEqual([
         "agent-1",
         provider,
@@ -220,6 +220,92 @@ describe("postSendMoney", () => {
         0,
         "identified"
       ]);
+    }
+  );
+
+  test.each([
+    ["1.00", 1, 301],
+    ["1.20", 1.2, 301.2]
+  ])(
+    "MTN Cash In GHS 100 with GHS %s Transfer Charges adds the actual charge to cash",
+    async (fee, expectedCharge, expectedCashAfter) => {
+      const client = makeClient();
+
+      const result = await postSendMoney(
+        client,
+        baseTransaction({
+          provider: "mtn",
+          amount: "100.00",
+          fee
+        }),
+        "agent-1"
+      );
+
+      expect(result.amount).toBe(100);
+      expect(result.transferCharge).toBeCloseTo(
+        expectedCharge,
+        2
+      );
+      expect(result.cashReceived).toBeCloseTo(
+        100 + expectedCharge,
+        2
+      );
+
+      // Electronic principal is unaffected by Transfer Charges.
+      expect(result.eFloatBefore).toBe(500);
+      expect(result.eFloatAfter).toBe(400);
+
+      // Physical cash receives principal + actual edited charge.
+      expect(result.cashBefore).toBe(200);
+      expect(result.cashAfter).toBeCloseTo(
+        expectedCashAfter,
+        2
+      );
+
+      const walletUpdate =
+        client.query.mock.calls.find(
+          ([sql]) =>
+            sql.includes(
+              "UPDATE agent_sim_wallets"
+            )
+        );
+
+      expect(walletUpdate[1][0]).toBe(400);
+
+      const cashUpdate =
+        client.query.mock.calls.find(
+          ([sql]) =>
+            sql.includes(
+              "UPDATE agent_cash_balances"
+            )
+        );
+
+      expect(cashUpdate[1][0]).toBeCloseTo(
+        expectedCashAfter,
+        2
+      );
+
+      const movements =
+        client.query.mock.calls.filter(
+          ([sql]) =>
+            sql.includes(
+              "INSERT INTO agent_balance_movements"
+            )
+        );
+
+      expect(movements).toHaveLength(2);
+
+      expect(movements[0][1][2]).toBe(-100);
+      expect(movements[0][1][4]).toBe(400);
+
+      expect(movements[1][1][2]).toBeCloseTo(
+        100 + expectedCharge,
+        2
+      );
+      expect(movements[1][1][4]).toBeCloseTo(
+        expectedCashAfter,
+        2
+      );
     }
   );
 

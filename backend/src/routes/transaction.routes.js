@@ -61,6 +61,11 @@ router.post('/', [
     .trim()
     .notEmpty()
     .withMessage('Invalid transaction type'),
+  body('fee')
+    .optional({ nullable: true, checkFalsy: true })
+    .isFloat({ min: 0 })
+    .withMessage('Transfer Charges must be zero or greater')
+    .toFloat(),
   body('amount').custom((value, { req }) => {
     // These four transaction types dial and get PIN-prompted with no
     // amount ever entered by the agent, so the app never fills in
