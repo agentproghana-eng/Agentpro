@@ -1320,7 +1320,7 @@ mpRouter.get('/featured-sellers', async (req, res) => {
         AND owner.role = 'business_owner'
         AND owner.status = 'active'
        LEFT JOIN advertisements a
-         ON a.company_id = c.id
+         ON a.posted_by = owner.id
        LEFT JOIN ad_ratings ar
          ON ar.advertisement_id = a.id
        WHERE c.status = 'active'
