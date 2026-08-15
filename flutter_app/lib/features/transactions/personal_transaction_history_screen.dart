@@ -7,10 +7,12 @@ import 'package:intl/intl.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_bloc.dart';
+import '../../core/auth/personal_subscription_access.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
 import '../../shared/widgets/personal_transaction_item.dart';
+import '../ussd_settings/quick_action_catalog.dart';
 
 class PersonalTransactionHistoryScreen extends StatefulWidget {
   const PersonalTransactionHistoryScreen({super.key});
@@ -26,6 +28,9 @@ class _PersonalTransactionHistoryScreenState
   final TextEditingController _searchController = TextEditingController();
 
   Timer? _searchDebounce;
+
+  QuickActionCatalog? _catalog;
+  int _requestGeneration = 0;
 
   List<dynamic> _transactions = [];
 
@@ -48,25 +53,6 @@ class _PersonalTransactionHistoryScreenState
 
   DateTimeRange? _dateRange;
 
-  static const _providers = [
-    {'value': 'all', 'label': 'All Networks'},
-    {'value': 'mtn', 'label': 'MTN'},
-    {'value': 'telecel', 'label': 'Telecel'},
-    {'value': 'at_money', 'label': 'AT Money'},
-  ];
-
-  static const _types = [
-    {'value': 'all', 'label': 'All Types'},
-    {'value': 'send_money_same_network', 'label': 'Send Money'},
-    {'value': 'send_money_cross_network', 'label': 'Cross Network'},
-    {'value': 'buy_airtime', 'label': 'Airtime'},
-    {'value': 'buy_data', 'label': 'Data'},
-    {'value': 'buy_mashup', 'label': 'MashUp'},
-    {'value': 'check_momo_balance', 'label': 'MoMo Balance'},
-    {'value': 'check_airtime_balance', 'label': 'Airtime Balance'},
-    {'value': 'withdraw_cash', 'label': 'Withdraw Cash'},
-  ];
-
   static const _statuses = [
     {'value': 'all', 'label': 'All Statuses'},
     {'value': 'success', 'label': 'Successful'},
@@ -76,11 +62,117 @@ class _PersonalTransactionHistoryScreenState
     {'value': 'initiated', 'label': 'Initiated'},
   ];
 
+  List<Map<String, String>> get _providerOptions {
+    final providers = <String>{};
+
+    final catalog = _catalog;
+
+    if (catalog != null) {
+      providers.addAll(catalog.providers);
+    }
+
+    for (final row in _transactions) {
+      if (row is! Map) continue;
+
+      final provider = (row['provider'] ?? '').toString().trim();
+
+      if (provider.isNotEmpty) {
+        providers.add(provider);
+      }
+    }
+
+    if (_providerFilter != 'all') {
+      providers.add(_providerFilter);
+    }
+
+    final sorted = providers.toList()
+      ..sort(
+        (a, b) => quickActionProviderLabel(a).toLowerCase().compareTo(
+              quickActionProviderLabel(b).toLowerCase(),
+            ),
+      );
+
+    return [
+      const {
+        'value': 'all',
+        'label': 'All Networks',
+      },
+      ...sorted.map(
+        (provider) => {
+          'value': provider,
+          'label': quickActionProviderLabel(provider),
+        },
+      ),
+    ];
+  }
+
+  List<Map<String, String>> get _typeOptions {
+    final labels = <String, String>{};
+
+    final catalog = _catalog;
+
+    if (catalog != null) {
+      for (final definitions in catalog.byProvider.values) {
+        for (final definition in definitions) {
+          if (definition.type.isEmpty) continue;
+
+          labels.putIfAbsent(
+            definition.type,
+            () => definition.displayLabel.isNotEmpty
+                ? definition.displayLabel
+                : quickActionTransactionLabel(
+                    definition.type,
+                  ),
+          );
+        }
+      }
+    }
+
+    for (final row in _transactions) {
+      if (row is! Map) continue;
+
+      final type = (row['transaction_type'] ?? '').toString().trim();
+
+      if (type.isNotEmpty) {
+        labels.putIfAbsent(
+          type,
+          () => quickActionTransactionLabel(type),
+        );
+      }
+    }
+
+    if (_typeFilter != 'all') {
+      labels.putIfAbsent(
+        _typeFilter,
+        () => quickActionTransactionLabel(
+          _typeFilter,
+        ),
+      );
+    }
+
+    final entries = labels.entries.toList()
+      ..sort(
+        (a, b) => a.value.toLowerCase().compareTo(b.value.toLowerCase()),
+      );
+
+    return [
+      const {
+        'value': 'all',
+        'label': 'All Types',
+      },
+      ...entries.map(
+        (entry) => {
+          'value': entry.key,
+          'label': entry.value,
+        },
+      ),
+    ];
+  }
+
   bool get _isPaid {
     final state = context.read<AuthBloc>().state;
 
-    return state is AuthAuthenticated &&
-        state.user['personal_subscription_plan'] == 'paid';
+    return state is AuthAuthenticated && hasActivePaidPersonalPlan(state.user);
   }
 
   int get _activeFilterCount {
@@ -116,6 +208,7 @@ class _PersonalTransactionHistoryScreenState
     _scrollController.addListener(_handleScroll);
 
     if (_isPaid) {
+      _loadCatalog();
       _load();
     }
   }
@@ -126,6 +219,20 @@ class _PersonalTransactionHistoryScreenState
     _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadCatalog() async {
+    try {
+      final catalog = await QuickActionCatalog.load(
+        mode: 'personal',
+      );
+
+      if (!mounted) return;
+
+      setState(() => _catalog = catalog);
+    } catch (_) {
+      return;
+    }
   }
 
   void _handleScroll() {
@@ -171,26 +278,32 @@ class _PersonalTransactionHistoryScreenState
   }) async {
     if (!mounted) return;
 
+    final requestGeneration = ++_requestGeneration;
+
     setState(() {
       _error = null;
+      _loadingMore = false;
 
       if (refreshing) {
         _refreshing = true;
       } else {
         _loading = true;
+        _refreshing = false;
       }
     });
 
     try {
       final response = await ApiClient.instance.get(
-        '/personal-transactions',
+        '/personal-transactions/history',
         queryParameters: _queryParameters(1),
       );
 
       final data = (response.data['data'] as List?) ?? const [];
       final meta = response.data['meta'] as Map<String, dynamic>?;
 
-      if (!mounted) return;
+      if (!mounted || requestGeneration != _requestGeneration) {
+        return;
+      }
 
       setState(() {
         _transactions = data;
@@ -201,7 +314,9 @@ class _PersonalTransactionHistoryScreenState
         _refreshing = false;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || requestGeneration != _requestGeneration) {
+        return;
+      }
 
       setState(() {
         _error = 'Could not load your transaction history.';
@@ -216,20 +331,24 @@ class _PersonalTransactionHistoryScreenState
       return;
     }
 
+    final requestGeneration = _requestGeneration;
+
     setState(() => _loadingMore = true);
 
     final nextPage = _page + 1;
 
     try {
       final response = await ApiClient.instance.get(
-        '/personal-transactions',
+        '/personal-transactions/history',
         queryParameters: _queryParameters(nextPage),
       );
 
       final data = (response.data['data'] as List?) ?? const [];
       final meta = response.data['meta'] as Map<String, dynamic>?;
 
-      if (!mounted) return;
+      if (!mounted || requestGeneration != _requestGeneration) {
+        return;
+      }
 
       setState(() {
         _transactions.addAll(data);
@@ -239,7 +358,9 @@ class _PersonalTransactionHistoryScreenState
         _loadingMore = false;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || requestGeneration != _requestGeneration) {
+        return;
+      }
 
       setState(() => _loadingMore = false);
 
@@ -403,7 +524,7 @@ class _PersonalTransactionHistoryScreenState
                     const SizedBox(height: 12),
                     optionSection(
                       'NETWORK',
-                      _providers,
+                      _providerOptions,
                       provider,
                       (value) => setSheetState(
                         () => provider = value,
@@ -412,7 +533,7 @@ class _PersonalTransactionHistoryScreenState
                     const SizedBox(height: 22),
                     optionSection(
                       'TRANSACTION TYPE',
-                      _types,
+                      _typeOptions,
                       type,
                       (value) => setSheetState(
                         () => type = value,
@@ -847,13 +968,13 @@ class _PersonalTransactionHistoryScreenState
                 children: [
                   if (_providerFilter != 'all')
                     _ActiveFilterChip(
-                      label: _providers.firstWhere(
+                      label: _providerOptions.firstWhere(
                         (p) => p['value'] == _providerFilter,
                       )['label']!,
                     ),
                   if (_typeFilter != 'all')
                     _ActiveFilterChip(
-                      label: _types.firstWhere(
+                      label: _typeOptions.firstWhere(
                         (p) => p['value'] == _typeFilter,
                       )['label']!,
                     ),

@@ -5,6 +5,7 @@ import '../theme/app_theme.dart';
 import '../theme/app_colors.dart';
 import '../../features/transactions/personal_transaction_screen.dart'
     show kPersonalTransactionLabels;
+import '../../features/ussd_settings/quick_action_catalog.dart';
 
 /// Shared between Personal Home's Recent Transactions preview and the
 /// full Personal Transaction History screen. Status-colored rather
@@ -68,14 +69,16 @@ class PersonalTransactionItem extends StatelessWidget {
           decoration: BoxDecoration(
               color: context.appTileColor(const Color(0xFFE6F4F1)),
               borderRadius: BorderRadius.circular(9)),
-          child: Icon(_icons[type] ?? Icons.receipt_long_outlined,
+          child: Icon(_icons[type] ?? quickActionCatalogIcon(type),
               size: 16, color: AppTheme.primaryColor),
         ),
         const SizedBox(width: 10),
         Expanded(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(kPersonalTransactionLabels[type] ?? type,
+          Text(
+              kPersonalTransactionLabels[type] ??
+                  quickActionTransactionLabel(type),
               style:
                   const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
           Text('${tx['recipient_phone'] ?? ''} \u00b7 $timeStr',

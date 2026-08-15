@@ -2,7 +2,11 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const personalTransactionController = require('../controllers/personalTransactionController');
-const { authenticate, requirePersonalAccount } = require('../middleware/auth');
+const {
+  authenticate,
+  requirePersonalAccount,
+  requirePaidPersonalPlan,
+} = require('../middleware/auth');
 const {
   createInitiationCapabilityGuard,
 } = require('../middleware/transactionCapability');
@@ -51,8 +55,15 @@ router.patch('/:transaction_id/complete', [
   body('status').isIn(['success', 'failed', 'pending_confirmation']).withMessage('Invalid status'),
 ], handleValidation, personalTransactionController.completeTransaction);
 
-// GET /api/v1/personal-transactions — List the current user's own history
-router.get('/', personalTransactionController.listTransactions);
+// GET /api/v1/personal-transactions — Bounded recent activity preview
+router.get('/', personalTransactionController.listRecentTransactions);
+
+// GET /api/v1/personal-transactions/history — Paid-only complete history
+router.get(
+  '/history',
+  requirePaidPersonalPlan,
+  personalTransactionController.listTransactions
+);
 
 // GET /api/v1/personal-transactions/:transaction_id
 router.get('/:transaction_id', personalTransactionController.getTransaction);
