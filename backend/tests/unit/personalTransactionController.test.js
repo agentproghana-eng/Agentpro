@@ -219,6 +219,42 @@ describe('personalTransactionController initiation entitlement', () => {
     });
   });
 
+  test('MTN Personal Send Money passes its reference to USSD automation', async () => {
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [{ dial_code: '*170#' }],
+      })
+      .mockResolvedValueOnce({
+        rows: [insertedTransaction()],
+      });
+
+    const req = makeReq({
+      plan: 'paid',
+      expiresAt: '2099-12-31T23:59:59.999Z',
+      provider: 'mtn',
+      transactionType: 'send_money_same_network',
+    });
+    const res = makeRes();
+
+    await personalTransactionController.initiateTransaction(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(201);
+
+    const payload = res.json.mock.calls[0][0];
+
+    expect(payload.data.automation_entitled).toBe(true);
+    expect(payload.data.manual_dial_code).toBeNull();
+
+    expect(payload.data.automation_params).toEqual(
+      expect.objectContaining({
+        amount: '25.00',
+        customer_phone: '0240000000',
+        recipient_phone: '0240000000',
+        payment_reference: 'REF-1',
+      })
+    );
+  });
+
   test('expired Paid Personal is treated as Free and cannot query a Personal override', async () => {
     mockQuery
       .mockResolvedValueOnce({

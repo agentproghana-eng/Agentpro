@@ -236,6 +236,12 @@ class UssdAccessibilityChannel(
             true
         }
 
+        val needsReference = if (steps != null) {
+            steps.any { it.action == "send_reference" }
+        } else {
+            false
+        }
+
         // send_selection values are indexed by the actual flow-step index.
         // Validate every required selection before dialing so a malformed or
         // stale client payload cannot enter the USSD session and stall later.
@@ -270,6 +276,15 @@ class UssdAccessibilityChannel(
             result.error(
                 "MISSING_AMOUNT",
                 "amount is required by this USSD flow",
+                null
+            )
+            return
+        }
+
+        if (needsReference && reference.isNullOrBlank()) {
+            result.error(
+                "MISSING_REFERENCE",
+                "reference is required by this USSD flow",
                 null
             )
             return

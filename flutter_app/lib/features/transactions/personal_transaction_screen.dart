@@ -165,6 +165,11 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         'send_money_same_network',
         'send_money_cross_network',
       ].contains(widget.transactionType);
+
+  bool get _referenceRequired =>
+      widget.provider == 'mtn' &&
+      widget.transactionType == 'send_money_same_network';
+
   bool get _needsTillNumber => widget.transactionType == 'withdraw_cash';
 
   String _dbStep = 'recipient_mode';
@@ -240,20 +245,23 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     setState(() => _loading = true);
     String? progressAction;
 
+    final reference = _referenceCtrl.text.trim();
+
+    final requestFields = <String, dynamic>{
+      'provider': widget.provider,
+      'transaction_type': widget.transactionType,
+      if (_needsAmount) 'amount': double.tryParse(_amountCtrl.text.trim()),
+      if (_needsPhone) 'recipient_phone': _phoneCtrl.text.trim(),
+      if (_needsReference && reference.isNotEmpty) 'notes': reference,
+      if (_needsTillNumber) 'merchant_id': _tillNumberCtrl.text.trim(),
+      if (widget.simIccid != null) 'sim_iccid': widget.simIccid,
+      if (widget.simSlot != null) 'sim_slot': widget.simSlot,
+    };
+
     try {
       final res = await ApiClient.instance.post(
         '/personal-transactions',
-        data: {
-          'provider': widget.provider,
-          'transaction_type': widget.transactionType,
-          if (_needsAmount) 'amount': double.tryParse(_amountCtrl.text.trim()),
-          if (_needsPhone) 'recipient_phone': _phoneCtrl.text.trim(),
-          if (_needsReference && _referenceCtrl.text.trim().isNotEmpty)
-            'notes': _referenceCtrl.text.trim(),
-          if (_needsTillNumber) 'merchant_id': _tillNumberCtrl.text.trim(),
-          if (widget.simIccid != null) 'sim_iccid': widget.simIccid,
-          if (widget.simSlot != null) 'sim_slot': widget.simSlot,
-        },
+        data: requestFields,
       );
 
       final transaction = res.data['data'];
@@ -268,10 +276,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           'transaction_type': widget.transactionType,
           'amount': _needsAmount ? _amountCtrl.text.trim() : null,
           'customer_phone': _needsPhone ? _phoneCtrl.text.trim() : null,
-          'request_fields': {
-            if (_needsAmount) 'amount': _amountCtrl.text.trim(),
-            if (_needsPhone) 'customer_phone': _phoneCtrl.text.trim(),
-          },
+          'request_fields': requestFields,
         },
       );
     } on DioException catch (e) {
@@ -409,8 +414,12 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           if (_needsReference) ...[
             AppTextField(
               controller: _referenceCtrl,
-              label: 'Reference (optional)',
+              label: _referenceRequired ? 'Reference' : 'Reference (optional)',
               prefixIcon: Icons.notes_outlined,
+              validator: _referenceRequired
+                  ? (v) =>
+                      (v ?? '').trim().isEmpty ? 'Reference is required' : null
+                  : null,
             ),
             const SizedBox(height: 14),
           ],
