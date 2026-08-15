@@ -1,10 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Agent Pro Ghana brand color - Deep Teal -->
-    <color name="notification_color">#006B5E</color>
-    <color name="primary">#006B5E</color>
-    <color name="primary_dark">#004D43</color>
-    <color name="secondary">#FFB300</color>
+    <color name="notification_color">#00695C</color>
+    <color name="primary">#00695C</color>
+    <color name="primary_dark">#004D40</color>
+    <color name="secondary">#C9A227</color>
     <color name="white">#FFFFFF</color>
-    <color name="background">#F5F5F5</color>
+    <color name="background">#F7F9F8</color>
 </resources>

@@ -180,6 +180,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
   USSDStatus _outcome = USSDStatus.failed;
   String? _failureReason;
   Map<String, dynamic>? _completedTransaction;
+  DateTime? _resultRecordedAt;
   USSDEngine? _engine;
   String? _simWarning;
   bool _permissionPermanentlyDenied = false;
@@ -689,6 +690,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       _failureReason = message;
       _statusMessage = message;
       _completed = true;
+      _resultRecordedAt ??= DateTime.now();
     });
   }
 
@@ -965,14 +967,28 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         reason.contains('could not confirm the outcome after pin entry');
   }
 
-  bool _shouldReturnAfterMissingResult(USSDResult result) {
-    final reason = result.failureReason?.toLowerCase() ?? '';
+  bool _isAmbiguousMissingResult(
+    USSDStatus outcome,
+    String? failureReason,
+  ) {
+    final reason = failureReason?.toLowerCase() ?? '';
 
-    final noResponseBeforePin = result.outcome == USSDStatus.failed &&
+    return outcome == USSDStatus.failed &&
         (reason.contains('no response received from the network') ||
             reason.contains('no response received from the ussd session'));
+  }
 
-    return noResponseBeforePin;
+  bool _shouldReturnAfterMissingResult(USSDResult result) {
+    return _isAmbiguousMissingResult(
+      result.outcome,
+      result.failureReason,
+    );
+  }
+
+  bool get _canRetryDefiniteFailure {
+    return _outcome == USSDStatus.failed &&
+        _completedTransaction != null &&
+        !_isAmbiguousMissingResult(_outcome, _failureReason);
   }
 
   Future<void> _returnToTransactionAfterMissingResult(USSDResult result) async {
@@ -1026,6 +1042,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       if (mounted) {
         setState(() {
           _completed = true;
+          _resultRecordedAt ??= DateTime.now();
           _outcome = result.outcome;
           _failureReason = result.failureReason;
           _completedTransaction = {
@@ -1056,6 +1073,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       if (mounted) {
         setState(() {
           _completed = true;
+          _resultRecordedAt ??= DateTime.now();
           _outcome = result.outcome;
           _failureReason = result.failureReason;
           _completedTransaction = res.data['data'];
@@ -1085,6 +1103,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         if (mounted) {
           setState(() {
             _completed = true;
+            _resultRecordedAt ??= DateTime.now();
             _outcome = result.outcome;
             _failureReason = result.failureReason;
             _completedTransaction = {
@@ -1103,6 +1122,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       if (mounted) {
         setState(() {
           _completed = true;
+          _resultRecordedAt ??= DateTime.now();
           _outcome = result.outcome;
           _failureReason = result.failureReason ??
               (e.response?.data?['message'] as String? ??
@@ -1119,7 +1139,9 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       child: Scaffold(
         backgroundColor: context.appScaffoldBg,
         appBar: AppBar(
-          title: const Text('Processing Transaction'),
+          title: Text(
+            _completed ? 'Transaction Result' : 'Processing Transaction',
+          ),
           automaticallyImplyLeading: _completed,
         ),
         body: _completed ? _buildResult() : _buildProgress(),
@@ -1432,18 +1454,17 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         .join(' ');
   }
 
-  String _resultTimeLabel() {
-    final now = DateTime.now();
-    final hour = now.hour == 0
+  String _resultTimeLabel(DateTime value) {
+    final hour = value.hour == 0
         ? 12
-        : now.hour > 12
-            ? now.hour - 12
-            : now.hour;
-    final minute = now.minute.toString().padLeft(2, '0');
-    final period = now.hour >= 12 ? 'PM' : 'AM';
+        : value.hour > 12
+            ? value.hour - 12
+            : value.hour;
+    final minute = value.minute.toString().padLeft(2, '0');
+    final period = value.hour >= 12 ? 'PM' : 'AM';
 
-    return '${now.day.toString().padLeft(2, '0')}/'
-        '${now.month.toString().padLeft(2, '0')}/${now.year} · '
+    return '${value.day.toString().padLeft(2, '0')}/'
+        '${value.month.toString().padLeft(2, '0')}/${value.year} · '
         '$hour:$minute $period';
   }
 
@@ -1589,6 +1610,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         _failureReason = null;
         _completedTransaction = null;
         _resolvedTransaction = null;
+        _resultRecordedAt = null;
         _startupInitiationRetryAvailable = false;
       });
     }
@@ -1629,26 +1651,20 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     }
   }
 
-  void _retryTransaction() {
-    final provider = widget.data['provider']?.toString() ?? 'mtn';
-    final type = widget.data['transaction_type']?.toString() ?? '';
-
-    if (!widget.isPersonal && _startupInitiationRetryAvailable) {
-      unawaited(_retryStartupInitiation());
+  void _retryNow() {
+    if (!_canRetryDefiniteFailure || !mounted || !context.canPop()) {
       return;
     }
 
-    if (widget.isPersonal) {
-      context.go(
-        Uri(
-          path: '/personal-transactions/new',
-          queryParameters: {'type': type, 'provider': provider},
-        ).toString(),
-      );
+    context.pop('retry_now');
+  }
+
+  void _editAndRetry() {
+    if (!_canRetryDefiniteFailure || !mounted || !context.canPop()) {
       return;
     }
 
-    context.go('/transactions?type=$type&provider=$provider');
+    context.pop('edit_retry');
   }
 
   Widget _buildResult() {
@@ -1673,6 +1689,13 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
     final isSuccess = _outcome == USSDStatus.success;
     final isPending = _outcome == USSDStatus.pendingConfirmation;
+    final canRetryDefiniteFailure = _canRetryDefiniteFailure;
+    final resultTime = _resultRecordedAt ?? DateTime.now();
+    final resultTimeLabel = isSuccess
+        ? 'Completed'
+        : isPending
+            ? 'Checked at'
+            : 'Failed at';
 
     final Color statusColor;
     final IconData statusIcon;
@@ -1836,8 +1859,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
                 const Divider(height: 1),
                 _resultDetailRow(
                   icon: Icons.schedule_outlined,
-                  label: 'Completed',
-                  value: _resultTimeLabel(),
+                  label: resultTimeLabel,
+                  value: _resultTimeLabel(resultTime),
                 ),
               ],
             ),
@@ -1920,13 +1943,43 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
               onPressed: () => _returnHome(refreshDashboard: true),
               outlined: true,
             ),
-          ] else ...[
+          ] else if (canRetryDefiniteFailure) ...[
             AppButton(
-              label: 'Try Again',
+              label: 'Retry Now',
               icon: Icons.refresh_rounded,
-              onPressed: _retryTransaction,
+              onPressed: _retryNow,
             ),
             const SizedBox(height: 12),
+            AppButton(
+              label: 'Edit & Retry',
+              icon: Icons.edit_outlined,
+              onPressed: _editAndRetry,
+              outlined: true,
+            ),
+            const SizedBox(height: 12),
+            AppButton(
+              label: 'Go Home',
+              icon: Icons.home_outlined,
+              onPressed: () => _returnHome(refreshDashboard: false),
+              outlined: true,
+            ),
+          ] else if (!widget.isPersonal &&
+              _startupInitiationRetryAvailable) ...[
+            AppButton(
+              label: 'Retry Connection',
+              icon: Icons.sync_rounded,
+              onPressed: () {
+                unawaited(_retryStartupInitiation());
+              },
+            ),
+            const SizedBox(height: 12),
+            AppButton(
+              label: 'Go Home',
+              icon: Icons.home_outlined,
+              onPressed: () => _returnHome(refreshDashboard: false),
+              outlined: true,
+            ),
+          ] else ...[
             AppButton(
               label: 'Go Home',
               icon: Icons.home_outlined,

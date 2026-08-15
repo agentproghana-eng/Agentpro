@@ -54,7 +54,7 @@ exports.getSubscription = async (req, res) => {
 // ── Submit Payment Reference ──────────────────────────────────
 
 exports.submitPayment = async (req, res) => {
-  const { momo_reference, payment_phone, amount, notes } = req.body;
+  const { momo_reference, payment_phone, notes } = req.body;
   const companyId = req.user.company_id;
 
   try {
@@ -70,26 +70,43 @@ exports.submitPayment = async (req, res) => {
 
     const sub = subResult.rows[0];
 
-    // Check no pending payment already exists
-    const pending = await query(
-      `SELECT id FROM subscription_payments
-       WHERE subscription_id = $1 AND status = 'pending'`,
-      [sub.id]
-    );
+    // Serialize payment submission for this subscription. Every
+    // competing request must acquire the same subscription-row lock
+    // before checking for an existing pending payment.
+    let payment;
+    let pendingExists = false;
 
-    if (pending.rows.length > 0) {
+    await withTransaction(async (client) => {
+      await client.query(
+        'SELECT id FROM subscriptions WHERE id = $1 FOR UPDATE',
+        [sub.id]
+      );
+
+      const pending = await client.query(
+        `SELECT id FROM subscription_payments
+         WHERE subscription_id = $1 AND status = 'pending'`,
+        [sub.id]
+      );
+
+      if (pending.rows.length > 0) {
+        pendingExists = true;
+        return;
+      }
+
+      payment = await client.query(
+        `INSERT INTO subscription_payments
+           (subscription_id, company_id, amount, momo_reference, payment_phone, notes)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        [sub.id, companyId, billing.amount, momo_reference, payment_phone, notes]
+      );
+    });
+
+    if (pendingExists) {
       return res.status(409).json({
         success: false,
         message: 'You already have a payment under review. Please wait for verification.',
       });
     }
-
-    const payment = await query(
-      `INSERT INTO subscription_payments
-         (subscription_id, company_id, amount, momo_reference, payment_phone, notes)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [sub.id, companyId, amount || billing.amount, momo_reference, payment_phone, notes]
-    );
 
     await auditLog({
       userId: req.user.id,
@@ -97,7 +114,7 @@ exports.submitPayment = async (req, res) => {
       action: 'SUBSCRIPTION_PAYMENT_SUBMITTED',
       entityType: 'subscription_payment',
       entityId: payment.rows[0].id,
-      newValues: { momo_reference, amount },
+      newValues: { momo_reference, amount: billing.amount },
       ipAddress: req.ip,
       requestId: req.requestId,
     });
@@ -129,43 +146,67 @@ exports.verifyPayment = async (req, res) => {
   const { payment_id } = req.params;
   const { action, rejection_reason } = req.body; // 'approve' or 'reject'
 
+  if (!['approve', 'reject'].includes(action)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Action must be approve or reject',
+    });
+  }
+
   try {
-    const paymentResult = await query(
-      'SELECT * FROM subscription_payments WHERE id = $1',
-      [payment_id]
-    );
-
-    if (paymentResult.rows.length === 0) {
-      return res.status(404).json({ success: false, message: 'Payment not found' });
-    }
-
-    const payment = paymentResult.rows[0];
-
-    if (payment.status !== 'pending' && payment.status !== 'submitted') {
-      return res.status(400).json({
-        success: false,
-        message: `Payment already ${payment.status}`,
-      });
-    }
+    let payment;
+    let verificationError = null;
+    let owner = null;
+    let companyName = null;
+    let approvedExpiresAt = null;
 
     await withTransaction(async (client) => {
+      const paymentResult = await client.query(
+        'SELECT * FROM subscription_payments WHERE id = $1 FOR UPDATE',
+        [payment_id]
+      );
+
+      if (paymentResult.rows.length === 0) {
+        verificationError = {
+          status: 404,
+          message: 'Payment not found',
+        };
+        return;
+      }
+
+      payment = paymentResult.rows[0];
+
+      if (payment.status !== 'pending' && payment.status !== 'submitted') {
+        verificationError = {
+          status: 400,
+          message: `Payment already ${payment.status}`,
+        };
+        return;
+      }
+
       if (action === 'approve') {
-        // Activate subscription
         const now = new Date();
         const expiresAt = new Date(now);
-        expiresAt.setMonth(expiresAt.getMonth() + (payment.period_months || 1));
+        expiresAt.setMonth(
+          expiresAt.getMonth() + (payment.period_months || 1)
+        );
 
         const sub = await client.query(
           'SELECT * FROM subscriptions WHERE id = $1',
           [payment.subscription_id]
         );
 
-        // If already active, extend from current expiry
         let startFrom = now;
-        if (sub.rows[0].status === 'active' && sub.rows[0].expires_at > now) {
+
+        if (
+          sub.rows[0].status === 'active' &&
+          sub.rows[0].expires_at > now
+        ) {
           startFrom = new Date(sub.rows[0].expires_at);
           expiresAt.setTime(startFrom.getTime());
-          expiresAt.setMonth(expiresAt.getMonth() + (payment.period_months || 1));
+          expiresAt.setMonth(
+            expiresAt.getMonth() + (payment.period_months || 1)
+          );
         }
 
         const graceEnds = new Date(expiresAt);
@@ -177,73 +218,136 @@ exports.verifyPayment = async (req, res) => {
                started_at = COALESCE(started_at, $1),
                expires_at = $2, grace_period_ends_at = $3
            WHERE id = $4`,
-          [startFrom, expiresAt, graceEnds, payment.subscription_id]
+          [
+            startFrom,
+            expiresAt,
+            graceEnds,
+            payment.subscription_id,
+          ]
         );
 
         await client.query(
           `UPDATE subscription_payments
-           SET status = 'verified', verified_at = NOW(), verified_by = $1
+           SET status = 'verified',
+               verified_at = NOW(),
+               verified_by = $1
            WHERE id = $2`,
           [req.user.id, payment_id]
         );
 
-        // Activate company if still pending
         await client.query(
-          "UPDATE companies SET status = 'active', approved_at = NOW(), approved_by = $1 WHERE id = $2 AND status = 'pending'",
+          `UPDATE companies
+           SET status = 'active',
+               approved_at = NOW(),
+               approved_by = $1
+           WHERE id = $2
+             AND status = 'pending'`,
           [req.user.id, payment.company_id]
         );
+
         await client.query(
-          "UPDATE users SET status = 'active' WHERE company_id = $1 AND status = 'pending'",
+          `UPDATE users
+           SET status = 'active'
+           WHERE company_id = $1
+             AND status = 'pending'`,
           [payment.company_id]
         );
 
-        // Notify business owner
-        const owner = await client.query(
-          "SELECT * FROM users WHERE company_id = $1 AND role = 'business_owner' LIMIT 1",
-          [payment.company_id]
-        );
-
-        if (owner.rows.length > 0) {
-          await sendWelcomeEmail(owner.rows[0].email, owner.rows[0].first_name,
-            (await client.query('SELECT name FROM companies WHERE id = $1', [payment.company_id])).rows[0]?.name);
-          await sendToUser(owner.rows[0].id, {
-            type: 'renewal_approved',
-            title: '✅ Subscription Activated!',
-            body: `Your Business Plan is now active until ${expiresAt.toLocaleDateString('en-GH')}.`,
-            data: { expires_at: expiresAt.toISOString() },
-          });
-          if (owner.rows[0].phone) {
-            try {
-              await sendSubscriptionRenewalSMS(owner.rows[0].phone, owner.rows[0].first_name, payment.amount, expiresAt.toLocaleDateString("en-GH"));
-            } catch (smsErr) {
-              logger.error("Failed to send subscription renewal SMS:", smsErr);
-            }
-          }
-        }
-
-      } else if (action === 'reject') {
+        approvedExpiresAt = expiresAt;
+      } else {
         await client.query(
           `UPDATE subscription_payments
-           SET status = 'rejected', verified_at = NOW(), verified_by = $1, rejection_reason = $2
+           SET status = 'rejected',
+               verified_at = NOW(),
+               verified_by = $1,
+               rejection_reason = $2
            WHERE id = $3`,
           [req.user.id, rejection_reason, payment_id]
         );
+      }
 
-        // Notify business owner
-        const owner = await client.query(
-          "SELECT id FROM users WHERE company_id = $1 AND role = 'business_owner' LIMIT 1",
+      const ownerResult = await client.query(
+        `SELECT id, email, first_name, phone
+         FROM users
+         WHERE company_id = $1
+           AND role = 'business_owner'
+         LIMIT 1`,
+        [payment.company_id]
+      );
+
+      owner = ownerResult.rows[0] || null;
+
+      if (action === 'approve' && owner) {
+        const companyResult = await client.query(
+          'SELECT name FROM companies WHERE id = $1',
           [payment.company_id]
         );
-        if (owner.rows.length > 0) {
-          await sendToUser(owner.rows[0].id, {
-            type: 'system_update',
-            title: '❌ Payment Not Verified',
-            body: `Your subscription payment could not be verified. Reason: ${rejection_reason || 'Please contact support.'}`,
-            data: {},
-          });
-        }
+
+        companyName = companyResult.rows[0]?.name || null;
       }
     });
+
+    if (verificationError) {
+      return res.status(verificationError.status).json({
+        success: false,
+        message: verificationError.message,
+      });
+    }
+
+    // External side effects happen only after the database transaction
+    // commits. Notification failures must not undo a verified payment.
+    if (owner) {
+      if (action === 'approve') {
+        try {
+          await sendWelcomeEmail(
+            owner.email,
+            owner.first_name,
+            companyName
+          );
+        } catch (emailErr) {
+          logger.error(
+            'Failed to send subscription welcome email:',
+            emailErr
+          );
+        }
+
+        await sendToUser(owner.id, {
+          type: 'renewal_approved',
+          title: '✅ Subscription Activated!',
+          body:
+            `Your Business Plan is now active until ` +
+            `${approvedExpiresAt.toLocaleDateString('en-GH')}.`,
+          data: {
+            expires_at: approvedExpiresAt.toISOString(),
+          },
+        });
+
+        if (owner.phone) {
+          try {
+            await sendSubscriptionRenewalSMS(
+              owner.phone,
+              owner.first_name,
+              payment.amount,
+              approvedExpiresAt.toLocaleDateString('en-GH')
+            );
+          } catch (smsErr) {
+            logger.error(
+              'Failed to send subscription renewal SMS:',
+              smsErr
+            );
+          }
+        }
+      } else {
+        await sendToUser(owner.id, {
+          type: 'system_update',
+          title: '❌ Payment Not Verified',
+          body:
+            `Your subscription payment could not be verified. ` +
+            `Reason: ${rejection_reason || 'Please contact support.'}`,
+          data: {},
+        });
+      }
+    }
 
     await auditLog({
       userId: req.user.id,
@@ -257,11 +361,19 @@ exports.verifyPayment = async (req, res) => {
 
     res.json({
       success: true,
-      message: `Payment ${action === 'approve' ? 'approved and subscription activated' : 'rejected'}`,
+      message:
+        `Payment ${
+          action === 'approve'
+            ? 'approved and subscription activated'
+            : 'rejected'
+        }`,
     });
   } catch (error) {
     logger.error('Verify payment error:', error);
-    res.status(500).json({ success: false, message: 'Failed to verify payment' });
+    res.status(500).json({
+      success: false,
+      message: 'Failed to verify payment',
+    });
   }
 };
 

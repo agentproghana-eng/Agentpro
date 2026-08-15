@@ -9,6 +9,7 @@
 
     <!-- Normal theme: applied after Flutter renders first frame -->
     <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
-        <item name="android:windowBackground">@color/white</item>
+        <item name="android:windowBackground">@color/background</item>
+        <item name="android:navigationBarColor">@color/background</item>
     </style>
 </resources>

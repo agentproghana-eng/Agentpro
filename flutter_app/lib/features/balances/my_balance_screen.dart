@@ -333,8 +333,7 @@ class _ProviderBalanceCard extends StatelessWidget {
     if (iccid.isNotEmpty) {
       queryParameters['sim_iccid'] = iccid;
     } else {
-      queryParameters['sim_subscription_id'] =
-          sim.subscriptionId.toString();
+      queryParameters['sim_subscription_id'] = sim.subscriptionId.toString();
     }
 
     return queryParameters;

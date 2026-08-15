@@ -20,9 +20,8 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
-    final user = authState is AuthAuthenticated
-        ? authState.user
-        : <String, dynamic>{};
+    final user =
+        authState is AuthAuthenticated ? authState.user : <String, dynamic>{};
 
     return Scaffold(
       body: IndexedStack(
@@ -66,9 +65,8 @@ class _OwnerMoreTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
-    final user = authState is AuthAuthenticated
-        ? authState.user
-        : <String, dynamic>{};
+    final user =
+        authState is AuthAuthenticated ? authState.user : <String, dynamic>{};
 
     return Scaffold(
       appBar: AppBar(title: const Text('More')),
@@ -148,14 +146,14 @@ class _OwnerMoreTab extends StatelessWidget {
           MoreTile(
             Icons.settings_outlined,
             'Settings',
-            () => context.push('/settings'),
+            () => context.push('/settings?mode=business'),
             subtitle: 'Manage preferences, security and app configuration',
           ),
           const MoreGroupLabel('Help & Support'),
           MoreTile(
             Icons.support_agent_outlined,
             'Help & Support',
-            () => context.push('/support'),
+            () => context.push('/support?mode=business'),
             subtitle: 'Guides, assistance and support options',
           ),
           const Divider(),

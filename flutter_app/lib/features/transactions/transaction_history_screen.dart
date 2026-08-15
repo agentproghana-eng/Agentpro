@@ -21,7 +21,12 @@ import '../../core/services/sim_card_service.dart';
 // alphabetically by provider name isn't a meaningful operation the way
 // sorting by a numeric field is.
 class TransactionHistoryScreen extends StatefulWidget {
-  const TransactionHistoryScreen({super.key});
+  final String? initialBranchId;
+
+  const TransactionHistoryScreen({
+    super.key,
+    this.initialBranchId,
+  });
 
   @override
   State<TransactionHistoryScreen> createState() =>
@@ -93,6 +98,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
   @override
   void initState() {
     super.initState();
+    _branchFilter = widget.initialBranchId;
     _checkRoleForBranchFilter();
     _load();
     _loadSims();

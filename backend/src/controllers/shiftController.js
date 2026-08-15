@@ -249,10 +249,76 @@ exports.getCurrentShift = async (req, res) => {
       `SELECT * FROM shifts WHERE agent_id = $1 AND status = 'open' LIMIT 1`,
       [req.user.id]
     );
-    res.json({ success: true, data: result.rows[0] || null });
+
+    const shift = result.rows[0] || null;
+
+    if (shift === null) {
+      return res.json({ success: true, data: null });
+    }
+
+    const snapshotResult = await query(
+      `SELECT
+         snapshot.id AS snapshot_id,
+         snapshot.sim_wallet_id,
+         wallet.provider,
+         wallet.identity_status,
+         wallet.sim_iccid,
+         wallet.installation_id,
+         wallet.sim_subscription_id,
+         wallet.last_known_sim_slot,
+         snapshot.balance_type,
+         snapshot.opening_expected,
+         snapshot.opening_declared,
+         snapshot.opening_variance
+       FROM shift_sim_balance_snapshots snapshot
+       JOIN agent_sim_wallets wallet
+         ON wallet.id = snapshot.sim_wallet_id
+       WHERE snapshot.shift_id = $1
+       ORDER BY snapshot.id`,
+      [shift.id]
+    );
+
+    const walletsById = new Map();
+
+    for (const snapshot of snapshotResult.rows) {
+      let group = walletsById.get(snapshot.sim_wallet_id);
+
+      if (group === undefined) {
+        group = {
+          sim_wallet_id: snapshot.sim_wallet_id,
+          provider: snapshot.provider,
+          identity_status: snapshot.identity_status,
+          sim_iccid: snapshot.sim_iccid,
+          installation_id: snapshot.installation_id,
+          sim_subscription_id: snapshot.sim_subscription_id,
+          sim_slot: snapshot.last_known_sim_slot,
+          balances: [],
+        };
+
+        walletsById.set(snapshot.sim_wallet_id, group);
+      }
+
+      group.balances.push({
+        balance_type: snapshot.balance_type,
+        opening_expected: snapshot.opening_expected,
+        opening_declared: snapshot.opening_declared,
+        opening_variance: snapshot.opening_variance,
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        ...shift,
+        opening_sim_balances: Array.from(walletsById.values()),
+      },
+    });
   } catch (error) {
     logger.error('Get current shift error:', error);
-    res.status(500).json({ success: false, message: 'Failed to fetch current shift' });
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch current shift',
+    });
   }
 };
 

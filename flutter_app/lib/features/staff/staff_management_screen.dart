@@ -21,42 +21,138 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
   List<dynamic> _staff = [];
   List<dynamic> _branches = [];
   bool _loading = true;
+  bool _loadingMore = false;
   String? _error;
+  int _page = 1;
+  int _totalPages = 1;
+  int _loadGeneration = 0;
+  int _lastTabIndex = 0;
 
   static const _roles = ['manager', 'agent', 'auditor'];
+
+  String? get _selectedRole {
+    final index = _tabController.index;
+    if (index <= 0) return null;
+    return _roles[index - 1];
+  }
 
   @override
   void initState() {
     super.initState();
     _tabController =
         TabController(length: _roles.length + 1, vsync: this); // +1 for "All"
+    _tabController.addListener(_handleTabChanged);
     _load();
   }
 
-  Future<void> _load() async {
+  void _handleTabChanged() {
+    final index = _tabController.index;
+    if (index == _lastTabIndex) return;
+
+    _lastTabIndex = index;
+    _load(refreshBranches: false);
+  }
+
+  Future<void> _load({bool refreshBranches = true}) async {
+    final generation = ++_loadGeneration;
+    final requestedRole = _selectedRole;
+
     setState(() {
       _loading = true;
+      _loadingMore = false;
       _error = null;
     });
+
     try {
-      final results = await Future.wait([
-        ApiClient.instance.get('/users', queryParameters: {'limit': 100}),
-        ApiClient.instance.get('/branches'),
-      ]);
-      if (mounted) {
-        setState(() {
-          _staff = results[0].data['data'] ?? [];
-          _branches = results[1].data['data'] ?? [];
-          _loading = false;
-        });
-      }
+      final userQuery = <String, dynamic>{
+        'page': 1,
+        'limit': 30,
+        if (requestedRole != null) 'role': requestedRole,
+      };
+
+      final usersFuture =
+          ApiClient.instance.get('/users', queryParameters: userQuery);
+      final branchesFuture =
+          refreshBranches ? ApiClient.instance.get('/branches') : null;
+
+      final usersResponse = await usersFuture;
+      final branchesResponse =
+          branchesFuture == null ? null : await branchesFuture;
+
+      if (!mounted || generation != _loadGeneration) return;
+
+      final data = List<dynamic>.from(usersResponse.data['data'] ?? const []);
+      final meta = usersResponse.data['meta'] as Map<String, dynamic>?;
+
+      setState(() {
+        _staff = data;
+        if (branchesResponse != null) {
+          _branches =
+              List<dynamic>.from(branchesResponse.data['data'] ?? const []);
+        }
+        _page = (meta?['page'] as num?)?.toInt() ?? 1;
+        _totalPages = (meta?['total_pages'] as num?)?.toInt() ?? 1;
+        _loading = false;
+        _loadingMore = false;
+      });
     } on DioException catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.response?.data?['message'] ?? 'Failed to load staff';
-          _loading = false;
-        });
+      if (!mounted || generation != _loadGeneration) return;
+
+      setState(() {
+        _error = e.response?.data?['message'] ?? 'Failed to load staff';
+        _loading = false;
+        _loadingMore = false;
+      });
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loading || _loadingMore || _page >= _totalPages) return;
+
+    final generation = _loadGeneration;
+    final requestedRole = _selectedRole;
+    final nextPage = _page + 1;
+
+    setState(() => _loadingMore = true);
+
+    try {
+      final response = await ApiClient.instance.get(
+        '/users',
+        queryParameters: {
+          'page': nextPage,
+          'limit': 30,
+          if (requestedRole != null) 'role': requestedRole,
+        },
+      );
+
+      if (!mounted ||
+          generation != _loadGeneration ||
+          requestedRole != _selectedRole) {
+        return;
       }
+
+      final data = List<dynamic>.from(response.data['data'] ?? const []);
+      final meta = response.data['meta'] as Map<String, dynamic>?;
+
+      setState(() {
+        _staff.addAll(data);
+        _page = (meta?['page'] as num?)?.toInt() ?? nextPage;
+        _totalPages = (meta?['total_pages'] as num?)?.toInt() ?? _totalPages;
+        _loadingMore = false;
+      });
+    } on DioException catch (e) {
+      if (!mounted || generation != _loadGeneration) return;
+
+      setState(() => _loadingMore = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.response?.data?['message'] ?? 'Could not load more staff',
+          ),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
     }
   }
 
@@ -187,24 +283,45 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
   }
 
   void _showAddStaffSheet() {
+    final role =
+        (context.read<AuthBloc>().state as AuthAuthenticated).user['role'];
+
+    if (role == 'manager' && _branches.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'You need a managed branch before you can add an agent.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final allowedRoles = role == 'manager' ? const <String>['agent'] : _roles;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => _AddStaffSheet(branches: _branches, onCreated: _load),
+      builder: (_) => _AddStaffSheet(
+        branches: _branches,
+        allowedRoles: allowedRoles,
+        onCreated: _load,
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Managers can view this screen (server-side scoping already restricts
-    // them to agents in branches they manage) but cannot create, suspend,
-    // delete, or reassign - those routes are owner/superuser only. Rather
-    // than show controls that silently fail with a 403, hide them entirely.
+    // Managers can view agents in branches they manage and may add agents
+    // to those branches. Existing-staff lifecycle and reassignment controls
+    // remain owner/superuser-only, so manager rows stay read-only.
     final role =
         (context.read<AuthBloc>().state as AuthAuthenticated).user['role'];
     final isReadOnly = role == 'manager';
+    final canAddStaff =
+        role == 'superuser' || role == 'business_owner' || role == 'manager';
 
     return Scaffold(
       appBar: AppBar(
@@ -242,6 +359,9 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
                         onDelete: _deactivateStaff,
                         onReassign: _reassignBranch,
                         onRefresh: _load,
+                        onLoadMore: _loadMore,
+                        hasMore: _page < _totalPages,
+                        loadingMore: _loadingMore,
                         isReadOnly: isReadOnly),
                     _StaffList(
                         staff: _filteredStaff('manager'),
@@ -249,6 +369,9 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
                         onDelete: _deactivateStaff,
                         onReassign: _reassignBranch,
                         onRefresh: _load,
+                        onLoadMore: _loadMore,
+                        hasMore: _page < _totalPages,
+                        loadingMore: _loadingMore,
                         isReadOnly: isReadOnly),
                     _StaffList(
                         staff: _filteredStaff('agent'),
@@ -256,6 +379,9 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
                         onDelete: _deactivateStaff,
                         onReassign: _reassignBranch,
                         onRefresh: _load,
+                        onLoadMore: _loadMore,
+                        hasMore: _page < _totalPages,
+                        loadingMore: _loadingMore,
                         isReadOnly: isReadOnly),
                     _StaffList(
                         staff: _filteredStaff('auditor'),
@@ -263,23 +389,27 @@ class _StaffManagementScreenState extends State<StaffManagementScreen>
                         onDelete: _deactivateStaff,
                         onReassign: _reassignBranch,
                         onRefresh: _load,
+                        onLoadMore: _loadMore,
+                        hasMore: _page < _totalPages,
+                        loadingMore: _loadingMore,
                         isReadOnly: isReadOnly),
                   ],
                 ),
-      floatingActionButton: isReadOnly
-          ? null
-          : FloatingActionButton.extended(
+      floatingActionButton: canAddStaff
+          ? FloatingActionButton.extended(
               onPressed: _showAddStaffSheet,
               icon: const Icon(Icons.person_add),
               label: const Text('Add Staff'),
               backgroundColor: AppTheme.primaryColor,
               foregroundColor: AppTheme.secondaryColor,
-            ),
+            )
+          : null,
     );
   }
 
   @override
   void dispose() {
+    _tabController.removeListener(_handleTabChanged);
     _tabController.dispose();
     super.dispose();
   }
@@ -293,6 +423,9 @@ class _StaffList extends StatelessWidget {
   final void Function(Map<String, dynamic>) onDelete;
   final void Function(Map<String, dynamic>) onReassign;
   final Future<void> Function() onRefresh;
+  final Future<void> Function() onLoadMore;
+  final bool hasMore;
+  final bool loadingMore;
   final bool isReadOnly;
 
   const _StaffList(
@@ -301,11 +434,14 @@ class _StaffList extends StatelessWidget {
       required this.onDelete,
       required this.onReassign,
       required this.onRefresh,
+      required this.onLoadMore,
+      required this.hasMore,
+      required this.loadingMore,
       this.isReadOnly = false});
 
   @override
   Widget build(BuildContext context) {
-    if (staff.isEmpty) {
+    if (staff.isEmpty && !hasMore) {
       return const EmptyState(
         icon: Icons.people_outline,
         title: 'No staff in this category',
@@ -316,9 +452,28 @@ class _StaffList extends StatelessWidget {
     return RefreshIndicator(
       onRefresh: onRefresh,
       child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(8),
-        itemCount: staff.length,
+        itemCount: staff.length + (hasMore ? 1 : 0),
         itemBuilder: (_, i) {
+          if (i >= staff.length) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Center(
+                child: OutlinedButton(
+                  onPressed: loadingMore ? null : onLoadMore,
+                  child: loadingMore
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Load more staff'),
+                ),
+              ),
+            );
+          }
+
           final u = staff[i] as Map<String, dynamic>;
           final isActive = u['status'] == 'active';
           return Card(
@@ -381,10 +536,12 @@ class _StaffList extends StatelessWidget {
                               child: Text('Delete',
                                   style: TextStyle(color: AppTheme.errorColor)),
                             ),
-                            const PopupMenuItem(
-                              value: 'reassign',
-                              child: Text('Reassign Branch'),
-                            ),
+                            if (['agent', 'manager', 'business_owner']
+                                .contains(u['role']))
+                              const PopupMenuItem(
+                                value: 'reassign',
+                                child: Text('Reassign Branch'),
+                              ),
                           ],
                         ),
                       ],
@@ -401,9 +558,14 @@ class _StaffList extends StatelessWidget {
 
 class _AddStaffSheet extends StatefulWidget {
   final List<dynamic> branches;
+  final List<String> allowedRoles;
   final VoidCallback onCreated;
 
-  const _AddStaffSheet({required this.branches, required this.onCreated});
+  const _AddStaffSheet({
+    required this.branches,
+    required this.allowedRoles,
+    required this.onCreated,
+  });
 
   @override
   State<_AddStaffSheet> createState() => _AddStaffSheetState();
@@ -480,7 +642,7 @@ class _AddStaffSheetState extends State<_AddStaffSheet> {
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
-                children: ['manager', 'agent', 'auditor'].map((r) {
+                children: widget.allowedRoles.map((r) {
                   final selected = _role == r;
                   return ChoiceChip(
                     label: Text(r[0].toUpperCase() + r.substring(1)),

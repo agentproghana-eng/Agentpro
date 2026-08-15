@@ -12,9 +12,12 @@ class AppConstants {
 
   // ── App Info ─────────────────────────────────────────────────
   static const String appName = 'Agent Pro Ghana';
-  static const String appTagline = 'One App. Every Mobile Money Business.';
+  static const String appTagline = 'One App. Every Business.';
   static const String appVersion = '2.0.0';
   static const String supportEmail = 'support@agentproghana.com';
+  static const String supportPhone = '0207438990';
+  static const String supportWhatsAppNumber = '233207438990';
+  static const String supportHours = 'Mon - Fri, 8:00 AM - 5:00 PM';
   static const String websiteUrl = 'https://agentproghana.com';
 
   // ── MoMo Providers ───────────────────────────────────────────
@@ -30,11 +33,24 @@ class AppConstants {
     'at_money': '*500#',
   };
 
-  static const Map<String, String> providerSupportNumbers = {
+  // Network help differs by account context. Personal MTN customers
+  // use 100, while MTN Agent SIM users use the agent-support code 114.
+  static const Map<String, String> personalProviderSupportNumbers = {
     'mtn': '100',
     'telecel': '100',
     'at_money': '100',
   };
+
+  static const Map<String, String> agentProviderSupportNumbers = {
+    'mtn': '114',
+    'telecel': '100',
+    'at_money': '100',
+  };
+
+  // Retained for existing Personal/customer call sites. New UI that
+  // knows its mode should use the explicit map above instead.
+  static const Map<String, String> providerSupportNumbers =
+      personalProviderSupportNumbers;
 
   // ── Transaction Types ─────────────────────────────────────────
   static const Map<String, String> transactionTypeNames = {

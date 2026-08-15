@@ -440,13 +440,43 @@ exports.refreshToken = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid token type' });
     }
 
-    // Check if blacklisted
+    // Check the fast Redis blacklist first.
     const blacklisted = await isTokenBlacklisted(refresh_token);
     if (blacklisted) {
       return res.status(401).json({ success: false, message: 'Token has been revoked' });
     }
 
-    // Fetch user
+    // A valid JWT signature is not sufficient on its own. Refresh tokens
+    // are persisted as bcrypt hashes so password changes, logout, staff
+    // suspension/deactivation, and other server-side revocations remain
+    // authoritative even if the signed token has not expired yet.
+    const storedTokens = await query(
+      `SELECT token_hash
+       FROM refresh_tokens
+       WHERE user_id = $1
+         AND revoked_at IS NULL
+         AND expires_at > NOW()
+       ORDER BY created_at DESC`,
+      [decoded.id]
+    );
+
+    let storedTokenMatches = false;
+    for (const storedToken of storedTokens.rows) {
+      if (await bcrypt.compare(refresh_token, storedToken.token_hash)) {
+        storedTokenMatches = true;
+        break;
+      }
+    }
+
+    if (!storedTokenMatches) {
+      return res.status(401).json({
+        success: false,
+        message: 'Refresh token is no longer valid',
+      });
+    }
+
+    // Fetch user only after the refresh session itself has been validated.
+    // Suspended/deactivated users cannot exchange even a still-stored token.
     const result = await query(
       `SELECT u.*, c.name as company_name
        FROM users u
@@ -483,13 +513,14 @@ exports.logout = async (req, res) => {
   const authHeader = req.headers.authorization;
 
   try {
-    // Blacklist access token
+    // Blacklist the currently presented access token.
     if (authHeader) {
       const accessToken = authHeader.split(' ')[1];
       try {
         const decoded = jwt.decode(accessToken);
         if (decoded) {
-          const expiresIn = decoded.exp - Math.floor(Date.now() / 1000);
+          const expiresIn =
+            decoded.exp - Math.floor(Date.now() / 1000);
           if (expiresIn > 0) {
             await blacklistToken(accessToken, expiresIn);
           }
@@ -497,13 +528,38 @@ exports.logout = async (req, res) => {
       } catch (e) { /* ignore */ }
     }
 
-    // Revoke refresh token
+    // Revoke only the refresh-token row that matches the token presented
+    // by this device/session. Signing out on one device must not revoke
+    // every other active device belonging to the same user.
     if (refresh_token) {
-      const tokenHash = await bcrypt.hash(refresh_token, 8);
-      await query(
-        'UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL',
+      const storedTokens = await query(
+        `SELECT id, token_hash
+         FROM refresh_tokens
+         WHERE user_id = $1
+           AND revoked_at IS NULL
+           AND expires_at > NOW()
+         ORDER BY created_at DESC`,
         [req.user.id]
       );
+
+      let matchedTokenId = null;
+
+      for (const storedToken of storedTokens.rows) {
+        if (await bcrypt.compare(refresh_token, storedToken.token_hash)) {
+          matchedTokenId = storedToken.id;
+          break;
+        }
+      }
+
+      if (matchedTokenId) {
+        await query(
+          'UPDATE refresh_tokens SET revoked_at = NOW() WHERE id = $1',
+          [matchedTokenId]
+        );
+      }
+
+      // Keep the supplied token unusable even if its database row was
+      // already revoked or otherwise absent.
       await blacklistToken(refresh_token, 30 * 24 * 3600);
     }
 
@@ -516,15 +572,18 @@ exports.logout = async (req, res) => {
       requestId: req.requestId
     });
 
-    res.json({ success: true, message: 'Logged out successfully' });
-
+    res.json({
+      success: true,
+      message: 'Logged out successfully'
+    });
   } catch (error) {
     logger.error('Logout error:', error);
-    res.status(500).json({ success: false, message: 'Logout failed' });
+    res.status(500).json({
+      success: false,
+      message: 'Logout failed'
+    });
   }
 };
-
-// ─── Request Password Reset ───────────────────────────────────
 
 exports.requestPasswordReset = async (req, res) => {
   const { email } = req.body;

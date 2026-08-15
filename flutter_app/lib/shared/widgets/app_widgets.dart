@@ -427,6 +427,8 @@ class GhsAmount extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final resolvedColor = color ?? Theme.of(context).colorScheme.primary;
+
     return RichText(
       text: TextSpan(
         style: DefaultTextStyle.of(context).style,
@@ -435,7 +437,7 @@ class GhsAmount extends StatelessWidget {
             text: 'GH₵ ',
             style: TextStyle(
               fontSize: fontSize * 0.7,
-              color: color ?? AppTheme.primaryColor,
+              color: resolvedColor,
               fontWeight: bold ? FontWeight.bold : FontWeight.normal,
             ),
           ),
@@ -443,7 +445,7 @@ class GhsAmount extends StatelessWidget {
             text: amount.toStringAsFixed(2),
             style: TextStyle(
               fontSize: fontSize,
-              color: color ?? AppTheme.primaryColor,
+              color: resolvedColor,
               fontWeight: bold ? FontWeight.bold : FontWeight.normal,
             ),
           ),

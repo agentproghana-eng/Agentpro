@@ -1,5 +1,9 @@
 const express = require('express');
 const { validateFlowSteps } = require('../utils/ussdFlowValidation');
+const {
+  getFlowBuilderEligibility,
+  getGlobalFlowBuilderEligibility,
+} = require('../utils/ussdFlowCapabilities');
 const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
 const { query } = require('../config/database');
@@ -532,6 +536,7 @@ router.get('/ussd-flows', async (req, res) => {
       `SELECT f.*, COUNT(s.id)::int AS step_count
        FROM ussd_flows f
        LEFT JOIN ussd_flow_steps s ON s.flow_id = f.id
+       WHERE f.owner_user_id IS NULL
        GROUP BY f.id
        ORDER BY f.provider, f.transaction_type`
     );
@@ -541,7 +546,10 @@ router.get('/ussd-flows', async (req, res) => {
 
 router.get('/ussd-flows/:id', async (req, res) => {
   try {
-    const flowResult = await query('SELECT * FROM ussd_flows WHERE id = $1', [req.params.id]);
+    const flowResult = await query(
+      'SELECT * FROM ussd_flows WHERE id = $1 AND owner_user_id IS NULL',
+      [req.params.id]
+    );
     if (!flowResult.rows.length) {
       return res.status(404).json({ success: false, message: 'Flow not found' });
     }
@@ -576,7 +584,57 @@ router.post('/ussd-flows', async (req, res) => {
     return res.status(422).json({ success: false, message: stepsError });
   }
 
+  const hasCompanyId =
+    Object.prototype.hasOwnProperty.call(req.body, 'company_id');
+
+  if (
+    hasCompanyId &&
+    company_id !== null &&
+    company_id !== undefined &&
+    (typeof company_id !== 'string' || company_id.trim().length === 0)
+  ) {
+    return res.status(422).json({
+      success: false,
+      code: 'INVALID_COMPANY_ID',
+      message: 'company_id must be a non-empty string when provided.',
+    });
+  }
+
+  const targetCompanyId =
+    company_id === null || company_id === undefined
+      ? null
+      : company_id.trim();
+
   try {
+    const eligibility = targetCompanyId === null
+      ? await getGlobalFlowBuilderEligibility(
+          provider,
+          transaction_type
+        )
+      : await getFlowBuilderEligibility(
+          'business',
+          provider,
+          transaction_type
+        );
+
+    if (!eligibility.provider_registered) {
+      return res.status(422).json({
+        success: false,
+        code: 'USSD_PROVIDER_NOT_REGISTERED',
+        message: 'Provider is not registered for USSD Flow Builder configuration.',
+      });
+    }
+
+    if (!eligibility.transaction_type_builder_enabled) {
+      return res.status(422).json({
+        success: false,
+        code: 'USSD_FLOW_TYPE_NOT_ENABLED',
+        message: targetCompanyId === null
+          ? 'Transaction type is not enabled for any Global USSD Flow Builder account mode.'
+          : 'Transaction type is not enabled for Business USSD Flow Builder configuration.',
+      });
+    }
+
     const flow = await withTransaction(async (client) => {
       const flowResult = await client.query(
         `INSERT INTO ussd_flows (
@@ -598,7 +656,7 @@ router.post('/ussd-flows', async (req, res) => {
           dial_code,
           success_markers || [],
           failure_markers || [],
-          company_id || null,
+          targetCompanyId,
           bundle_category || null,
           recipient_mode || null,
           req.user.id,
@@ -616,7 +674,7 @@ router.post('/ussd-flows', async (req, res) => {
     });
 
     await auditLog({
-      userId: req.user.id, companyId: company_id || null,
+      userId: req.user.id, companyId: targetCompanyId,
       action: 'USSD_FLOW_CREATED', entityType: 'ussd_flow', entityId: flow.id,
       newValues: {
         provider,
@@ -693,6 +751,7 @@ router.patch('/ussd-flows/:id', async (req, res) => {
            is_active = COALESCE($8, is_active),
            updated_at = NOW()
          WHERE id = $9
+           AND owner_user_id IS NULL
          RETURNING *`,
         [
           dial_code,

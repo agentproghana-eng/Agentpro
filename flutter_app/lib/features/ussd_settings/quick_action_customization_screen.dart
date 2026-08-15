@@ -3,276 +3,7 @@ import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
 import 'quick_action_preference.dart';
-
-class QuickActionDefinition {
-  final String type;
-  final String label;
-  final IconData icon;
-
-  const QuickActionDefinition({
-    required this.type,
-    required this.label,
-    required this.icon,
-  });
-}
-
-const List<QuickActionDefinition> kAgentQuickActionDefinitions = [
-  QuickActionDefinition(
-    type: 'cash_in',
-    label: 'Deposit',
-    icon: Icons.call_received,
-  ),
-  QuickActionDefinition(
-    type: 'cash_out',
-    label: 'Cash Out / Withdrawal',
-    icon: Icons.call_made,
-  ),
-  QuickActionDefinition(
-    type: 'send_money',
-    label: 'Cash In',
-    icon: Icons.call_received,
-  ),
-  QuickActionDefinition(
-    type: 'merchant_payment',
-    label: 'Pay to Merchant',
-    icon: Icons.storefront_outlined,
-  ),
-  QuickActionDefinition(
-    type: 'bill_payment',
-    label: 'Pay to Agent',
-    icon: Icons.receipt_long_outlined,
-  ),
-  QuickActionDefinition(
-    type: 'airtime',
-    label: 'Airtime',
-    icon: Icons.phone_android_outlined,
-  ),
-  QuickActionDefinition(
-    type: 'data_bundle',
-    label: 'Data Bundle',
-    icon: Icons.wifi_outlined,
-  ),
-  QuickActionDefinition(
-    type: 'balance_enquiry',
-    label: 'Check Balance',
-    icon: Icons.account_balance_wallet_outlined,
-  ),
-  QuickActionDefinition(
-    type: 'commission_balance',
-    label: 'Commission Balance',
-    icon: Icons.pie_chart_outline,
-  ),
-  QuickActionDefinition(
-    type: 'cash_in_commission',
-    label: 'Cash In Commission',
-    icon: Icons.savings_outlined,
-  ),
-  QuickActionDefinition(
-    type: 'commission_transfer',
-    label: 'Commission to Float',
-    icon: Icons.swap_vert_circle_outlined,
-  ),
-  QuickActionDefinition(
-    type: 'working_to_float',
-    label: 'Working Account to Float',
-    icon: Icons.move_to_inbox_outlined,
-  ),
-  QuickActionDefinition(
-    type: 'float_to_working',
-    label: 'Float to Working Account',
-    icon: Icons.outbox_outlined,
-  ),
-  QuickActionDefinition(
-    type: 'business_deposit',
-    label: 'Business Deposit',
-    icon: Icons.business_outlined,
-  ),
-  QuickActionDefinition(
-    type: 'business_withdrawal',
-    label: 'Business Withdrawal',
-    icon: Icons.account_balance_outlined,
-  ),
-];
-
-const List<QuickActionDefinition> kPersonalQuickActionDefinitions = [
-  QuickActionDefinition(
-    type: 'send_money_same_network',
-    label: 'Send Money\nSame Network',
-    icon: Icons.send_outlined,
-  ),
-  QuickActionDefinition(
-    type: 'send_money_cross_network',
-    label: 'Send Money\nOther Network',
-    icon: Icons.compare_arrows,
-  ),
-  QuickActionDefinition(
-    type: 'withdraw_cash',
-    label: 'Withdraw Cash',
-    icon: Icons.call_made,
-  ),
-  QuickActionDefinition(
-    type: 'buy_airtime',
-    label: 'Buy Airtime',
-    icon: Icons.phone_android_outlined,
-  ),
-  QuickActionDefinition(
-    type: 'buy_data',
-    label: 'Buy Data',
-    icon: Icons.wifi_outlined,
-  ),
-  QuickActionDefinition(
-    type: 'buy_mashup',
-    label: 'Mash Up',
-    icon: Icons.card_giftcard_outlined,
-  ),
-  QuickActionDefinition(
-    type: 'check_momo_balance',
-    label: 'Check MoMo\nBalance',
-    icon: Icons.account_balance_wallet_outlined,
-  ),
-  QuickActionDefinition(
-    type: 'check_airtime_balance',
-    label: 'Check Airtime\nBalance',
-    icon: Icons.sim_card_outlined,
-  ),
-];
-
-const Map<String, Set<String>> kAgentQuickActionSupport = {
-  'mtn': {
-    'cash_out',
-    'send_money',
-    'merchant_payment',
-    'bill_payment',
-    'airtime',
-    'data_bundle',
-    'balance_enquiry',
-    'commission_balance',
-    'cash_in_commission',
-    'commission_transfer',
-  },
-  'telecel': {
-    'cash_in',
-    'cash_out',
-    'business_deposit',
-    'business_withdrawal',
-    'airtime',
-    'data_bundle',
-    'balance_enquiry',
-    'working_to_float',
-    'float_to_working',
-    'commission_transfer',
-  },
-  'at_money': {
-    'cash_in',
-    'cash_out',
-    'merchant_payment',
-    'bill_payment',
-    'airtime',
-    'data_bundle',
-    'balance_enquiry',
-    'cash_in_commission',
-    'cash_out_commission',
-  },
-};
-
-const Map<String, Set<String>> kPersonalQuickActionSupport = {
-  'mtn': {
-    'send_money_same_network',
-    'send_money_cross_network',
-    'withdraw_cash',
-    'buy_airtime',
-    'buy_data',
-    'buy_mashup',
-    'check_momo_balance',
-    'check_airtime_balance',
-  },
-  'telecel': {
-    'send_money_same_network',
-    'send_money_cross_network',
-    'withdraw_cash',
-    'buy_airtime',
-    'buy_data',
-    'buy_mashup',
-    'check_momo_balance',
-    'check_airtime_balance',
-  },
-  'at_money': {
-    'send_money_same_network',
-    'send_money_cross_network',
-    'withdraw_cash',
-    'buy_airtime',
-    'buy_data',
-    'buy_mashup',
-    'check_momo_balance',
-    'check_airtime_balance',
-  },
-};
-
-const Map<String, List<String>> kAgentQuickActionDefaults = {
-  'mtn': [
-    'cash_out',
-    'send_money',
-    'merchant_payment',
-    'bill_payment',
-    'airtime',
-    'data_bundle',
-    'balance_enquiry',
-    'commission_balance',
-  ],
-  'telecel': [
-    'cash_in',
-    'cash_out',
-    'business_deposit',
-    'airtime',
-    'data_bundle',
-    'balance_enquiry',
-    'working_to_float',
-    'float_to_working',
-    'commission_transfer',
-  ],
-  'at_money': [
-    'cash_in',
-    'cash_out',
-    'airtime',
-    'data_bundle',
-    'balance_enquiry',
-    'cash_in_commission',
-    'cash_out_commission',
-  ],
-};
-
-const Map<String, List<String>> kPersonalQuickActionDefaults = {
-  'mtn': [
-    'send_money_same_network',
-    'send_money_cross_network',
-    'withdraw_cash',
-    'buy_airtime',
-    'buy_data',
-    'buy_mashup',
-    'check_momo_balance',
-    'check_airtime_balance',
-  ],
-  'telecel': [
-    'send_money_same_network',
-    'send_money_cross_network',
-    'withdraw_cash',
-    'buy_airtime',
-    'buy_data',
-    'buy_mashup',
-    'check_momo_balance',
-    'check_airtime_balance',
-  ],
-  'at_money': [
-    'send_money_same_network',
-    'send_money_cross_network',
-    'withdraw_cash',
-    'buy_airtime',
-    'buy_data',
-    'buy_mashup',
-    'check_momo_balance',
-    'check_airtime_balance',
-  ],
-};
+import 'quick_action_catalog.dart';
 
 class QuickActionCustomizationScreen extends StatefulWidget {
   final bool isPersonal;
@@ -289,34 +20,25 @@ class QuickActionCustomizationScreen extends StatefulWidget {
 
 class _QuickActionCustomizationScreenState
     extends State<QuickActionCustomizationScreen> {
-  String _provider = 'mtn';
+  String _provider = '';
   bool _loading = true;
   bool _saving = false;
   String? _error;
 
-  Map<String, List<QuickActionPreference>> _preferences = {
-    'mtn': <QuickActionPreference>[],
-    'telecel': <QuickActionPreference>[],
-    'at_money': <QuickActionPreference>[],
-  };
+  QuickActionCatalog? _catalog;
 
-  List<QuickActionDefinition> get _definitions => widget.isPersonal
-      ? kPersonalQuickActionDefinitions
-      : kAgentQuickActionDefinitions;
+  Map<String, List<QuickActionPreference>> _preferences = {};
 
-  Map<String, List<String>> get _defaults => widget.isPersonal
-      ? kPersonalQuickActionDefaults
-      : kAgentQuickActionDefaults;
+  List<String> get _providers {
+    return <String>{
+      ...?_catalog?.providers,
+      ..._preferences.keys,
+    }.toList();
+  }
 
-  Map<String, Set<String>> get _support => widget.isPersonal
-      ? kPersonalQuickActionSupport
-      : kAgentQuickActionSupport;
-
-  Set<String> get _supportedTypes => _support[_provider] ?? const <String>{};
-
-  List<QuickActionDefinition> get _availableDefinitions => _definitions
-      .where((definition) => _supportedTypes.contains(definition.type))
-      .toList();
+  List<QuickActionCatalogDefinition> get _availableDefinitions =>
+      _catalog?.definitionsFor(_provider) ??
+      const <QuickActionCatalogDefinition>[];
 
   List<QuickActionPreference> get _selected =>
       _preferences[_provider] ?? <QuickActionPreference>[];
@@ -327,22 +49,26 @@ class _QuickActionCustomizationScreenState
     _load();
   }
 
-  QuickActionDefinition? _definitionFor(String type) {
-    for (final definition in _definitions) {
-      if (definition.type == type) return definition;
-    }
-    return null;
+  QuickActionCatalogDefinition? _definitionFor(
+    String type,
+  ) {
+    return _catalog?.definitionFor(_provider, type);
   }
 
-  List<QuickActionPreference> _defaultPreferencesFor(String provider) {
-    final defaults = _defaults[provider] ?? const <String>[];
+  List<QuickActionPreference> _defaultPreferencesFor(
+    String provider,
+  ) {
+    final definitions = _catalog?.definitionsFor(provider) ??
+        const <QuickActionCatalogDefinition>[];
 
-    return defaults
+    return definitions
+        .take(9)
+        .toList()
         .asMap()
         .entries
         .map(
           (entry) => QuickActionPreference(
-            actionKey: entry.value,
+            actionKey: entry.value.type,
             position: entry.key,
           ),
         )
@@ -355,76 +81,134 @@ class _QuickActionCustomizationScreenState
       _error = null;
     });
 
+    final mode = widget.isPersonal ? 'personal' : 'business';
+
+    QuickActionCatalog? catalog;
+    var catalogLoaded = false;
+
+    try {
+      catalog = await QuickActionCatalog.load(mode: mode);
+      catalogLoaded = true;
+    } catch (_) {
+      catalog = null;
+    }
+
+    Map<String, dynamic> saved = <String, dynamic>{};
+    var preferencesLoaded = false;
+
     try {
       final response = await ApiClient.instance.get('/users/me/quick-actions');
-      final data = response.data['data'] as Map<String, dynamic>? ?? {};
+
+      final responseData = response.data;
+
+      final data = responseData is Map
+          ? Map<String, dynamic>.from(
+              responseData['data'] is Map
+                  ? responseData['data'] as Map
+                  : const <String, dynamic>{},
+            )
+          : <String, dynamic>{};
+
       final modeKey = widget.isPersonal ? 'personal' : 'agent';
-      final saved =
-          data[modeKey] as Map<String, dynamic>? ?? <String, dynamic>{};
+      final savedValue = data[modeKey];
 
-      final parsed = <String, List<QuickActionPreference>>{};
+      saved = savedValue is Map
+          ? Map<String, dynamic>.from(savedValue)
+          : <String, dynamic>{};
 
-      for (final provider in ['mtn', 'telecel', 'at_money']) {
-        final providerValue = saved[provider];
-        final supported = _support[provider] ?? const <String>{};
+      preferencesLoaded = true;
+    } catch (_) {
+      saved = <String, dynamic>{};
+    }
 
-        if (providerValue is List) {
-          final items = <QuickActionPreference>[];
+    final parsed = <String, List<QuickActionPreference>>{};
 
-          for (var index = 0; index < providerValue.length; index++) {
-            try {
-              final preference = QuickActionPreference.fromDynamic(
-                providerValue[index],
-                fallbackPosition: index,
-              );
+    final providers = <String>{
+      ...?catalog?.providers,
+      ...saved.keys,
+    }.toList();
 
-              if (preference.actionKey.isEmpty ||
-                  _definitionFor(preference.actionKey) == null ||
-                  !supported.contains(preference.actionKey)) {
-                continue;
-              }
+    for (final provider in providers) {
+      final providerValue = saved[provider];
+      final definitions = catalog?.definitionsFor(provider) ??
+          const <QuickActionCatalogDefinition>[];
 
-              items.add(preference);
-            } catch (_) {
-              // Ignore malformed individual records while keeping
-              // the rest of the user's saved configuration.
+      if (providerValue is List) {
+        final items = <QuickActionPreference>[];
+
+        for (var index = 0; index < providerValue.length; index++) {
+          try {
+            final preference = QuickActionPreference.fromDynamic(
+              providerValue[index],
+              fallbackPosition: index,
+            );
+
+            if (preference.actionKey.isEmpty) {
+              continue;
             }
+
+            items.add(preference);
+          } catch (_) {
+            continue;
           }
-
-          items.sort((a, b) => a.position.compareTo(b.position));
-
-          parsed[provider] = items
-              .take(9)
-              .toList()
-              .asMap()
-              .entries
-              .map(
-                (entry) => entry.value.copyWith(position: entry.key),
-              )
-              .toList();
-        } else {
-          parsed[provider] = _defaultPreferencesFor(provider);
         }
+
+        items.sort(
+          (a, b) => a.position.compareTo(b.position),
+        );
+
+        parsed[provider] = items
+            .take(9)
+            .toList()
+            .asMap()
+            .entries
+            .map(
+              (entry) => entry.value.copyWith(
+                position: entry.key,
+              ),
+            )
+            .toList();
+      } else {
+        parsed[provider] = definitions
+            .take(9)
+            .toList()
+            .asMap()
+            .entries
+            .map(
+              (entry) => QuickActionPreference(
+                actionKey: entry.value.type,
+                position: entry.key,
+              ),
+            )
+            .toList();
+      }
+    }
+
+    if (mounted == false) return;
+
+    String? loadError;
+
+    if (catalogLoaded == false && preferencesLoaded) {
+      loadError = 'Global Quick Action templates are temporarily unavailable. '
+          'Your saved actions are still available.';
+    } else if (catalogLoaded && preferencesLoaded == false) {
+      loadError = 'Could not load your saved Quick Action layout. '
+          'Showing available Global templates.';
+    } else if (catalogLoaded == false && preferencesLoaded == false) {
+      loadError = 'Could not load Quick Actions.';
+    }
+
+    setState(() {
+      _catalog = catalog;
+      _preferences = parsed;
+      _error = loadError;
+
+      if (providers.isNotEmpty && providers.contains(_provider) == false) {
+        _provider = providers.first;
       }
 
-      if (!mounted) return;
-
-      setState(() {
-        _preferences = parsed;
-        _loading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-
-      setState(() {
-        _preferences = {
-          for (final provider in ['mtn', 'telecel', 'at_money'])
-            provider: _defaultPreferencesFor(provider),
-        };
-        _loading = false;
-        _error = 'Could not load saved layout. Showing defaults.';
-      });
-    }
+      _loading = false;
+    });
   }
 
   void _toggle(String type) {
@@ -474,8 +258,9 @@ class _QuickActionCustomizationScreenState
       builder: (dialogContext) => AlertDialog(
         title: const Text('Restore all providers?'),
         content: Text(
-          'This will restore the default ${widget.isPersonal ? 'Personal' : 'Agent'} '
-          'Quick Actions for MTN, Telecel, and AT Money.',
+          'This will restore the first available '
+          '${widget.isPersonal ? 'Personal' : 'Agent'} templates '
+          'for every provider in the current catalog.',
         ),
         actions: [
           TextButton(
@@ -493,10 +278,14 @@ class _QuickActionCustomizationScreenState
     if (confirmed != true || !mounted) return;
 
     setState(() {
-      _preferences = {
-        for (final provider in ['mtn', 'telecel', 'at_money'])
-          provider: _defaultPreferencesFor(provider),
-      };
+      final restored =
+          Map<String, List<QuickActionPreference>>.from(_preferences);
+
+      for (final provider in _catalog?.providers ?? const <String>[]) {
+        restored[provider] = _defaultPreferencesFor(provider);
+      }
+
+      _preferences = restored;
     });
   }
 
@@ -562,9 +351,8 @@ class _QuickActionCustomizationScreenState
     QuickActionPreference preference,
   ) async {
     final definition = _definitionFor(preference.actionKey);
-    if (definition == null) return;
-
-    final defaultLabel = definition.label.replaceAll('\n', ' ');
+    final defaultLabel = definition?.displayLabel ??
+        quickActionTransactionLabel(preference.actionKey);
     var draftName = preference.customName ?? defaultLabel;
 
     final result = await showDialog<String>(
@@ -948,30 +736,41 @@ class _QuickActionCustomizationScreenState
                   ),
                 ],
                 const SizedBox(height: 16),
-                Row(
-                  children: [
-                    _ProviderButton(
-                      label: 'MTN',
-                      value: 'mtn',
-                      selected: _provider == 'mtn',
-                      onTap: _selectProvider,
+                if (_providers.isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: context.appSurface,
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    const SizedBox(width: 7),
-                    _ProviderButton(
-                      label: 'Telecel',
-                      value: 'telecel',
-                      selected: _provider == 'telecel',
-                      onTap: _selectProvider,
+                    child: const Text(
+                      'No Global Quick Action templates are available for this mode yet.',
+                      textAlign: TextAlign.center,
                     ),
-                    const SizedBox(width: 7),
-                    _ProviderButton(
-                      label: 'AT Money',
-                      value: 'at_money',
-                      selected: _provider == 'at_money',
-                      onTap: _selectProvider,
+                  )
+                else
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (var index = 0;
+                            index < _providers.length;
+                            index++) ...[
+                          _ProviderButton(
+                            label: quickActionProviderLabel(
+                              _providers[index],
+                            ),
+                            value: _providers[index],
+                            selected: _provider == _providers[index],
+                            onTap: _selectProvider,
+                          ),
+                          if (index < _providers.length - 1)
+                            const SizedBox(width: 7),
+                        ],
+                      ],
                     ),
-                  ],
-                ),
+                  ),
                 const SizedBox(height: 18),
                 Text(
                   '3×3 Preview (${_selected.length}/9)',
@@ -1000,7 +799,7 @@ class _QuickActionCustomizationScreenState
                 const SizedBox(height: 6),
                 _QuickActionPreview(
                   selected: _selected,
-                  definitions: _definitions,
+                  definitions: _availableDefinitions,
                 ),
                 const SizedBox(height: 20),
                 const Text(
@@ -1031,14 +830,18 @@ class _QuickActionCustomizationScreenState
                     onReorderItem: _reorder,
                     itemBuilder: (context, index) {
                       final preference = _selected[index];
-                      final definition = _definitionFor(preference.actionKey)!;
+                      final definition = _definitionFor(preference.actionKey);
 
-                      final icon = quickActionIconFromKey(preference.iconKey) ??
-                          definition.icon;
+                      final defaultLabel = definition?.displayLabel ??
+                          quickActionTransactionLabel(preference.actionKey);
 
-                      final label = preference.resolvedLabel(
-                        definition.label.replaceAll('\n', ' '),
-                      );
+                      final icon = quickActionIconFromKey(
+                            preference.iconKey,
+                          ) ??
+                          definition?.icon ??
+                          quickActionCatalogIcon(preference.actionKey);
+
+                      final label = preference.resolvedLabel(defaultLabel);
 
                       return Card(
                         key: ValueKey(preference.actionKey),
@@ -1059,7 +862,7 @@ class _QuickActionCustomizationScreenState
                           title: Text(label),
                           subtitle: Text(
                             preference.customName != null
-                                ? 'Original: ${definition.label.replaceAll('\n', ' ')}'
+                                ? 'Original: $defaultLabel'
                                 : preference.actionKey,
                           ),
                           onTap: () => _renameAction(preference),
@@ -1122,35 +925,22 @@ class _QuickActionCustomizationScreenState
                   ),
                 const SizedBox(height: 20),
                 const Text(
-                  'Available Actions',
+                  'Available Templates',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
                   ),
                 ),
-                const SizedBox(height: 8),
-                ..._availableDefinitions.map((definition) {
-                  final checked = _selected.any(
-                    (item) => item.actionKey == definition.type,
-                  );
-
-                  return CheckboxListTile(
-                    value: checked,
-                    onChanged: (_) => _toggle(definition.type),
-                    secondary: Icon(
-                      definition.icon,
-                      color: checked
-                          ? AppTheme.primaryColor
-                          : context.appSecondaryText,
-                    ),
-                    title: Text(
-                      definition.label.replaceAll('\n', ' '),
-                    ),
-                    subtitle: Text(definition.type),
-                    controlAffinity: ListTileControlAffinity.trailing,
-                    contentPadding: EdgeInsets.zero,
-                  );
-                }),
+                const SizedBox(height: 4),
+                Text(
+                  'Templates come from active Global flows and are grouped by transaction category.',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    color: context.appSecondaryText,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ..._buildGroupedAvailableActions(context),
                 const SizedBox(height: 18),
                 ElevatedButton.icon(
                   onPressed: _saving ? null : _save,
@@ -1171,6 +961,86 @@ class _QuickActionCustomizationScreenState
               ],
             ),
     );
+  }
+
+  List<Widget> _buildGroupedAvailableActions(
+    BuildContext context,
+  ) {
+    final grouped = <String, List<QuickActionCatalogDefinition>>{};
+
+    for (final definition in _availableDefinitions) {
+      final group = definition.quickActionGroup.isEmpty
+          ? 'Other Services'
+          : definition.quickActionGroup;
+
+      grouped
+          .putIfAbsent(
+            group,
+            () => <QuickActionCatalogDefinition>[],
+          )
+          .add(definition);
+    }
+
+    final widgets = <Widget>[];
+
+    for (final entry in grouped.entries) {
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.only(
+            top: 6,
+            bottom: 2,
+          ),
+          child: Text(
+            entry.key,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: context.appSecondaryText,
+            ),
+          ),
+        ),
+      );
+
+      for (final definition in entry.value) {
+        final checked = _selected.any(
+          (item) => item.actionKey == definition.type,
+        );
+
+        widgets.add(
+          CheckboxListTile(
+            value: checked,
+            onChanged: (_) => _toggle(definition.type),
+            secondary: Icon(
+              definition.icon,
+              color: checked ? AppTheme.primaryColor : context.appSecondaryText,
+            ),
+            title: Text(definition.displayLabel),
+            subtitle: Text(definition.type),
+            controlAffinity: ListTileControlAffinity.trailing,
+            contentPadding: EdgeInsets.zero,
+          ),
+        );
+      }
+    }
+
+    if (widgets.isEmpty && _providers.isNotEmpty) {
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            vertical: 12,
+          ),
+          child: Text(
+            'No active Global templates are available for '
+            '${quickActionProviderLabel(_provider)}.',
+            style: TextStyle(
+              color: context.appSecondaryText,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return widgets;
   }
 
   void _selectProvider(String provider) {
@@ -1195,12 +1065,18 @@ class _ProviderButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = AppTheme.providerColor(value);
 
-    return Expanded(
-      child: InkWell(
-        onTap: () => onTap(value),
-        borderRadius: BorderRadius.circular(9),
+    return InkWell(
+      onTap: () => onTap(value),
+      borderRadius: BorderRadius.circular(9),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          minWidth: 104,
+        ),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 10,
+          ),
           decoration: BoxDecoration(
             color: selected ? color : context.appSurface,
             borderRadius: BorderRadius.circular(9),
@@ -1224,14 +1100,14 @@ class _ProviderButton extends StatelessWidget {
 
 class _QuickActionPreview extends StatelessWidget {
   final List<QuickActionPreference> selected;
-  final List<QuickActionDefinition> definitions;
+  final List<QuickActionCatalogDefinition> definitions;
 
   const _QuickActionPreview({
     required this.selected,
     required this.definitions,
   });
 
-  QuickActionDefinition? _find(String type) {
+  QuickActionCatalogDefinition? _find(String type) {
     for (final definition in definitions) {
       if (definition.type == type) return definition;
     }
@@ -1250,9 +1126,10 @@ class _QuickActionPreview extends StatelessWidget {
 
         final icon = quickActionIconFromKey(preference.iconKey) ??
             definition?.icon ??
-            Icons.apps;
+            quickActionCatalogIcon(preference.actionKey);
 
-        final defaultLabel = definition?.label ?? preference.actionKey;
+        final defaultLabel = definition?.displayLabel ??
+            quickActionTransactionLabel(preference.actionKey);
 
         previewItems.add(
           Container(

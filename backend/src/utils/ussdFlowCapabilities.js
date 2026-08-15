@@ -39,6 +39,80 @@ async function getTransactionCapabilities(accountMode, queryFn = query) {
   return result.rows;
 }
 
+async function getFlowBuilderEligibility(
+  accountMode,
+  provider,
+  transactionType,
+  queryFn = query
+) {
+  if (accountMode !== 'business' && accountMode !== 'personal') {
+    throw new TypeError(
+      'accountMode must be either business or personal'
+    );
+  }
+
+  const result = await queryFn(
+    `SELECT
+       EXISTS (
+         SELECT 1
+         FROM pg_type t
+         JOIN pg_enum e
+           ON e.enumtypid = t.oid
+         WHERE t.typname = 'provider'
+           AND e.enumlabel = $1
+       ) AS provider_registered,
+       EXISTS (
+         SELECT 1
+         FROM ussd_flow_capabilities
+         WHERE account_mode = $2
+           AND transaction_type::text = $3
+           AND is_active = TRUE
+       ) AS transaction_type_builder_enabled`,
+    [provider, accountMode, transactionType]
+  );
+
+  const row = result.rows[0] || {};
+
+  return {
+    provider_registered: row.provider_registered === true,
+    transaction_type_builder_enabled:
+      row.transaction_type_builder_enabled === true,
+  };
+}
+
+async function getGlobalFlowBuilderEligibility(
+  provider,
+  transactionType,
+  queryFn = query
+) {
+  const result = await queryFn(
+    `SELECT
+       EXISTS (
+         SELECT 1
+         FROM pg_type t
+         JOIN pg_enum e
+           ON e.enumtypid = t.oid
+         WHERE t.typname = 'provider'
+           AND e.enumlabel = $1
+       ) AS provider_registered,
+       EXISTS (
+         SELECT 1
+         FROM ussd_flow_capabilities
+         WHERE transaction_type::text = $2
+           AND is_active = TRUE
+       ) AS transaction_type_builder_enabled`,
+    [provider, transactionType]
+  );
+
+  const row = result.rows[0] || {};
+
+  return {
+    provider_registered: row.provider_registered === true,
+    transaction_type_builder_enabled:
+      row.transaction_type_builder_enabled === true,
+  };
+}
+
 async function getInitiationCapability(
   accountMode,
   provider,
@@ -96,6 +170,8 @@ async function getFlowBuilderCapabilities(accountMode, queryFn = query) {
 module.exports = {
   getRegisteredProviders,
   getTransactionCapabilities,
+  getFlowBuilderEligibility,
+  getGlobalFlowBuilderEligibility,
   getInitiationCapability,
   getFlowBuilderCapabilities,
 };

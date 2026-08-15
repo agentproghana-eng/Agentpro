@@ -13,7 +13,7 @@ function formatGhanaPhone(phone) {
 async function sendSMS(to, message) {
   if (!process.env.ARKESEL_API_KEY) {
     logger.warn("ARKESEL_API_KEY not set, skipping SMS send");
-    return null;
+    return { skipped: true };
   }
   try {
     const res = await fetch(ARKESEL_URL, {
@@ -29,12 +29,25 @@ async function sendSMS(to, message) {
       }),
     });
     const data = await res.json();
-    if (data.status !== "success") throw new Error(JSON.stringify(data));
+
+    if (!res.ok || data.status !== "success") {
+      logger.error("SMS provider rejected request", {
+        httpStatus: res.status,
+      });
+      throw new Error("SMS provider rejected request");
+    }
+
     logger.info(`SMS sent to ${to}: ${data.data?.id}`);
     return data;
   } catch (error) {
-    logger.error("SMS send error:", error);
-    throw error;
+    if (error?.message === "SMS provider rejected request") {
+      throw error;
+    }
+
+    logger.error("SMS send failed", {
+      name: error?.name || "Error",
+    });
+    throw new Error("SMS send failed");
   }
 }
 
@@ -44,9 +57,16 @@ async function sendRegistrationApprovedSMS(phone, firstName, companyName) {
   );
 }
 
-async function sendNewEmployeeSMS(phone, firstName, role, companyName) {
-  return sendSMS(phone,
-    `Agent Pro Ghana: Hi ${firstName}, you have been added as ${role} at ${companyName}. Check your email for your login details.`
+async function sendNewEmployeeSMS(
+  phone,
+  firstName,
+  role,
+  companyName,
+  tempPassword
+) {
+  return sendSMS(
+    phone,
+    `Agent Pro Ghana: Hi ${firstName}, you have been added as ${role} at ${companyName}. Temporary password: ${tempPassword}. Sign in with your email and change this password immediately.`
   );
 }
 

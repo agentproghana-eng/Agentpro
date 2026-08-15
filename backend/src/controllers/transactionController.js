@@ -1169,6 +1169,12 @@ exports.listTransactions = async (req, res) => {
     sort_order = 'desc',
   } = req.query;
 
+  const parsedPage = Math.max(parseInt(page, 10) || 1, 1);
+  const parsedLimit = Math.min(
+    Math.max(parseInt(limit, 10) || 20, 1),
+    100
+  );
+
   // Strict allowlist mapping a client-facing sort key to a safe SQL
   // column expression - never interpolate the raw sort_by value
   // directly into ORDER BY, which would be a SQL injection surface.
@@ -1183,7 +1189,7 @@ exports.listTransactions = async (req, res) => {
   const sortDirection = sort_order === 'asc' ? 'ASC' : 'DESC';
 
   try {
-    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const offset = (parsedPage - 1) * parsedLimit;
     const conditions = [];
     const params = [];
     let paramIdx = 1;
@@ -1239,7 +1245,7 @@ exports.listTransactions = async (req, res) => {
          ${whereClause}
          ORDER BY ${sortColumn} ${sortDirection}
          LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
-        [...params, parseInt(limit), offset]
+        [...params, parsedLimit, offset]
       ),
       query(
         `SELECT COUNT(*) FROM transactions t ${whereClause}`,
@@ -1254,9 +1260,9 @@ exports.listTransactions = async (req, res) => {
       data: dataResult.rows,
       meta: {
         total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total_pages: Math.ceil(total / parseInt(limit))
+        page: parsedPage,
+        limit: parsedLimit,
+        total_pages: Math.ceil(total / parsedLimit)
       }
     });
 

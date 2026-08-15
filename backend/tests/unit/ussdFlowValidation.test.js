@@ -129,4 +129,64 @@ describe('USSD Flow validation', () => {
 
     expect(validateFlowSteps(steps)).toBeNull();
   });
+
+  it.each([
+    null,
+    'not-an-object',
+    42,
+    [],
+  ])('rejects malformed step value %p', (invalidStep) => {
+    const steps = [
+      invalidStep,
+      {
+        match_all: ['enter pin'],
+        action: 'pin_prompt',
+      },
+    ];
+
+    expect(validateFlowSteps(steps)).toContain('step must be an object');
+  });
+
+  it.each([
+    [['']],
+    [['   ']],
+    [[123]],
+    [[null]],
+  ])('rejects unsafe match_all entries %p', (matchAll) => {
+    const steps = baseSteps();
+    steps[0] = {
+      match_all: matchAll,
+      action: 'send_amount',
+    };
+
+    expect(validateFlowSteps(steps)).toContain(
+      'every match_all entry must be a non-empty string'
+    );
+  });
+
+  it('rejects more than one pin_prompt boundary', () => {
+    const steps = baseSteps();
+    steps.push({
+      match_all: ['enter second pin'],
+      action: 'pin_prompt',
+    });
+
+    expect(validateFlowSteps(steps)).toContain(
+      'exactly one pin_prompt step'
+    );
+  });
+
+  it('rejects ordinary automation actions after pin_prompt', () => {
+    const steps = baseSteps();
+    steps.push({
+      match_all: ['continue'],
+      action: 'send_digit',
+      action_value: '1',
+    });
+
+    expect(validateFlowSteps(steps)).toContain(
+      'only auto_confirm_once may run after PIN entry'
+    );
+  });
+
 });

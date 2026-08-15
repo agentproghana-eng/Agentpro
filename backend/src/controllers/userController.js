@@ -9,6 +9,9 @@ const { auditLog } = require('../services/auditService');
 const { sendEmail, sendNewEmployeeEmail } = require('../services/emailService');
 const { sendNewEmployeeSMS } = require('../services/smsService');
 const { sendEphemeral } = require('../services/notificationService');
+const {
+  getRegisteredProviders,
+} = require('../utils/ussdFlowCapabilities');
 
 exports.changePassword = async (req, res) => {
   const { current_password, new_password } = req.body;
@@ -84,7 +87,13 @@ exports.changePassword = async (req, res) => {
 
 exports.listUsers = async (req, res) => {
   const { role, status, branch_id, company_id, page = 1, limit = 20 } = req.query;
-  const offset = (parseInt(page) - 1) * parseInt(limit);
+
+  const parsedPage = Math.max(parseInt(page, 10) || 1, 1);
+  const parsedLimit = Math.min(
+    Math.max(parseInt(limit, 10) || 20, 1),
+    100
+  );
+  const offset = (parsedPage - 1) * parsedLimit;
 
   try {
     const conditions = [];
@@ -101,6 +110,10 @@ exports.listUsers = async (req, res) => {
     // a manager could see every staff member company-wide even though
     // they can't edit any of them (edit routes are owner/superuser only).
     if (req.user.role === 'manager') {
+      // Managers manage agents in their assigned branches. Managers,
+      // auditors, owners, and other roles must never become visible merely
+      // because they also have an agent_branches relationship.
+      conditions.push(`u.role = 'agent'`);
       conditions.push(`u.id IN (
         SELECT ab.agent_id FROM agent_branches ab
         WHERE ab.branch_id IN (SELECT branch_id FROM branch_managers WHERE manager_id = $${idx++})
@@ -115,19 +128,42 @@ exports.listUsers = async (req, res) => {
     // roles since it just ANDs with their existing auto-scope.
     if (company_id) { conditions.push(`u.company_id = $${idx++}`); params.push(company_id); }
 
+    // Staff branch filtering follows the user's own agent_branches
+    // assignment, not branch_managers. Managers may oversee multiple
+    // branches, but that is a separate authorization relationship.
+    if (branch_id) {
+      conditions.push(`EXISTS (
+        SELECT 1
+        FROM agent_branches ab_filter
+        WHERE ab_filter.agent_id = u.id
+          AND ab_filter.branch_id = $${idx++}
+      )`);
+      params.push(branch_id);
+    }
+
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const [data, count] = await Promise.all([
       query(
         `SELECT u.id, u.role, u.first_name, u.last_name, u.email, u.phone,
                 u.status, u.created_at, u.last_login_at, u.profile_image_url,
-                u.company_id, c.name as company_name
+                u.company_id, c.name as company_name,
+                assigned_branch.branch_id,
+                assigned_branch.branch_name
          FROM users u
          LEFT JOIN companies c ON u.company_id = c.id
+         LEFT JOIN LATERAL (
+           SELECT ab.branch_id, b.name as branch_name
+           FROM agent_branches ab
+           INNER JOIN branches b ON b.id = ab.branch_id
+           WHERE ab.agent_id = u.id
+           ORDER BY ab.is_primary DESC, ab.assigned_at ASC, ab.id ASC
+           LIMIT 1
+         ) assigned_branch ON true
          ${where}
          ORDER BY u.created_at DESC
          LIMIT $${idx++} OFFSET $${idx++}`,
-        [...params, parseInt(limit), offset]
+        [...params, parsedLimit, offset]
       ),
       query(`SELECT COUNT(*) FROM users u ${where}`, params),
     ]);
@@ -137,9 +173,9 @@ exports.listUsers = async (req, res) => {
       data: data.rows,
       meta: {
         total: parseInt(count.rows[0].count),
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total_pages: Math.ceil(parseInt(count.rows[0].count) / parseInt(limit)),
+        page: parsedPage,
+        limit: parsedLimit,
+        total_pages: Math.ceil(parseInt(count.rows[0].count) / parsedLimit),
       },
     });
   } catch (error) {
@@ -151,17 +187,33 @@ exports.listUsers = async (req, res) => {
 exports.createUser = async (req, res) => {
   const { first_name, last_name, email, phone, role, password, branch_id } = req.body;
 
-  // Business owners can only create managers, agents, auditors
+  // Staff creation is role-sensitive:
+  // - superuser: platform-wide administrative roles
+  // - business owner: managers, agents, auditors
+  // - manager: agents only
   const allowedRoles = req.user.role === 'superuser'
     ? ['business_owner', 'manager', 'agent', 'auditor', 'customer']
-    : ['manager', 'agent', 'auditor'];
+    : req.user.role === 'business_owner'
+      ? ['manager', 'agent', 'auditor']
+      : req.user.role === 'manager'
+        ? ['agent']
+        : [];
 
   if (!allowedRoles.includes(role)) {
     return res.status(403).json({ success: false, message: `Cannot create user with role: ${role}` });
   }
 
+  // Managers may add agents, but an agent created by a manager must always
+  // belong to one of that manager's own managed branches.
+  if (req.user.role === 'manager' && !branch_id) {
+    return res.status(422).json({
+      success: false,
+      message: 'Managers must assign agents to a branch they manage',
+    });
+  }
+
   // Generate a cryptographically secure temporary password if none was provided.
-  // This is NEVER returned in the API response and is only ever sent via email.
+  // It is NEVER returned in the API response or persisted in plaintext; it is passed only to the configured one-time delivery channels.
   const tempPassword = password || generateTempPassword();
 
   try {
@@ -182,12 +234,30 @@ exports.createUser = async (req, res) => {
     // no orphaned user record is ever created if the branch is invalid.
     const assignToBranch = branch_id && ['agent', 'manager'].includes(role);
     if (assignToBranch) {
-      const branchCheck = await query(
-        'SELECT id FROM branches WHERE id = $1 AND company_id = $2',
-        [branch_id, req.user.company_id]
-      );
-      if (branchCheck.rows.length === 0) {
-        return res.status(400).json({ success: false, message: 'Invalid branch for your company' });
+      if (req.user.role === 'manager') {
+        const branchCheck = await query(
+          `SELECT b.id
+           FROM branches b
+           INNER JOIN branch_managers bm ON bm.branch_id = b.id
+           WHERE b.id = $1
+             AND b.company_id = $2
+             AND bm.manager_id = $3`,
+          [branch_id, req.user.company_id, req.user.id]
+        );
+        if (branchCheck.rows.length === 0) {
+          return res.status(403).json({
+            success: false,
+            message: 'You can only add agents to branches you manage',
+          });
+        }
+      } else {
+        const branchCheck = await query(
+          'SELECT id FROM branches WHERE id = $1 AND company_id = $2',
+          [branch_id, req.user.company_id]
+        );
+        if (branchCheck.rows.length === 0) {
+          return res.status(400).json({ success: false, message: 'Invalid branch for your company' });
+        }
       }
     }
 
@@ -244,18 +314,33 @@ exports.createUser = async (req, res) => {
       logger.error("Failed to fetch company name for notifications:", e);
     }
 
-    // Email the temporary password - this is the only place it is ever transmitted
-    let emailSent = true;
+    // Deliver the temporary password through the configured one-time staff channels after account creation succeeds.
+    let emailSent = false;
     try {
-      await sendNewEmployeeEmail(user.email, first_name, last_name, role, companyName, tempPassword);
+      const emailResult = await sendNewEmployeeEmail(
+        user.email,
+        first_name,
+        last_name,
+        role,
+        companyName,
+        tempPassword
+      );
+      emailSent = emailResult?.skipped !== true;
     } catch (emailError) {
       logger.error("Failed to send new employee email:", emailError);
-      emailSent = false;
     }
 
+    let smsSent = false;
     if (phone) {
       try {
-        await sendNewEmployeeSMS(phone, first_name, role, companyName);
+        const smsResult = await sendNewEmployeeSMS(
+          phone,
+          first_name,
+          role,
+          companyName,
+          tempPassword
+        );
+        smsSent = smsResult?.skipped !== true;
       } catch (smsErr) {
         logger.error("Failed to send new employee SMS:", smsErr);
       }
@@ -274,12 +359,25 @@ exports.createUser = async (req, res) => {
     }
 
 
+    let deliveryMessage;
+    if (emailSent && smsSent) {
+      deliveryMessage =
+        `Temporary login details were sent to ${user.email} and the staff phone by SMS.`;
+    } else if (emailSent) {
+      deliveryMessage =
+        `Temporary login details were sent to ${user.email}.`;
+    } else if (smsSent) {
+      deliveryMessage =
+        'Temporary login details were sent to the staff phone by SMS.';
+    } else {
+      deliveryMessage =
+        'The account was created, but login details could not be delivered. Please use password reset to set the initial password.';
+    }
+
     res.status(201).json({
       success: true,
       data: user,
-      message: emailSent
-        ? `${role} account created. Login details have been emailed to ${user.email}.`
-        : `${role} account created, but the welcome email could not be sent. Please use password reset to set their initial password.`,
+      message: `${role} account created. ${deliveryMessage}`,
     });
   } catch (error) {
     // Race condition safety net: two concurrent requests could both pass
@@ -351,6 +449,18 @@ exports.updateUser = async (req, res) => {
       [first_name, last_name, phone, status, user_id]
     );
 
+    // A staff lifecycle restriction must survive beyond the current
+    // 15-minute access-token window. Revoke all persisted refresh sessions
+    // whenever the account is moved away from active. Reactivation does not
+    // undo these revocations; the user must authenticate again to establish
+    // a fresh session.
+    if (status && status !== 'active') {
+      await query(
+        'UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL',
+        [user_id]
+      );
+    }
+
     await auditLog({
       userId: req.user.id, companyId: req.user.company_id,
       action: 'USER_UPDATED', entityType: 'user', entityId: user_id,
@@ -394,6 +504,12 @@ exports.getUser = async (req, res) => {
     // bypass list-level scoping by requesting a user_id directly. A
     // manager viewing their own record is always allowed.
     if (req.user.role === 'manager' && user_id !== req.user.id) {
+      // Branch overlap alone is not enough: managers may only read agents.
+      // Their own user record remains explicitly allowed above.
+      if (targetUser.role !== 'agent') {
+        return res.status(403).json({ success: false, message: 'Access denied' });
+      }
+
       const managerScope = await query(
         `SELECT 1 FROM agent_branches ab
          WHERE ab.agent_id = $1
@@ -450,9 +566,13 @@ exports.reassignBranch = async (req, res) => {
         [user_id, branch_id, req.user.id]
       );
       if (targetUser.role === "manager") {
-        await client.query("DELETE FROM branch_managers WHERE manager_id = $1", [user_id]);
+        // Reassigning a manager changes the branch where they personally
+        // operate, but must not erase their other branch-management
+        // responsibilities. branch_managers is intentionally many-to-many.
         await client.query(
-          "INSERT INTO branch_managers (manager_id, branch_id, assigned_by) VALUES ($1, $2, $3)",
+          `INSERT INTO branch_managers (manager_id, branch_id, assigned_by)
+           VALUES ($1, $2, $3)
+           ON CONFLICT DO NOTHING`,
           [user_id, branch_id, req.user.id]
         );
       }
@@ -485,20 +605,49 @@ exports.reactivateStaffMember = async (req, res, existingUserId, fields) => {
 
   const allowedRoles = req.user.role === "superuser"
     ? ["business_owner", "manager", "agent", "auditor", "customer"]
-    : ["manager", "agent", "auditor"];
+    : req.user.role === "business_owner"
+      ? ["manager", "agent", "auditor"]
+      : req.user.role === "manager"
+        ? ["agent"]
+        : [];
   if (!allowedRoles.includes(role)) {
     return res.status(403).json({ success: false, message: `Cannot create user with role: ${role}` });
+  }
+
+  if (req.user.role === "manager" && !branch_id) {
+    return res.status(422).json({
+      success: false,
+      message: "Managers must assign agents to a branch they manage",
+    });
   }
 
   try {
     const assignToBranch = branch_id && ["agent", "manager"].includes(role);
     if (assignToBranch) {
-      const branchCheck = await query(
-        "SELECT id FROM branches WHERE id = $1 AND company_id = $2",
-        [branch_id, req.user.company_id]
-      );
-      if (branchCheck.rows.length === 0) {
-        return res.status(400).json({ success: false, message: "Invalid branch for your company" });
+      if (req.user.role === "manager") {
+        const branchCheck = await query(
+          `SELECT b.id
+           FROM branches b
+           INNER JOIN branch_managers bm ON bm.branch_id = b.id
+           WHERE b.id = $1
+             AND b.company_id = $2
+             AND bm.manager_id = $3`,
+          [branch_id, req.user.company_id, req.user.id]
+        );
+        if (branchCheck.rows.length === 0) {
+          return res.status(403).json({
+            success: false,
+            message: "You can only add agents to branches you manage",
+          });
+        }
+      } else {
+        const branchCheck = await query(
+          "SELECT id FROM branches WHERE id = $1 AND company_id = $2",
+          [branch_id, req.user.company_id]
+        );
+        if (branchCheck.rows.length === 0) {
+          return res.status(400).json({ success: false, message: "Invalid branch for your company" });
+        }
       }
     }
 
@@ -548,7 +697,7 @@ exports.reactivateStaffMember = async (req, res, existingUserId, fields) => {
 
     if (phone) {
       try {
-        await sendNewEmployeeSMS(phone, first_name, role, companyName);
+        await sendNewEmployeeSMS(phone, first_name, role, companyName, tempPassword);
       } catch (smsErr) {
         logger.error("Failed to send reactivation SMS:", smsErr);
       }
@@ -642,8 +791,6 @@ exports.updateMySettings = async (req, res) => {
   }
 };
 
-const QUICK_ACTION_PROVIDERS = ['mtn', 'telecel', 'at_money'];
-
 const QUICK_ACTION_ICON_COLORS = new Set([
   '#00897B',
   '#1565C0',
@@ -657,7 +804,7 @@ const QUICK_ACTION_ICON_COLORS = new Set([
   '#D81B60',
 ]);
 
-function validateQuickActionPreferences(value, fieldName) {
+function validateQuickActionPreferences(value, fieldName, registeredProviders) {
   if (value === undefined) return null;
 
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -665,7 +812,7 @@ function validateQuickActionPreferences(value, fieldName) {
   }
 
   for (const [provider, actions] of Object.entries(value)) {
-    if (!QUICK_ACTION_PROVIDERS.includes(provider)) {
+    if (!registeredProviders.has(provider)) {
       return `Invalid provider in ${fieldName}: ${provider}`;
     }
 
@@ -768,6 +915,177 @@ function validateQuickActionPreferences(value, fieldName) {
   return null;
 }
 
+
+function quickActionGroupForType(transactionType) {
+  const normalized = String(transactionType || '').trim().toLowerCase();
+
+  if (
+    normalized.includes('airtime') ||
+    normalized.includes('data') ||
+    normalized.includes('bundle') ||
+    normalized.includes('mashup')
+  ) {
+    return 'Airtime & Data';
+  }
+
+  if (
+    normalized.includes('balance') ||
+    normalized.includes('statement') ||
+    normalized.includes('commission')
+  ) {
+    return 'Balances & Commission';
+  }
+
+  if (
+    normalized.includes('cash') ||
+    normalized.includes('deposit') ||
+    normalized.includes('withdraw') ||
+    normalized.includes('float') ||
+    normalized.includes('working')
+  ) {
+    return 'Cash & Float';
+  }
+
+  if (
+    normalized.includes('send') ||
+    normalized.includes('transfer') ||
+    normalized.includes('payment') ||
+    normalized.includes('merchant') ||
+    normalized.includes('bill') ||
+    normalized.startsWith('pay_')
+  ) {
+    return 'Transfers & Payments';
+  }
+
+  return 'Other Services';
+}
+
+exports.getMyQuickActionCatalog = async (req, res) => {
+  const requestedMode = String(req.query.mode || 'business')
+    .trim()
+    .toLowerCase();
+
+  const accountMode = requestedMode === 'agent'
+    ? 'business'
+    : requestedMode;
+
+  if (accountMode !== 'business' && accountMode !== 'personal') {
+    return res.status(422).json({
+      success: false,
+      message: 'mode must be business, agent, or personal',
+    });
+  }
+
+  try {
+    const result = await query(
+      `SELECT
+         f.provider::text AS provider,
+         f.transaction_type::text AS transaction_type,
+         COALESCE(
+           NULLIF(BTRIM(c.display_label), ''),
+           INITCAP(REPLACE(f.transaction_type::text, '_', ' '))
+         ) AS display_label,
+         f.bundle_category,
+         f.recipient_mode
+       FROM ussd_flows f
+       INNER JOIN ussd_flow_capabilities c
+         ON c.transaction_type = f.transaction_type
+        AND c.account_mode = $1
+       WHERE f.company_id IS NULL
+         AND f.owner_user_id IS NULL
+         AND f.is_active = TRUE
+         AND c.is_active = TRUE
+         AND c.can_initiate = TRUE
+       ORDER BY
+         f.provider::text,
+         display_label,
+         f.transaction_type::text,
+         COALESCE(f.bundle_category, ''),
+         COALESCE(f.recipient_mode, '')`,
+      [accountMode]
+    );
+
+    const providerMap = new Map();
+
+    for (const row of result.rows) {
+      const provider = String(row.provider || '').trim();
+      const transactionType = String(row.transaction_type || '').trim();
+
+      if (!provider || !transactionType) {
+        continue;
+      }
+
+      if (!providerMap.has(provider)) {
+        providerMap.set(provider, new Map());
+      }
+
+      const actions = providerMap.get(provider);
+
+      if (!actions.has(transactionType)) {
+        actions.set(transactionType, {
+          provider,
+          transaction_type: transactionType,
+          display_label:
+            String(row.display_label || '').trim() ||
+            transactionType.replace(/_/g, ' '),
+          quick_action_group: quickActionGroupForType(transactionType),
+          variants: [],
+        });
+      }
+
+      const bundleCategory =
+        row.bundle_category === null || row.bundle_category === undefined
+          ? null
+          : String(row.bundle_category).trim() || null;
+
+      const recipientMode =
+        row.recipient_mode === null || row.recipient_mode === undefined
+          ? null
+          : String(row.recipient_mode).trim() || null;
+
+      if (bundleCategory !== null || recipientMode !== null) {
+        const action = actions.get(transactionType);
+
+        const alreadyPresent = action.variants.some(
+          (variant) =>
+            variant.bundle_category === bundleCategory &&
+            variant.recipient_mode === recipientMode
+        );
+
+        if (!alreadyPresent) {
+          action.variants.push({
+            bundle_category: bundleCategory,
+            recipient_mode: recipientMode,
+          });
+        }
+      }
+    }
+
+    const providers = [];
+
+    for (const [provider, actionMap] of providerMap.entries()) {
+      providers.push({
+        provider,
+        actions: Array.from(actionMap.values()),
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        mode: accountMode,
+        providers,
+      },
+    });
+  } catch (error) {
+    logger.error('Get my Quick Action catalog error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch Quick Action catalog',
+    });
+  }
+};
+
 exports.getMyQuickActions = async (req, res) => {
   try {
     const result = await query(
@@ -816,9 +1134,24 @@ exports.updateMyQuickActions = async (req, res) => {
     });
   }
 
+  let registeredQuickActionProviders;
+
+  try {
+    registeredQuickActionProviders = new Set(
+      await getRegisteredProviders()
+    );
+  } catch (error) {
+    logger.error('Load registered Quick Action providers error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to validate Quick Action providers',
+    });
+  }
+
   const agentError = validateQuickActionPreferences(
     agent_quick_actions,
-    'agent_quick_actions'
+    'agent_quick_actions',
+    registeredQuickActionProviders
   );
 
   if (agentError) {
@@ -830,7 +1163,8 @@ exports.updateMyQuickActions = async (req, res) => {
 
   const personalError = validateQuickActionPreferences(
     personal_quick_actions,
-    'personal_quick_actions'
+    'personal_quick_actions',
+    registeredQuickActionProviders
   );
 
   if (personalError) {

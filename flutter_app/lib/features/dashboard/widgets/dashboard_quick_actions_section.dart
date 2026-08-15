@@ -6,7 +6,7 @@ import '../../../core/services/sim_card_service.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/dashboard_empty_state.dart';
-import '../../ussd_settings/quick_action_customization_screen.dart';
+import '../../ussd_settings/quick_action_catalog.dart';
 import '../../ussd_settings/quick_action_preference.dart';
 
 class DashboardQuickActionsSection extends StatelessWidget {
@@ -18,6 +18,8 @@ class DashboardQuickActionsSection extends StatelessWidget {
     required this.simPurposes,
     required this.agentQuickActions,
     required this.personalQuickActions,
+    required this.agentCatalog,
+    required this.personalCatalog,
   });
 
   final String provider;
@@ -26,6 +28,8 @@ class DashboardQuickActionsSection extends StatelessWidget {
   final Map<int, String> simPurposes;
   final Map<String, List<QuickActionPreference>> agentQuickActions;
   final Map<String, List<QuickActionPreference>> personalQuickActions;
+  final QuickActionCatalog? agentCatalog;
+  final QuickActionCatalog? personalCatalog;
 
   bool get _isPersonalSim {
     final sim = simMap?[provider];
@@ -35,6 +39,12 @@ class DashboardQuickActionsSection extends StatelessWidget {
     }
 
     return simPurposes[sim.slot] == 'personal';
+  }
+
+  QuickActionCatalog? _catalog({
+    required bool personal,
+  }) {
+    return personal ? personalCatalog : agentCatalog;
   }
 
   List<QuickActionPreference> _quickActions({
@@ -56,39 +66,31 @@ class DashboardQuickActionsSection extends StatelessWidget {
           .toList();
     }
 
-    final defaults = personal
-        ? kPersonalQuickActionDefaults[provider]
-        : kAgentQuickActionDefaults[provider];
+    final definitions =
+        _catalog(personal: personal)?.definitionsFor(provider) ??
+            const <QuickActionCatalogDefinition>[];
 
-    return (defaults ?? const <String>[])
+    return definitions
         .take(9)
         .toList()
         .asMap()
         .entries
         .map(
           (entry) => QuickActionPreference(
-            actionKey: entry.value,
+            actionKey: entry.value.type,
             position: entry.key,
           ),
         )
         .toList();
   }
 
-  QuickActionDefinition? _definition(
+  QuickActionCatalogDefinition? _definition(
     String type, {
     required bool personal,
   }) {
-    final definitions = personal
-        ? kPersonalQuickActionDefinitions
-        : kAgentQuickActionDefinitions;
-
-    for (final definition in definitions) {
-      if (definition.type == type) {
-        return definition;
-      }
-    }
-
-    return null;
+    return _catalog(
+      personal: personal,
+    )?.definitionFor(provider, type);
   }
 
   @override
@@ -156,25 +158,13 @@ class DashboardQuickActionsSection extends StatelessWidget {
       final type = preference.actionKey;
       final definition = _definition(type, personal: false);
 
-      if (definition == null) {
-        continue;
-      }
-
-      var defaultLabel = definition.label;
-
-      if (provider == 'telecel') {
-        defaultLabel = switch (type) {
-          'cash_in' => 'Deposit',
-          'cash_out' => 'Withdrawal',
-          'data_bundle' => 'Internet Data',
-          'balance_enquiry' => 'Balance',
-          _ => defaultLabel,
-        };
-      }
+      final defaultLabel =
+          definition?.displayLabel ?? quickActionTransactionLabel(type);
 
       final label = preference.resolvedLabel(defaultLabel);
-      final icon =
-          quickActionIconFromKey(preference.iconKey) ?? definition.icon;
+      final icon = quickActionIconFromKey(preference.iconKey) ??
+          definition?.icon ??
+          quickActionCatalogIcon(type);
 
       tiles.add(
         _buildTile(
@@ -230,13 +220,13 @@ class DashboardQuickActionsSection extends StatelessWidget {
       final type = preference.actionKey;
       final definition = _definition(type, personal: true);
 
-      if (definition == null) {
-        continue;
-      }
+      final icon = quickActionIconFromKey(preference.iconKey) ??
+          definition?.icon ??
+          quickActionCatalogIcon(type);
 
-      final icon =
-          quickActionIconFromKey(preference.iconKey) ?? definition.icon;
-      final label = preference.resolvedLabel(definition.label);
+      final label = preference.resolvedLabel(
+        definition?.displayLabel ?? quickActionTransactionLabel(type),
+      );
 
       tiles.add(
         _buildTile(
@@ -308,12 +298,7 @@ class DashboardQuickActionsSection extends StatelessWidget {
   }
 
   String _providerLabel(String value) {
-    return switch (value) {
-      'mtn' => 'MTN',
-      'telecel' => 'Telecel',
-      'at_money' => 'AT Money',
-      _ => value,
-    };
+    return quickActionProviderLabel(value);
   }
 }
 

@@ -12,7 +12,7 @@ import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/personal_ad_banner.dart';
 import '../../shared/widgets/personal_transaction_item.dart';
-import '../ussd_settings/quick_action_customization_screen.dart';
+import '../ussd_settings/quick_action_catalog.dart';
 import '../ussd_settings/quick_action_preference.dart';
 import '../../shared/widgets/offline_status_banner.dart';
 import '../../shared/widgets/dashboard_skeleton.dart';
@@ -41,14 +41,9 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
   List<dynamic> _recent = [];
   bool _loadingRecent = true;
   Map<String, List<QuickActionPreference>> _personalQuickActions = {};
+  QuickActionCatalog? _quickActionCatalog;
   StreamSubscription<DashboardRefreshEvent>? _dashboardRefreshSubscription;
   bool _highlightNewestTransaction = false;
-
-  final _providers = const [
-    {'value': 'mtn', 'label': 'MTN'},
-    {'value': 'telecel', 'label': 'Telecel'},
-    {'value': 'at_money', 'label': 'AT Money'},
-  ];
 
   @override
   void initState() {
@@ -112,6 +107,27 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
   // Same shape as the Agent HomeTab's _load() (limit=5, filtered by the
   // selected provider tab) - just pointed at /personal-transactions.
   Future<void> _loadQuickActions() async {
+    QuickActionCatalog? catalog;
+
+    try {
+      catalog = await QuickActionCatalog.load(
+        mode: 'personal',
+      );
+
+      if (mounted) {
+        setState(() {
+          _quickActionCatalog = catalog;
+
+          if (catalog!.providers.isNotEmpty &&
+              !catalog.providers.contains(_provider)) {
+            _provider = catalog.providers.first;
+          }
+        });
+      }
+    } catch (_) {
+      // Existing saved actions remain usable with generic fallbacks.
+    }
+
     try {
       final response = await ApiClient.instance.get('/users/me/quick-actions');
 
@@ -124,10 +140,13 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
 
       final parsed = <String, List<QuickActionPreference>>{};
 
-      for (final provider in ['mtn', 'telecel', 'at_money']) {
-        final value = personal[provider];
+      for (final entry in personal.entries) {
+        final provider = entry.key.toString().trim();
+        final value = entry.value;
 
-        if (value is! List) continue;
+        if (provider.isEmpty || value is! List) {
+          continue;
+        }
 
         final items = <QuickActionPreference>[];
 
@@ -138,7 +157,9 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
               fallbackPosition: index,
             );
 
-            if (preference.actionKey.trim().isEmpty) continue;
+            if (preference.actionKey.trim().isEmpty) {
+              continue;
+            }
 
             items.add(preference);
           } catch (_) {
@@ -146,7 +167,9 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
           }
         }
 
-        items.sort((a, b) => a.position.compareTo(b.position));
+        items.sort(
+          (a, b) => a.position.compareTo(b.position),
+        );
 
         parsed[provider] = items
             .take(9)
@@ -154,69 +177,67 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
             .asMap()
             .entries
             .map(
-              (entry) => entry.value.copyWith(position: entry.key),
+              (entry) => entry.value.copyWith(
+                position: entry.key,
+              ),
             )
             .toList();
       }
 
-      setState(() => _personalQuickActions = parsed);
+      if (mounted) {
+        setState(() {
+          _personalQuickActions = parsed;
+
+          final providers = <String>{
+            ...?_quickActionCatalog?.providers,
+            ..._personalQuickActions.keys,
+          };
+
+          if (providers.isNotEmpty && providers.contains(_provider) == false) {
+            _provider = providers.first;
+          }
+        });
+      }
     } catch (_) {
-      // Continue using defaults.
+      // Catalog defaults remain available when preferences cannot load.
     }
   }
 
-  QuickActionDefinition? _quickActionDefinition(String type) {
-    for (final definition in kPersonalQuickActionDefinitions) {
-      if (definition.type == type) {
-        return definition;
-      }
-    }
-
-    return null;
+  QuickActionCatalogDefinition? _quickActionDefinition(
+    String type,
+  ) {
+    return _quickActionCatalog?.definitionFor(
+      _provider,
+      type,
+    );
   }
 
   List<QuickActionPreference> get _visibleQuickActions {
     final saved = _personalQuickActions[_provider];
 
-    if (saved != null) {
-      return saved
-          .where(
-            (item) =>
-                item.isVisible &&
-                _quickActionDefinition(item.actionKey) != null,
-          )
+    if (saved == null) {
+      final definitions = _quickActionCatalog?.definitionsFor(_provider) ??
+          const <QuickActionCatalogDefinition>[];
+
+      return definitions
           .take(9)
+          .toList()
+          .asMap()
+          .entries
+          .map(
+            (entry) => QuickActionPreference(
+              actionKey: entry.value.type,
+              position: entry.key,
+            ),
+          )
           .toList();
     }
 
-    final defaults =
-        kPersonalQuickActionDefaults[_provider] ?? const <String>[];
-
-    return defaults
-        .take(9)
-        .toList()
-        .asMap()
-        .entries
-        .map(
-          (entry) => QuickActionPreference(
-            actionKey: entry.value,
-            position: entry.key,
-          ),
-        )
-        .toList();
+    return saved.where((item) => item.isVisible).take(9).toList();
   }
 
   String _providerLabel(String provider) {
-    switch (provider) {
-      case 'mtn':
-        return 'MTN';
-      case 'telecel':
-        return 'Telecel';
-      case 'at_money':
-        return 'AirtelTigo';
-      default:
-        return provider;
-    }
+    return quickActionProviderLabel(provider);
   }
 
   Future<void> _loadRecent() async {
@@ -323,11 +344,28 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
     final firstName = user['first_name'] ?? '';
     final isPaid = user['personal_subscription_plan'] == 'paid';
 
-    final noSimsDetected =
-        _simMap != null && _simMap!.values.every((v) => v == null);
-    final visibleProviders = _simMap == null
-        ? _providers
-        : _providers.where((p) => _simMap![p['value']] != null).toList();
+    final simMap = _simMap;
+    final catalogProviders = _quickActionCatalog?.providers ?? const <String>[];
+
+    final providerCandidates = <String>{
+      ...catalogProviders,
+      ..._personalQuickActions.keys,
+    }.toList();
+
+    final noSimsDetected = simMap == null
+        ? false
+        : simMap.values.every((value) => value == null) &&
+            _personalQuickActions.keys.every(simMap.containsKey);
+
+    final visibleProviders = simMap == null
+        ? providerCandidates
+        : providerCandidates.where((provider) {
+            if (simMap.containsKey(provider)) {
+              return simMap[provider] == null ? false : true;
+            }
+
+            return _personalQuickActions.containsKey(provider);
+          }).toList();
 
     return Scaffold(
       body: Column(
@@ -358,9 +396,13 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                       children: [
                         Image.asset(
                           'assets/images/agentpro-icon.png',
-                          height: 26,
+                          width: 32,
+                          height: 32,
+                          fit: BoxFit.contain,
+                          filterQuality: FilterQuality.high,
+                          isAntiAlias: true,
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 9),
                         const Text.rich(
                           TextSpan(
                             children: [
@@ -368,16 +410,20 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                                 text: 'Agent',
                                 style: TextStyle(
                                   color: Colors.white,
-                                  fontSize: 17,
+                                  fontSize: 20,
+                                  height: 1,
                                   fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.65,
                                 ),
                               ),
                               TextSpan(
                                 text: 'Pro',
                                 style: TextStyle(
                                   color: AppTheme.secondaryColor,
-                                  fontSize: 17,
+                                  fontSize: 20,
+                                  height: 1,
                                   fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.65,
                                 ),
                               ),
                             ],
@@ -462,15 +508,15 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                               ),
                               child: Row(
                                 children: visibleProviders.map((p) {
-                                  final selected = _provider == p['value'];
+                                  final selected = _provider == p;
                                   final color = AppTheme.providerColor(
-                                    p['value']!,
+                                    p,
                                   );
                                   return Expanded(
                                     child: GestureDetector(
                                       onTap: () {
                                         setState(() {
-                                          _provider = p['value']!;
+                                          _provider = p;
                                         });
                                         _loadRecent();
                                       },
@@ -506,13 +552,13 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                                               : null,
                                         ),
                                         child: Text(
-                                          p['label']!,
+                                          _providerLabel(p),
                                           textAlign: TextAlign.center,
                                           style: TextStyle(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 12,
                                             color: selected
-                                                ? (p['value'] == 'mtn'
+                                                ? (p == 'mtn'
                                                     ? Colors.black
                                                     : Colors.white)
                                                 : context.appSecondaryText,
@@ -552,15 +598,21 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                                 (preference) {
                                   final definition = _quickActionDefinition(
                                     preference.actionKey,
-                                  )!;
+                                  );
 
                                   final icon = quickActionIconFromKey(
                                         preference.iconKey,
                                       ) ??
-                                      definition.icon;
+                                      definition?.icon ??
+                                      quickActionCatalogIcon(
+                                        preference.actionKey,
+                                      );
 
                                   final label = preference.resolvedLabel(
-                                    definition.label,
+                                    definition?.displayLabel ??
+                                        quickActionTransactionLabel(
+                                          preference.actionKey,
+                                        ),
                                   );
 
                                   return _QuickActionTile(

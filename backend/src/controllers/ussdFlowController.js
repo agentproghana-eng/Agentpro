@@ -4,6 +4,8 @@ const { auditLog } = require('../services/auditService');
 const { validateFlowSteps } = require('../utils/ussdFlowValidation');
 const {
   getFlowBuilderCapabilities,
+  getFlowBuilderEligibility,
+  getGlobalFlowBuilderEligibility,
 } = require('../utils/ussdFlowCapabilities');
 
 // Mirrors the ussd_flow_action enum - kept in sync manually since
@@ -12,12 +14,12 @@ const {
 // confusing database error.
 
 // ── List flows ────────────────────────────────────────────────
-// Superuser sees every flow. Business owners see every global flow
-// (company_id IS NULL - read-only to them) plus their own company's
-// flows. Never another company's flows.
+// This Business/Global endpoint never exposes Personal-owned rows.
+// Superuser sees all Global + Company flows. Business owners see every
+// Global flow (read-only to them) plus their own company's flows.
 exports.listFlows = async (req, res) => {
   try {
-    const conditions = [];
+    const conditions = ['f.owner_user_id IS NULL'];
     const params = [];
     let idx = 1;
 
@@ -62,7 +64,10 @@ exports.listFlows = async (req, res) => {
 exports.getFlow = async (req, res) => {
   const { id } = req.params;
   try {
-    const flowResult = await query('SELECT * FROM ussd_flows WHERE id = $1', [id]);
+    const flowResult = await query(
+      'SELECT * FROM ussd_flows WHERE id = $1 AND owner_user_id IS NULL',
+      [id]
+    );
     if (flowResult.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Flow not found' });
     }
@@ -147,7 +152,49 @@ exports.createFlow = async (req, res) => {
 
   const companyId = req.user.role === 'superuser' ? null : req.user.company_id;
 
+  if (
+    req.user.role !== 'superuser' &&
+    (typeof companyId !== 'string' || companyId.trim().length === 0)
+  ) {
+    return res.status(403).json({
+      success: false,
+      code: 'BUSINESS_IDENTITY_REQUIRED',
+      message: 'A valid company identity is required to create a Business USSD flow.',
+    });
+  }
+
   try {
+    const isGlobalTarget = req.user.role === 'superuser';
+
+    const eligibility = isGlobalTarget
+      ? await getGlobalFlowBuilderEligibility(
+          provider,
+          transaction_type
+        )
+      : await getFlowBuilderEligibility(
+          'business',
+          provider,
+          transaction_type
+        );
+
+    if (!eligibility.provider_registered) {
+      return res.status(422).json({
+        success: false,
+        code: 'USSD_PROVIDER_NOT_REGISTERED',
+        message: 'Provider is not registered for USSD Flow Builder configuration.',
+      });
+    }
+
+    if (!eligibility.transaction_type_builder_enabled) {
+      return res.status(422).json({
+        success: false,
+        code: 'USSD_FLOW_TYPE_NOT_ENABLED',
+        message: isGlobalTarget
+          ? 'Transaction type is not enabled for any Global USSD Flow Builder account mode.'
+          : 'Transaction type is not enabled for Business USSD Flow Builder configuration.',
+      });
+    }
+
     const flow = await withTransaction(async (client) => {
       const flowResult = await client.query(
         `INSERT INTO ussd_flows (
@@ -229,9 +276,9 @@ exports.createFlow = async (req, res) => {
 };
 
 // ── Update a flow (replaces its steps wholesale if provided) ─────
-// Business owners can only edit flows scoped to their OWN company -
-// global flows (company_id IS NULL) are read-only to them, matching
-// the same rule enforced on create. Superuser can edit any flow.
+// Business owners can only edit flows scoped to their OWN company.
+// Global flows are read-only to them. Superuser can edit any Global or
+// Company flow, but Personal-owned rows are never part of this endpoint.
 exports.updateFlow = async (req, res) => {
   const { id } = req.params;
   const {
@@ -250,7 +297,10 @@ exports.updateFlow = async (req, res) => {
       Object.prototype.hasOwnProperty.call(req.body, 'recipient_mode');
 
   try {
-    const existing = await query('SELECT * FROM ussd_flows WHERE id = $1', [id]);
+    const existing = await query(
+      'SELECT * FROM ussd_flows WHERE id = $1 AND owner_user_id IS NULL',
+      [id]
+    );
     if (existing.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Flow not found' });
     }
@@ -356,7 +406,10 @@ exports.updateFlow = async (req, res) => {
 exports.deleteFlow = async (req, res) => {
   const { id } = req.params;
   try {
-    const existing = await query('SELECT * FROM ussd_flows WHERE id = $1', [id]);
+    const existing = await query(
+      'SELECT * FROM ussd_flows WHERE id = $1 AND owner_user_id IS NULL',
+      [id]
+    );
     if (existing.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Flow not found' });
     }

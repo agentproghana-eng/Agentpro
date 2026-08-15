@@ -85,11 +85,9 @@ class _CommissionTransferScreenState extends State<CommissionTransferScreen> {
 
       if (!mounted) return;
 
-      final requestedIccid =
-          (widget.initialSimIccid ?? '').trim();
+      final requestedIccid = (widget.initialSimIccid ?? '').trim();
 
-      final routeRequestedExactSim =
-          widget.initialSimSlot != null ||
+      final routeRequestedExactSim = widget.initialSimSlot != null ||
           requestedIccid.isNotEmpty ||
           widget.initialSimSubscriptionId != null;
 
@@ -97,18 +95,14 @@ class _CommissionTransferScreenState extends State<CommissionTransferScreen> {
 
       if (routeRequestedExactSim) {
         for (final sim in matches) {
-          final slotMatches =
-              widget.initialSimSlot == null ||
+          final slotMatches = widget.initialSimSlot == null ||
               sim.slot == widget.initialSimSlot;
 
-          final identityMatches =
-              requestedIccid.isNotEmpty
-                  ? sim.iccid.trim() == requestedIccid &&
-                      slotMatches
-                  : slotMatches &&
-                      widget.initialSimSubscriptionId != null &&
-                      sim.subscriptionId ==
-                          widget.initialSimSubscriptionId;
+          final identityMatches = requestedIccid.isNotEmpty
+              ? sim.iccid.trim() == requestedIccid && slotMatches
+              : slotMatches &&
+                  widget.initialSimSubscriptionId != null &&
+                  sim.subscriptionId == widget.initialSimSubscriptionId;
 
           if (identityMatches) {
             requestedSim = sim;
@@ -501,8 +495,7 @@ class _CommissionTransferScreenState extends State<CommissionTransferScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final destinationLabel =
-        widget.provider == 'telecel' ? 'Float' : 'e-Float';
+    final destinationLabel = widget.provider == 'telecel' ? 'Float' : 'e-Float';
 
     return Scaffold(
       appBar: AppBar(

@@ -42,7 +42,14 @@ class ApiClient {
               request.path.contains('/auth/register') ||
               request.path.contains('/auth/refresh');
 
-          if (isUnauthorized && !alreadyRetried && !isAuthRequest) {
+          final currentAccessToken = await StorageService.getAccessToken();
+          final canRefresh =
+              currentAccessToken != null && currentAccessToken.isNotEmpty;
+
+          if (isUnauthorized &&
+              canRefresh &&
+              !alreadyRetried &&
+              !isAuthRequest) {
             request.extra['auth_refresh_retried'] = true;
 
             final refreshed = await refreshToken();

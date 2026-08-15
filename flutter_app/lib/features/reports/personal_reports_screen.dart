@@ -201,8 +201,7 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
       context: context,
       firstDate: DateTime(now.year - 10),
       lastDate: now,
-      initialDateRange:
-          _customRange ??
+      initialDateRange: _customRange ??
           DateTimeRange(start: DateTime(now.year, now.month, 1), end: now),
       helpText: 'Select report date range',
       saveText: 'Apply',
@@ -319,9 +318,8 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
                         title: Text(
                           entry.value,
                           style: TextStyle(
-                            fontWeight: selected
-                                ? FontWeight.w700
-                                : FontWeight.w500,
+                            fontWeight:
+                                selected ? FontWeight.w700 : FontWeight.w500,
                             color: selected
                                 ? AppTheme.primaryColor
                                 : theme.colorScheme.onSurface,
@@ -555,9 +553,8 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
             children: [
               Icon(
                 icon,
-                color: selected
-                    ? AppTheme.primaryColor
-                    : context.appSecondaryText,
+                color:
+                    selected ? AppTheme.primaryColor : context.appSecondaryText,
               ),
               const SizedBox(width: 8),
               Text(

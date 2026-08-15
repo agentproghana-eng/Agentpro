@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/auth/auth_bloc.dart';
+import '../../core/auth/personal_subscription_access.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/more_tile.dart';
 
@@ -43,7 +44,7 @@ class PersonalMoreTab extends StatelessWidget {
     final user =
         authState is AuthAuthenticated ? authState.user : <String, dynamic>{};
     final hasBusinessRole = user['company_id'] != null;
-    final isPaid = user['personal_subscription_plan'] == 'paid';
+    final isPaid = hasActivePaidPersonalPlan(user);
 
     return Scaffold(
       appBar: AppBar(title: const Text('More')),
@@ -100,14 +101,14 @@ class PersonalMoreTab extends StatelessWidget {
           MoreTile(
             Icons.settings_outlined,
             'Settings',
-            () => context.push('/settings'),
+            () => context.push('/settings?mode=personal'),
             subtitle: 'Manage preferences, security and app configuration',
           ),
           const MoreGroupLabel('Help & Support'),
           MoreTile(
             Icons.support_agent_outlined,
             'Help & Support',
-            () => context.push('/support'),
+            () => context.push('/support?mode=personal'),
             subtitle: 'Guides, assistance and support options',
           ),
           const Divider(),

@@ -251,6 +251,62 @@ exports.completeTransaction = async (req, res) => {
   }
 };
 
+// ─── Recent Personal Transactions ───────────────────────────
+
+exports.listRecentTransactions = async (req, res) => {
+  const userId = req.user.id;
+
+  const provider =
+    typeof req.query.provider === 'string'
+      ? req.query.provider.trim()
+      : '';
+
+  const simIccid =
+    typeof req.query.sim_iccid === 'string'
+      ? req.query.sim_iccid.trim()
+      : '';
+
+  const conditions = ['user_id = $1'];
+  const params = [userId];
+  let idx = 2;
+
+  if (provider) {
+    conditions.push(`provider = $${idx++}`);
+    params.push(provider);
+  }
+
+  if (simIccid) {
+    conditions.push(`sim_iccid = $${idx++}`);
+    params.push(simIccid);
+  }
+
+  try {
+    const result = await query(
+      `SELECT *
+       FROM personal_transactions
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY created_at DESC, id DESC
+       LIMIT 5`,
+      params
+    );
+
+    res.json({
+      success: true,
+      data: result.rows,
+      meta: {
+        limit: 5,
+      },
+    });
+  } catch (error) {
+    logger.error('List recent personal transactions error:', error);
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch transactions',
+    });
+  }
+};
+
 // ─── List Personal Transactions ─────────────────────────────
 // Always scoped to the current user only - unlike the Agent side,
 // there is no manager/owner "view others' transactions" concept here.

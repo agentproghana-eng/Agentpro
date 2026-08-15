@@ -7,6 +7,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_network_image.dart';
 import '../../shared/widgets/app_widgets.dart';
+import 'marketplace_data_utils.dart';
 
 class SellerStorefrontScreen extends StatefulWidget {
   final String sellerId;
@@ -83,32 +84,38 @@ class _SellerStorefrontScreenState extends State<SellerStorefrontScreen> {
     }
   }
 
-  String get _displayName {
-    final companyName = _seller?['company_name']?.toString().trim();
-
-    if (companyName != null && companyName.isNotEmpty) {
-      return companyName;
-    }
-
+  String get _sellerName {
     final firstName = _seller?['first_name']?.toString() ?? '';
     final lastName = _seller?['last_name']?.toString() ?? '';
 
-    final fullName = '$firstName $lastName'.trim();
+    return '$firstName $lastName'.trim();
+  }
 
-    return fullName.isEmpty ? 'Marketplace Seller' : fullName;
+  String get _companyName => _seller?['company_name']?.toString().trim() ?? '';
+
+  String get _displayName {
+    if (_sellerName.isNotEmpty) {
+      return _sellerName;
+    }
+
+    if (_companyName.isNotEmpty) {
+      return _companyName;
+    }
+
+    return 'Marketplace Seller';
   }
 
   String? get _imageUrl {
-    final companyLogo = _seller?['company_logo_url']?.toString().trim();
-
-    if (companyLogo != null && companyLogo.isNotEmpty) {
-      return companyLogo;
-    }
-
     final profileImage = _seller?['profile_image_url']?.toString().trim();
 
     if (profileImage != null && profileImage.isNotEmpty) {
       return profileImage;
+    }
+
+    final companyLogo = _seller?['company_logo_url']?.toString().trim();
+
+    if (companyLogo != null && companyLogo.isNotEmpty) {
+      return companyLogo;
     }
 
     return null;
@@ -291,6 +298,20 @@ class _SellerStorefrontScreenState extends State<SellerStorefrontScreen> {
                 ],
               ],
             ),
+            if (_sellerName.isNotEmpty && _companyName.isNotEmpty) ...[
+              const SizedBox(height: 3),
+              Text(
+                _companyName,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: context.appSecondaryText,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
             if (isVerified || isFeatured) ...[
               const SizedBox(height: 7),
               Wrap(
@@ -460,8 +481,9 @@ class _StorefrontAdCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final images = ad['image_urls'];
-    final hasImage = images is List && images.isNotEmpty;
+    final images = normalizedMarketplaceImageUrls(
+      ad['image_urls'],
+    );
 
     final price = double.tryParse(ad['price']?.toString() ?? '0') ?? 0;
 
@@ -478,9 +500,9 @@ class _StorefrontAdCard extends StatelessWidget {
               child: Container(
                 width: double.infinity,
                 color: AppTheme.primaryColor.withValues(alpha: 0.08),
-                child: hasImage
+                child: images.isNotEmpty
                     ? AppNetworkImage(
-                        url: images.first.toString(),
+                        url: images.first,
                         fit: BoxFit.contain,
                         memCacheWidth: 700,
                         errorWidget: const Icon(

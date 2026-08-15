@@ -35,7 +35,7 @@ final List<HelpSection> _helpSections = [
         HelpItem(
           question: 'How do new staff get their login details?',
           answer:
-              'When an owner or manager adds a new staff member, a temporary password is automatically generated and sent by email and text message. It must be changed the first time they log in.',
+              'A temporary password is automatically generated and sent by email. If a phone number is saved for the staff member, the same temporary password is also sent by SMS. It must be changed the first time they log in.',
         ),
       ]),
   const HelpSection(
@@ -43,14 +43,14 @@ final List<HelpSection> _helpSections = [
       icon: Icons.swap_horiz,
       items: [
         HelpItem(
-          question: 'What transaction types are supported?',
+          question: 'What transactions can I use?',
           answer:
-              'Cash In, Cash Out, Send Money, Pay to Merchant, Pay to Agent, Airtime, Data Bundle, Balance Enquiry, and Mini Statement — across MTN Mobile Money, Telecel Cash, and AT Money.',
+              'The app shows the transaction options currently available for your provider and account mode. Available options may change as services and flows are updated.',
         ),
         HelpItem(
           question: 'How does the automatic dialing work?',
           answer:
-              'Tapping a transaction type dials the USSD code and taps through the network menu automatically — no manual dialing or navigating needed. The app pauses the moment the screen asks for the MoMo PIN, and PIN entry is the only step ever done by hand, directly on the real network screen. This is true whether the automation is one built into the app itself or one configured remotely by an admin — either way it behaves identically: watch it work, then enter the PIN when it stops.',
+              'Tapping a transaction type starts the available automated USSD flow, so you do not need to dial and navigate the network menu yourself. The app pauses when the network asks for your MoMo PIN. Enter the PIN only on the real network screen, then continue the transaction.',
         ),
         HelpItem(
           question:
@@ -74,9 +74,9 @@ final List<HelpSection> _helpSections = [
       icon: Icons.account_balance_wallet_outlined,
       items: [
         HelpItem(
-          question: 'What are the three balance types?',
+          question: 'What balances can I see?',
           answer:
-              'e-Float (electronic, held with the network), Cash at Hand (physical cash on hand), and Commission (earned from transactions, not yet moved to e-Float).',
+              'Balances depend on the provider and physical SIM. AgentPro can show Cash at Hand plus SIM-wallet balances such as Working Account, Float or e-Float, and Commission where that provider exposes them.',
         ),
         HelpItem(
           question: 'How do I record float received?',
@@ -88,9 +88,9 @@ final List<HelpSection> _helpSections = [
           answer: 'Tap "Adjust Cash" under the relevant provider.',
         ),
         HelpItem(
-          question: 'How do I move commission into usable e-Float?',
+          question: 'How do I move commission into usable float?',
           answer:
-              "Tap \"Transfer Commission to e-Float\". The network's own response is what confirms success.",
+              "Use the Transfer Commission action for the selected SIM. The destination is shown as Float or e-Float according to that provider, and the network's own response confirms success.",
         ),
         HelpItem(
           question: "Why don't I see a provider on my balance screen?",
@@ -117,7 +117,7 @@ final List<HelpSection> _helpSections = [
         HelpItem(
           question: 'What reports are available?',
           answer:
-              'Transaction Report and Commission Report, each downloadable as PDF, Excel, or CSV.',
+              'Business users can download Transaction and Commission Reports as PDF, Excel, or CSV. Personal users can download Transaction Reports as PDF or CSV.',
         ),
         HelpItem(
           question: 'Can I filter a report before generating it?',
@@ -137,7 +137,7 @@ final List<HelpSection> _helpSections = [
         HelpItem(
           question: 'How do I post an ad?',
           answer:
-              'Tap "Post Ad" and fill in a title, description, 1–3 photos (required), category, price (optional — leave blank for "Contact for price"), location, and contact phone, then submit for review.',
+              'Tap "Post Ad" and fill in a title, description, category, price (optional — leave blank for "Contact for price"), location, and contact phone. Add 1 to 3 photos of what you are offering — at least one photo is required. Then submit for review.',
         ),
         HelpItem(
           question: 'What happens after I submit an ad?',
@@ -190,7 +190,7 @@ final List<HelpSection> _helpSections = [
         HelpItem(
           question: 'What does it cost after the trial?',
           answer:
-              'GH₵10/month, paid via MTN MoMo to the Agent Pro Ghana merchant number.',
+              'Business billing is GH₵10 per paid active seat. Every 5th active staff member is free. Personal Paid is GH₵5/month. The Subscription screen shows the amount due before payment.',
         ),
         HelpItem(
           question: 'How is payment confirmed?',
@@ -205,12 +205,12 @@ final List<HelpSection> _helpSections = [
         HelpItem(
           question: 'Where do I configure a new USSD automation?',
           answer:
-              'In the Admin Portal (web), not the mobile app: sidebar → "USSD Flows" 🔀. Changes here take effect immediately on every device — no app update needed.',
+              'In the mobile app, Business owners can open More → Custom USSD Flows for company flows. Personal users can open Personal More → Custom USSD Flows for their own flows. Global flows are centrally managed and appear read-only where applicable.',
         ),
         HelpItem(
           question: 'How do I create a new flow?',
           answer:
-              'Tap "+ New Flow". Choose the Provider (MTN, Telecel, or AT Money), type the exact Transaction Type (e.g. airtime, data_bundle, cash_in), and enter the Dial Code — it must start with * and end with #, e.g. *170#.',
+              'Open Custom USSD Flows and tap +. Choose from the providers and transaction types currently available for your account mode, enter the dial code, then define the flow steps. The available provider and transaction options can change over time.',
         ),
         HelpItem(
           question: 'What goes in the Flow JSON?',
@@ -248,8 +248,9 @@ final List<HelpSection> _helpSections = [
       icon: Icons.support_agent_outlined,
       items: [
         HelpItem(
-          question: 'How do I reach my network for PIN issues?',
-          answer: 'MTN: 114. Telecel: 100. AirtelTigo: 100.',
+          question: 'How do I reach my network for account or PIN issues?',
+          answer:
+              'MTN Personal users call 100. MTN Agent SIM users call 114. Telecel users call 100. AT Money users call 100.',
         ),
         HelpItem(
           question: 'How do I reach Agent Pro Ghana support?',
@@ -266,8 +267,9 @@ final List<HelpSection> _helpSections = [
       icon: Icons.lock_outline,
       items: [
         HelpItem(
-          question: 'Can I log in with my fingerprint or face?',
-          answer: 'Yes — enable biometric login in Settings.',
+          question: 'How does phone authentication work?',
+          answer:
+              'Enable phone authentication in Settings when it is available on your device. It unlocks a resumable AgentPro session using the device authentication method supported by your phone.',
         ),
         HelpItem(
           question: 'I forgot my password.',

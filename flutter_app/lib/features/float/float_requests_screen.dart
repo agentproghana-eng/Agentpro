@@ -107,9 +107,8 @@ class _FloatRequestsScreenState extends State<FloatRequestsScreen> {
 
       final responseData = error.response?.data;
 
-      final message = responseData is Map
-          ? responseData['message']?.toString()
-          : null;
+      final message =
+          responseData is Map ? responseData['message']?.toString() : null;
 
       setState(() {
         _error = message ?? 'Failed to load float requests';
@@ -178,8 +177,7 @@ class _FloatRequestsScreenState extends State<FloatRequestsScreen> {
                 ),
                 const SizedBox(height: 6),
                 GhsAmount(
-                  amount:
-                      double.tryParse(
+                  amount: double.tryParse(
                         request['amount_requested']?.toString() ?? '0',
                       ) ??
                       0,
@@ -230,6 +228,7 @@ class _FloatRequestsScreenState extends State<FloatRequestsScreen> {
                   ? null
                   : ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.errorColor,
+                      foregroundColor: Colors.white,
                     ),
               child: Text(isApprove ? 'Approve Request' : 'Reject Request'),
             ),
@@ -276,9 +275,8 @@ class _FloatRequestsScreenState extends State<FloatRequestsScreen> {
 
       final responseData = error.response?.data;
 
-      final message = responseData is Map
-          ? responseData['message']?.toString()
-          : null;
+      final message =
+          responseData is Map ? responseData['message']?.toString() : null;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -385,72 +383,75 @@ class _FloatRequestsScreenState extends State<FloatRequestsScreen> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _error != null
-                ? EmptyState(
-                    icon: Icons.error_outline,
-                    title: 'Could not load float requests',
-                    subtitle: _error,
-                    actionLabel: 'Retry',
-                    onAction: _load,
-                  )
-                : _requests.isEmpty
-                ? RefreshIndicator(
-                    onRefresh: _load,
-                    child: ListView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      children: [
-                        SizedBox(
-                          height: MediaQuery.sizeOf(context).height * 0.48,
-                          child: EmptyState(
-                            icon: Icons.request_page_outlined,
-                            title: isAgent
-                                ? 'No float requests yet'
-                                : 'No float requests found',
-                            subtitle: isAgent
-                                ? 'Request branch treasury float when your branch needs additional funding.'
-                                : 'Requests matching this status will appear here.',
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : RefreshIndicator(
-                    onRefresh: _load,
-                    child: ListView.builder(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
-                      itemCount:
-                          _requests.length + (_page < _totalPages ? 1 : 0),
-                      itemBuilder: (context, index) {
-                        if (index == _requests.length) {
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            child: Center(
-                              child: _loadingMore
-                                  ? const CircularProgressIndicator()
-                                  : TextButton(
-                                      onPressed: () => _load(loadMore: true),
-                                      child: const Text('Load More'),
-                                    ),
+                    ? EmptyState(
+                        icon: Icons.error_outline,
+                        title: 'Could not load float requests',
+                        subtitle: _error,
+                        actionLabel: 'Retry',
+                        onAction: _load,
+                      )
+                    : _requests.isEmpty
+                        ? RefreshIndicator(
+                            onRefresh: _load,
+                            child: ListView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              children: [
+                                SizedBox(
+                                  height:
+                                      MediaQuery.sizeOf(context).height * 0.48,
+                                  child: EmptyState(
+                                    icon: Icons.request_page_outlined,
+                                    title: isAgent
+                                        ? 'No float requests yet'
+                                        : 'No float requests found',
+                                    subtitle: isAgent
+                                        ? 'Request branch treasury float when your branch needs additional funding.'
+                                        : 'Requests matching this status will appear here.',
+                                  ),
+                                ),
+                              ],
                             ),
-                          );
-                        }
+                          )
+                        : RefreshIndicator(
+                            onRefresh: _load,
+                            child: ListView.builder(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+                              itemCount: _requests.length +
+                                  (_page < _totalPages ? 1 : 0),
+                              itemBuilder: (context, index) {
+                                if (index == _requests.length) {
+                                  return Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 12),
+                                    child: Center(
+                                      child: _loadingMore
+                                          ? const CircularProgressIndicator()
+                                          : TextButton(
+                                              onPressed: () =>
+                                                  _load(loadMore: true),
+                                              child: const Text('Load More'),
+                                            ),
+                                    ),
+                                  );
+                                }
 
-                        final request = Map<String, dynamic>.from(
-                          _requests[index] as Map,
-                        );
+                                final request = Map<String, dynamic>.from(
+                                  _requests[index] as Map,
+                                );
 
-                        return _FloatRequestCard(
-                          request: request,
-                          showRequester: !isAgent,
-                          canReview:
-                              canReview &&
-                              request['status']?.toString() == 'pending',
-                          onApprove: () => _review(request, 'approved'),
-                          onReject: () => _review(request, 'rejected'),
-                        );
-                      },
-                    ),
-                  ),
+                                return _FloatRequestCard(
+                                  request: request,
+                                  showRequester: !isAgent,
+                                  canReview: canReview &&
+                                      request['status']?.toString() ==
+                                          'pending',
+                                  onApprove: () => _review(request, 'approved'),
+                                  onReject: () => _review(request, 'rejected'),
+                                );
+                              },
+                            ),
+                          ),
           ),
         ],
       ),
@@ -460,6 +461,7 @@ class _FloatRequestsScreenState extends State<FloatRequestsScreen> {
               icon: const Icon(Icons.add),
               label: const Text('Request Float'),
               backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
             )
           : null,
     );
@@ -605,6 +607,7 @@ class _FloatRequestCard extends StatelessWidget {
                       onPressed: onApprove,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.primaryColor,
+                        foregroundColor: Colors.white,
                       ),
                       child: const Text('Approve'),
                     ),
@@ -628,20 +631,32 @@ class _StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final (label, background, foreground) = switch (status) {
       'approved' => (
-        'APPROVED',
-        context.isDarkMode ? const Color(0xFF1B3327) : const Color(0xFFE1F5E9),
-        context.isDarkMode ? const Color(0xFF69D28A) : const Color(0xFF1B7A43),
-      ),
+          'APPROVED',
+          context.isDarkMode
+              ? const Color(0xFF1B3327)
+              : const Color(0xFFE1F5E9),
+          context.isDarkMode
+              ? const Color(0xFF69D28A)
+              : const Color(0xFF1B7A43),
+        ),
       'rejected' => (
-        'REJECTED',
-        context.isDarkMode ? const Color(0xFF332020) : const Color(0xFFFBE4E4),
-        context.isDarkMode ? const Color(0xFFE57373) : const Color(0xFFA33333),
-      ),
+          'REJECTED',
+          context.isDarkMode
+              ? const Color(0xFF332020)
+              : const Color(0xFFFBE4E4),
+          context.isDarkMode
+              ? const Color(0xFFE57373)
+              : const Color(0xFFA33333),
+        ),
       _ => (
-        'PENDING',
-        context.isDarkMode ? const Color(0xFF332B15) : const Color(0xFFFFF4D9),
-        context.isDarkMode ? AppTheme.secondaryColor : const Color(0xFF7A5B00),
-      ),
+          'PENDING',
+          context.isDarkMode
+              ? const Color(0xFF332B15)
+              : const Color(0xFFFFF4D9),
+          context.isDarkMode
+              ? AppTheme.secondaryColor
+              : const Color(0xFF7A5B00),
+        ),
     };
 
     return Container(
@@ -711,9 +726,8 @@ class _SubmitFloatRequestSheetState extends State<_SubmitFloatRequestSheet> {
       setState(() {
         _branches = branches;
 
-        _branchId = branches.isNotEmpty
-            ? branches.first['id']?.toString()
-            : null;
+        _branchId =
+            branches.isNotEmpty ? branches.first['id']?.toString() : null;
 
         _loadingBranches = false;
       });
@@ -724,9 +738,8 @@ class _SubmitFloatRequestSheetState extends State<_SubmitFloatRequestSheet> {
 
       final responseData = error.response?.data;
 
-      final message = responseData is Map
-          ? responseData['message']?.toString()
-          : null;
+      final message =
+          responseData is Map ? responseData['message']?.toString() : null;
 
       setState(() {
         _loadingBranches = false;
@@ -793,9 +806,8 @@ class _SubmitFloatRequestSheetState extends State<_SubmitFloatRequestSheet> {
 
       final responseData = error.response?.data;
 
-      final message = responseData is Map
-          ? responseData['message']?.toString()
-          : null;
+      final message =
+          responseData is Map ? responseData['message']?.toString() : null;
 
       setState(() {
         _error = message ?? 'Failed to submit float request.';
@@ -945,8 +957,8 @@ class _SubmitFloatRequestSheetState extends State<_SubmitFloatRequestSheet> {
                 const SizedBox(height: 12),
                 Text(
                   _error!,
-                  style: const TextStyle(
-                    color: AppTheme.errorColor,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -955,9 +967,8 @@ class _SubmitFloatRequestSheetState extends State<_SubmitFloatRequestSheet> {
               const SizedBox(height: 20),
               AppButton(
                 label: 'Submit Float Request',
-                onPressed: _loadingBranches || _branches.isEmpty
-                    ? null
-                    : _submit,
+                onPressed:
+                    _loadingBranches || _branches.isEmpty ? null : _submit,
                 isLoading: _submitting,
               ),
             ],

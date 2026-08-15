@@ -4,6 +4,7 @@ const { auditLog } = require('../services/auditService');
 const { validateFlowSteps } = require('../utils/ussdFlowValidation');
 const {
   getFlowBuilderCapabilities,
+  getFlowBuilderEligibility,
 } = require('../utils/ussdFlowCapabilities');
 
 // Dedicated CRUD for a Personal subscriber's own USSD flows - always
@@ -202,6 +203,29 @@ exports.createFlow = async (req, res) => {
   }
 
   try {
+    const eligibility = await getFlowBuilderEligibility(
+      'personal',
+      provider,
+      transaction_type
+    );
+
+    if (!eligibility.provider_registered) {
+      return res.status(422).json({
+        success: false,
+        code: 'USSD_PROVIDER_NOT_REGISTERED',
+        message: 'Provider is not registered for USSD Flow Builder configuration.',
+      });
+    }
+
+    if (!eligibility.transaction_type_builder_enabled) {
+      return res.status(422).json({
+        success: false,
+        code: 'USSD_FLOW_TYPE_NOT_ENABLED',
+        message:
+          'Transaction type is not enabled for Personal USSD Flow Builder configuration.',
+      });
+    }
+
     const flow = await withTransaction(async (client) => {
       const flowResult = await client.query(
         `INSERT INTO ussd_flows (
@@ -389,15 +413,22 @@ exports.updateFlow = async (req, res) => {
   }
 };
 
-// ── Delete My Flow ────────────────────────────────────────────
+// ── Deactivate My Flow ────────────────────────────────────────
+// Keep the row and its steps for audit/history consistency with Business
+// flows. The partial active-flow uniqueness indexes allow another active
+// variant to be created later while this inactive row remains preserved.
 
 exports.deleteFlow = async (req, res) => {
   const { id } = req.params;
   try {
     const result = await query(
-      'DELETE FROM ussd_flows WHERE id = $1 AND owner_user_id = $2 RETURNING id',
+      `UPDATE ussd_flows
+       SET is_active = false, updated_at = NOW()
+       WHERE id = $1 AND owner_user_id = $2
+       RETURNING id`,
       [id, req.user.id]
     );
+
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Flow not found' });
     }
@@ -405,16 +436,19 @@ exports.deleteFlow = async (req, res) => {
     await auditLog({
       userId: req.user.id,
       companyId: null,
-      action: 'PERSONAL_USSD_FLOW_DELETED',
+      action: 'PERSONAL_USSD_FLOW_DEACTIVATED',
       entityType: 'ussd_flow',
       entityId: id,
       ipAddress: req.ip,
       requestId: req.requestId,
     });
 
-    res.json({ success: true, message: 'Flow deleted' });
+    res.json({ success: true, message: 'Flow deactivated' });
   } catch (error) {
-    logger.error('Delete personal USSD flow error:', error);
-    res.status(500).json({ success: false, message: 'Failed to delete flow' });
+    logger.error('Deactivate personal USSD flow error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to deactivate flow',
+    });
   }
 };

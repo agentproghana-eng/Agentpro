@@ -70,28 +70,11 @@ class _DashboardShiftCardState extends State<DashboardShiftCard> {
     setState(() => _opening = true);
 
     try {
-      final response = await ApiClient.instance.post('/shifts/open');
-      final rawShift = response.data['data'];
+      await context.push('/shifts/open');
 
-      if (rawShift is! Map) {
-        throw const FormatException('Invalid shift response');
-      }
+      if (mounted == false) return;
 
-      final shift = Map<String, dynamic>.from(rawShift);
-
-      AppCacheService.set(_cacheKey, shift);
-
-      if (!mounted) return;
-
-      setState(() => _currentShift = shift);
-    } catch (_) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to open shift'),
-        ),
-      );
+      await _loadCurrentShift();
     } finally {
       if (mounted) {
         setState(() => _opening = false);

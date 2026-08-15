@@ -40,6 +40,7 @@ import '../../features/ussd_settings/quick_action_customization_screen.dart';
 import '../../features/ussd_flows/ussd_flow_list_screen.dart';
 import '../../features/community/community_feed_screen.dart';
 import '../../features/shifts/close_shift_screen.dart';
+import '../../features/shifts/open_shift_screen.dart';
 import '../../features/shifts/shift_history_screen.dart';
 import '../../features/community/post_detail_screen.dart';
 import '../../features/community/post_moderation_screen.dart';
@@ -105,6 +106,14 @@ class AppRouter {
         if (authState is AuthAuthenticated) {
           final role = authState.user['role']?.toString();
           final location = state.matchedLocation;
+          final hasPersonalCapability =
+              authState.user['personal_subscription_plan'] != null;
+
+          if (location.startsWith('/personal-') && !hasPersonalCapability) {
+            return role == 'customer'
+                ? '/unsupported-account'
+                : _homeForRole(authState);
+          }
 
           if (location == '/agent' && role != 'agent') {
             return _homeForRole(authState);
@@ -121,7 +130,8 @@ class AppRouter {
           }
 
           if ((location == '/users' || location == '/branches') &&
-              role != 'business_owner') {
+              role != 'business_owner' &&
+              role != 'manager') {
             return _homeForRole(authState);
           }
         }
@@ -209,8 +219,11 @@ class AppRouter {
           },
         ),
         GoRoute(
-            path: '/transactions/history',
-            builder: (_, __) => const TransactionHistoryScreen()),
+          path: '/transactions/history',
+          builder: (_, state) => TransactionHistoryScreen(
+            initialBranchId: state.uri.queryParameters['branch_id'],
+          ),
+        ),
         GoRoute(
           path: '/transactions/:id',
           builder: (_, state) => TransactionDetailScreen(
@@ -247,10 +260,8 @@ class AppRouter {
               );
             }
 
-            final simSlotStr =
-                state.uri.queryParameters['sim_slot'];
-            final simIccid =
-                state.uri.queryParameters['sim_iccid'];
+            final simSlotStr = state.uri.queryParameters['sim_slot'];
+            final simIccid = state.uri.queryParameters['sim_iccid'];
             final simSubscriptionIdStr =
                 state.uri.queryParameters['sim_subscription_id'];
 
@@ -259,10 +270,9 @@ class AppRouter {
               initialSimSlot:
                   simSlotStr != null ? int.tryParse(simSlotStr) : null,
               initialSimIccid: simIccid,
-              initialSimSubscriptionId:
-                  simSubscriptionIdStr != null
-                      ? int.tryParse(simSubscriptionIdStr)
-                      : null,
+              initialSimSubscriptionId: simSubscriptionIdStr != null
+                  ? int.tryParse(simSubscriptionIdStr)
+                  : null,
             );
           },
         ),
@@ -278,10 +288,8 @@ class AppRouter {
               );
             }
 
-            final simSlotStr =
-                state.uri.queryParameters['sim_slot'];
-            final simIccid =
-                state.uri.queryParameters['sim_iccid'];
+            final simSlotStr = state.uri.queryParameters['sim_slot'];
+            final simIccid = state.uri.queryParameters['sim_iccid'];
             final simSubscriptionIdStr =
                 state.uri.queryParameters['sim_subscription_id'];
 
@@ -290,10 +298,9 @@ class AppRouter {
               initialSimSlot:
                   simSlotStr != null ? int.tryParse(simSlotStr) : null,
               initialSimIccid: simIccid,
-              initialSimSubscriptionId:
-                  simSubscriptionIdStr != null
-                      ? int.tryParse(simSubscriptionIdStr)
-                      : null,
+              initialSimSubscriptionId: simSubscriptionIdStr != null
+                  ? int.tryParse(simSubscriptionIdStr)
+                  : null,
             );
           },
         ),
@@ -304,7 +311,12 @@ class AppRouter {
         GoRoute(
             path: '/balances/pending-approvals',
             builder: (_, __) => const PendingApprovalsScreen()),
-        GoRoute(path: '/support', builder: (_, __) => const SupportScreen()),
+        GoRoute(
+          path: '/support',
+          builder: (_, state) => SupportScreen(
+            isPersonal: state.uri.queryParameters['mode'] == 'personal',
+          ),
+        ),
         GoRoute(
             path: '/help-guide', builder: (_, __) => const HelpGuideScreen()),
         GoRoute(
@@ -345,6 +357,8 @@ class AppRouter {
         GoRoute(
             path: '/community',
             builder: (_, __) => const CommunityFeedScreen()),
+        GoRoute(
+            path: '/shifts/open', builder: (_, __) => const OpenShiftScreen()),
         GoRoute(
             path: '/shifts/close/:shiftId',
             builder: (_, state) =>
@@ -441,7 +455,12 @@ class AppRouter {
             builder: (_, __) => const NotificationsScreen()),
 
         // Settings
-        GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
+        GoRoute(
+          path: '/settings',
+          builder: (_, state) => SettingsScreen(
+            isPersonal: state.uri.queryParameters['mode'] == 'personal',
+          ),
+        ),
         GoRoute(
             path: '/settings/sim-purpose',
             builder: (_, __) => const SimPurposeSettingsScreen()),
