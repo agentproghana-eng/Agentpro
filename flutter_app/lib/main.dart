@@ -151,10 +151,26 @@ class _AgentProAppState extends State<AgentProApp> {
         themeMode: ThemeMode.system,
         routerConfig: router,
         builder: (context, child) {
-          return InactivityDetector(
-            timeout: const Duration(minutes: 5),
-            child: _AccessibilityGate(
-              child: child ?? const SizedBox.shrink(),
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+
+          final systemUiStyle = SystemUiOverlayStyle(
+            statusBarColor: AppTheme.primaryDeep,
+            statusBarIconBrightness: Brightness.light,
+            statusBarBrightness: Brightness.dark,
+            systemNavigationBarColor:
+                isDark ? AppTheme.darkScaffoldBg : const Color(0xFFF7F9F8),
+            systemNavigationBarIconBrightness:
+                isDark ? Brightness.light : Brightness.dark,
+            systemNavigationBarDividerColor: Colors.transparent,
+          );
+
+          return AnnotatedRegion<SystemUiOverlayStyle>(
+            value: systemUiStyle,
+            child: InactivityDetector(
+              timeout: const Duration(minutes: 5),
+              child: _AccessibilityGate(
+                child: child ?? const SizedBox.shrink(),
+              ),
             ),
           );
         },

@@ -427,8 +427,7 @@ class GhsAmount extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final resolvedColor =
-        color ?? Theme.of(context).colorScheme.primary;
+    final resolvedColor = color ?? Theme.of(context).colorScheme.primary;
 
     return RichText(
       text: TextSpan(

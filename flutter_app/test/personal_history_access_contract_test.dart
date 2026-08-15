@@ -29,7 +29,7 @@ void main() {
           source,
           isNot(
             contains(
-              "ApiClient.instance.get(\n"
+              'ApiClient.instance.get(\n'
               "        '/personal-transactions',",
             ),
           ),

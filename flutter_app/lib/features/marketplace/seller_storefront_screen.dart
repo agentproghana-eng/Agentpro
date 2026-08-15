@@ -91,8 +91,7 @@ class _SellerStorefrontScreenState extends State<SellerStorefrontScreen> {
     return '$firstName $lastName'.trim();
   }
 
-  String get _companyName =>
-      _seller?['company_name']?.toString().trim() ?? '';
+  String get _companyName => _seller?['company_name']?.toString().trim() ?? '';
 
   String get _displayName {
     if (_sellerName.isNotEmpty) {

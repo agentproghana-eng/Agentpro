@@ -80,7 +80,7 @@ void main() {
           source,
           contains(
             "(row['transaction_type'] ?? '')"
-            ".toString().trim()",
+            '.toString().trim()',
           ),
         );
 
@@ -92,8 +92,8 @@ void main() {
         expect(
           source,
           contains(
-            "labels.putIfAbsent(\n"
-            "        _typeFilter,",
+            'labels.putIfAbsent(\n'
+            '        _typeFilter,',
           ),
         );
       },

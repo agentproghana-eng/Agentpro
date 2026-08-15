@@ -112,9 +112,8 @@ class _FloatHistoryScreenState extends State<FloatHistoryScreen> {
       }
 
       final responseData = error.response?.data;
-      final message = responseData is Map
-          ? responseData['message']?.toString()
-          : null;
+      final message =
+          responseData is Map ? responseData['message']?.toString() : null;
 
       setState(() {
         _error = message ?? 'Failed to load float history';
@@ -328,73 +327,75 @@ class _FloatHistoryScreenState extends State<FloatHistoryScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-          ? EmptyState(
-              icon: Icons.error_outline,
-              title: 'Could not load float history',
-              subtitle: _error,
-              actionLabel: 'Retry',
-              onAction: _load,
-            )
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(12),
-                children: [
-                  if (hasFilters)
-                    _ActiveFilters(
-                      provider: _provider,
-                      dateRange: _dateRange,
-                      onClearProvider: () {
-                        setState(() {
-                          _provider = null;
-                        });
-                        _load();
-                      },
-                      onClearDates: () {
-                        setState(() {
-                          _dateRange = null;
-                        });
-                        _load();
-                      },
-                    ),
-                  if (hasFilters) const SizedBox(height: 8),
-                  if (_movements.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 48),
-                      child: EmptyState(
-                        icon: Icons.history_outlined,
-                        title: 'No float movements found',
-                        subtitle: 'Treasury float activity will appear here.',
-                      ),
-                    )
-                  else
-                    ..._movements.map(
-                      (movement) => _FloatMovementCard(
-                        movement: Map<String, dynamic>.from(movement as Map),
-                      ),
-                    ),
-                  if (_page < _totalPages)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8, bottom: 24),
-                      child: OutlinedButton(
-                        onPressed: _loadingMore
-                            ? null
-                            : () => _load(loadMore: true),
-                        child: _loadingMore
-                            ? const SizedBox(
-                                height: 18,
-                                width: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text('Load more'),
-                      ),
-                    ),
-                ],
-              ),
-            ),
+              ? EmptyState(
+                  icon: Icons.error_outline,
+                  title: 'Could not load float history',
+                  subtitle: _error,
+                  actionLabel: 'Retry',
+                  onAction: _load,
+                )
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(12),
+                    children: [
+                      if (hasFilters)
+                        _ActiveFilters(
+                          provider: _provider,
+                          dateRange: _dateRange,
+                          onClearProvider: () {
+                            setState(() {
+                              _provider = null;
+                            });
+                            _load();
+                          },
+                          onClearDates: () {
+                            setState(() {
+                              _dateRange = null;
+                            });
+                            _load();
+                          },
+                        ),
+                      if (hasFilters) const SizedBox(height: 8),
+                      if (_movements.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 48),
+                          child: EmptyState(
+                            icon: Icons.history_outlined,
+                            title: 'No float movements found',
+                            subtitle:
+                                'Treasury float activity will appear here.',
+                          ),
+                        )
+                      else
+                        ..._movements.map(
+                          (movement) => _FloatMovementCard(
+                            movement:
+                                Map<String, dynamic>.from(movement as Map),
+                          ),
+                        ),
+                      if (_page < _totalPages)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8, bottom: 24),
+                          child: OutlinedButton(
+                            onPressed: _loadingMore
+                                ? null
+                                : () => _load(loadMore: true),
+                            child: _loadingMore
+                                ? const SizedBox(
+                                    height: 18,
+                                    width: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Text('Load more'),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
     );
   }
 }
