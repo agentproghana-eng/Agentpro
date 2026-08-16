@@ -177,6 +177,9 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       widget.provider == 'mtn' &&
       widget.transactionType == 'send_money_cross_network';
 
+  bool get _isMtnAirtime =>
+      widget.provider == 'mtn' && widget.transactionType == 'buy_airtime';
+
   String get _providerLabel => switch (widget.provider) {
         'mtn' => 'MTN',
         'telecel' => 'Telecel',
@@ -220,10 +223,17 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   bool get _needsAmount =>
       !kNoAmountPersonalTypes.contains(widget.transactionType) &&
       !_isDataBundle;
-  bool get _needsPhone =>
-      !kNoAmountPersonalTypes.contains(widget.transactionType) &&
-      widget.transactionType != 'withdraw_cash' &&
-      !_isDataBundle;
+
+  bool get _needsPhone {
+    if (_isMtnAirtime) {
+      return _recipientMode == 'other';
+    }
+
+    return !kNoAmountPersonalTypes.contains(widget.transactionType) &&
+        widget.transactionType != 'withdraw_cash' &&
+        !_isDataBundle;
+  }
+
   bool get _needsReference => [
         'send_money_same_network',
         'send_money_cross_network',
@@ -275,7 +285,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     _selectedSimSlot = widget.simSlot;
     _loadSimIdentity();
 
-    if (['buy_airtime', 'buy_mashup'].contains(widget.transactionType)) {
+    if (widget.transactionType == 'buy_mashup') {
       final state = context.read<AuthBloc>().state;
       if (state is AuthAuthenticated) {
         _phoneCtrl.text = (state.user['phone'] ?? '').toString();
@@ -469,6 +479,8 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     final requestFields = <String, dynamic>{
       'provider': widget.provider,
       'transaction_type': widget.transactionType,
+      if (_isMtnAirtime && _recipientMode != null)
+        'recipient_mode': _recipientMode,
       if (_needsAmount) 'amount': double.tryParse(_amountCtrl.text.trim()),
       if (_needsPhone) 'recipient_phone': _phoneCtrl.text.trim(),
       if (_needsReference && reference.isNotEmpty) 'notes': reference,
@@ -494,6 +506,8 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           'transaction': transaction,
           'provider': widget.provider,
           'transaction_type': widget.transactionType,
+          if (_isMtnAirtime && _recipientMode != null)
+            'recipient_mode': _recipientMode,
           'amount': _needsAmount ? _amountCtrl.text.trim() : null,
           'customer_phone': _needsPhone ? _phoneCtrl.text.trim() : null,
           'sim_slot': selectedSim.slot,
@@ -796,6 +810,64 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       key: _formKey,
       child: ListView(
         children: [
+          if (_isMtnAirtime) ...[
+            DropdownButtonFormField<String>(
+              initialValue: _recipientMode,
+              decoration: const InputDecoration(
+                labelText: 'Who is receiving the airtime?',
+                prefixIcon: Icon(Icons.person_outline),
+                helperText: 'Choose the MTN airtime destination',
+              ),
+              items: const [
+                DropdownMenuItem<String>(
+                  value: 'self',
+                  child: Text('Myself'),
+                ),
+                DropdownMenuItem<String>(
+                  value: 'other',
+                  child: Text('Someone else'),
+                ),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  _recipientMode = value;
+
+                  if (value == 'self') {
+                    _phoneCtrl.clear();
+                  }
+                });
+              },
+              validator: (value) =>
+                  value == null ? 'Choose who is receiving the airtime' : null,
+            ),
+            const SizedBox(height: 14),
+            AppTextField(
+              controller: _amountCtrl,
+              label: 'Amount (GHS)',
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              prefixIcon: Icons.payments_outlined,
+              validator: (v) {
+                final n = double.tryParse((v ?? '').trim());
+                if (n == null || n <= 0) {
+                  return 'Enter a valid amount';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 14),
+            if (_needsPhone) ...[
+              AppTextField(
+                controller: _phoneCtrl,
+                label: 'Recipient Phone',
+                keyboardType: TextInputType.phone,
+                prefixIcon: Icons.phone_outlined,
+                validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null,
+              ),
+              const SizedBox(height: 14),
+            ],
+          ],
           if (_isMtnCrossNetwork) ...[
             DropdownButtonFormField<String>(
               initialValue: _crossNetworkSelection,
@@ -822,7 +894,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
             ),
             const SizedBox(height: 14),
           ],
-          if (_needsPhone) ...[
+          if (!_isMtnAirtime && _needsPhone) ...[
             AppTextField(
               controller: _phoneCtrl,
               label: 'Recipient Phone',
@@ -832,7 +904,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
             ),
             const SizedBox(height: 14),
           ],
-          if (_needsAmount) ...[
+          if (!_isMtnAirtime && _needsAmount) ...[
             AppTextField(
               controller: _amountCtrl,
               label: 'Amount (GHS)',
