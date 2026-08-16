@@ -189,6 +189,28 @@ class OfflineQueueService {
     return jsonDecode(raw as String) as Map<String, dynamic>;
   }
 
+  static Future<void> deleteCachedFlow(
+    String provider,
+    String transactionType, {
+    required OfflineQueueIdentity identity,
+    bool isPersonal = false,
+    String? bundleCategory,
+    String? recipientMode,
+  }) async {
+    final key = _flowKey(
+      identity,
+      provider,
+      transactionType,
+      isPersonal: isPersonal,
+      bundleCategory: bundleCategory,
+      recipientMode: recipientMode,
+    );
+
+    if (key == null) return;
+
+    await _templateBox.delete(key);
+  }
+
   static Future<String> queueTransaction({
     required OfflineQueueIdentity identity,
     required Map<String, dynamic> requestFields,

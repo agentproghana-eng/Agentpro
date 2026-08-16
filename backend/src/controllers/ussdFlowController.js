@@ -2,6 +2,7 @@ const { query, withTransaction } = require('../config/database');
 const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
 const { validateFlowSteps } = require('../utils/ussdFlowValidation');
+const { validateFlowMetadata } = require('../utils/ussdFlowMetadataValidation');
 const {
   getFlowBuilderCapabilities,
   getFlowBuilderEligibility,
@@ -143,6 +144,20 @@ exports.createFlow = async (req, res) => {
 
   if (!provider || !transaction_type || !dial_code) {
     return res.status(422).json({ success: false, message: 'provider, transaction_type, and dial_code are required' });
+  }
+
+  const metadataError = validateFlowMetadata({
+    dial_code,
+    success_markers: success_markers ?? [],
+    failure_markers: failure_markers ?? [],
+  });
+
+  if (metadataError) {
+    return res.status(422).json({
+      success: false,
+      code: 'USSD_FLOW_INVALID_METADATA',
+      message: metadataError,
+    });
   }
 
   const stepError = validateFlowSteps(steps);
@@ -312,6 +327,104 @@ exports.updateFlow = async (req, res) => {
       }
       if (flow.company_id !== req.user.company_id) {
         return res.status(403).json({ success: false, message: 'Access denied' });
+      }
+    }
+
+    const effectiveDialCode =
+      dial_code !== undefined ? dial_code : flow.dial_code;
+    const effectiveSuccessMarkers =
+      success_markers !== undefined
+        ? success_markers
+        : flow.success_markers;
+    const effectiveFailureMarkers =
+      failure_markers !== undefined
+        ? failure_markers
+        : flow.failure_markers;
+
+    const shouldValidateMetadata =
+      dial_code !== undefined ||
+      success_markers !== undefined ||
+      failure_markers !== undefined ||
+      (is_active === true && flow.is_active !== true);
+
+    if (
+      shouldValidateMetadata &&
+      effectiveDialCode !== undefined
+    ) {
+      const metadataError = validateFlowMetadata({
+        dial_code: effectiveDialCode,
+        success_markers: effectiveSuccessMarkers ?? [],
+        failure_markers: effectiveFailureMarkers ?? [],
+      });
+
+      if (metadataError) {
+        return res.status(422).json({
+          success: false,
+          code: 'USSD_FLOW_INVALID_METADATA',
+          message: metadataError,
+        });
+      }
+    }
+
+    // Reactivation is a new decision to make this flow executable again.
+    // Re-check the current Flow Builder capability instead of reviving a
+    // provider/type that has subsequently been disabled.
+    if (is_active === true && flow.is_active !== true) {
+      const isGlobalFlow = flow.company_id === null;
+
+      const eligibility = isGlobalFlow
+        ? await getGlobalFlowBuilderEligibility(
+            flow.provider,
+            flow.transaction_type
+          )
+        : await getFlowBuilderEligibility(
+            'business',
+            flow.provider,
+            flow.transaction_type
+          );
+
+      if (!eligibility.provider_registered) {
+        return res.status(422).json({
+          success: false,
+          code: 'USSD_PROVIDER_NOT_REGISTERED',
+          message:
+            'Provider is no longer registered for USSD Flow Builder configuration.',
+        });
+      }
+
+      if (!eligibility.transaction_type_builder_enabled) {
+        return res.status(422).json({
+          success: false,
+          code: 'USSD_FLOW_TYPE_NOT_ENABLED',
+          message: isGlobalFlow
+            ? 'This transaction type is no longer enabled for Global USSD Flow Builder configuration.'
+            : 'This transaction type is no longer enabled for Business USSD Flow Builder configuration.',
+        });
+      }
+    }
+
+    // If reactivation does not replace the steps, validate the persisted
+    // configuration before making it executable again. This protects
+    // historical flows created before today's stricter safety rules.
+    if (is_active === true && flow.is_active !== true && steps === undefined) {
+      const persistedStepsResult = await query(
+        `SELECT match_all, action, action_value
+         FROM ussd_flow_steps
+         WHERE flow_id = $1
+         ORDER BY step_order`,
+        [id]
+      );
+
+      const persistedStepError =
+        validateFlowSteps(persistedStepsResult.rows);
+
+      if (persistedStepError) {
+        return res.status(422).json({
+          success: false,
+          code: 'USSD_FLOW_INVALID_CONFIGURATION',
+          message:
+            'This flow cannot be reactivated because its saved steps are no longer safe. Edit and save the flow before reactivating it.',
+        });
       }
     }
 
@@ -527,6 +640,30 @@ exports.resolveFlow = async (req, res) => {
       });
     }
 
+    // Validate stored flow metadata at runtime as well. Historical rows may
+    // predate the current builder validation rules.
+    if (flow.dial_code !== undefined) {
+      const runtimeMetadataError = validateFlowMetadata({
+        dial_code: flow.dial_code,
+        success_markers: flow.success_markers ?? [],
+        failure_markers: flow.failure_markers ?? [],
+      });
+
+      if (runtimeMetadataError) {
+        logger.warn('Unsafe Business USSD flow metadata blocked at runtime', {
+          flowId: flow.id,
+          reason: runtimeMetadataError,
+        });
+
+        return res.status(409).json({
+          success: false,
+          code: 'USSD_FLOW_INVALID_CONFIGURATION',
+          message:
+            'The active USSD flow metadata is invalid and cannot be executed.',
+        });
+      }
+    }
+
     const stepsResult = await query(
       `SELECT match_all, action, action_value
        FROM ussd_flow_steps
@@ -534,6 +671,22 @@ exports.resolveFlow = async (req, res) => {
        ORDER BY step_order`,
       [flow.id]
     );
+
+    const runtimeStepError = validateFlowSteps(stepsResult.rows);
+
+    if (runtimeStepError) {
+      logger.warn('Unsafe Business USSD flow blocked at runtime', {
+        flowId: flow.id,
+        reason: runtimeStepError,
+      });
+
+      return res.status(409).json({
+        success: false,
+        code: 'USSD_FLOW_INVALID_CONFIGURATION',
+        message:
+          'The active USSD flow configuration is invalid and cannot be executed.',
+      });
+    }
 
     res.json({
       success: true,

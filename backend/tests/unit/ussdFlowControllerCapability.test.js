@@ -63,7 +63,7 @@ function validBody() {
   };
 }
 
-describe('USSD Flow Builder create capability enforcement', () => {
+describe('USSD Flow Builder capability enforcement', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
@@ -451,4 +451,552 @@ describe('USSD Flow Builder create capability enforcement', () => {
       })
     );
   });
+
+  test('Business reactivation rejects a type that is no longer enabled', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 'company-flow-1',
+          company_id: 'company-1',
+          owner_user_id: null,
+          provider: 'mtn',
+          transaction_type: 'cash_in',
+          is_active: false,
+        },
+      ],
+    });
+
+    mockGetFlowBuilderEligibility.mockResolvedValueOnce({
+      provider_registered: true,
+      transaction_type_builder_enabled: false,
+    });
+
+    const req = {
+      user: {
+        id: 'business-user-1',
+        role: 'business_owner',
+        company_id: 'company-1',
+      },
+      params: {
+        id: 'company-flow-1',
+      },
+      body: {
+        is_active: true,
+      },
+    };
+    const res = makeRes();
+
+    await ussdFlowController.updateFlow(req, res);
+
+    expect(mockGetFlowBuilderEligibility).toHaveBeenCalledWith(
+      'business',
+      'mtn',
+      'cash_in'
+    );
+
+    expect(mockGetGlobalFlowBuilderEligibility).not.toHaveBeenCalled();
+    expect(mockWithTransaction).not.toHaveBeenCalled();
+
+    expect(res.status).toHaveBeenCalledWith(422);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: false,
+        code: 'USSD_FLOW_TYPE_NOT_ENABLED',
+      })
+    );
+  });
+
+  test('Global reactivation uses any-mode Global eligibility', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 'global-flow-1',
+          company_id: null,
+          owner_user_id: null,
+          provider: 'mtn',
+          transaction_type: 'cash_in',
+          is_active: false,
+        },
+      ],
+    });
+
+    mockGetGlobalFlowBuilderEligibility.mockResolvedValueOnce({
+      provider_registered: true,
+      transaction_type_builder_enabled: false,
+    });
+
+    const req = {
+      user: {
+        id: 'superuser-1',
+        role: 'superuser',
+        company_id: null,
+      },
+      params: {
+        id: 'global-flow-1',
+      },
+      body: {
+        is_active: true,
+      },
+    };
+    const res = makeRes();
+
+    await ussdFlowController.updateFlow(req, res);
+
+    expect(mockGetGlobalFlowBuilderEligibility).toHaveBeenCalledWith(
+      'mtn',
+      'cash_in'
+    );
+
+    expect(mockGetFlowBuilderEligibility).not.toHaveBeenCalled();
+    expect(mockWithTransaction).not.toHaveBeenCalled();
+
+    expect(res.status).toHaveBeenCalledWith(422);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: false,
+        code: 'USSD_FLOW_TYPE_NOT_ENABLED',
+      })
+    );
+  });
+
+  test('Personal reactivation rejects a type that is no longer enabled', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 'personal-flow-1',
+          owner_user_id: 'personal-user-1',
+          company_id: null,
+          provider: 'telecel',
+          transaction_type: 'cash_in',
+          is_active: false,
+        },
+      ],
+    });
+
+    mockGetFlowBuilderEligibility.mockResolvedValueOnce({
+      provider_registered: true,
+      transaction_type_builder_enabled: false,
+    });
+
+    const req = {
+      user: {
+        id: 'personal-user-1',
+      },
+      params: {
+        id: 'personal-flow-1',
+      },
+      body: {
+        is_active: true,
+      },
+    };
+    const res = makeRes();
+
+    await personalUssdFlowController.updateFlow(req, res);
+
+    expect(mockGetFlowBuilderEligibility).toHaveBeenCalledWith(
+      'personal',
+      'telecel',
+      'cash_in'
+    );
+
+    expect(mockWithTransaction).not.toHaveBeenCalled();
+
+    expect(res.status).toHaveBeenCalledWith(422);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: false,
+        code: 'USSD_FLOW_TYPE_NOT_ENABLED',
+      })
+    );
+  });
+
+  test('deactivation does not require a Flow Builder capability check', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 'company-flow-1',
+          company_id: 'company-1',
+          owner_user_id: null,
+          provider: 'mtn',
+          transaction_type: 'cash_in',
+          is_active: true,
+        },
+      ],
+    });
+
+    mockWithTransaction.mockResolvedValueOnce({
+      id: 'company-flow-1',
+      is_active: false,
+    });
+
+    const req = {
+      user: {
+        id: 'business-user-1',
+        role: 'business_owner',
+        company_id: 'company-1',
+      },
+      params: {
+        id: 'company-flow-1',
+      },
+      body: {
+        is_active: false,
+      },
+    };
+    const res = makeRes();
+
+    await ussdFlowController.updateFlow(req, res);
+
+    expect(mockGetFlowBuilderEligibility).not.toHaveBeenCalled();
+    expect(mockGetGlobalFlowBuilderEligibility).not.toHaveBeenCalled();
+    expect(mockWithTransaction).toHaveBeenCalledTimes(1);
+
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: true,
+      })
+    );
+  });
+
+
+
+  test('Business reactivation rejects unsafe persisted steps', async () => {
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'company-flow-unsafe',
+            company_id: 'company-1',
+            owner_user_id: null,
+            provider: 'mtn',
+            transaction_type: 'cash_in',
+            is_active: false,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            match_all: ['menu'],
+            action: 'send_digit',
+            action_value: '1',
+          },
+        ],
+      });
+
+    const req = {
+      user: {
+        id: 'business-user-1',
+        role: 'business_owner',
+        company_id: 'company-1',
+      },
+      params: {
+        id: 'company-flow-unsafe',
+      },
+      body: {
+        is_active: true,
+      },
+    };
+
+    const res = makeRes();
+
+    await ussdFlowController.updateFlow(req, res);
+
+    expect(mockWithTransaction).not.toHaveBeenCalled();
+
+    expect(res.status).toHaveBeenCalledWith(422);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'USSD_FLOW_INVALID_CONFIGURATION',
+      })
+    );
+  });
+
+  test('Personal reactivation rejects unsafe persisted steps', async () => {
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'personal-flow-unsafe',
+            owner_user_id: 'personal-user-1',
+            company_id: null,
+            provider: 'telecel',
+            transaction_type: 'buy_airtime',
+            is_active: false,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            match_all: ['menu'],
+            action: 'send_digit',
+            action_value: '1',
+          },
+        ],
+      });
+
+    const req = {
+      user: {
+        id: 'personal-user-1',
+      },
+      params: {
+        id: 'personal-flow-unsafe',
+      },
+      body: {
+        is_active: true,
+      },
+    };
+
+    const res = makeRes();
+
+    await personalUssdFlowController.updateFlow(req, res);
+
+    expect(mockWithTransaction).not.toHaveBeenCalled();
+
+    expect(res.status).toHaveBeenCalledWith(422);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'USSD_FLOW_INVALID_CONFIGURATION',
+      })
+    );
+  });
+
+  test('Business resolver refuses an unsafe active stored flow', async () => {
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'company-active-unsafe',
+            company_id: 'company-1',
+            owner_user_id: null,
+            provider: 'mtn',
+            transaction_type: 'cash_in',
+            is_active: true,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            match_all: ['menu'],
+            action: 'send_digit',
+            action_value: '1',
+          },
+        ],
+      });
+
+    const req = {
+      user: {
+        id: 'business-user-1',
+        company_id: 'company-1',
+      },
+      query: {
+        provider: 'mtn',
+        transaction_type: 'cash_in',
+      },
+    };
+
+    const res = makeRes();
+
+    await ussdFlowController.resolveFlow(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'USSD_FLOW_INVALID_CONFIGURATION',
+      })
+    );
+  });
+
+  test('Personal resolver refuses an unsafe active stored flow', async () => {
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'personal-active-unsafe',
+            owner_user_id: 'personal-user-1',
+            company_id: null,
+            provider: 'telecel',
+            transaction_type: 'buy_airtime',
+            is_active: true,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            match_all: ['menu'],
+            action: 'send_digit',
+            action_value: '1',
+          },
+        ],
+      });
+
+    const req = {
+      user: {
+        id: 'personal-user-1',
+      },
+      query: {
+        provider: 'telecel',
+        transaction_type: 'buy_airtime',
+      },
+    };
+
+    const res = makeRes();
+
+    await personalUssdFlowController.resolveFlow(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'USSD_FLOW_INVALID_CONFIGURATION',
+      })
+    );
+  });
+
+
+
+  test('Business create rejects an unsafe dial code', async () => {
+    const body = validBody();
+    body.dial_code = 'tel:*170#';
+
+    const req = {
+      user: {
+        id: 'business-user-1',
+        role: 'business_owner',
+        company_id: 'company-1',
+      },
+      body,
+    };
+
+    const res = makeRes();
+
+    await ussdFlowController.createFlow(req, res);
+
+    expect(mockGetFlowBuilderEligibility).not.toHaveBeenCalled();
+    expect(mockWithTransaction).not.toHaveBeenCalled();
+
+    expect(res.status).toHaveBeenCalledWith(422);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'USSD_FLOW_INVALID_METADATA',
+      })
+    );
+  });
+
+  test('Personal create rejects ambiguous outcome markers', async () => {
+    const body = validBody();
+    body.success_markers = ['completed'];
+    body.failure_markers = ['COMPLETED'];
+
+    const req = {
+      user: {
+        id: 'personal-user-1',
+      },
+      body,
+    };
+
+    const res = makeRes();
+
+    await personalUssdFlowController.createFlow(req, res);
+
+    expect(mockGetFlowBuilderEligibility).not.toHaveBeenCalled();
+    expect(mockWithTransaction).not.toHaveBeenCalled();
+
+    expect(res.status).toHaveBeenCalledWith(422);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'USSD_FLOW_INVALID_METADATA',
+      })
+    );
+  });
+
+  test('Business update rejects conflicting effective markers', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 'company-flow-metadata',
+          company_id: 'company-1',
+          owner_user_id: null,
+          provider: 'mtn',
+          transaction_type: 'cash_in',
+          dial_code: '*170#',
+          success_markers: ['successful'],
+          failure_markers: ['failed'],
+          is_active: true,
+        },
+      ],
+    });
+
+    const req = {
+      user: {
+        id: 'business-user-1',
+        role: 'business_owner',
+        company_id: 'company-1',
+      },
+      params: {
+        id: 'company-flow-metadata',
+      },
+      body: {
+        success_markers: ['FAILED'],
+      },
+    };
+
+    const res = makeRes();
+
+    await ussdFlowController.updateFlow(req, res);
+
+    expect(mockWithTransaction).not.toHaveBeenCalled();
+
+    expect(res.status).toHaveBeenCalledWith(422);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'USSD_FLOW_INVALID_METADATA',
+      })
+    );
+  });
+
+  test('Business resolver refuses unsafe stored metadata', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 'company-flow-bad-metadata',
+          company_id: 'company-1',
+          owner_user_id: null,
+          provider: 'mtn',
+          transaction_type: 'cash_in',
+          dial_code: 'tel:*170#',
+          success_markers: ['successful'],
+          failure_markers: ['failed'],
+          is_active: true,
+        },
+      ],
+    });
+
+    const req = {
+      user: {
+        id: 'business-user-1',
+        company_id: 'company-1',
+      },
+      query: {
+        provider: 'mtn',
+        transaction_type: 'cash_in',
+      },
+    };
+
+    const res = makeRes();
+
+    await ussdFlowController.resolveFlow(req, res);
+
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'USSD_FLOW_INVALID_CONFIGURATION',
+      })
+    );
+  });
+
+
 });

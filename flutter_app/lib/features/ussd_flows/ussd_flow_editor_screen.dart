@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
+import 'ussd_flow_draft_validation.dart';
 
 class _StepDraft {
   final matchAllCtrl = TextEditingController();
@@ -299,64 +300,44 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
       return;
     }
 
-    if (_dialCodeCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Dial code is required')));
-      return;
-    }
-    if (_steps.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('At least one step is required')),
-      );
-      return;
-    }
+    final dialCode = _dialCodeCtrl.text.trim();
 
-    final pinPromptIndex = _steps.indexWhere(
-      (step) => step.action == 'pin_prompt',
+    final successMarkers = _successMarkersCtrl.text
+        .split(',')
+        .map((marker) => marker.trim().toLowerCase())
+        .where((marker) => marker.isNotEmpty)
+        .toList();
+
+    final failureMarkers = _failureMarkersCtrl.text
+        .split(',')
+        .map((marker) => marker.trim().toLowerCase())
+        .where((marker) => marker.isNotEmpty)
+        .toList();
+
+    final metadataError = validateUssdFlowDraftMetadata(
+      dialCode: dialCode,
+      successMarkers: successMarkers,
+      failureMarkers: failureMarkers,
     );
 
-    final autoConfirmIndexes = <int>[];
-
-    for (var i = 0; i < _steps.length; i++) {
-      final step = _steps[i];
-
-      if (step.action != 'auto_confirm_once') continue;
-
-      autoConfirmIndexes.add(i);
-
-      if (!RegExp(r'^[0-9]$').hasMatch(step.actionValueCtrl.text.trim())) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Step ${i + 1}: Auto-Confirm Once must be exactly one '
-              'numeric menu digit.',
-            ),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
-        return;
-      }
-    }
-
-    if (autoConfirmIndexes.length > 1) {
+    if (metadataError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Only one Auto-Confirm Once step is allowed per flow.'),
+        SnackBar(
+          content: Text(metadataError),
           backgroundColor: AppTheme.errorColor,
         ),
       );
       return;
     }
 
-    if (autoConfirmIndexes.isNotEmpty &&
-        (pinPromptIndex < 0 || autoConfirmIndexes.first <= pinPromptIndex)) {
+    final stepPayload = _steps.map((step) => step.toMap()).toList();
+
+    final stepError = validateUssdFlowDraftSteps(stepPayload);
+
+    if (stepError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Step ${autoConfirmIndexes.first + 1}: Auto-Confirm Once '
-            'must be placed after the PIN Prompt step.',
-          ),
+          content: Text(stepError),
           backgroundColor: AppTheme.errorColor,
         ),
       );
@@ -367,24 +348,16 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
     final payload = {
       'provider': _provider,
       'transaction_type': _transactionType,
-      'dial_code': _dialCodeCtrl.text.trim(),
-      'success_markers': _successMarkersCtrl.text
-          .split(',')
-          .map((s) => s.trim().toLowerCase())
-          .where((s) => s.isNotEmpty)
-          .toList(),
-      'failure_markers': _failureMarkersCtrl.text
-          .split(',')
-          .map((s) => s.trim().toLowerCase())
-          .where((s) => s.isNotEmpty)
-          .toList(),
+      'dial_code': dialCode,
+      'success_markers': successMarkers,
+      'failure_markers': failureMarkers,
       'bundle_category': _bundleCategoryCtrl.text.trim().isEmpty
           ? null
           : _bundleCategoryCtrl.text.trim(),
       'recipient_mode': _recipientModeCtrl.text.trim().isEmpty
           ? null
           : _recipientModeCtrl.text.trim(),
-      'steps': _steps.map((s) => s.toMap()).toList(),
+      'steps': stepPayload,
     };
 
     try {

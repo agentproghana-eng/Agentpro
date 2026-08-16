@@ -11,6 +11,8 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 import '../../core/services/offline_queue_service.dart';
 import '../../core/services/dashboard_refresh_service.dart';
+import '../ussd_flows/ussd_flow_runtime_policy.dart';
+import '../ussd_flows/ussd_flow_draft_validation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/auth/auth_bloc.dart';
 
@@ -488,32 +490,14 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
     if (mounted) setState(() => _statusMessage = 'Looking up automation...');
 
-    // Use a supplied offline flow first, then the synchronously cached
-    // Hive flow. This avoids waiting for another HTTP request during the
-    // common transaction path. An online refresh runs in the background
-    // so later transactions receive any server-side flow changes.
+    // A flow explicitly supplied in the transaction payload belongs to
+    // the genuine offline path created by TransactionScreen. The device
+    // cannot ask the server for fresher configuration in that situation,
+    // so this scoped cached flow is intentionally authoritative for this
+    // offline attempt.
     final suppliedCachedFlow = transaction['cached_flow'];
-    final cachedFlow = suppliedCachedFlow is Map
-        ? Map<String, dynamic>.from(suppliedCachedFlow)
-        : OfflineQueueService.getCachedFlow(
-            provider,
-            transactionType,
-            identity: _offlineIdentity,
-            isPersonal: widget.isPersonal,
-            bundleCategory: bundleCategory,
-            recipientMode: recipientMode,
-          );
 
-    if (cachedFlow != null) {
-      unawaited(
-        _refreshCachedFlow(
-          provider: provider,
-          transactionType: transactionType,
-          bundleCategory: bundleCategory,
-          recipientMode: recipientMode,
-        ),
-      );
-
+    if (suppliedCachedFlow is Map) {
       await _startResolvedFlow(
         transactionId: transactionId,
         automationParams: Map<String, String>.from(automationParams),
@@ -521,18 +505,25 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         provider: provider,
         telecelOperatorId: telecelOperatorId,
         simSlot: simSlot,
-        flowData: cachedFlow,
+        flowData: Map<String, dynamic>.from(suppliedCachedFlow),
         selectionsInOrder: selectionsInOrder,
       );
       return;
     }
 
-    // Not MTN/Telecel's hardcoded flows - check whether a custom USSD
-    // Flow Builder flow exists for this provider/transaction_type before
-    // falling back to the single-dial USSDEngine below. Silently falls
-    // through if none exists (404) or the lookup fails for any other
-    // reason - most provider/type combos simply aren't customized, which
-    // is the normal, expected case, not an error worth surfacing.
+    // Online-started transactions must ask the server for the current active
+    // Custom USSD flow before executing local automation. The local cache is
+    // only a transient-failure fallback and must never override an
+    // authoritative server response.
+    final fallbackCachedFlow = OfflineQueueService.getCachedFlow(
+      provider,
+      transactionType,
+      identity: _offlineIdentity,
+      isPersonal: widget.isPersonal,
+      bundleCategory: bundleCategory,
+      recipientMode: recipientMode,
+    );
+
     try {
       final resolveRes = await ApiClient.instance.get(
         widget.isPersonal
@@ -545,23 +536,25 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
           if (recipientMode != null) 'recipient_mode': recipientMode,
         },
       );
+
       final rawFlowData = resolveRes.data['data'];
+
       if (rawFlowData is! Map) {
-        throw const FormatException('Invalid USSD flow response');
+        throw const FormatException(
+          'Invalid USSD flow response',
+        );
       }
 
       final flowData = Map<String, dynamic>.from(rawFlowData);
 
-      unawaited(
-        OfflineQueueService.cacheFlow(
-          provider,
-          transactionType,
-          flowData,
-          identity: _offlineIdentity,
-          isPersonal: widget.isPersonal,
-          bundleCategory: bundleCategory,
-          recipientMode: recipientMode,
-        ),
+      await OfflineQueueService.cacheFlow(
+        provider,
+        transactionType,
+        flowData,
+        identity: _offlineIdentity,
+        isPersonal: widget.isPersonal,
+        bundleCategory: bundleCategory,
+        recipientMode: recipientMode,
       );
 
       await _startResolvedFlow(
@@ -575,13 +568,74 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         selectionsInOrder: selectionsInOrder,
       );
       return;
-    } on DioException {
-      // 404 just means no custom flow exists for this combo - fall
-      // through to the single-dial path below, same as always. Any
-      // other error also falls through rather than blocking the
-      // transaction entirely on a lookup failure.
+    } on DioException catch (error) {
+      final statusCode = error.response?.statusCode;
+      final responseData = error.response?.data;
+      final errorCode =
+          responseData is Map ? responseData['code']?.toString() : null;
+
+      if (errorCode == 'USSD_FLOW_INVALID_CONFIGURATION') {
+        await OfflineQueueService.deleteCachedFlow(
+          provider,
+          transactionType,
+          identity: _offlineIdentity,
+          isPersonal: widget.isPersonal,
+          bundleCategory: bundleCategory,
+          recipientMode: recipientMode,
+        );
+
+        final reason = responseData is Map
+            ? responseData['message']?.toString() ??
+                'The configured USSD flow is invalid.'
+            : 'The configured USSD flow is invalid.';
+
+        if (mounted) {
+          setState(() => _simWarning = reason);
+        }
+
+        await _reportResult(
+          transactionId,
+          USSDResult(
+            outcome: USSDStatus.failed,
+            failureReason: reason,
+            sessionLog: const [],
+          ),
+        );
+
+        return;
+      }
+
+      if (statusCode == 404) {
+        // The server is authoritative. No active flow exists anymore for
+        // this exact provider/type/variant, so remove its stale local copy.
+        await OfflineQueueService.deleteCachedFlow(
+          provider,
+          transactionType,
+          identity: _offlineIdentity,
+          isPersonal: widget.isPersonal,
+          bundleCategory: bundleCategory,
+          recipientMode: recipientMode,
+        );
+      } else if (fallbackCachedFlow != null &&
+          shouldFallbackToCachedUssdFlow(
+            hasHttpResponse: error.response != null,
+            statusCode: statusCode,
+          )) {
+        await _startResolvedFlow(
+          transactionId: transactionId,
+          automationParams: Map<String, String>.from(automationParams),
+          transactionType: transactionType,
+          provider: provider,
+          telecelOperatorId: telecelOperatorId,
+          simSlot: simSlot,
+          flowData: fallbackCachedFlow,
+          selectionsInOrder: selectionsInOrder,
+        );
+        return;
+      }
     } catch (_) {
-      // Ignore and fall through to single-dial below.
+      // A malformed online response is not permission to execute an older
+      // cached flow. Continue to normal template/no-automation handling.
     }
 
     // No cached flow, no online Flow Builder flow, and no legacy
@@ -717,6 +771,31 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     final steps =
         rawSteps.map((step) => Map<String, dynamic>.from(step as Map)).toList();
 
+    // Never trust historical/offline configuration solely because it came
+    // from the scoped cache or database. Validate again at the final device
+    // execution boundary before Accessibility is allowed to act on it.
+    final flowValidationError = validateUssdFlowDraftSteps(steps);
+
+    if (flowValidationError != null) {
+      final reason =
+          'USSD automation configuration is unsafe: $flowValidationError';
+
+      if (mounted) {
+        setState(() => _simWarning = reason);
+      }
+
+      await _reportResult(
+        transactionId,
+        USSDResult(
+          outcome: USSDStatus.failed,
+          failureReason: reason,
+          sessionLog: const [],
+        ),
+      );
+
+      return;
+    }
+
     final successMarkers = (flowData['success_markers'] as List?)
         ?.map((value) => value.toString())
         .toList();
@@ -724,6 +803,32 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     final failureMarkers = (flowData['failure_markers'] as List?)
         ?.map((value) => value.toString())
         .toList();
+
+    final metadataValidationError = validateUssdFlowDraftMetadata(
+      dialCode: dialCode,
+      successMarkers: successMarkers ?? const <String>[],
+      failureMarkers: failureMarkers ?? const <String>[],
+    );
+
+    if (metadataValidationError != null) {
+      final reason =
+          'USSD automation metadata is unsafe: $metadataValidationError';
+
+      if (mounted) {
+        setState(() => _simWarning = reason);
+      }
+
+      await _reportResult(
+        transactionId,
+        USSDResult(
+          outcome: USSDStatus.failed,
+          failureReason: reason,
+          sessionLog: const [],
+        ),
+      );
+
+      return;
+    }
 
     final selectionsMap = <String, String>{};
 
@@ -753,43 +858,6 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       failureMarkers: failureMarkers,
       selections: selectionsMap.isEmpty ? null : selectionsMap,
     );
-  }
-
-  Future<void> _refreshCachedFlow({
-    required String provider,
-    required String transactionType,
-    String? bundleCategory,
-    String? recipientMode,
-  }) async {
-    try {
-      final response = await ApiClient.instance.get(
-        widget.isPersonal
-            ? '/personal-ussd-flows/resolve'
-            : '/ussd-flows/resolve',
-        queryParameters: {
-          'provider': provider,
-          'transaction_type': transactionType,
-          if (bundleCategory != null) 'bundle_category': bundleCategory,
-          if (recipientMode != null) 'recipient_mode': recipientMode,
-        },
-      );
-
-      final rawFlowData = response.data['data'];
-      if (rawFlowData is! Map) return;
-
-      await OfflineQueueService.cacheFlow(
-        provider,
-        transactionType,
-        Map<String, dynamic>.from(rawFlowData),
-        identity: _offlineIdentity!,
-        isPersonal: widget.isPersonal,
-        bundleCategory: bundleCategory,
-        recipientMode: recipientMode,
-      );
-    } catch (_) {
-      // Refreshing future-use cache must never delay or interrupt
-      // the active USSD transaction.
-    }
   }
 
   Future<void> _startAccessibilityAutomation(
