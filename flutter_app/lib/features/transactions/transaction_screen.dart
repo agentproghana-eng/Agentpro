@@ -143,6 +143,20 @@ class _TransactionScreenState extends State<TransactionScreen> {
   String get _title =>
       transactionTypeLabel(widget.transactionType, _selectedProvider);
 
+  bool get _providerLocked {
+    final initialProvider = widget.initialProvider?.trim();
+
+    return _needsReference ||
+        (initialProvider != null && initialProvider.isNotEmpty);
+  }
+
+  String get _selectedProviderLabel => switch (_selectedProvider) {
+        'mtn' => 'MTN',
+        'telecel' => 'Telecel',
+        'at_money' => 'AT Money',
+        _ => _selectedProvider,
+      };
+
   bool get _needsRecipient => ['send_money'].contains(widget.transactionType);
   // Pay to Agent and Pay to Merchant (MTN's "Pay To" menu, both
   // branches) - both confirmed via live device mapping to need a
@@ -305,7 +319,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         _simDetectionComplete = true;
         _simPermissionDenied = false;
 
-        if (!_needsReference &&
+        if (!_providerLocked &&
             available.isNotEmpty &&
             !available.contains(_selectedProvider)) {
           providerChanged = true;
@@ -459,6 +473,10 @@ class _TransactionScreenState extends State<TransactionScreen> {
   }
 
   void _selectProvider(String provider) {
+    if (_providerLocked) {
+      return;
+    }
+
     if (!_providerSupportsTransaction(provider)) {
       return;
     }
@@ -504,8 +522,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
           content: Text(
             _simPermissionDenied
                 ? 'Allow phone permission before starting this transaction.'
-                : _needsReference
-                    ? 'An MTN SIM is required for this transaction.'
+                : _providerLocked
+                    ? 'The $_selectedProviderLabel SIM selected for this transaction is required.'
                     : 'No supported SIM is available for this transaction.',
           ),
         ),
@@ -982,26 +1000,26 @@ class _TransactionScreenState extends State<TransactionScreen> {
             children: [
               // SIM-aware network selection.
               //
-              // Pay to Agent / Pay to Merchant remain MTN-only, but the
-              // exact physical MTN SIM must still be visible and selectable
-              // so same-provider dual-SIM transactions are attributable to
-              // the correct wallet.
-              if (_needsReference) ...[
+              // When a transaction is launched from a provider/SIM context,
+              // keep that provider locked for the entire transaction. The
+              // exact physical SIM remains visible, and same-provider dual-SIM
+              // users may explicitly choose another SIM from that provider.
+              if (_providerLocked) ...[
                 if (!_simDetectionComplete) ...[
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        SizedBox(
+                        const SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         ),
-                        SizedBox(width: 10),
+                        const SizedBox(width: 10),
                         Text(
-                          'Detecting MTN SIMs…',
-                          style: TextStyle(fontWeight: FontWeight.w600),
+                          'Detecting $_selectedProviderLabel SIMs…',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                       ],
                     ),
@@ -1025,8 +1043,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
                         Expanded(
                           child: Text(
                             _simPermissionDenied
-                                ? 'Allow phone permission to detect your MTN SIM.'
-                                : 'Insert an MTN SIM to continue.',
+                                ? 'Allow phone permission to detect your $_selectedProviderLabel SIM.'
+                                : 'Insert a $_selectedProviderLabel SIM to continue.',
                             style: TextStyle(
                               color: context.appSecondaryText,
                               fontSize: 12,
@@ -1125,12 +1143,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
                       children: [
                         Icon(
                           Icons.sim_card_outlined,
-                          color: AppTheme.providerColor('mtn'),
+                          color: AppTheme.providerColor(_selectedProvider),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            'MTN locked · Using SIM ${_selectedSim!.slot + 1}',
+                            '$_selectedProviderLabel locked · Using SIM ${_selectedSim!.slot + 1}',
                             style: const TextStyle(
                               fontWeight: FontWeight.w700,
                               fontSize: 13,
@@ -1143,11 +1161,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
                   ),
                   if (_selectedProviderSims.length > 1) ...[
                     const SizedBox(height: 14),
-                    const Align(
+                    Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        'Select physical MTN SIM',
-                        style: TextStyle(
+                        'Select physical $_selectedProviderLabel SIM',
+                        style: const TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 13,
                         ),
@@ -1159,7 +1177,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                       runSpacing: 8,
                       children: _selectedProviderSims.map((sim) {
                         final selected = _selectedSim?.slot == sim.slot;
-                        final color = AppTheme.providerColor('mtn');
+                        final color = AppTheme.providerColor(_selectedProvider);
 
                         return ChoiceChip(
                           selected: selected,
@@ -1498,7 +1516,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 ],
               ],
 
-              // Merchant ID (Pay to Merchant)
+              // Provider-specific identifier.
+              //
+              // Pay to Merchant uses a Merchant ID rather than a phone
+              // number. Keep that identifier truthful instead of presenting
+              // it as a phone field.
               if (_needsMerchantId) ...[
                 AppTextField(
                   controller: _merchantIdCtrl,
@@ -1510,6 +1532,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 const SizedBox(height: 14),
               ],
 
+              // Telecel Agent Data Bundle is selected from the provider
+              // bundle menu and therefore has its own specialized control.
               if (_isTelecelDataBundle) ...[
                 DropdownButtonFormField<AgentTelecelBundleOption>(
                   initialValue: _selectedTelecelBundle,
@@ -1543,10 +1567,10 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 const SizedBox(height: 14),
               ],
 
-              // Customer Phone - labeled "Enter Number" for Pay to Agent
-              // (no walk-in customer in that flow, just a number being
-              // paid), "Customer Phone Number" everywhere else. Not
-              // shown at all for Pay to Merchant (Merchant ID instead).
+              // 1. PHONE NUMBER
+              //
+              // Business Deposit / Withdrawal genuinely use an Agent Short
+              // Code, so retain that terminology for those specific flows.
               if (_needsCustomer) ...[
                 AppTextField(
                   controller: _customerPhoneCtrl,
@@ -1555,9 +1579,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     'business_withdrawal',
                   ].contains(widget.transactionType)
                       ? 'Agent Short Code'
-                      : (_needsReference
-                          ? 'Enter Number'
-                          : 'Customer Phone Number'),
+                      : 'Phone Number',
                   hint: [
                     'business_deposit',
                     'business_withdrawal',
@@ -1566,38 +1588,37 @@ class _TransactionScreenState extends State<TransactionScreen> {
                       : '024XXXXXXX',
                   keyboardType: TextInputType.phone,
                   prefixIcon: Icons.phone_outlined,
-                  validator: (v) =>
-                      v!.isEmpty ? 'Phone number is required' : null,
+                  validator: (v) {
+                    if (v == null || v.isEmpty) {
+                      return [
+                        'business_deposit',
+                        'business_withdrawal',
+                      ].contains(widget.transactionType)
+                          ? 'Agent short code is required'
+                          : 'Phone number is required';
+                    }
+
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 14),
               ],
 
-              // Recipient (Send Money)
               if (_needsRecipient) ...[
                 AppTextField(
                   controller: _recipientPhoneCtrl,
-                  label: 'Recipient Phone Number',
+                  label: 'Phone Number',
                   hint: '024XXXXXXX',
                   keyboardType: TextInputType.phone,
-                  prefixIcon: Icons.person_add_outlined,
-                  validator: (v) =>
-                      v!.isEmpty ? 'Recipient phone is required' : null,
+                  prefixIcon: Icons.phone_outlined,
+                  validator: (v) => v == null || v.isEmpty
+                      ? 'Phone number is required'
+                      : null,
                 ),
                 const SizedBox(height: 14),
               ],
 
-              // Reference (Pay to Agent / Pay to Merchant)
-              if (_needsReference) ...[
-                AppTextField(
-                  controller: _referenceCtrl,
-                  label: 'Reference',
-                  prefixIcon: Icons.notes_outlined,
-                  validator: (v) => v!.isEmpty ? 'Reference is required' : null,
-                ),
-                const SizedBox(height: 14),
-              ],
-
-              // Amount
+              // 2. AMOUNT
               if (_needsAmount) ...[
                 TextFormField(
                   controller: _amountCtrl,
@@ -1605,7 +1626,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     decimal: true,
                   ),
                   inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                    FilteringTextInputFormatter.allow(
+                      RegExp(r'[0-9.]'),
+                    ),
                   ],
                   decoration: InputDecoration(
                     labelText: 'Amount (GH₵)',
@@ -1623,18 +1646,36 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     fontWeight: FontWeight.bold,
                   ),
                   validator: (v) {
-                    if (v!.isEmpty) return 'Amount is required';
+                    if (v == null || v.isEmpty) {
+                      return 'Amount is required';
+                    }
+
                     final n = double.tryParse(v);
-                    if (n == null || n <= 0) return 'Enter a valid amount';
+
+                    if (n == null || n <= 0) {
+                      return 'Enter a valid amount';
+                    }
+
                     return null;
                   },
                 ),
                 const SizedBox(height: 14),
               ],
 
-              // Transfer Charges default to 1% of the principal.
-              // The field remains editable because the actual provider
-              // charge can vary for a transaction.
+              // 3. REFERENCE — only when required by the provider flow.
+              if (_needsReference) ...[
+                AppTextField(
+                  controller: _referenceCtrl,
+                  label: 'Reference',
+                  prefixIcon: Icons.notes_outlined,
+                  validator: (v) =>
+                      v == null || v.isEmpty ? 'Reference is required' : null,
+                ),
+                const SizedBox(height: 14),
+              ],
+
+              // 4. TRANSFER CHARGES — only when AgentPro records a
+              // provider transfer charge for this transaction.
               if (_isTransferChargeFlow) ...[
                 TextFormField(
                   controller: _feeCtrl,
@@ -1642,7 +1683,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     decimal: true,
                   ),
                   inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                    FilteringTextInputFormatter.allow(
+                      RegExp(r'[0-9.]'),
+                    ),
                   ],
                   decoration: InputDecoration(
                     labelText: 'Transfer Charges (GH₵)',
@@ -1659,9 +1702,16 @@ class _TransactionScreenState extends State<TransactionScreen> {
                   ),
                   onChanged: (_) => _feeAutoCalculated = false,
                   validator: (v) {
-                    if (v == null || v.isEmpty) return null;
+                    if (v == null || v.isEmpty) {
+                      return null;
+                    }
+
                     final n = double.tryParse(v);
-                    if (n == null || n < 0) return 'Enter a valid charge';
+
+                    if (n == null || n < 0) {
+                      return 'Enter a valid charge';
+                    }
+
                     return null;
                   },
                 ),

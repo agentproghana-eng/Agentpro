@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/api/api_client.dart';
+import '../../shared/utils/transaction_labels.dart';
 
 class QuickActionCatalogDefinition {
   final String provider;
@@ -21,11 +22,18 @@ class QuickActionCatalogDefinition {
     Map<String, dynamic> json,
   ) {
     final variantsValue = json['variants'];
+    final provider = (json['provider'] ?? '').toString().trim();
+    final type = (json['transaction_type'] ?? '').toString().trim();
+    final catalogLabel = (json['display_label'] ?? '').toString().trim();
 
     return QuickActionCatalogDefinition(
-      provider: (json['provider'] ?? '').toString().trim(),
-      type: (json['transaction_type'] ?? '').toString().trim(),
-      displayLabel: (json['display_label'] ?? '').toString().trim(),
+      provider: provider,
+      type: type,
+      displayLabel: quickActionDisplayLabel(
+        provider: provider,
+        type: type,
+        catalogLabel: catalogLabel,
+      ),
       quickActionGroup:
           (json['quick_action_group'] ?? 'Other Services').toString().trim(),
       variants: variantsValue is List
@@ -125,6 +133,7 @@ class QuickActionCatalog {
 
     final data = Map<String, dynamic>.from(root);
     final providerRows = data['providers'];
+    final resolvedMode = (data['mode'] ?? mode).toString();
 
     final byProvider = <String, List<QuickActionCatalogDefinition>>{};
 
@@ -164,15 +173,88 @@ class QuickActionCatalog {
           }
         }
 
-        byProvider[provider] = definitions;
+        byProvider[provider] = resolvedMode == 'business'
+            ? normalizeBusinessQuickActionDefinitions(
+                provider: provider,
+                definitions: definitions,
+              )
+            : definitions;
       }
     }
 
     return QuickActionCatalog(
-      mode: (data['mode'] ?? mode).toString(),
+      mode: resolvedMode,
       byProvider: byProvider,
     );
   }
+}
+
+List<QuickActionCatalogDefinition> normalizeBusinessQuickActionDefinitions({
+  required String provider,
+  required List<QuickActionCatalogDefinition> definitions,
+}) {
+  if (provider != 'mtn') {
+    return List<QuickActionCatalogDefinition>.from(definitions);
+  }
+
+  final legacyCashInIndex = definitions.indexWhere(
+    (definition) => definition.type == 'cash_in',
+  );
+
+  final canonicalCashInIndex = definitions.indexWhere(
+    (definition) => definition.type == 'send_money',
+  );
+
+  if (legacyCashInIndex < 0 || canonicalCashInIndex < 0) {
+    return List<QuickActionCatalogDefinition>.from(definitions);
+  }
+
+  final canonicalCashIn = definitions[canonicalCashInIndex];
+  final normalized = <QuickActionCatalogDefinition>[];
+
+  for (var index = 0; index < definitions.length; index++) {
+    if (index == legacyCashInIndex) {
+      // Put the real MTN Cash In action where the legacy Cash In
+      // template previously lived.
+      normalized.add(canonicalCashIn);
+      continue;
+    }
+
+    if (index == canonicalCashInIndex) {
+      // Its original later position is now redundant.
+      continue;
+    }
+
+    normalized.add(definitions[index]);
+  }
+
+  return normalized;
+}
+
+String quickActionDisplayLabel({
+  required String provider,
+  required String type,
+  String? catalogLabel,
+}) {
+  final semanticLabel = transactionTypeLabel(type, provider);
+  final genericLabel = _humanizeCatalogValue(type);
+
+  // Provider/accounting terminology wins over a stale or generic
+  // catalog label. Examples:
+  // - MTN send_money -> Cash In
+  // - bill_payment -> Pay to Agent
+  // - Telecel/AT Money cash_in -> Deposit
+  if (semanticLabel != genericLabel) {
+    return semanticLabel;
+  }
+
+  final normalizedCatalogLabel = catalogLabel?.trim();
+
+  if (normalizedCatalogLabel != null && normalizedCatalogLabel.isNotEmpty) {
+    return normalizedCatalogLabel;
+  }
+
+  return genericLabel;
 }
 
 String quickActionProviderLabel(String value) {

@@ -99,6 +99,59 @@ class QuickActionPreference {
   }
 }
 
+List<QuickActionPreference> normalizeBusinessQuickActionPreferences({
+  required String provider,
+  required List<QuickActionPreference> preferences,
+}) {
+  if (provider != 'mtn') {
+    return List<QuickActionPreference>.from(preferences);
+  }
+
+  final legacyCashInIndex = preferences.indexWhere(
+    (item) => item.actionKey == 'cash_in',
+  );
+
+  if (legacyCashInIndex < 0) {
+    return List<QuickActionPreference>.from(preferences);
+  }
+
+  final normalized = <QuickActionPreference>[];
+
+  for (var index = 0; index < preferences.length; index++) {
+    final preference = preferences[index];
+
+    if (index == legacyCashInIndex) {
+      // The confirmed MTN Cash In flow is internally send_money.
+      // Replace the legacy cash_in tile IN PLACE so the user's
+      // dashboard position, icon, colour and visibility are preserved.
+      normalized.add(
+        preference.copyWith(
+          actionKey: 'send_money',
+        ),
+      );
+      continue;
+    }
+
+    // Remove the old second send_money slot. Its canonical Cash In
+    // replacement now occupies the former cash_in position above.
+    if (preference.actionKey == 'send_money') {
+      continue;
+    }
+
+    normalized.add(preference);
+  }
+
+  return normalized
+      .asMap()
+      .entries
+      .map(
+        (entry) => entry.value.copyWith(
+          position: entry.key,
+        ),
+      )
+      .toList();
+}
+
 class QuickActionIconOption {
   final String key;
   final String label;

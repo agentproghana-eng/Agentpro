@@ -960,6 +960,71 @@ function quickActionGroupForType(transactionType) {
   return 'Other Services';
 }
 
+function quickActionDisplayLabel(
+  provider,
+  transactionType,
+  capabilityLabel
+) {
+  const normalizedProvider = String(provider || '').trim().toLowerCase();
+  const normalizedType = String(transactionType || '').trim().toLowerCase();
+
+  // MTN Agent terminology: this internal send_money transaction is the
+  // customer Cash In operation.
+  if (normalizedProvider === 'mtn' && normalizedType === 'send_money') {
+    return 'Cash In';
+  }
+
+  // MTN's old Bill Payment naming is now Pay to Agent.
+  if (normalizedType === 'bill_payment') {
+    return 'Pay to Agent';
+  }
+
+  const normalizedLabel = String(capabilityLabel || '').trim();
+
+  return normalizedLabel ||
+    normalizedType
+      .split('_')
+      .filter(Boolean)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+}
+
+function normalizeBusinessQuickActionActions(provider, actionMap) {
+  const actions = Array.from(actionMap.values());
+
+  if (String(provider || '').trim().toLowerCase() !== 'mtn') {
+    return actions;
+  }
+
+  const legacyCashInIndex = actions.findIndex(
+    (action) => action.transaction_type === 'cash_in'
+  );
+
+  const canonicalCashInIndex = actions.findIndex(
+    (action) => action.transaction_type === 'send_money'
+  );
+
+  if (legacyCashInIndex < 0 || canonicalCashInIndex < 0) {
+    return actions;
+  }
+
+  const canonicalCashIn = actions[canonicalCashInIndex];
+
+  return actions.flatMap((action, index) => {
+    if (index === legacyCashInIndex) {
+      // Real MTN Cash In takes the old Cash In position.
+      return [canonicalCashIn];
+    }
+
+    if (index === canonicalCashInIndex) {
+      // Remove the duplicate later Send Money/Cash In position.
+      return [];
+    }
+
+    return [action];
+  });
+}
+
 exports.getMyQuickActionCatalog = async (req, res) => {
   const requestedMode = String(req.query.mode || 'business')
     .trim()
@@ -1025,9 +1090,11 @@ exports.getMyQuickActionCatalog = async (req, res) => {
         actions.set(transactionType, {
           provider,
           transaction_type: transactionType,
-          display_label:
-            String(row.display_label || '').trim() ||
-            transactionType.replace(/_/g, ' '),
+          display_label: quickActionDisplayLabel(
+            provider,
+            transactionType,
+            row.display_label
+          ),
           quick_action_group: quickActionGroupForType(transactionType),
           variants: [],
         });
@@ -1066,7 +1133,10 @@ exports.getMyQuickActionCatalog = async (req, res) => {
     for (const [provider, actionMap] of providerMap.entries()) {
       providers.push({
         provider,
-        actions: Array.from(actionMap.values()),
+        actions: normalizeBusinessQuickActionActions(
+          provider,
+          actionMap
+        ),
       });
     }
 

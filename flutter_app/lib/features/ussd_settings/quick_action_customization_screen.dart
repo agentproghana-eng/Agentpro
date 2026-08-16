@@ -157,7 +157,14 @@ class _QuickActionCustomizationScreenState
           (a, b) => a.position.compareTo(b.position),
         );
 
-        parsed[provider] = items
+        final normalizedItems = widget.isPersonal
+            ? items
+            : normalizeBusinessQuickActionPreferences(
+                provider: provider,
+                preferences: items,
+              );
+
+        parsed[provider] = normalizedItems
             .take(9)
             .toList()
             .asMap()

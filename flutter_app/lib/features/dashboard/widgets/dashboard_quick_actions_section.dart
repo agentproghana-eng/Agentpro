@@ -53,22 +53,15 @@ class DashboardQuickActionsSection extends StatelessWidget {
     final saved =
         personal ? personalQuickActions[provider] : agentQuickActions[provider];
 
-    if (saved != null) {
-      final catalog = _catalog(personal: personal);
+    if (saved != null && saved.isNotEmpty) {
+      final normalizedSaved = personal
+          ? saved
+          : normalizeBusinessQuickActionPreferences(
+              provider: provider,
+              preferences: saved,
+            );
 
-      final supported = catalog
-          ?.definitionsFor(provider)
-          .map((definition) => definition.type)
-          .toSet();
-
-      return saved
-          .where(
-            (item) =>
-                item.isVisible &&
-                (supported == null || supported.contains(item.actionKey)),
-          )
-          .take(9)
-          .toList();
+      return normalizedSaved.where((item) => item.isVisible).take(9).toList();
     }
 
     final definitions =
@@ -131,6 +124,7 @@ class DashboardQuickActionsSection extends StatelessWidget {
   }
 
   List<Widget> _agentTiles(BuildContext context) {
+    final sim = simMap?[provider];
     final actions = _quickActions(personal: false);
     final tiles = <Widget>[];
 
@@ -163,8 +157,11 @@ class DashboardQuickActionsSection extends StatelessWidget {
       final type = preference.actionKey;
       final definition = _definition(type, personal: false);
 
-      final defaultLabel =
-          definition?.displayLabel ?? quickActionTransactionLabel(type);
+      final defaultLabel = quickActionDisplayLabel(
+        provider: provider,
+        type: type,
+        catalogLabel: definition?.displayLabel,
+      );
 
       final label = preference.resolvedLabel(defaultLabel);
       final icon = quickActionIconFromKey(preference.iconKey) ??
@@ -181,9 +178,23 @@ class DashboardQuickActionsSection extends StatelessWidget {
             iconColors[index % iconColors.length],
           ),
           type: type,
-          onTap: () => context.push(
-            '/transactions?type=$type&provider=$provider',
-          ),
+          onTap: () {
+            final query = <String, String>{
+              'type': type,
+              'provider': provider,
+              if (sim != null) 'sim_slot': sim.slot.toString(),
+              if (sim != null && sim.iccid.isNotEmpty) 'sim_iccid': sim.iccid,
+              if (sim != null)
+                'sim_subscription_id': sim.subscriptionId.toString(),
+            };
+
+            context.push(
+              Uri(
+                path: '/transactions',
+                queryParameters: query,
+              ).toString(),
+            );
+          },
         ),
       );
     }
@@ -230,7 +241,11 @@ class DashboardQuickActionsSection extends StatelessWidget {
           quickActionCatalogIcon(type);
 
       final label = preference.resolvedLabel(
-        definition?.displayLabel ?? quickActionTransactionLabel(type),
+        quickActionDisplayLabel(
+          provider: provider,
+          type: type,
+          catalogLabel: definition?.displayLabel,
+        ),
       );
 
       tiles.add(

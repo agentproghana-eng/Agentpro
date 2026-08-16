@@ -389,4 +389,124 @@ describe('Quick Action catalog controller behavior', () => {
       expect(mockAuditLog).not.toHaveBeenCalled();
     },
   );
+
+  test(
+    'Business catalog uses MTN Cash In and Pay to Agent terminology',
+    async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            provider: 'mtn',
+            transaction_type: 'send_money',
+            display_label: 'Send Money',
+            bundle_category: null,
+            recipient_mode: null,
+          },
+          {
+            provider: 'mtn',
+            transaction_type: 'bill_payment',
+            display_label: 'Bill Payment',
+            bundle_category: null,
+            recipient_mode: null,
+          },
+        ],
+      });
+
+      const req = {
+        user: makeUser(),
+        query: {
+          mode: 'business',
+        },
+      };
+
+      const res = makeResponse();
+
+      await userController.getMyQuickActionCatalog(req, res);
+
+      expect(res.status).not.toHaveBeenCalled();
+
+      const payload = res.json.mock.calls[0][0];
+      const actions = payload.data.providers[0].actions;
+
+      expect(
+        actions.map((action) => ({
+          type: action.transaction_type,
+          label: action.display_label,
+        }))
+      ).toEqual([
+        {
+          type: 'send_money',
+          label: 'Cash In',
+        },
+        {
+          type: 'bill_payment',
+          label: 'Pay to Agent',
+        },
+      ]);
+    },
+  );
+
+
+
+  test(
+    'MTN catalog moves send_money into the legacy cash_in position and removes duplicate cash_in',
+    async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            provider: 'mtn',
+            transaction_type: 'cash_in',
+            display_label: 'Cash In',
+            bundle_category: null,
+            recipient_mode: null,
+          },
+          {
+            provider: 'mtn',
+            transaction_type: 'airtime',
+            display_label: 'Airtime',
+            bundle_category: null,
+            recipient_mode: null,
+          },
+          {
+            provider: 'mtn',
+            transaction_type: 'send_money',
+            display_label: 'Send Money',
+            bundle_category: null,
+            recipient_mode: null,
+          },
+        ],
+      });
+
+      const req = {
+        user: makeUser(),
+        query: {
+          mode: 'business',
+        },
+      };
+
+      const res = makeResponse();
+
+      await userController.getMyQuickActionCatalog(req, res);
+
+      const actions =
+        res.json.mock.calls[0][0].data.providers[0].actions;
+
+      expect(
+        actions.map((action) => action.transaction_type)
+      ).toEqual([
+        'send_money',
+        'airtime',
+      ]);
+
+      expect(actions[0].display_label).toBe('Cash In');
+
+      expect(
+        actions.some(
+          (action) => action.transaction_type === 'cash_in'
+        )
+      ).toBe(false);
+    },
+  );
+
+
 });

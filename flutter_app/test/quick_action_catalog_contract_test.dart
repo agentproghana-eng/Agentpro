@@ -152,11 +152,31 @@ void main() {
       );
     });
 
-    test('dynamic catalog actions keep the generic transaction navigation path',
+    test('dynamic catalog actions carry provider and physical SIM identity',
         () {
       expect(
         dashboardActions,
-        contains('/transactions?type=\$type&provider=\$provider'),
+        contains("path: '/transactions'"),
+      );
+
+      expect(
+        dashboardActions,
+        contains("'provider': provider"),
+      );
+
+      expect(
+        dashboardActions,
+        contains("'sim_slot': sim.slot.toString()"),
+      );
+
+      expect(
+        dashboardActions,
+        contains("'sim_iccid': sim.iccid"),
+      );
+
+      expect(
+        dashboardActions,
+        contains("'sim_subscription_id': sim.subscriptionId.toString()"),
       );
 
       expect(
@@ -174,6 +194,24 @@ void main() {
       expect(
         catalog,
         contains('_ => _humanizeCatalogValue(value)'),
+      );
+    });
+
+    test('Business dashboard preserves saved actions outside current catalog',
+        () {
+      expect(
+        dashboardActions,
+        isNot(contains('supported.contains(item.actionKey)')),
+      );
+
+      expect(
+        dashboardActions,
+        contains('saved != null && saved.isNotEmpty'),
+      );
+
+      expect(
+        dashboardActions,
+        contains('.where((item) => item.isVisible)'),
       );
     });
 
