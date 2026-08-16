@@ -324,7 +324,8 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
       'type': type,
       'provider': _provider,
       if (sim != null) 'sim_slot': sim.slot.toString(),
-      if (sim != null) 'sim_iccid': sim.iccid,
+      if (sim != null && sim.iccid.isNotEmpty) 'sim_iccid': sim.iccid,
+      if (sim != null) 'sim_subscription_id': sim.subscriptionId.toString(),
     };
     final uri = Uri(path: '/personal-transactions/new', queryParameters: query);
     context.push(uri.toString());

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_bloc.dart';
+import '../../core/services/sim_card_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
@@ -130,12 +131,15 @@ class PersonalTransactionScreen extends StatefulWidget {
   final String provider;
   final int? simSlot;
   final String? simIccid;
+  final int? simSubscriptionId;
+
   const PersonalTransactionScreen({
     super.key,
     required this.transactionType,
     required this.provider,
     this.simSlot,
     this.simIccid,
+    this.simSubscriptionId,
   });
 
   @override
@@ -152,6 +156,12 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   final _flexiAmountCtrl = TextEditingController();
   bool _loading = false;
 
+  List<SimCard> _simCards = const [];
+  int? _selectedSimSlot;
+  bool _simDetectionComplete = false;
+  bool _simPermissionDenied = false;
+  bool _initialSimIdentityUnavailable = false;
+
   static const Map<String, String> _mtnCrossNetworkOptions = {
     '1': 'AT',
     '2': 'Telecel',
@@ -166,6 +176,44 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   bool get _isMtnCrossNetwork =>
       widget.provider == 'mtn' &&
       widget.transactionType == 'send_money_cross_network';
+
+  String get _providerLabel => switch (widget.provider) {
+        'mtn' => 'MTN',
+        'telecel' => 'Telecel',
+        'at_money' => 'AT Money',
+        _ => widget.provider,
+      };
+
+  List<SimCard> get _providerSims {
+    final sims = _simCards
+        .where((sim) => sim.network == widget.provider)
+        .toList()
+      ..sort((a, b) => a.slot.compareTo(b.slot));
+
+    return sims;
+  }
+
+  SimCard? get _selectedSim {
+    final sims = _providerSims;
+
+    if (sims.isEmpty) return null;
+
+    if (_selectedSimSlot != null) {
+      for (final sim in sims) {
+        if (sim.slot == _selectedSimSlot) {
+          return sim;
+        }
+      }
+    }
+
+    // If Home explicitly routed this transaction to a physical SIM,
+    // never silently substitute another SIM.
+    if (_initialSimIdentityUnavailable) {
+      return null;
+    }
+
+    return sims.first;
+  }
 
   bool get _isDataBundle => widget.transactionType == 'buy_data';
 
@@ -223,11 +271,139 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   @override
   void initState() {
     super.initState();
+
+    _selectedSimSlot = widget.simSlot;
+    _loadSimIdentity();
+
     if (['buy_airtime', 'buy_mashup'].contains(widget.transactionType)) {
       final state = context.read<AuthBloc>().state;
       if (state is AuthAuthenticated) {
         _phoneCtrl.text = (state.user['phone'] ?? '').toString();
       }
+    }
+  }
+
+  Future<void> _loadSimIdentity() async {
+    if (mounted) {
+      setState(() {
+        _simDetectionComplete = false;
+        _simPermissionDenied = false;
+      });
+    }
+
+    try {
+      var detected = await SimCardService.getSimCards();
+
+      if (detected.isEmpty) {
+        await Future.delayed(const Duration(milliseconds: 1200));
+
+        if (!mounted) return;
+
+        detected = await SimCardService.getSimCards();
+      }
+
+      // Apply the same Personal-vs-Business SIM purpose rule used by
+      // Personal Home. A SIM explicitly reserved for Agent/Business
+      // must not become selectable merely because this form re-detected it.
+      final purposes = <int, String>{};
+
+      try {
+        final response = await ApiClient.instance.get(
+          '/user-sim-purposes',
+        );
+
+        final saved = (response.data['data'] as List?) ?? const [];
+
+        for (final value in saved) {
+          if (value is! Map) continue;
+
+          final slot = value['sim_slot'];
+          final purpose = value['purpose'];
+
+          if (slot is int && purpose is String) {
+            purposes[slot] = purpose;
+          }
+        }
+      } catch (_) {
+        // Match Personal Home: if purpose lookup is unavailable,
+        // keep detected supported SIMs available.
+      }
+
+      final supported = detected
+          .where(
+            (sim) => sim.isMoMoSupported && purposes[sim.slot] != 'agent',
+          )
+          .toList()
+        ..sort((a, b) => a.slot.compareTo(b.slot));
+
+      final providerSims = supported
+          .where((sim) => sim.network == widget.provider)
+          .toList()
+        ..sort((a, b) => a.slot.compareTo(b.slot));
+
+      final requestedIccid = (widget.simIccid ?? '').trim();
+
+      final exactSimRequested = widget.simSlot != null ||
+          requestedIccid.isNotEmpty ||
+          widget.simSubscriptionId != null;
+
+      SimCard? requestedSim;
+
+      if (exactSimRequested) {
+        for (final sim in providerSims) {
+          final slotMatches =
+              widget.simSlot == null || sim.slot == widget.simSlot;
+
+          final identityMatches = requestedIccid.isNotEmpty
+              ? sim.iccid.trim() == requestedIccid && slotMatches
+              : widget.simSubscriptionId != null
+                  ? slotMatches &&
+                      sim.subscriptionId == widget.simSubscriptionId
+                  : slotMatches;
+
+          if (identityMatches) {
+            requestedSim = sim;
+            break;
+          }
+        }
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _simCards = supported;
+        _simDetectionComplete = true;
+        _simPermissionDenied = false;
+
+        if (providerSims.isEmpty) {
+          _selectedSimSlot = null;
+          _initialSimIdentityUnavailable = exactSimRequested;
+        } else if (exactSimRequested) {
+          _selectedSimSlot = requestedSim?.slot;
+          _initialSimIdentityUnavailable = requestedSim == null;
+        } else {
+          _selectedSimSlot = providerSims.first.slot;
+          _initialSimIdentityUnavailable = false;
+        }
+      });
+    } on SimPermissionException {
+      if (!mounted) return;
+
+      setState(() {
+        _simCards = const [];
+        _selectedSimSlot = null;
+        _simDetectionComplete = true;
+        _simPermissionDenied = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _simCards = const [];
+        _selectedSimSlot = null;
+        _simDetectionComplete = true;
+        _simPermissionDenied = false;
+      });
     }
   }
 
@@ -259,7 +435,32 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       await _submitDataBundle();
       return;
     }
-    if (_needsAmount && !_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) return;
+
+    if (!_simDetectionComplete) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('SIM detection is still in progress.'),
+        ),
+      );
+      return;
+    }
+
+    final selectedSim = _selectedSim;
+
+    if (selectedSim == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _simPermissionDenied
+                ? 'Allow phone permission before starting this transaction.'
+                : 'The $_providerLabel SIM selected for this transaction is required.',
+          ),
+        ),
+      );
+      return;
+    }
+
     setState(() => _loading = true);
     String? progressAction;
 
@@ -272,8 +473,9 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       if (_needsPhone) 'recipient_phone': _phoneCtrl.text.trim(),
       if (_needsReference && reference.isNotEmpty) 'notes': reference,
       if (_needsTillNumber) 'merchant_id': _tillNumberCtrl.text.trim(),
-      if (widget.simIccid != null) 'sim_iccid': widget.simIccid,
-      if (widget.simSlot != null) 'sim_slot': widget.simSlot,
+      if (selectedSim.iccid.isNotEmpty) 'sim_iccid': selectedSim.iccid,
+      'sim_slot': selectedSim.slot,
+      'sim_subscription_id': selectedSim.subscriptionId,
     };
 
     try {
@@ -294,6 +496,9 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           'transaction_type': widget.transactionType,
           'amount': _needsAmount ? _amountCtrl.text.trim() : null,
           'customer_phone': _needsPhone ? _phoneCtrl.text.trim() : null,
+          'sim_slot': selectedSim.slot,
+          'sim_iccid': selectedSim.iccid.isNotEmpty ? selectedSim.iccid : null,
+          'sim_subscription_id': selectedSim.subscriptionId,
           'request_fields': requestFields,
           if (_isMtnCrossNetwork && _crossNetworkSelection != null)
             'selections_in_order': [
@@ -319,6 +524,30 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   }
 
   Future<void> _submitDataBundle() async {
+    if (!_simDetectionComplete) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('SIM detection is still in progress.'),
+        ),
+      );
+      return;
+    }
+
+    final selectedSim = _selectedSim;
+
+    if (selectedSim == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _simPermissionDenied
+                ? 'Allow phone permission before starting this transaction.'
+                : 'The $_providerLabel SIM selected for this transaction is required.',
+          ),
+        ),
+      );
+      return;
+    }
+
     setState(() => _loading = true);
     String? progressAction;
     final recipientPhone =
@@ -336,8 +565,9 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           'recipient_mode': _recipientMode,
           if (recipientPhone != null) 'recipient_phone': recipientPhone,
           if (flexiAmount != null) 'amount': double.tryParse(flexiAmount),
-          if (widget.simIccid != null) 'sim_iccid': widget.simIccid,
-          if (widget.simSlot != null) 'sim_slot': widget.simSlot,
+          if (selectedSim.iccid.isNotEmpty) 'sim_iccid': selectedSim.iccid,
+          'sim_slot': selectedSim.slot,
+          'sim_subscription_id': selectedSim.subscriptionId,
         },
       );
 
@@ -356,6 +586,9 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           'selections_in_order': _computeSelections(),
           'amount': flexiAmount,
           'customer_phone': recipientPhone,
+          'sim_slot': selectedSim.slot,
+          'sim_iccid': selectedSim.iccid.isNotEmpty ? selectedSim.iccid : null,
+          'sim_subscription_id': selectedSim.subscriptionId,
           'request_fields': {
             if (flexiAmount != null) 'amount': flexiAmount,
             if (recipientPhone != null) 'customer_phone': recipientPhone,
@@ -395,10 +628,166 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       ),
       body: Padding(
         padding: const EdgeInsets.all(20),
-        child: _isDataBundle
-            ? _buildDataBundleFlow(context)
-            : _buildGenericForm(context, label),
+        child: Column(
+          children: [
+            _buildLockedSimSection(context),
+            const SizedBox(height: 16),
+            Expanded(
+              child: _isDataBundle
+                  ? _buildDataBundleFlow(context)
+                  : _buildGenericForm(context, label),
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildLockedSimSection(BuildContext context) {
+    if (!_simDetectionComplete) {
+      return Row(
+        children: [
+          const SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            'Detecting $_providerLabel SIMs…',
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      );
+    }
+
+    final sims = _providerSims;
+    final selected = _selectedSim;
+
+    if (sims.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: context.appSurface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: context.appDivider),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.sim_card_alert_outlined,
+              color: context.appSecondaryText,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                _simPermissionDenied
+                    ? 'Allow phone permission to detect your $_providerLabel SIM.'
+                    : 'Insert a Personal $_providerLabel SIM to continue.',
+                style: TextStyle(
+                  color: context.appSecondaryText,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 12,
+          ),
+          decoration: BoxDecoration(
+            color: context.appSurface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: context.appDivider),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                selected == null
+                    ? Icons.sim_card_alert_outlined
+                    : Icons.sim_card_outlined,
+                color: selected == null
+                    ? context.appSecondaryText
+                    : AppTheme.providerColor(widget.provider),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  selected == null
+                      ? 'The selected physical SIM is no longer available.'
+                      : '$_providerLabel locked · Using SIM ${selected.slot + 1}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              if (selected != null) const Icon(Icons.lock_outline, size: 18),
+            ],
+          ),
+        ),
+        if (sims.length > 1 || selected == null) ...[
+          const SizedBox(height: 10),
+          Text(
+            'Select physical $_providerLabel SIM',
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: sims.map((sim) {
+              final isSelected = selected?.slot == sim.slot;
+              final color = AppTheme.providerColor(
+                widget.provider,
+              );
+
+              final iccid = sim.iccid.trim();
+              final tail = iccid.isEmpty
+                  ? ''
+                  : iccid.substring(
+                      iccid.length > 6 ? iccid.length - 6 : 0,
+                    );
+
+              return ChoiceChip(
+                selected: isSelected,
+                selectedColor: color.withValues(alpha: 0.16),
+                avatar: Icon(
+                  Icons.sim_card_outlined,
+                  size: 18,
+                  color: isSelected ? color : context.appSecondaryText,
+                ),
+                label: Text(
+                  'SIM ${sim.slot + 1}'
+                  '${tail.isNotEmpty ? ' · $tail' : ''}',
+                ),
+                onSelected: (_) {
+                  setState(() {
+                    _selectedSimSlot = sim.slot;
+                    _initialSimIdentityUnavailable = false;
+                  });
+                },
+              );
+            }).toList(),
+          ),
+        ],
+      ],
     );
   }
 
@@ -433,6 +822,16 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
             ),
             const SizedBox(height: 14),
           ],
+          if (_needsPhone) ...[
+            AppTextField(
+              controller: _phoneCtrl,
+              label: 'Recipient Phone',
+              keyboardType: TextInputType.phone,
+              prefixIcon: Icons.phone_outlined,
+              validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null,
+            ),
+            const SizedBox(height: 14),
+          ],
           if (_needsAmount) ...[
             AppTextField(
               controller: _amountCtrl,
@@ -446,16 +845,6 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
                 if (n == null || n <= 0) return 'Enter a valid amount';
                 return null;
               },
-            ),
-            const SizedBox(height: 14),
-          ],
-          if (_needsPhone) ...[
-            AppTextField(
-              controller: _phoneCtrl,
-              label: 'Recipient Phone',
-              keyboardType: TextInputType.phone,
-              prefixIcon: Icons.phone_outlined,
-              validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null,
             ),
             const SizedBox(height: 14),
           ],

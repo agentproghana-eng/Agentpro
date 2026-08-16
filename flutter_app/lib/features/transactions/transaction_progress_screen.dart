@@ -357,12 +357,15 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       return;
     }
 
-    // Personal transaction access is available on both Free and Paid plans,
-    // but automatic USSD navigation is Paid-only. The backend decides the
-    // entitlement on every initiation request. Branch here before hard-coded,
-    // cached, or remotely resolved automation so an old cached Personal flow
-    // cannot bypass a downgrade.
+    // Centrally managed Global Personal automation is available to both
+    // Free and Paid Personal accounts. Paid status only controls whether
+    // this account may use its own Personal Flow Builder override.
+    //
+    // Keep the legacy automation_entitled fallback branch below for
+    // compatibility with an older backend response during rollout.
     final automationEntitled = transaction['automation_entitled'] == true;
+    final personalOverrideEntitled =
+        transaction['personal_override_entitled'] == true;
 
     if (widget.isPersonal && !automationEntitled) {
       final manualDialCode =
@@ -515,14 +518,19 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     // Custom USSD flow before executing local automation. The local cache is
     // only a transient-failure fallback and must never override an
     // authoritative server response.
-    final fallbackCachedFlow = OfflineQueueService.getCachedFlow(
-      provider,
-      transactionType,
-      identity: _offlineIdentity,
-      isPersonal: widget.isPersonal,
-      bundleCategory: bundleCategory,
-      recipientMode: recipientMode,
-    );
+    // A Free/expired Personal account must never execute a cached
+    // Personal-owned override left behind from an earlier Paid session.
+    // Its online resolver is authoritative and returns Global-only.
+    final fallbackCachedFlow = widget.isPersonal && !personalOverrideEntitled
+        ? null
+        : OfflineQueueService.getCachedFlow(
+            provider,
+            transactionType,
+            identity: _offlineIdentity,
+            isPersonal: widget.isPersonal,
+            bundleCategory: bundleCategory,
+            recipientMode: recipientMode,
+          );
 
     try {
       final resolveRes = await ApiClient.instance.get(

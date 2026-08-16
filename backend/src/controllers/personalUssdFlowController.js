@@ -18,13 +18,18 @@ const {
 // routes only ever mean "my own personal flow."
 
 // ── Resolve My Active Flow ─────────────────────────────────────
-// Runtime resolver for Personal mode only. This endpoint lives behind
-// requirePersonalAccount + requirePaidPersonalPlan, so a caller cannot
-// select Personal resolution semantics through the Business endpoint.
+// Runtime resolver for Personal mode only.
 //
-// Precedence:
+// Global flows are available to every Personal account.
+// An active Paid Personal plan additionally unlocks the authenticated
+// user's own Personal override.
+//
+// Precedence for active Paid Personal:
 //   1. this authenticated user's Personal override
 //   2. true Global default
+//
+// Precedence for Free / expired Personal:
+//   1. true Global default
 //
 // Company-owned flows are never considered here.
 exports.resolveFlow = async (req, res) => {
@@ -43,28 +48,36 @@ exports.resolveFlow = async (req, res) => {
   }
 
   try {
+    const subscription = req.personalSubscription;
+    const personalOverrideEntitled =
+      subscription?.plan === 'paid' &&
+      (!subscription.expires_at ||
+        new Date(subscription.expires_at) >= new Date());
+
     let flow = null;
 
-    const personalResult = await query(
-      `SELECT * FROM ussd_flows
-       WHERE owner_user_id = $1
-         AND company_id IS NULL
-         AND provider = $2
-         AND transaction_type = $3
-         AND is_active = TRUE
-         AND COALESCE(bundle_category,'') = COALESCE($4,'')
-         AND COALESCE(recipient_mode,'') = COALESCE($5,'')`,
-      [
-        req.user.id,
-        provider,
-        transaction_type,
-        bundle_category || null,
-        recipient_mode || null,
-      ]
-    );
+    if (personalOverrideEntitled) {
+      const personalResult = await query(
+        `SELECT * FROM ussd_flows
+         WHERE owner_user_id = $1
+           AND company_id IS NULL
+           AND provider = $2
+           AND transaction_type = $3
+           AND is_active = TRUE
+           AND COALESCE(bundle_category,'') = COALESCE($4,'')
+           AND COALESCE(recipient_mode,'') = COALESCE($5,'')`,
+        [
+          req.user.id,
+          provider,
+          transaction_type,
+          bundle_category || null,
+          recipient_mode || null,
+        ]
+      );
 
-    if (personalResult.rows.length > 0) {
-      flow = personalResult.rows[0];
+      if (personalResult.rows.length > 0) {
+        flow = personalResult.rows[0];
+      }
     }
 
     if (!flow) {

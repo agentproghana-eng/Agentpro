@@ -3,17 +3,19 @@ const router = express.Router();
 const personalUssdFlowController = require('../controllers/personalUssdFlowController');
 const { authenticate, requirePersonalAccount, requirePaidPersonalPlan } = require('../middleware/auth');
 
-// Every route requires an active Paid Personal subscription - Custom
-// USSD Flows are a Paid-only feature per spec, unlike viewing/reacting
-// in the Community which Free Personal users get too.
-router.use(authenticate, requirePersonalAccount, requirePaidPersonalPlan);
+// Every route requires Personal capability.
+router.use(authenticate, requirePersonalAccount);
 
-// Runtime resolution must be registered before /:id so Express does not
-// interpret "resolve" as a flow UUID. This route inherits the Personal
-// capability + Paid subscription middleware above.
+// Runtime execution of centrally managed Global flows is available to
+// both Free and Paid Personal accounts. The controller itself only
+// considers a Personal-owned override when the attached subscription
+// is actively Paid.
 router.get('/resolve', personalUssdFlowController.resolveFlow);
 
-// Inherits authenticate + Personal capability + Paid-plan middleware.
+// Everything below this point is Personal Flow Builder functionality,
+// which remains Paid-only.
+router.use(requirePaidPersonalPlan);
+
 // Register before /:id so "capabilities" is never interpreted as a UUID.
 router.get('/capabilities', personalUssdFlowController.getCapabilities);
 

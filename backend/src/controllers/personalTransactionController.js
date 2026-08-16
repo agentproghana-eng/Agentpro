@@ -16,15 +16,14 @@ exports.initiateTransaction = async (req, res) => {
   const userId = req.user.id;
 
   try {
-    // Transaction access and USSD Automation are separate Personal
-    // entitlements. Free Personal users may perform transactions, but
-    // automatic USSD navigation is a Paid feature.
+    // Centrally managed Global USSD automation is available to every
+    // Personal account, including Free Personal. Paid Personal additionally
+    // unlocks that user's own Personal Flow Builder override.
     //
-    // requirePersonalAccount has already attached the current subscription,
-    // so this decision is server-authoritative and does not trust potentially
-    // stale client-side plan state.
+    // Keep those concepts separate: downgrade must disable the custom
+    // override without disabling the safe centrally managed Global flow.
     const subscription = req.personalSubscription;
-    const automationEntitled =
+    const personalOverrideEntitled =
       subscription?.plan === 'paid' &&
       (!subscription.expires_at ||
         new Date(subscription.expires_at) >= new Date());
@@ -35,7 +34,7 @@ exports.initiateTransaction = async (req, res) => {
     // provider's manual USSD entry code.
     let selectedFlow = null;
 
-    if (automationEntitled) {
+    if (personalOverrideEntitled) {
       const personalFlow = await query(
         `SELECT dial_code
          FROM ussd_flows
@@ -92,20 +91,11 @@ exports.initiateTransaction = async (req, res) => {
       });
     }
 
-    // Free Personal execution is deliberately non-automated, so it needs a
-    // centrally configured dial entry point. Never fall back to a hard-coded
-    // provider list here: future providers remain data-driven.
-    const manualDialCode = automationEntitled
-      ? null
-      : String(selectedFlow.dial_code || '').trim();
-
-    if (!automationEntitled && !manualDialCode) {
-      return res.status(400).json({
-        success: false,
-        message:
-          `No manual USSD dial code configured for ${provider} ${transaction_type}`
-      });
-    }
+    // Reaching this point means an active Personal or Global flow exists.
+    // Global flow automation is therefore available regardless of whether
+    // this Personal account is Free or Paid.
+    const automationEntitled = true;
+    const manualDialCode = null;
 
     const reference = `PER-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
 
@@ -132,11 +122,10 @@ exports.initiateTransaction = async (req, res) => {
       requestId: req.requestId
     });
 
-    // Paid Personal transactions continue through Flow Builder automation.
-    // Free Personal transactions instead receive only the Global flow's root
-    // dial code and open the real network USSD menu for manual navigation.
-    // automation_params are still returned for transaction recording and for
-    // the Paid automation path; PIN values are never included.
+    // Every Personal account may execute a centrally managed Global flow.
+    // personal_override_entitled separately tells Flutter whether cached
+    // Personal-owned overrides are allowed for this account.
+    // PIN values are never included.
     res.status(201).json({
       success: true,
       data: {
@@ -148,6 +137,7 @@ exports.initiateTransaction = async (req, res) => {
         // Flutter must use it before considering native, cached, or resolved
         // automation so a stale Paid cache cannot survive a downgrade.
         automation_entitled: automationEntitled,
+        personal_override_entitled: personalOverrideEntitled,
         manual_dial_code: manualDialCode,
         // notes doubles as the reference value here rather than adding
         // a dedicated column - Send Money's flow has a send_reference

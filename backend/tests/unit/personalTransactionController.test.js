@@ -84,7 +84,7 @@ describe('personalTransactionController initiation entitlement', () => {
     mockAuditLog.mockResolvedValue(undefined);
   });
 
-  test('Free Personal uses only the Global flow and returns its manual dial code', async () => {
+  test('Free Personal uses only the Global flow and enables automation', async () => {
     mockQuery
       .mockResolvedValueOnce({
         rows: [{ dial_code: '*170#' }],
@@ -121,8 +121,9 @@ describe('personalTransactionController initiation entitlement', () => {
       success: true,
       data: expect.objectContaining({
         transaction_id: 'personal-tx-1',
-        automation_entitled: false,
-        manual_dial_code: '*170#',
+        automation_entitled: true,
+        personal_override_entitled: false,
+        manual_dial_code: null,
       }),
     });
   });
@@ -167,6 +168,7 @@ describe('personalTransactionController initiation entitlement', () => {
       success: true,
       data: expect.objectContaining({
         automation_entitled: true,
+        personal_override_entitled: true,
         manual_dial_code: null,
       }),
     });
@@ -214,6 +216,7 @@ describe('personalTransactionController initiation entitlement', () => {
       success: true,
       data: expect.objectContaining({
         automation_entitled: true,
+        personal_override_entitled: true,
         manual_dial_code: null,
       }),
     });
@@ -243,6 +246,7 @@ describe('personalTransactionController initiation entitlement', () => {
     const payload = res.json.mock.calls[0][0];
 
     expect(payload.data.automation_entitled).toBe(true);
+    expect(payload.data.personal_override_entitled).toBe(true);
     expect(payload.data.manual_dial_code).toBeNull();
 
     expect(payload.data.automation_params).toEqual(
@@ -284,8 +288,9 @@ describe('personalTransactionController initiation entitlement', () => {
     expect(res.json).toHaveBeenCalledWith({
       success: true,
       data: expect.objectContaining({
-        automation_entitled: false,
-        manual_dial_code: '*110#',
+        automation_entitled: true,
+        personal_override_entitled: false,
+        manual_dial_code: null,
       }),
     });
   });
@@ -311,27 +316,5 @@ describe('personalTransactionController initiation entitlement', () => {
     });
   });
 
-  test('rejects Free Personal initiation when the Global flow has no manual dial code', async () => {
-    mockQuery.mockResolvedValueOnce({
-      rows: [{ dial_code: null }],
-    });
 
-    const req = makeReq({
-      provider: 'future_provider',
-      transactionType: 'future_type',
-    });
-    const res = makeRes();
-
-    await personalTransactionController.initiateTransaction(req, res);
-
-    expect(mockQuery).toHaveBeenCalledTimes(1);
-    expect(mockAuditLog).not.toHaveBeenCalled();
-
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({
-      success: false,
-      message:
-        'No manual USSD dial code configured for future_provider future_type',
-    });
-  });
 });

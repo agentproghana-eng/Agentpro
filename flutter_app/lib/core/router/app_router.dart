@@ -192,11 +192,17 @@ class AppRouter {
             final provider = state.uri.queryParameters['provider'] ?? 'mtn';
             final simSlotStr = state.uri.queryParameters['sim_slot'];
             final simIccid = state.uri.queryParameters['sim_iccid'];
+            final simSubscriptionIdStr =
+                state.uri.queryParameters['sim_subscription_id'];
+
             return PersonalTransactionScreen(
               transactionType: type,
               provider: provider,
               simSlot: simSlotStr != null ? int.tryParse(simSlotStr) : null,
               simIccid: simIccid,
+              simSubscriptionId: simSubscriptionIdStr != null
+                  ? int.tryParse(simSubscriptionIdStr)
+                  : null,
             );
           },
         ),
