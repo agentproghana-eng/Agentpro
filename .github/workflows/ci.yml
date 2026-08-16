@@ -61,7 +61,86 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/agentpro_test
           NODE_ENV: test
-        run: node scripts/migrate.js
+        run: |
+          set -euo pipefail
+
+          # Production already has a real superuser. CI deliberately starts
+          # from an empty database, so legacy seed migration 077 reaches its
+          # explicit no-superuser guard.
+          #
+          # Run normally first so CI still fails immediately for every
+          # unexpected migration error.
+          set +e
+          MIGRATION_OUTPUT="$(node scripts/migrate.js 2>&1)"
+          MIGRATION_STATUS=$?
+          set -e
+
+          printf '%s\n' "$MIGRATION_OUTPUT"
+
+          if [ "$MIGRATION_STATUS" -eq 0 ]; then
+            exit 0
+          fi
+
+          # Only recover from the exact known clean-database bootstrap case.
+          if ! grep -Fq             "Migration 077_seed_mtn_personal_send_money_cross_network_flow.sql failed"             <<<"$MIGRATION_OUTPUT" ||
+             ! grep -Fq             "Cannot seed MTN Personal cross-network USSD flow: no superuser exists"             <<<"$MIGRATION_OUTPUT"; then
+            exit "$MIGRATION_STATUS"
+          fi
+
+          echo "CI bootstrap: creating ephemeral migration superuser."
+
+          node <<'NODE'
+          const { Client } = require('pg');
+
+          (async () => {
+            const client = new Client({
+              connectionString: process.env.DATABASE_URL,
+            });
+
+            await client.connect();
+
+            try {
+              await client.query(`
+                INSERT INTO users (
+                  role,
+                  first_name,
+                  last_name,
+                  email,
+                  password_hash,
+                  status
+                )
+                VALUES (
+                  'superuser',
+                  'CI',
+                  'Migration',
+                  'ci-migration@agentpro.invalid',
+                  crypt(gen_random_uuid()::text, gen_salt('bf')),
+                  'active'
+                )
+                ON CONFLICT (email) DO NOTHING
+              `);
+
+              // Migration 075 was already committed before 077 stopped the
+              // first run. On a blank DB it could not seed its flow because
+              // no superuser existed. Remove only its CI migration-log entry
+              // so the normal migration runner can execute it again now.
+              await client.query(
+                'DELETE FROM migrations_log WHERE filename = $1',
+                [
+                  '075_seed_mtn_personal_send_money_same_network_flow.sql',
+                ],
+              );
+            } finally {
+              await client.end();
+            }
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
+          echo "CI bootstrap complete; rerunning pending migrations."
+          node scripts/migrate.js
 
       - name: Run unit tests
         working-directory: backend
