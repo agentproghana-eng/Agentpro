@@ -318,3 +318,49 @@ describe('personalTransactionController initiation entitlement', () => {
 
 
 });
+
+describe('personalTransactionController physical SIM activity scoping', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockAuditLog.mockResolvedValue(undefined);
+  });
+
+  test('recent Personal activity can be scoped to one physical SIM', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    const req = {
+      user: { id: 'personal-user-1' },
+      query: {
+        provider: 'mtn',
+        sim_iccid: 'ICCID-SIM-2',
+        sim_slot: '1',
+      },
+    };
+    const res = makeRes();
+
+    await personalTransactionController.listRecentTransactions(req, res);
+
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+
+    const [sql, params] = mockQuery.mock.calls[0];
+
+    expect(sql).toContain('provider = $2');
+    expect(sql).toContain('sim_iccid = $3');
+    expect(sql).toContain('sim_slot = $4');
+
+    expect(params).toEqual([
+      'personal-user-1',
+      'mtn',
+      'ICCID-SIM-2',
+      1,
+    ]);
+
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: [],
+      meta: {
+        limit: 5,
+      },
+    });
+  });
+});

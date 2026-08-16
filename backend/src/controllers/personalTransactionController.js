@@ -256,6 +256,14 @@ exports.listRecentTransactions = async (req, res) => {
       ? req.query.sim_iccid.trim()
       : '';
 
+  const rawSimSlot = req.query.sim_slot;
+  const parsedSimSlot =
+    typeof rawSimSlot === 'string' && rawSimSlot.trim() !== ''
+      ? Number.parseInt(rawSimSlot, 10)
+      : Number.isInteger(rawSimSlot)
+        ? rawSimSlot
+        : null;
+
   const conditions = ['user_id = $1'];
   const params = [userId];
   let idx = 2;
@@ -268,6 +276,11 @@ exports.listRecentTransactions = async (req, res) => {
   if (simIccid) {
     conditions.push(`sim_iccid = $${idx++}`);
     params.push(simIccid);
+  }
+
+  if (Number.isInteger(parsedSimSlot) && parsedSimSlot >= 0) {
+    conditions.push(`sim_slot = $${idx++}`);
+    params.push(parsedSimSlot);
   }
 
   try {
@@ -312,6 +325,7 @@ exports.listTransactions = async (req, res) => {
     from_date,
     to_date,
     sim_iccid,
+    sim_slot,
     sort_by = 'date',
     sort_order = 'desc',
   } = req.query;
@@ -357,6 +371,22 @@ exports.listTransactions = async (req, res) => {
     if (sim_iccid) {
       conditions.push(`sim_iccid = $${idx++}`);
       params.push(sim_iccid);
+    }
+
+    if (
+      sim_slot !== undefined &&
+      sim_slot !== null &&
+      String(sim_slot).trim() !== ''
+    ) {
+      const parsedHistorySimSlot = Number.parseInt(sim_slot, 10);
+
+      if (
+        Number.isInteger(parsedHistorySimSlot) &&
+        parsedHistorySimSlot >= 0
+      ) {
+        conditions.push(`sim_slot = $${idx++}`);
+        params.push(parsedHistorySimSlot);
+      }
     }
 
     if (from_date) {

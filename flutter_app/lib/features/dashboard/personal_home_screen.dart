@@ -40,6 +40,8 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
     with RouteAware {
   String _provider = 'mtn';
   Map<String, SimCard?>? _simMap;
+  Map<String, List<SimCard>> _personalSimsByProvider = const {};
+  int? _selectedSimSlot;
   List<dynamic> _recent = [];
   bool _loadingRecent = true;
   Map<String, List<QuickActionPreference>> _personalQuickActions = {};
@@ -83,13 +85,38 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
   Future<void> _handleDashboardRefresh(DashboardRefreshEvent event) async {
     if (!event.isPersonal || !mounted) return;
 
-    final simMap = _simMap;
-    if (simMap != null && simMap[event.provider] == null) {
+    final providerSims =
+        _personalSimsByProvider[event.provider] ?? const <SimCard>[];
+
+    if (_simMap != null && providerSims.isEmpty) {
       return;
     }
 
-    if (_provider != event.provider) {
-      setState(() => _provider = event.provider);
+    SimCard? eventSim;
+
+    if (event.simSlot != null) {
+      for (final sim in providerSims) {
+        if (sim.slot == event.simSlot) {
+          eventSim = sim;
+          break;
+        }
+      }
+    }
+
+    final providerChanged = _provider != event.provider;
+    final exactSimChanged =
+        eventSim != null && _selectedSimSlot != eventSim.slot;
+
+    if (providerChanged || exactSimChanged) {
+      setState(() {
+        _provider = event.provider;
+
+        if (eventSim != null) {
+          _selectedSimSlot = eventSim.slot;
+        } else if (providerChanged && providerSims.isNotEmpty) {
+          _selectedSimSlot = providerSims.first.slot;
+        }
+      });
     }
 
     await _loadRecent();
@@ -273,8 +300,65 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
     return quickActionProviderLabel(provider);
   }
 
+  List<SimCard> get _selectedProviderSims =>
+      _personalSimsByProvider[_provider] ?? const <SimCard>[];
+
+  SimCard? get _selectedSim {
+    final sims = _selectedProviderSims;
+
+    if (sims.isEmpty) return null;
+
+    final selectedSlot = _selectedSimSlot;
+
+    if (selectedSlot != null) {
+      for (final sim in sims) {
+        if (sim.slot == selectedSlot) {
+          return sim;
+        }
+      }
+    }
+
+    return sims.first;
+  }
+
+  void _selectProvider(String provider) {
+    final sims = _personalSimsByProvider[provider] ?? const <SimCard>[];
+
+    setState(() {
+      _provider = provider;
+      _selectedSimSlot = sims.isEmpty ? null : sims.first.slot;
+    });
+
+    unawaited(_loadRecent());
+  }
+
+  void _selectPhysicalSim(SimCard sim) {
+    if (_provider == sim.network && _selectedSimSlot == sim.slot) {
+      return;
+    }
+
+    setState(() {
+      _provider = sim.network;
+      _selectedSimSlot = sim.slot;
+    });
+
+    unawaited(_loadRecent());
+  }
+
   Future<void> _loadRecent() async {
     final requestedProvider = _provider;
+    final requestedSim = _selectedSim;
+    final requestedSimSlot = requestedSim?.slot;
+
+    if (_simMap != null && requestedSim == null) {
+      if (mounted) {
+        setState(() {
+          _recent = [];
+          _loadingRecent = false;
+        });
+      }
+      return;
+    }
 
     if (mounted) {
       setState(() => _loadingRecent = true);
@@ -286,19 +370,27 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
         queryParameters: {
           'limit': 5,
           'provider': requestedProvider,
+          if (requestedSim != null) 'sim_slot': requestedSim.slot,
+          if (requestedSim != null && requestedSim.iccid.isNotEmpty)
+            'sim_iccid': requestedSim.iccid,
         },
       );
 
-      // Ignore a response that belongs to a provider which stopped
-      // being selected while this request was in flight.
-      if (mounted && requestedProvider == _provider) {
+      // A user can switch between two physical SIMs on the same provider
+      // while this request is in flight. Provider alone is therefore not
+      // enough to decide whether this response still belongs on screen.
+      if (mounted &&
+          requestedProvider == _provider &&
+          requestedSimSlot == _selectedSim?.slot) {
         setState(() {
           _recent = res.data['data'] ?? [];
           _loadingRecent = false;
         });
       }
     } catch (_) {
-      if (mounted && requestedProvider == _provider) {
+      if (mounted &&
+          requestedProvider == _provider &&
+          requestedSimSlot == _selectedSim?.slot) {
         setState(() => _loadingRecent = false);
       }
     }
@@ -314,60 +406,101 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
   // available if no purposes have been saved yet.
   Future<void> _loadSimMap() async {
     try {
-      var map = await SimCardService.getNetworkSimMap();
-      if (map.values.every((v) => v == null)) {
+      var detected = await SimCardService.getSimCards();
+
+      if (detected.isEmpty) {
         await Future.delayed(const Duration(milliseconds: 1200));
+
         if (!mounted) return;
-        map = await SimCardService.getNetworkSimMap();
+
+        detected = await SimCardService.getSimCards();
       }
 
-      Map<int, String> purposes = {};
+      final purposes = <int, String>{};
+
       try {
         final res = await ApiClient.instance.get('/user-sim-purposes');
-        final saved = (res.data['data'] as List?) ?? [];
-        for (final p in saved) {
-          purposes[p['sim_slot'] as int] = p['purpose'] as String;
+        final saved = (res.data['data'] as List?) ?? const [];
+
+        for (final value in saved) {
+          if (value is! Map) continue;
+
+          final slot = value['sim_slot'];
+          final purpose = value['purpose'];
+
+          if (slot is int && purpose is String) {
+            purposes[slot] = purpose;
+          }
         }
       } catch (_) {
-        // No saved purposes yet, or fetch failed - every detected SIM
-        // stays available for Personal use.
+        // No saved purposes yet, or purpose lookup failed. In that case
+        // every detected supported SIM remains Personal-available.
       }
 
-      if (purposes.isNotEmpty) {
-        map = Map.fromEntries(
-          map.entries.map((e) {
-            final sim = e.value;
-            if (sim != null && purposes[sim.slot] == 'agent') {
-              return MapEntry(e.key, null);
-            }
-            return e;
-          }),
-        );
+      final personalSims = detected
+          .where(
+            (sim) => sim.isMoMoSupported && purposes[sim.slot] != 'agent',
+          )
+          .toList()
+        ..sort((a, b) => a.slot.compareTo(b.slot));
+
+      final byProvider = <String, List<SimCard>>{};
+      final map = <String, SimCard?>{
+        'mtn': null,
+        'telecel': null,
+        'at_money': null,
+      };
+
+      for (final sim in personalSims) {
+        byProvider.putIfAbsent(sim.network, () => <SimCard>[]).add(sim);
+
+        if (map.containsKey(sim.network) && map[sim.network] == null) {
+          map[sim.network] = sim;
+        }
       }
 
-      final availableProviders = map.entries
-          .where((entry) => entry.value != null)
-          .map((entry) => entry.key)
-          .toList();
+      SimCard? selectedSim;
+
+      final previousSlot = _selectedSimSlot;
+
+      if (previousSlot != null) {
+        for (final sim in personalSims) {
+          if (sim.slot == previousSlot) {
+            selectedSim = sim;
+            break;
+          }
+        }
+      }
+
+      if (selectedSim == null) {
+        final currentProviderSims = byProvider[_provider] ?? const <SimCard>[];
+
+        if (currentProviderSims.isNotEmpty) {
+          selectedSim = currentProviderSims.first;
+        } else if (personalSims.isNotEmpty) {
+          selectedSim = personalSims.first;
+        }
+      }
 
       if (!mounted) return;
 
       setState(() {
         _simMap = map;
+        _personalSimsByProvider = byProvider;
+        _selectedSimSlot = selectedSim?.slot;
 
-        if (availableProviders.isNotEmpty &&
-            !availableProviders.contains(_provider)) {
-          _provider = availableProviders.first;
+        if (selectedSim != null) {
+          _provider = selectedSim.network;
         }
       });
     } catch (_) {
-      // Permission denied or detection failed - leave _simMap null so
-      // the UI falls back to showing all three tabs.
+      // Permission denied or SIM detection failure: retain the existing
+      // catalog fallback instead of inventing physical SIM identities.
     }
   }
 
   void _startTransaction(String type) {
-    final sim = _simMap?[_provider];
+    final sim = _selectedSim;
 
     if (_simMap != null && sim == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -573,12 +706,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
                                   );
                                   return Expanded(
                                     child: GestureDetector(
-                                      onTap: () {
-                                        setState(() {
-                                          _provider = p;
-                                        });
-                                        _loadRecent();
-                                      },
+                                      onTap: () => _selectProvider(p),
                                       child: AnimatedContainer(
                                         duration: const Duration(
                                           milliseconds: 220,
@@ -631,6 +759,87 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
                             ),
                     ),
                   ),
+                  if (_selectedProviderSims.length > 1)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: context.appSurface,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.05),
+                                blurRadius: 3,
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            children: _selectedProviderSims.map((sim) {
+                              final selected = _selectedSimSlot == sim.slot;
+                              final providerColor =
+                                  AppTheme.providerColor(_provider);
+
+                              return Expanded(
+                                child: Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 3),
+                                  child: Semantics(
+                                    selected: selected,
+                                    button: true,
+                                    label:
+                                        '${_providerLabel(_provider)} SIM ${sim.slot + 1}',
+                                    child: OutlinedButton.icon(
+                                      onPressed: () => _selectPhysicalSim(sim),
+                                      icon: Icon(
+                                        selected
+                                            ? Icons.check_circle_rounded
+                                            : Icons.sim_card_outlined,
+                                        size: 17,
+                                      ),
+                                      label: Text(
+                                        'SIM ${sim.slot + 1}',
+                                        maxLines: 1,
+                                      ),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: selected
+                                            ? (_provider == 'mtn'
+                                                ? Colors.black
+                                                : providerColor)
+                                            : Theme.of(context)
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                        backgroundColor: selected
+                                            ? providerColor.withValues(
+                                                alpha: 0.12,
+                                              )
+                                            : Colors.transparent,
+                                        side: BorderSide(
+                                          color: selected
+                                              ? providerColor
+                                              : Theme.of(context)
+                                                  .dividerColor
+                                                  .withValues(alpha: 0.45),
+                                        ),
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 10,
+                                          horizontal: 8,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ),
+                    ),
                   SliverToBoxAdapter(
                     child: noSimsDetected
                         ? const DashboardEmptyState(

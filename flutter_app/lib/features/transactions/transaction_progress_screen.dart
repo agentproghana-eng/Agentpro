@@ -1646,6 +1646,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       DashboardRefreshService.notifyTransactionCompleted(
         isPersonal: widget.isPersonal,
         provider: widget.data['provider']?.toString() ?? 'mtn',
+        simSlot: _parseSimSlot(widget.data['sim_slot']),
       );
     }
 

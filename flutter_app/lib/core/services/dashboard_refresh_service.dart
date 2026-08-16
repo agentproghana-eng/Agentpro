@@ -3,10 +3,12 @@ import 'dart:async';
 class DashboardRefreshEvent {
   final bool isPersonal;
   final String provider;
+  final int? simSlot;
 
   const DashboardRefreshEvent({
     required this.isPersonal,
     required this.provider,
+    this.simSlot,
   });
 }
 
@@ -21,9 +23,14 @@ class DashboardRefreshService {
   static void notifyTransactionCompleted({
     required bool isPersonal,
     required String provider,
+    int? simSlot,
   }) {
     _controller.add(
-      DashboardRefreshEvent(isPersonal: isPersonal, provider: provider),
+      DashboardRefreshEvent(
+        isPersonal: isPersonal,
+        provider: provider,
+        simSlot: simSlot,
+      ),
     );
   }
 }
