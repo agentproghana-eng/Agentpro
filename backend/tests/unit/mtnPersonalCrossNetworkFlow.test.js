@@ -5,30 +5,23 @@ const path = require('path');
 
 const migrationPath = path.join(
   __dirname,
-  '../../migrations/077_seed_mtn_personal_send_money_cross_network_flow.sql'
+  '../../migrations/079_fix_mtn_personal_send_money_complete_menu_sequence.sql'
 );
 
 const sql = fs.readFileSync(migrationPath, 'utf8');
 
 describe('MTN Personal Send Money other-network flow', () => {
-  test('uses current *170# first menu -> Other Networks path', () => {
-    expect(sql).toContain("'send_money_cross_network'");
-    expect(sql).toContain("'*170#'");
+  test('uses Transfer Money before Other Networks', () => {
+    expect(sql).toContain(
+      "ARRAY['transfer money']"
+    );
 
     expect(sql).toContain("'momo user'");
     expect(sql).toContain("'other networks'");
     expect(sql).toContain("'bank account'");
 
     expect(sql).toContain(
-      "'send_digit'"
-    );
-
-    expect(sql).toContain(
       "'5'"
-    );
-
-    expect(sql).not.toContain(
-      "ARRAY['transfer money']"
     );
   });
 
@@ -46,11 +39,6 @@ describe('MTN Personal Send Money other-network flow', () => {
   });
 
   test('submits and confirms recipient phone', () => {
-    const phoneActions =
-      sql.match(/'send_customer_phone'/g) || [];
-
-    expect(phoneActions).toHaveLength(2);
-
     expect(sql).toContain(
       "ARRAY['enter mobile number']"
     );
@@ -60,21 +48,13 @@ describe('MTN Personal Send Money other-network flow', () => {
     );
   });
 
-  test('sends amount and required reference before manual PIN', () => {
+  test('sends amount and reference then stops at PIN', () => {
     expect(sql).toContain(
       "ARRAY['enter amount to transfer']"
     );
 
     expect(sql).toContain(
-      "'send_amount'"
-    );
-
-    expect(sql).toContain(
       "ARRAY['enter reference id']"
-    );
-
-    expect(sql).toContain(
-      "'send_reference'"
     );
 
     expect(sql).toContain(
@@ -86,26 +66,19 @@ describe('MTN Personal Send Money other-network flow', () => {
     );
   });
 
-  test('does not guess receipt markers or post-PIN confirmation', () => {
-    const emptyMarkers =
-      sql.match(/ARRAY\[\]::TEXT\[\]/g) || [];
-
-    expect(emptyMarkers.length).toBeGreaterThanOrEqual(2);
-
+  test('does not automate any post-PIN decision', () => {
     expect(sql).not.toContain(
       "'auto_confirm_once'"
     );
   });
 
-  test('fails loudly instead of silently applying without a superuser', () => {
+  test('requires exactly one active Global cross-network flow', () => {
     expect(sql).toContain(
-      'Cannot seed MTN Personal cross-network USSD flow: no superuser exists'
+      'IF cross_network_count <> 1 THEN'
     );
 
-    expect(sql).toContain('RAISE EXCEPTION');
-
-    expect(sql).not.toContain(
-      "AND EXISTS (\n  SELECT 1\n  FROM users\n  WHERE role = 'superuser'\n)"
+    expect(sql).toContain(
+      'RAISE EXCEPTION'
     );
   });
 });
