@@ -3,7 +3,6 @@
 -- Confirmed on a live MTN Personal MoMo SIM using *170#:
 --
 --   *170#
---   1) Transfer Money
 --   5) Other Networks
 --
 --   Recipient network:
@@ -94,18 +93,16 @@ FROM ussd_flows f,
   VALUES
     (
       1,
-      ARRAY['transfer money'],
-      'send_digit',
-      '1'
-    ),
-    (
-      2,
-      ARRAY['other networks'],
+      ARRAY[
+        'momo user',
+        'other networks',
+        'bank account'
+      ],
       'send_digit',
       '5'
     ),
     (
-      3,
+      2,
       ARRAY[
         'transfer money to other network',
         'telecel',
@@ -115,31 +112,31 @@ FROM ussd_flows f,
       NULL
     ),
     (
-      4,
+      3,
       ARRAY['enter mobile number'],
       'send_customer_phone',
       NULL
     ),
     (
-      5,
+      4,
       ARRAY['confirm mobile number'],
       'send_customer_phone',
       NULL
     ),
     (
-      6,
+      5,
       ARRAY['enter amount to transfer'],
       'send_amount',
       NULL
     ),
     (
-      7,
+      6,
       ARRAY['enter reference id'],
       'send_reference',
       NULL
     ),
     (
-      8,
+      7,
       ARRAY['enter mm pin'],
       'pin_prompt',
       NULL

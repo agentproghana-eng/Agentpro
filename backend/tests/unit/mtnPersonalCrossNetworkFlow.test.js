@@ -11,28 +11,24 @@ const migrationPath = path.join(
 const sql = fs.readFileSync(migrationPath, 'utf8');
 
 describe('MTN Personal Send Money other-network flow', () => {
-  test('uses the confirmed *170# Transfer Money -> Other Networks path', () => {
+  test('uses current *170# first menu -> Other Networks path', () => {
     expect(sql).toContain("'send_money_cross_network'");
     expect(sql).toContain("'*170#'");
 
-    expect(sql).toContain(
-      "ARRAY['transfer money']"
-    );
+    expect(sql).toContain("'momo user'");
+    expect(sql).toContain("'other networks'");
+    expect(sql).toContain("'bank account'");
 
     expect(sql).toContain(
-      "'send_digit',"
-    );
-
-    expect(sql).toContain(
-      "'1'"
-    );
-
-    expect(sql).toContain(
-      "ARRAY['other networks']"
+      "'send_digit'"
     );
 
     expect(sql).toContain(
       "'5'"
+    );
+
+    expect(sql).not.toContain(
+      "ARRAY['transfer money']"
     );
   });
 
@@ -112,6 +108,4 @@ describe('MTN Personal Send Money other-network flow', () => {
       "AND EXISTS (\n  SELECT 1\n  FROM users\n  WHERE role = 'superuser'\n)"
     );
   });
-
-
 });
