@@ -152,6 +152,21 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   final _flexiAmountCtrl = TextEditingController();
   bool _loading = false;
 
+  static const Map<String, String> _mtnCrossNetworkOptions = {
+    '1': 'AT',
+    '2': 'Telecel',
+    '3': 'E-zwich',
+    '4': 'G-Money',
+    '5': 'Zeepay',
+    '6': 'GhanaPay',
+  };
+
+  String? _crossNetworkSelection;
+
+  bool get _isMtnCrossNetwork =>
+      widget.provider == 'mtn' &&
+      widget.transactionType == 'send_money_cross_network';
+
   bool get _isDataBundle => widget.transactionType == 'buy_data';
 
   bool get _needsAmount =>
@@ -168,7 +183,10 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
 
   bool get _referenceRequired =>
       widget.provider == 'mtn' &&
-      widget.transactionType == 'send_money_same_network';
+      [
+        'send_money_same_network',
+        'send_money_cross_network',
+      ].contains(widget.transactionType);
 
   bool get _needsTillNumber => widget.transactionType == 'withdraw_cash';
 
@@ -277,6 +295,10 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           'amount': _needsAmount ? _amountCtrl.text.trim() : null,
           'customer_phone': _needsPhone ? _phoneCtrl.text.trim() : null,
           'request_fields': requestFields,
+          if (_isMtnCrossNetwork && _crossNetworkSelection != null)
+            'selections_in_order': [
+              _crossNetworkSelection!,
+            ],
         },
       );
     } on DioException catch (e) {
@@ -385,6 +407,32 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       key: _formKey,
       child: ListView(
         children: [
+          if (_isMtnCrossNetwork) ...[
+            DropdownButtonFormField<String>(
+              initialValue: _crossNetworkSelection,
+              decoration: const InputDecoration(
+                labelText: 'Recipient Network',
+                prefixIcon: Icon(Icons.cell_tower_outlined),
+                helperText: 'Choose the destination network shown by MTN',
+              ),
+              items: _mtnCrossNetworkOptions.entries
+                  .map(
+                    (entry) => DropdownMenuItem<String>(
+                      value: entry.key,
+                      child: Text(entry.value),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                setState(() {
+                  _crossNetworkSelection = value;
+                });
+              },
+              validator: (value) =>
+                  value == null ? 'Recipient network is required' : null,
+            ),
+            const SizedBox(height: 14),
+          ],
           if (_needsAmount) ...[
             AppTextField(
               controller: _amountCtrl,
