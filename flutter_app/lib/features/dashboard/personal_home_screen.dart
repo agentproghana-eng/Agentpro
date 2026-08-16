@@ -8,6 +8,7 @@ import '../../core/auth/auth_bloc.dart';
 import '../../core/api/api_client.dart';
 import '../../core/services/sim_card_service.dart';
 import '../../core/services/dashboard_refresh_service.dart';
+import '../../core/router/app_router.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/personal_ad_banner.dart';
@@ -35,7 +36,8 @@ class PersonalHomeScreen extends StatefulWidget {
   State<PersonalHomeScreen> createState() => _PersonalHomeScreenState();
 }
 
-class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
+class _PersonalHomeScreenState extends State<PersonalHomeScreen>
+    with RouteAware {
   String _provider = 'mtn';
   Map<String, SimCard?>? _simMap;
   List<dynamic> _recent = [];
@@ -46,6 +48,12 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
   bool _highlightNewestTransaction = false;
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    routeObserver.subscribe(this, ModalRoute.of(context) as PageRoute);
+  }
+
+  @override
   void initState() {
     super.initState();
 
@@ -53,13 +61,32 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
       _handleDashboardRefresh,
     );
 
-    _loadSimMap();
-    _loadRecent();
-    _loadQuickActions();
+    unawaited(_refreshPersonalContext());
+  }
+
+  @override
+  void didPopNext() {
+    unawaited(_refreshPersonalContext());
+  }
+
+  Future<void> _refreshPersonalContext() async {
+    await Future.wait([
+      _loadSimMap(),
+      _loadQuickActions(),
+    ]);
+
+    if (!mounted) return;
+
+    await _loadRecent();
   }
 
   Future<void> _handleDashboardRefresh(DashboardRefreshEvent event) async {
     if (!event.isPersonal || !mounted) return;
+
+    final simMap = _simMap;
+    if (simMap != null && simMap[event.provider] == null) {
+      return;
+    }
 
     if (_provider != event.provider) {
       setState(() => _provider = event.provider);
@@ -118,7 +145,11 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
         setState(() {
           _quickActionCatalog = catalog;
 
-          if (catalog!.providers.isNotEmpty &&
+          // Once SIM detection has completed, the physical
+          // Personal-assigned SIM is the provider source of truth.
+          // The catalog only decides which actions that provider has.
+          if (_simMap == null &&
+              catalog!.providers.isNotEmpty &&
               !catalog.providers.contains(_provider)) {
             _provider = catalog.providers.first;
           }
@@ -193,7 +224,9 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
             ..._personalQuickActions.keys,
           };
 
-          if (providers.isNotEmpty && providers.contains(_provider) == false) {
+          if (_simMap == null &&
+              providers.isNotEmpty &&
+              providers.contains(_provider) == false) {
             _provider = providers.first;
           }
         });
@@ -241,20 +274,33 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
   }
 
   Future<void> _loadRecent() async {
-    setState(() => _loadingRecent = true);
+    final requestedProvider = _provider;
+
+    if (mounted) {
+      setState(() => _loadingRecent = true);
+    }
+
     try {
       final res = await ApiClient.instance.get(
         '/personal-transactions',
-        queryParameters: {'limit': 5, 'provider': _provider},
+        queryParameters: {
+          'limit': 5,
+          'provider': requestedProvider,
+        },
       );
-      if (mounted) {
+
+      // Ignore a response that belongs to a provider which stopped
+      // being selected while this request was in flight.
+      if (mounted && requestedProvider == _provider) {
         setState(() {
           _recent = res.data['data'] ?? [];
           _loadingRecent = false;
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _loadingRecent = false);
+      if (mounted && requestedProvider == _provider) {
+        setState(() => _loadingRecent = false);
+      }
     }
   }
 
@@ -299,17 +345,19 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
         );
       }
 
+      final availableProviders = map.entries
+          .where((entry) => entry.value != null)
+          .map((entry) => entry.key)
+          .toList();
+
       if (!mounted) return;
+
       setState(() {
         _simMap = map;
-        if (map[_provider] == null) {
-          final firstAvailable = map.entries
-              .firstWhere(
-                (e) => e.value != null,
-                orElse: () => map.entries.first,
-              )
-              .key;
-          _provider = firstAvailable;
+
+        if (availableProviders.isNotEmpty &&
+            !availableProviders.contains(_provider)) {
+          _provider = availableProviders.first;
         }
       });
     } catch (_) {
@@ -320,6 +368,18 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
 
   void _startTransaction(String type) {
     final sim = _simMap?[_provider];
+
+    if (_simMap != null && sim == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'No Personal ${_providerLabel(_provider)} SIM is assigned.',
+          ),
+        ),
+      );
+      return;
+    }
+
     final query = <String, String>{
       'type': type,
       'provider': _provider,
@@ -333,6 +393,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
 
   @override
   void dispose() {
+    routeObserver.unsubscribe(this);
     _dashboardRefreshSubscription?.cancel();
     super.dispose();
   }
@@ -353,20 +414,20 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
       ..._personalQuickActions.keys,
     }.toList();
 
-    final noSimsDetected = simMap == null
-        ? false
-        : simMap.values.every((value) => value == null) &&
-            _personalQuickActions.keys.every(simMap.containsKey);
+    // Once SIM detection succeeds, Personal Home is driven by the
+    // physical SIMs that remain after Agent-purpose filtering.
+    // A provider does not need to have a catalog entry just to appear.
+    final personalSimProviders = simMap == null
+        ? const <String>[]
+        : simMap.entries
+            .where((entry) => entry.value != null)
+            .map((entry) => entry.key)
+            .toList();
 
-    final visibleProviders = simMap == null
-        ? providerCandidates
-        : providerCandidates.where((provider) {
-            if (simMap.containsKey(provider)) {
-              return simMap[provider] == null ? false : true;
-            }
+    final noSimsDetected = simMap != null && personalSimProviders.isEmpty;
 
-            return _personalQuickActions.containsKey(provider);
-          }).toList();
+    final visibleProviders =
+        simMap == null ? providerCandidates : personalSimProviders;
 
     return Scaffold(
       body: Column(
@@ -465,11 +526,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
           ),
           Expanded(
             child: RefreshIndicator(
-              onRefresh: () => Future.wait([
-                _loadSimMap(),
-                _loadRecent(),
-                _loadQuickActions(),
-              ]),
+              onRefresh: _refreshPersonalContext,
               child: CustomScrollView(
                 slivers: [
                   const SliverToBoxAdapter(child: OfflineStatusBanner()),
@@ -486,7 +543,8 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Text(
-                                'No SIM card detected. Insert a SIM to use transaction features.',
+                                'No Personal SIM is assigned. '
+                                'Use Settings > SIM Purpose to assign one.',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: context.isDarkMode
@@ -574,62 +632,70 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen> {
                     ),
                   ),
                   SliverToBoxAdapter(
-                    child: _visibleQuickActions.isEmpty
-                        ? DashboardEmptyState(
-                            icon: Icons.grid_view_rounded,
-                            title: 'No quick actions available',
-                            message: 'No personal transaction actions are '
-                                'currently available for '
-                                '${_providerLabel(_provider)}.',
-                            actionLabel: 'Customize Quick Actions',
-                            actionIcon: Icons.tune_rounded,
-                            onAction: () =>
-                                context.push('/personal-quick-actions'),
+                    child: noSimsDetected
+                        ? const DashboardEmptyState(
+                            icon: Icons.sim_card_outlined,
+                            title: 'No Personal SIM assigned',
+                            message: 'Assign a detected SIM to Personal in '
+                                'Settings > SIM Purpose.',
                           )
-                        : Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-                            child: GridView.count(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              crossAxisCount: 3,
-                              crossAxisSpacing: 10,
-                              mainAxisSpacing: 10,
-                              childAspectRatio: 0.85,
-                              children: _visibleQuickActions.map(
-                                (preference) {
-                                  final definition = _quickActionDefinition(
-                                    preference.actionKey,
-                                  );
-
-                                  final icon = quickActionIconFromKey(
-                                        preference.iconKey,
-                                      ) ??
-                                      definition?.icon ??
-                                      quickActionCatalogIcon(
+                        : _visibleQuickActions.isEmpty
+                            ? DashboardEmptyState(
+                                icon: Icons.grid_view_rounded,
+                                title: 'No quick actions available',
+                                message: 'No personal transaction actions are '
+                                    'currently available for '
+                                    '${_providerLabel(_provider)}.',
+                                actionLabel: 'Customize Quick Actions',
+                                actionIcon: Icons.tune_rounded,
+                                onAction: () =>
+                                    context.push('/personal-quick-actions'),
+                              )
+                            : Padding(
+                                padding:
+                                    const EdgeInsets.fromLTRB(16, 14, 16, 4),
+                                child: GridView.count(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  crossAxisCount: 3,
+                                  crossAxisSpacing: 10,
+                                  mainAxisSpacing: 10,
+                                  childAspectRatio: 0.85,
+                                  children: _visibleQuickActions.map(
+                                    (preference) {
+                                      final definition = _quickActionDefinition(
                                         preference.actionKey,
                                       );
 
-                                  final label = preference.resolvedLabel(
-                                    definition?.displayLabel ??
-                                        quickActionTransactionLabel(
+                                      final icon = quickActionIconFromKey(
+                                            preference.iconKey,
+                                          ) ??
+                                          definition?.icon ??
+                                          quickActionCatalogIcon(
+                                            preference.actionKey,
+                                          );
+
+                                      final label = preference.resolvedLabel(
+                                        definition?.displayLabel ??
+                                            quickActionTransactionLabel(
+                                              preference.actionKey,
+                                            ),
+                                      );
+
+                                      return _QuickActionTile(
+                                        icon: icon,
+                                        iconColor: preference.resolvedIconColor(
+                                          AppTheme.primaryColor,
+                                        ),
+                                        label: label,
+                                        onTap: () => _startTransaction(
                                           preference.actionKey,
                                         ),
-                                  );
-
-                                  return _QuickActionTile(
-                                    icon: icon,
-                                    iconColor: preference.resolvedIconColor(
-                                      AppTheme.primaryColor,
-                                    ),
-                                    label: label,
-                                    onTap: () => _startTransaction(
-                                      preference.actionKey,
-                                    ),
-                                  );
-                                },
-                              ).toList(),
-                            ),
-                          ),
+                                      );
+                                    },
+                                  ).toList(),
+                                ),
+                              ),
                   ),
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 7),
