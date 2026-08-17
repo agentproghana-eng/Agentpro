@@ -11,6 +11,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 
 const Map<String, String> kPersonalTransactionLabels = {
+  'send_money': 'Send Money',
   'send_money_same_network': 'Send Money (Same Network)',
   'send_money_cross_network': 'Send Money (Other Network)',
   'buy_airtime': 'Buy Airtime',
@@ -172,10 +173,25 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   };
 
   String? _crossNetworkSelection;
+  String? _sendMoneyMode;
+
+  bool get _isUnifiedSendMoney => widget.transactionType == 'send_money';
+
+  String get _effectiveTransactionType {
+    if (!_isUnifiedSendMoney) {
+      return widget.transactionType;
+    }
+
+    return switch (_sendMoneyMode) {
+      'same_network' => 'send_money_same_network',
+      'other_network' => 'send_money_cross_network',
+      _ => widget.transactionType,
+    };
+  }
 
   bool get _isMtnCrossNetwork =>
       widget.provider == 'mtn' &&
-      widget.transactionType == 'send_money_cross_network';
+      _effectiveTransactionType == 'send_money_cross_network';
 
   bool get _isMtnAirtime =>
       widget.provider == 'mtn' && widget.transactionType == 'buy_airtime';
@@ -220,31 +236,40 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
 
   bool get _isDataBundle => widget.transactionType == 'buy_data';
 
-  bool get _needsAmount =>
-      !kNoAmountPersonalTypes.contains(widget.transactionType) &&
-      !_isDataBundle;
+  bool get _needsAmount {
+    if (_isUnifiedSendMoney && _sendMoneyMode == null) {
+      return false;
+    }
+
+    return !kNoAmountPersonalTypes.contains(_effectiveTransactionType) &&
+        !_isDataBundle;
+  }
 
   bool get _needsPhone {
+    if (_isUnifiedSendMoney && _sendMoneyMode == null) {
+      return false;
+    }
+
     if (_isMtnAirtime) {
       return _recipientMode == 'other';
     }
 
-    return !kNoAmountPersonalTypes.contains(widget.transactionType) &&
-        widget.transactionType != 'withdraw_cash' &&
+    return !kNoAmountPersonalTypes.contains(_effectiveTransactionType) &&
+        _effectiveTransactionType != 'withdraw_cash' &&
         !_isDataBundle;
   }
 
   bool get _needsReference => [
         'send_money_same_network',
         'send_money_cross_network',
-      ].contains(widget.transactionType);
+      ].contains(_effectiveTransactionType);
 
   bool get _referenceRequired =>
       widget.provider == 'mtn' &&
       [
         'send_money_same_network',
         'send_money_cross_network',
-      ].contains(widget.transactionType);
+      ].contains(_effectiveTransactionType);
 
   bool get _needsTillNumber => widget.transactionType == 'withdraw_cash';
 
@@ -475,10 +500,11 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     String? progressAction;
 
     final reference = _referenceCtrl.text.trim();
+    final transactionType = _effectiveTransactionType;
 
     final requestFields = <String, dynamic>{
       'provider': widget.provider,
-      'transaction_type': widget.transactionType,
+      'transaction_type': transactionType,
       if (_isMtnAirtime && _recipientMode != null)
         'recipient_mode': _recipientMode,
       if (_needsAmount) 'amount': double.tryParse(_amountCtrl.text.trim()),
@@ -505,7 +531,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           'is_personal': true,
           'transaction': transaction,
           'provider': widget.provider,
-          'transaction_type': widget.transactionType,
+          'transaction_type': transactionType,
           if (_isMtnAirtime && _recipientMode != null)
             'recipient_mode': _recipientMode,
           'amount': _needsAmount ? _amountCtrl.text.trim() : null,
@@ -810,6 +836,38 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       key: _formKey,
       child: ListView(
         children: [
+          if (_isUnifiedSendMoney) ...[
+            DropdownButtonFormField<String>(
+              initialValue: _sendMoneyMode,
+              decoration: const InputDecoration(
+                labelText: 'Where are you sending?',
+                prefixIcon: Icon(Icons.send_outlined),
+                helperText: 'Choose Same Network or Other Network',
+              ),
+              items: const [
+                DropdownMenuItem<String>(
+                  value: 'same_network',
+                  child: Text('Same Network'),
+                ),
+                DropdownMenuItem<String>(
+                  value: 'other_network',
+                  child: Text('Other Network'),
+                ),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  _sendMoneyMode = value;
+
+                  // Network selection only belongs to the MTN
+                  // cross-network variant.
+                  _crossNetworkSelection = null;
+                });
+              },
+              validator: (value) =>
+                  value == null ? 'Choose where you are sending money' : null,
+            ),
+            const SizedBox(height: 14),
+          ],
           if (_isMtnAirtime) ...[
             DropdownButtonFormField<String>(
               initialValue: _recipientMode,

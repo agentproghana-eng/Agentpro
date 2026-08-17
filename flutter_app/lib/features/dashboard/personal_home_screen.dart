@@ -296,6 +296,61 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
     return saved.where((item) => item.isVisible).take(9).toList();
   }
 
+  bool _isPersonalSendMoneyAction(String actionKey) =>
+      actionKey == 'send_money_same_network' ||
+      actionKey == 'send_money_cross_network';
+
+  List<QuickActionPreference> get _homeQuickActions {
+    final visible = _visibleQuickActions;
+
+    final hasSameNetwork = visible.any(
+      (item) => item.actionKey == 'send_money_same_network',
+    );
+
+    final hasOtherNetwork = visible.any(
+      (item) => item.actionKey == 'send_money_cross_network',
+    );
+
+    // Keep the saved/catalog behaviour untouched unless both real
+    // Send Money variants are available. When both exist, Personal Home
+    // presents one UI action while the transaction form chooses the
+    // underlying transaction type.
+    if (!hasSameNetwork || !hasOtherNetwork) {
+      return visible;
+    }
+
+    final collapsed = <QuickActionPreference>[];
+    var sendMoneyInserted = false;
+
+    for (final preference in visible) {
+      if (_isPersonalSendMoneyAction(preference.actionKey)) {
+        if (!sendMoneyInserted) {
+          collapsed.add(
+            preference.copyWith(
+              actionKey: 'send_money',
+              customName: 'Send Money',
+            ),
+          );
+          sendMoneyInserted = true;
+        }
+
+        continue;
+      }
+
+      collapsed.add(preference);
+    }
+
+    return collapsed
+        .asMap()
+        .entries
+        .map(
+          (entry) => entry.value.copyWith(
+            position: entry.key,
+          ),
+        )
+        .toList();
+  }
+
   String _providerLabel(String provider) {
     return quickActionProviderLabel(provider);
   }
@@ -848,7 +903,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
                             message: 'Assign a detected SIM to Personal in '
                                 'Settings > SIM Purpose.',
                           )
-                        : _visibleQuickActions.isEmpty
+                        : _homeQuickActions.isEmpty
                             ? DashboardEmptyState(
                                 icon: Icons.grid_view_rounded,
                                 title: 'No quick actions available',
@@ -870,7 +925,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
                                   crossAxisSpacing: 10,
                                   mainAxisSpacing: 10,
                                   childAspectRatio: 0.85,
-                                  children: _visibleQuickActions.map(
+                                  children: _homeQuickActions.map(
                                     (preference) {
                                       final definition = _quickActionDefinition(
                                         preference.actionKey,

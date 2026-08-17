@@ -92,6 +92,54 @@ void main() {
     expect(transactionSource, contains("child: Text('Someone else')"));
   });
 
+  test('Personal Send Money is grouped into one Home action', () {
+    expect(
+      homeSource,
+      contains("actionKey == 'send_money_same_network'"),
+    );
+    expect(
+      homeSource,
+      contains("actionKey == 'send_money_cross_network'"),
+    );
+    expect(
+      homeSource,
+      contains("actionKey: 'send_money'"),
+    );
+    expect(
+      homeSource,
+      contains("customName: 'Send Money'"),
+    );
+
+    expect(
+      transactionSource,
+      contains("widget.transactionType == 'send_money'"),
+    );
+    expect(
+      transactionSource,
+      contains("labelText: 'Where are you sending?'"),
+    );
+    expect(
+      transactionSource,
+      contains("value: 'same_network'"),
+    );
+    expect(
+      transactionSource,
+      contains("value: 'other_network'"),
+    );
+    expect(
+      transactionSource,
+      contains("'same_network' => 'send_money_same_network'"),
+    );
+    expect(
+      transactionSource,
+      contains("'other_network' => 'send_money_cross_network'"),
+    );
+    expect(
+      transactionSource,
+      contains("'transaction_type': transactionType"),
+    );
+  });
+
   test('Personal route carries exact physical SIM identity', () {
     expect(homeSource, contains("'sim_slot'"));
     expect(homeSource, contains("'sim_iccid'"));
