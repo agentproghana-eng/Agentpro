@@ -16,29 +16,80 @@ void main() {
   ).readAsStringSync();
 
   test('Personal generic form keeps the verified input order', () {
+    final form = transactionSource.indexOf(
+      'Widget _buildGenericForm',
+    );
+
+    expect(form, greaterThanOrEqualTo(0));
+
     final network = transactionSource.indexOf(
       'if (_isMtnCrossNetwork)',
+      form,
     );
 
     final phone = transactionSource.indexOf(
-      'if (_needsPhone)',
-      network,
+      'if (!_isMtnAirtime && _needsPhone)',
+      form,
     );
 
     final amount = transactionSource.indexOf(
-      'if (_needsAmount)',
-      phone,
+      'if (!_isMtnAirtime && _needsAmount)',
+      form,
     );
 
     final reference = transactionSource.indexOf(
       'if (_needsReference)',
-      amount,
+      form,
     );
 
-    expect(network, greaterThanOrEqualTo(0));
+    expect(network, greaterThan(form));
     expect(phone, greaterThan(network));
     expect(amount, greaterThan(phone));
     expect(reference, greaterThan(amount));
+  });
+
+  test('MTN Personal Airtime keeps the live-confirmed input order', () {
+    final form = transactionSource.indexOf(
+      'Widget _buildGenericForm',
+    );
+
+    expect(form, greaterThanOrEqualTo(0));
+
+    final airtime = transactionSource.indexOf(
+      'if (_isMtnAirtime) ...[',
+      form,
+    );
+
+    final recipientChoice = transactionSource.indexOf(
+      "labelText: 'Who is receiving the airtime?'",
+      form,
+    );
+
+    final amount = transactionSource.indexOf(
+      'controller: _amountCtrl',
+      recipientChoice,
+    );
+
+    final conditionalPhone = transactionSource.indexOf(
+      'if (_needsPhone) ...[',
+      recipientChoice,
+    );
+
+    final genericNetwork = transactionSource.indexOf(
+      'if (_isMtnCrossNetwork)',
+      form,
+    );
+
+    expect(airtime, greaterThan(form));
+    expect(recipientChoice, greaterThan(airtime));
+    expect(amount, greaterThan(recipientChoice));
+    expect(conditionalPhone, greaterThan(amount));
+    expect(genericNetwork, greaterThan(conditionalPhone));
+
+    expect(transactionSource, contains("value: 'self'"));
+    expect(transactionSource, contains("value: 'other'"));
+    expect(transactionSource, contains("child: Text('Myself')"));
+    expect(transactionSource, contains("child: Text('Someone else')"));
   });
 
   test('Personal route carries exact physical SIM identity', () {
