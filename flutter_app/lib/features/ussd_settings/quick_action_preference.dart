@@ -166,37 +166,65 @@ List<QuickActionPreference> normalizeBusinessQuickActionPreferences({
   required String provider,
   required List<QuickActionPreference> preferences,
 }) {
-  if (provider != 'mtn') {
-    return List<QuickActionPreference>.from(preferences);
+  final normalizedProvider = provider.trim().toLowerCase();
+
+  // Remove only obsolete system-generated labels. Genuine custom names
+  // remain untouched.
+  final cleaned = preferences.map((preference) {
+    final customName = preference.customName?.trim().toLowerCase();
+
+    if (normalizedProvider == 'mtn' &&
+        preference.actionKey == 'send_money' &&
+        customName == 'send money') {
+      return preference.copyWith(clearCustomName: true);
+    }
+
+    if (preference.actionKey == 'bill_payment' &&
+        customName == 'bill payment') {
+      return preference.copyWith(clearCustomName: true);
+    }
+
+    return preference;
+  }).toList();
+
+  if (normalizedProvider != 'mtn') {
+    return cleaned;
   }
 
-  final legacyCashInIndex = preferences.indexWhere(
+  final legacyCashInIndex = cleaned.indexWhere(
     (item) => item.actionKey == 'cash_in',
   );
 
   if (legacyCashInIndex < 0) {
-    return List<QuickActionPreference>.from(preferences);
+    return cleaned;
   }
 
   final normalized = <QuickActionPreference>[];
 
-  for (var index = 0; index < preferences.length; index++) {
-    final preference = preferences[index];
+  for (var index = 0; index < cleaned.length; index++) {
+    final preference = cleaned[index];
 
     if (index == legacyCashInIndex) {
-      // The confirmed MTN Cash In flow is internally send_money.
-      // Replace the legacy cash_in tile IN PLACE so the user's
-      // dashboard position, icon, colour and visibility are preserved.
+      // MTN Agent Cash In is internally the send_money transaction.
+      //
+      // Preserve the old Cash In tile's position/icon/colour/visibility,
+      // but use the canonical transaction type. If its saved name was
+      // merely an old system label, let the semantic label resolver
+      // provide the current "Cash In" wording.
+      final oldName = preference.customName?.trim().toLowerCase();
+
       normalized.add(
         preference.copyWith(
           actionKey: 'send_money',
+          clearCustomName: oldName == 'send money' || oldName == 'cash in',
         ),
       );
+
       continue;
     }
 
-    // Remove the old second send_money slot. Its canonical Cash In
-    // replacement now occupies the former cash_in position above.
+    // The canonical send_money action now occupies the old Cash In
+    // position, so its former duplicate position is removed.
     if (preference.actionKey == 'send_money') {
       continue;
     }
@@ -208,9 +236,7 @@ List<QuickActionPreference> normalizeBusinessQuickActionPreferences({
       .asMap()
       .entries
       .map(
-        (entry) => entry.value.copyWith(
-          position: entry.key,
-        ),
+        (entry) => entry.value.copyWith(position: entry.key),
       )
       .toList();
 }

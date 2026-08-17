@@ -11,6 +11,10 @@ void main() {
     'lib/features/dashboard/personal_home_screen.dart',
   ).readAsStringSync();
 
+  final quickActionPreferenceSource = File(
+    'lib/features/ussd_settings/quick_action_preference.dart',
+  ).readAsStringSync();
+
   final routerSource = File(
     'lib/core/router/app_router.dart',
   ).readAsStringSync();
@@ -95,18 +99,27 @@ void main() {
   test('Personal Send Money is grouped into one Home action', () {
     expect(
       homeSource,
+      contains('normalizePersonalQuickActionPreferences('),
+    );
+    expect(
+      homeSource,
+      contains('preferences: _visibleQuickActions'),
+    );
+
+    expect(
+      quickActionPreferenceSource,
       contains("actionKey == 'send_money_same_network'"),
     );
     expect(
-      homeSource,
+      quickActionPreferenceSource,
       contains("actionKey == 'send_money_cross_network'"),
     );
     expect(
-      homeSource,
+      quickActionPreferenceSource,
       contains("actionKey: 'send_money'"),
     );
     expect(
-      homeSource,
+      quickActionPreferenceSource,
       contains("customName: 'Send Money'"),
     );
 
