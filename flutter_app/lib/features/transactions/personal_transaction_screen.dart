@@ -127,6 +127,23 @@ const List<DataBundleOption> kFlexiPayment = [
   DataBundleOption('Pay with Telecel Cash', '2'),
 ];
 
+const List<DataBundleOption> kMtnDataPage1 = [
+  DataBundleOption('GHS 0.50', '2'),
+  DataBundleOption('GHS 1', '3'),
+  DataBundleOption('GHS 3', '4'),
+];
+
+const List<DataBundleOption> kMtnDataPage2 = [
+  DataBundleOption('GHS 10', '5'),
+  DataBundleOption('GHS 350', '6'),
+  DataBundleOption('GHS 399', '7'),
+];
+
+const List<DataBundleOption> kMtnDataPayment = [
+  DataBundleOption('Airtime', '1'),
+  DataBundleOption('Mobile Money', '2'),
+];
+
 class PersonalTransactionScreen extends StatefulWidget {
   final String transactionType;
   final String provider;
@@ -273,6 +290,9 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
 
   bool get _needsTillNumber => widget.transactionType == 'withdraw_cash';
 
+  bool get _isMtnDataBundle =>
+      widget.provider == 'mtn' && widget.transactionType == 'buy_data';
+
   String _dbStep = 'recipient_mode';
   String? _recipientMode;
   String? _bundleCategory;
@@ -290,6 +310,19 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   }
 
   List<String> _computeSelections() {
+    if (_isMtnDataBundle) {
+      if (_bundleCategory == 'fixed_page1' ||
+          _bundleCategory == 'fixed_page2') {
+        return [
+          if (_bundleChoice != null) _bundleChoice!.digit,
+        ];
+      }
+
+      // Flexi is always menu option 1, so its flow uses a static
+      // send_digit step rather than consuming a dynamic selection.
+      return const [];
+    }
+
     if (_bundleCategory == 'flexi') {
       return [
         if (_flexiType != null) _flexiType!.digit,
@@ -595,13 +628,19 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     final flexiAmount =
         _bundleCategory == 'flexi' ? _flexiAmountCtrl.text.trim() : null;
 
+    final resolvedBundleCategory = _isMtnDataBundle &&
+            _bundleCategory != null &&
+            _flexiPayment != null
+        ? '${_bundleCategory}_${_flexiPayment!.digit == '1' ? 'airtime' : 'momo'}'
+        : _bundleCategory;
+
     try {
       final res = await ApiClient.instance.post(
         '/personal-transactions',
         data: {
           'provider': widget.provider,
           'transaction_type': widget.transactionType,
-          'bundle_category': _bundleCategory,
+          'bundle_category': resolvedBundleCategory,
           'recipient_mode': _recipientMode,
           if (recipientPhone != null) 'recipient_phone': recipientPhone,
           if (flexiAmount != null) 'amount': double.tryParse(flexiAmount),
@@ -621,7 +660,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           'transaction': transaction,
           'provider': widget.provider,
           'transaction_type': widget.transactionType,
-          'bundle_category': _bundleCategory,
+          'bundle_category': resolvedBundleCategory,
           'recipient_mode': _recipientMode,
           'selections_in_order': _computeSelections(),
           'amount': flexiAmount,
@@ -1033,6 +1072,12 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         return _dbRecipientModeStep(context);
       case 'recipient_phone':
         return _dbRecipientPhoneStep(context);
+      case 'mtn_bundle':
+        return _dbMtnBundleStep(context);
+      case 'mtn_flexi_amount':
+        return _dbMtnFlexiAmountStep(context);
+      case 'mtn_payment':
+        return _dbMtnPaymentStep(context);
       case 'category':
         return _dbCategoryStep(context);
       case 'bundle':
@@ -1100,7 +1145,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
               child: _dbBigOption(context, 'Self', Icons.person_outline, () {
                 setState(() {
                   _recipientMode = 'self';
-                  _dbStep = 'category';
+                  _dbStep = _isMtnDataBundle ? 'mtn_bundle' : 'category';
                 });
               }),
             ),
@@ -1175,10 +1220,137 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
               );
               return;
             }
-            setState(() => _dbStep = 'category');
+            setState(
+              () => _dbStep = _isMtnDataBundle ? 'mtn_bundle' : 'category',
+            );
           },
         ),
       ],
+    );
+  }
+
+  Widget _dbMtnBundleStep(BuildContext context) {
+    return ListView(
+      children: [
+        _dbBack(
+          () => setState(
+            () => _dbStep = _recipientMode == 'other'
+                ? 'recipient_phone'
+                : 'recipient_mode',
+          ),
+        ),
+        Text(
+          'Choose data bundle',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Choose Flexi or one of the current MTN bundle amounts.',
+          style: TextStyle(color: context.appSecondaryText),
+        ),
+        const SizedBox(height: 16),
+        _dbOptionTile(
+          const DataBundleOption('Flexi — choose any amount', '1'),
+          () {
+            setState(() {
+              _bundleCategory = 'flexi';
+              _bundleChoice = const DataBundleOption('Flexi Bundle', '1');
+              _flexiPayment = null;
+              _flexiAmountCtrl.clear();
+              _dbStep = 'mtn_flexi_amount';
+            });
+          },
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Fixed bundles',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+        const SizedBox(height: 8),
+        ...kMtnDataPage1.map(
+          (opt) => _dbOptionTile(opt, () {
+            setState(() {
+              _bundleCategory = 'fixed_page1';
+              _bundleChoice = opt;
+              _flexiPayment = null;
+              _dbStep = 'mtn_payment';
+            });
+          }),
+        ),
+        ...kMtnDataPage2.map(
+          (opt) => _dbOptionTile(opt, () {
+            setState(() {
+              _bundleCategory = 'fixed_page2';
+              _bundleChoice = opt;
+              _flexiPayment = null;
+              _dbStep = 'mtn_payment';
+            });
+          }),
+        ),
+      ],
+    );
+  }
+
+  Widget _dbMtnFlexiAmountStep(BuildContext context) {
+    return ListView(
+      children: [
+        _dbBack(() => setState(() => _dbStep = 'mtn_bundle')),
+        Text(
+          'Flexi amount',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'MTN currently accepts GHS 0.03 – 399.',
+          style: TextStyle(color: context.appSecondaryText),
+        ),
+        const SizedBox(height: 16),
+        AppTextField(
+          controller: _flexiAmountCtrl,
+          label: 'Amount (GHS)',
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          prefixIcon: Icons.payments_outlined,
+        ),
+        const SizedBox(height: 20),
+        AppButton(
+          label: 'Continue',
+          onPressed: () {
+            final amount = double.tryParse(_flexiAmountCtrl.text.trim());
+
+            if (amount == null || amount < 0.03 || amount > 399) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Enter an amount between GHS 0.03 and 399',
+                  ),
+                ),
+              );
+              return;
+            }
+
+            setState(() => _dbStep = 'mtn_payment');
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _dbMtnPaymentStep(BuildContext context) {
+    return _dbSimpleChoiceStep(
+      context,
+      title: 'Payment method',
+      subtitle: 'Choose how MTN should charge for the bundle.',
+      options: kMtnDataPayment,
+      onBack: () => setState(
+        () => _dbStep =
+            _bundleCategory == 'flexi' ? 'mtn_flexi_amount' : 'mtn_bundle',
+      ),
+      onPick: (option) => setState(() {
+        _flexiPayment = option;
+        _dbStep = 'review';
+      }),
     );
   }
 
@@ -1419,7 +1591,8 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
                 'For',
                 _recipientMode == 'other' ? _phoneCtrl.text.trim() : 'Yourself',
               ),
-              _dbReviewRow('Category', _categoryObj?.label ?? ''),
+              if (!_isMtnDataBundle)
+                _dbReviewRow('Category', _categoryObj?.label ?? ''),
               if (_bundleChoice != null)
                 _dbReviewRow('Bundle', _bundleChoice!.label),
               if (_flexiType != null) _dbReviewRow('Type', _flexiType!.label),
