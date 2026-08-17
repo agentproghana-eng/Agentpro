@@ -55,7 +55,9 @@ class DashboardQuickActionsSection extends StatelessWidget {
 
     if (saved != null && saved.isNotEmpty) {
       final normalizedSaved = personal
-          ? saved
+          ? normalizePersonalQuickActionPreferences(
+              preferences: saved,
+            )
           : normalizeBusinessQuickActionPreferences(
               provider: provider,
               preferences: saved,
@@ -68,7 +70,7 @@ class DashboardQuickActionsSection extends StatelessWidget {
         _catalog(personal: personal)?.definitionsFor(provider) ??
             const <QuickActionCatalogDefinition>[];
 
-    return definitions
+    final fallback = definitions
         .take(9)
         .toList()
         .asMap()
@@ -80,6 +82,12 @@ class DashboardQuickActionsSection extends StatelessWidget {
           ),
         )
         .toList();
+
+    return personal
+        ? normalizePersonalQuickActionPreferences(
+            preferences: fallback,
+          )
+        : fallback;
   }
 
   QuickActionCatalogDefinition? _definition(

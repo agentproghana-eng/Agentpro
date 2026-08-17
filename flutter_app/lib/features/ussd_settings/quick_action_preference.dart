@@ -99,6 +99,69 @@ class QuickActionPreference {
   }
 }
 
+List<QuickActionPreference> normalizePersonalQuickActionPreferences({
+  required List<QuickActionPreference> preferences,
+}) {
+  final visible = preferences.where((item) => item.isVisible).toList();
+
+  final hasSameNetwork = visible.any(
+    (item) => item.actionKey == 'send_money_same_network',
+  );
+
+  final hasOtherNetwork = visible.any(
+    (item) => item.actionKey == 'send_money_cross_network',
+  );
+
+  // Personal mode presents one Send Money action when both underlying
+  // network variants are available. The Personal transaction screen
+  // decides which concrete transaction type is required.
+  if (!hasSameNetwork || !hasOtherNetwork) {
+    return visible
+        .take(9)
+        .toList()
+        .asMap()
+        .entries
+        .map(
+          (entry) => entry.value.copyWith(position: entry.key),
+        )
+        .toList();
+  }
+
+  final normalized = <QuickActionPreference>[];
+  var sendMoneyInserted = false;
+
+  for (final preference in visible) {
+    final isSendMoney = preference.actionKey == 'send_money_same_network' ||
+        preference.actionKey == 'send_money_cross_network';
+
+    if (isSendMoney) {
+      if (!sendMoneyInserted) {
+        normalized.add(
+          preference.copyWith(
+            actionKey: 'send_money',
+            customName: 'Send Money',
+          ),
+        );
+        sendMoneyInserted = true;
+      }
+
+      continue;
+    }
+
+    normalized.add(preference);
+  }
+
+  return normalized
+      .take(9)
+      .toList()
+      .asMap()
+      .entries
+      .map(
+        (entry) => entry.value.copyWith(position: entry.key),
+      )
+      .toList();
+}
+
 List<QuickActionPreference> normalizeBusinessQuickActionPreferences({
   required String provider,
   required List<QuickActionPreference> preferences,
