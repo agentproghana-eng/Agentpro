@@ -42,7 +42,7 @@
 DO $$
 DECLARE
   superuser_id UUID;
-  flow_id UUID;
+  v_flow_id UUID;
   recipient TEXT;
   variant TEXT;
   step_no INTEGER;
@@ -71,10 +71,10 @@ BEGIN
       'fixed_page2_momo'
     ]
     LOOP
-      flow_id := NULL;
+      v_flow_id := NULL;
 
       SELECT id
-      INTO flow_id
+      INTO v_flow_id
       FROM ussd_flows
       WHERE provider = 'mtn'
         AND transaction_type = 'buy_data'
@@ -85,7 +85,7 @@ BEGIN
         AND is_active = TRUE
       LIMIT 1;
 
-      IF flow_id IS NULL THEN
+      IF v_flow_id IS NULL THEN
         INSERT INTO ussd_flows (
           provider,
           transaction_type,
@@ -106,20 +106,20 @@ BEGIN
           variant,
           recipient
         )
-        RETURNING id INTO flow_id;
+        RETURNING id INTO v_flow_id;
       ELSE
         UPDATE ussd_flows
         SET dial_code = '*138#',
             success_markers = ARRAY[]::TEXT[],
             failure_markers = ARRAY[]::TEXT[]
-        WHERE id = flow_id;
+        WHERE id = v_flow_id;
       END IF;
 
       -- This migration owns these Global MTN Personal Buy Data variants.
       -- Rebuild their steps idempotently so a partially applied deployment
       -- cannot leave an incomplete sequence active.
       DELETE FROM ussd_flow_steps
-      WHERE ussd_flow_steps.flow_id = flow_id;
+      WHERE ussd_flow_steps.flow_id = v_flow_id;
 
       step_no := 1;
 
@@ -127,7 +127,7 @@ BEGIN
         flow_id, step_order, match_all, action, action_value
       )
       VALUES (
-        flow_id,
+        v_flow_id,
         step_no,
         ARRAY['proceed to buy bundle'],
         'send_digit'::ussd_flow_action,
@@ -139,7 +139,7 @@ BEGIN
         flow_id, step_order, match_all, action, action_value
       )
       VALUES (
-        flow_id,
+        v_flow_id,
         step_no,
         ARRAY['buy data bundle'],
         'send_digit'::ussd_flow_action,
@@ -151,7 +151,7 @@ BEGIN
         flow_id, step_order, match_all, action, action_value
       )
       VALUES (
-        flow_id,
+        v_flow_id,
         step_no,
         ARRAY['buy for self', 'buy for others'],
         'send_digit'::ussd_flow_action,
@@ -164,7 +164,7 @@ BEGIN
           flow_id, step_order, match_all, action, action_value
         )
         VALUES (
-          flow_id,
+          v_flow_id,
           step_no,
           ARRAY['enter phone number'],
           'send_customer_phone'::ussd_flow_action,
@@ -176,7 +176,7 @@ BEGIN
           flow_id, step_order, match_all, action, action_value
         )
         VALUES (
-          flow_id,
+          v_flow_id,
           step_no,
           ARRAY['repeat phone number'],
           'send_customer_phone'::ussd_flow_action,
@@ -190,7 +190,7 @@ BEGIN
           flow_id, step_order, match_all, action, action_value
         )
         VALUES (
-          flow_id,
+          v_flow_id,
           step_no,
           ARRAY['select data bundle'],
           'send_digit'::ussd_flow_action,
@@ -202,7 +202,7 @@ BEGIN
           flow_id, step_order, match_all, action, action_value
         )
         VALUES (
-          flow_id,
+          v_flow_id,
           step_no,
           ARRAY['enter amount to buy preferred bundle'],
           'send_amount'::ussd_flow_action,
@@ -215,7 +215,7 @@ BEGIN
           flow_id, step_order, match_all, action, action_value
         )
         VALUES (
-          flow_id,
+          v_flow_id,
           step_no,
           ARRAY['select data bundle'],
           'send_selection'::ussd_flow_action,
@@ -228,7 +228,7 @@ BEGIN
           flow_id, step_order, match_all, action, action_value
         )
         VALUES (
-          flow_id,
+          v_flow_id,
           step_no,
           ARRAY['select data bundle'],
           'send_digit'::ussd_flow_action,
@@ -240,7 +240,7 @@ BEGIN
           flow_id, step_order, match_all, action, action_value
         )
         VALUES (
-          flow_id,
+          v_flow_id,
           step_no,
           ARRAY['0. back'],
           'send_selection'::ussd_flow_action,
@@ -254,7 +254,7 @@ BEGIN
         flow_id, step_order, match_all, action, action_value
       )
       VALUES (
-        flow_id,
+        v_flow_id,
         step_no,
         ARRAY['data bundle', '1. buy'],
         'send_digit'::ussd_flow_action,
@@ -269,7 +269,7 @@ BEGIN
         flow_id, step_order, match_all, action, action_value
       )
       VALUES (
-        flow_id,
+        v_flow_id,
         step_no,
         ARRAY['choose payment mode', 'mobile money'],
         'send_digit'::ussd_flow_action,
@@ -282,7 +282,7 @@ BEGIN
           flow_id, step_order, match_all, action, action_value
         )
         VALUES (
-          flow_id,
+          v_flow_id,
           step_no,
           ARRAY['enter mobile money pin'],
           'pin_prompt'::ussd_flow_action,
