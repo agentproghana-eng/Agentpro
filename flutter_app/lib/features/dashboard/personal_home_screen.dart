@@ -296,10 +296,14 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
     return saved.where((item) => item.isVisible).take(9).toList();
   }
 
-  List<QuickActionPreference> get _homeQuickActions =>
-      normalizePersonalQuickActionPreferences(
-        preferences: _visibleQuickActions,
-      );
+  List<QuickActionPreference> get _homeQuickActions {
+    final visible = _visibleQuickActions;
+    final normalized = normalizePersonalQuickActionPreferences(
+      preferences: visible,
+    );
+
+    return normalized;
+  }
 
   String _providerLabel(String provider) {
     return quickActionProviderLabel(provider);

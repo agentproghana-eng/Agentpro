@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:pretty_dio_logger/pretty_dio_logger.dart';
 import '../services/storage_service.dart';
 
 class ApiClient {
@@ -76,18 +75,6 @@ class ApiClient {
         },
       ),
     );
-
-    // Logging in debug mode
-    assert(() {
-      dio.interceptors.add(
-        PrettyDioLogger(
-          requestHeader: true,
-          requestBody: true,
-          responseBody: true,
-        ),
-      );
-      return true;
-    }());
 
     return dio;
   }

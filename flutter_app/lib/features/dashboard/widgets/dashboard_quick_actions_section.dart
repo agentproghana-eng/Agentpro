@@ -20,6 +20,11 @@ class DashboardQuickActionsSection extends StatelessWidget {
     required this.personalQuickActions,
     required this.agentCatalog,
     required this.personalCatalog,
+    required this.simDetectionComplete,
+    required this.simPurposesResolved,
+    required this.agentCatalogResolved,
+    required this.personalCatalogResolved,
+    required this.onReloadQuickActions,
   });
 
   final String provider;
@@ -31,15 +36,11 @@ class DashboardQuickActionsSection extends StatelessWidget {
   final QuickActionCatalog? agentCatalog;
   final QuickActionCatalog? personalCatalog;
 
-  bool get _isPersonalSim {
-    final sim = simMap?[provider];
-
-    if (sim == null) {
-      return false;
-    }
-
-    return simPurposes[sim.slot] == 'personal';
-  }
+  final bool simDetectionComplete;
+  final bool simPurposesResolved;
+  final bool agentCatalogResolved;
+  final bool personalCatalogResolved;
+  final VoidCallback onReloadQuickActions;
 
   QuickActionCatalog? _catalog({
     required bool personal,
@@ -101,8 +102,67 @@ class DashboardQuickActionsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final actions =
-        _isPersonalSim ? _personalTiles(context) : _agentTiles(context);
+    if (!simDetectionComplete) {
+      return _loadingState();
+    }
+
+    final sim = simMap?[provider];
+
+    if (sim == null) {
+      return DashboardEmptyState(
+        icon: Icons.sim_card_alert_rounded,
+        title: 'No ${_providerLabel(provider)} SIM available',
+        message: 'Insert or enable a ${_providerLabel(provider)} SIM '
+            'to use Quick Actions.',
+      );
+    }
+
+    if (!simPurposesResolved) {
+      return _loadingState();
+    }
+
+    final purpose = simPurposes[sim.slot];
+
+    if (purpose != 'personal' && purpose != 'agent') {
+      return const DashboardEmptyState(
+        icon: Icons.sim_card_alert_rounded,
+        title: 'SIM purpose required',
+        message: 'AgentPro could not determine whether this SIM is '
+            'Personal or Agent. Set its SIM Purpose before using '
+            'Quick Actions.',
+      );
+    }
+
+    final personal = purpose == 'personal';
+
+    final saved =
+        personal ? personalQuickActions[provider] : agentQuickActions[provider];
+
+    final catalog = personal ? personalCatalog : agentCatalog;
+
+    final catalogResolved =
+        personal ? personalCatalogResolved : agentCatalogResolved;
+
+    final hasVisibleSavedActions =
+        saved?.any((item) => item.isVisible) ?? false;
+
+    if (!catalogResolved && catalog == null && !hasVisibleSavedActions) {
+      return _loadingState();
+    }
+
+    if (catalogResolved && catalog == null && !hasVisibleSavedActions) {
+      return DashboardEmptyState(
+        icon: Icons.cloud_off_rounded,
+        title: 'Quick actions unavailable',
+        message: 'AgentPro could not load Quick Actions. '
+            'Check your connection and try again.',
+        actionLabel: 'Retry',
+        actionIcon: Icons.refresh_rounded,
+        onAction: onReloadQuickActions,
+      );
+    }
+
+    final actions = personal ? _personalTiles(context) : _agentTiles(context);
 
     if (actions.isEmpty) {
       return DashboardEmptyState(
@@ -113,7 +173,9 @@ class DashboardQuickActionsSection extends StatelessWidget {
             'You can choose different actions in Templates.',
         actionLabel: 'Customize Quick Actions',
         actionIcon: Icons.tune_rounded,
-        onAction: () => context.push('/agent-quick-actions'),
+        onAction: () => context.push(
+          personal ? '/personal-quick-actions' : '/agent-quick-actions',
+        ),
       );
     }
 
@@ -127,6 +189,21 @@ class DashboardQuickActionsSection extends StatelessWidget {
         crossAxisSpacing: 6,
         childAspectRatio: 0.9,
         children: actions,
+      ),
+    );
+  }
+
+  Widget _loadingState() {
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(16, 28, 16, 28),
+      child: Center(
+        child: SizedBox(
+          width: 26,
+          height: 26,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.4,
+          ),
+        ),
       ),
     );
   }
@@ -272,6 +349,8 @@ class DashboardQuickActionsSection extends StatelessWidget {
               'provider': provider,
               if (sim != null) 'sim_slot': sim.slot.toString(),
               if (sim != null && sim.iccid.isNotEmpty) 'sim_iccid': sim.iccid,
+              if (sim != null)
+                'sim_subscription_id': sim.subscriptionId.toString(),
             };
 
             context.push(

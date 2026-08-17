@@ -1,10 +1,8 @@
 // personal_transaction_screen.dart
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
 import '../../core/api/api_client.dart';
-import '../../core/auth/auth_bloc.dart';
 import '../../core/services/sim_card_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
@@ -140,6 +138,48 @@ const List<DataBundleOption> kMtnDataPage2 = [
 ];
 
 const List<DataBundleOption> kMtnDataPayment = [
+  DataBundleOption('Airtime', '1'),
+  DataBundleOption('Mobile Money', '2'),
+];
+
+class MtnMashupTier {
+  final String id;
+  final String label;
+  final String digit;
+  final double amount;
+
+  const MtnMashupTier(this.id, this.label, this.digit, this.amount);
+}
+
+const List<MtnMashupTier> kMtnMashupTiers = [
+  MtnMashupTier('ghc1', 'GHS 1', '1', 1),
+  MtnMashupTier('ghc5', 'GHS 5', '2', 5),
+  MtnMashupTier('ghc10', 'GHS 10', '3', 10),
+  MtnMashupTier('ghc30', 'GHS 30 · 3133.94MB · No expiry', '4', 30),
+];
+
+const Map<String, List<DataBundleOption>> kMtnMashupAllocations = {
+  'ghc1': [
+    DataBundleOption('25.45MB + 11.17 mins', '2'),
+    DataBundleOption('30.53MB + 8.94 mins', '3'),
+    DataBundleOption('35.62MB + 6.7 mins', '4'),
+    DataBundleOption('50.89MB only', '5'),
+  ],
+  'ghc5': [
+    DataBundleOption('143.54MB + 59.45 mins', '2'),
+    DataBundleOption('172.25MB + 47.56 mins', '3'),
+    DataBundleOption('200.06MB + 35.67 mins', '4'),
+    DataBundleOption('287.08MB only', '5'),
+  ],
+  'ghc10': [
+    DataBundleOption('301.19MB + 123.85 mins', '2'),
+    DataBundleOption('361.43MB + 99.08 mins', '3'),
+    DataBundleOption('421.67MB + 74.31 mins', '4'),
+    DataBundleOption('602.39MB only', '5'),
+  ],
+};
+
+const List<DataBundleOption> kMtnMashupPayment = [
   DataBundleOption('Airtime', '1'),
   DataBundleOption('Mobile Money', '2'),
 ];
@@ -293,6 +333,14 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   bool get _isMtnDataBundle =>
       widget.provider == 'mtn' && widget.transactionType == 'buy_data';
 
+  bool get _isMtnMashup =>
+      widget.provider == 'mtn' && widget.transactionType == 'buy_mashup';
+
+  String _mashupStep = 'recipient_mode';
+  MtnMashupTier? _mashupTier;
+  DataBundleOption? _mashupAllocation;
+  DataBundleOption? _mashupPayment;
+
   String _dbStep = 'recipient_mode';
   String? _recipientMode;
   String? _bundleCategory;
@@ -342,13 +390,6 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
 
     _selectedSimSlot = widget.simSlot;
     _loadSimIdentity();
-
-    if (widget.transactionType == 'buy_mashup') {
-      final state = context.read<AuthBloc>().state;
-      if (state is AuthAuthenticated) {
-        _phoneCtrl.text = (state.user['phone'] ?? '').toString();
-      }
-    }
   }
 
   Future<void> _loadSimIdentity() async {
@@ -499,6 +540,10 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   }
 
   Future<void> _submit() async {
+    if (_isMtnMashup) {
+      await _submitMtnMashup();
+      return;
+    }
     if (_isDataBundle) {
       await _submitDataBundle();
       return;
@@ -712,9 +757,11 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
             _buildLockedSimSection(context),
             const SizedBox(height: 16),
             Expanded(
-              child: _isDataBundle
-                  ? _buildDataBundleFlow(context)
-                  : _buildGenericForm(context, label),
+              child: _isMtnMashup
+                  ? _buildMtnMashupFlow(context)
+                  : _isDataBundle
+                      ? _buildDataBundleFlow(context)
+                      : _buildGenericForm(context, label),
             ),
           ],
         ),
@@ -1066,6 +1113,394 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     );
   }
 
+  bool _mashupAllocationUsesSecondPage() {
+    final tier = _mashupTier;
+    final allocation = _mashupAllocation;
+    if (tier == null || allocation == null) return false;
+
+    if (tier.id == 'ghc1') {
+      return allocation.digit == '4' || allocation.digit == '5';
+    }
+
+    return (tier.id == 'ghc5' || tier.id == 'ghc10') && allocation.digit == '5';
+  }
+
+  String? _mashupBundleCategory() {
+    final tier = _mashupTier;
+    final payment = _mashupPayment;
+    if (tier == null || payment == null) return null;
+
+    final paymentKey = payment.digit == '1' ? 'airtime' : 'momo';
+
+    if (tier.id == 'ghc30') {
+      return '${tier.id}_$paymentKey';
+    }
+
+    final page = _mashupAllocationUsesSecondPage() ? 'page2' : 'page1';
+    return '${tier.id}_${page}_$paymentKey';
+  }
+
+  Widget _buildMtnMashupFlow(BuildContext context) {
+    switch (_mashupStep) {
+      case 'recipient_mode':
+        return ListView(
+          children: [
+            Text(
+              'Who is this MashUp for?',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'AgentPro will navigate the MTN Pulse menu automatically.',
+              style: TextStyle(color: context.appSecondaryText),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: _dbBigOption(
+                    context,
+                    'Myself',
+                    Icons.person_outline,
+                    () => setState(() {
+                      _recipientMode = 'self';
+                      _phoneCtrl.clear();
+                      _mashupStep = 'tier';
+                    }),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _dbBigOption(
+                    context,
+                    'Someone else',
+                    Icons.people_outline,
+                    () => setState(() {
+                      _recipientMode = 'other';
+                      _phoneCtrl.clear();
+                      _mashupStep = 'recipient_phone';
+                    }),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+
+      case 'recipient_phone':
+        return ListView(
+          children: [
+            _dbBack(() => setState(() => _mashupStep = 'recipient_mode')),
+            Text(
+              "Recipient's MTN number",
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'MTN will ask for this number and then ask AgentPro to confirm it.',
+              style: TextStyle(color: context.appSecondaryText),
+            ),
+            const SizedBox(height: 20),
+            AppTextField(
+              controller: _phoneCtrl,
+              label: 'Recipient Phone',
+              keyboardType: TextInputType.phone,
+              prefixIcon: Icons.phone_outlined,
+            ),
+            const SizedBox(height: 20),
+            AppButton(
+              label: 'Continue',
+              onPressed: () {
+                if (_phoneCtrl.text.trim().length < 9) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Enter a valid phone number')),
+                  );
+                  return;
+                }
+                setState(() => _mashupStep = 'tier');
+              },
+            ),
+          ],
+        );
+
+      case 'tier':
+        return ListView(
+          children: [
+            _dbBack(
+              () => setState(
+                () => _mashupStep = _recipientMode == 'other'
+                    ? 'recipient_phone'
+                    : 'recipient_mode',
+              ),
+            ),
+            Text(
+              'Choose MashUp amount',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Only live-confirmed fixed tiers are shown. Custom amount ranges are not guessed.',
+              style: TextStyle(color: context.appSecondaryText),
+            ),
+            const SizedBox(height: 16),
+            ...kMtnMashupTiers.map(
+              (tier) => _dbOptionTile(
+                DataBundleOption(tier.label, tier.digit),
+                () => setState(() {
+                  _mashupTier = tier;
+                  _mashupAllocation = null;
+                  _mashupPayment = null;
+                  _mashupStep = tier.id == 'ghc30' ? 'payment' : 'allocation';
+                }),
+              ),
+            ),
+          ],
+        );
+
+      case 'allocation':
+        final tier = _mashupTier;
+        final options = tier == null
+            ? const <DataBundleOption>[]
+            : kMtnMashupAllocations[tier.id] ?? const <DataBundleOption>[];
+
+        return ListView(
+          children: [
+            _dbBack(() => setState(() => _mashupStep = 'tier')),
+            Text(
+              'Choose data and minutes',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${tier?.label ?? 'MashUp'} allocation',
+              style: TextStyle(color: context.appSecondaryText),
+            ),
+            const SizedBox(height: 16),
+            ...options.map(
+              (option) => _dbOptionTile(
+                option,
+                () => setState(() {
+                  _mashupAllocation = option;
+                  _mashupStep = 'payment';
+                }),
+              ),
+            ),
+          ],
+        );
+
+      case 'payment':
+        return _dbSimpleChoiceStep(
+          context,
+          title: 'Payment method',
+          subtitle: 'Choose how MTN should charge for the MashUp.',
+          options: kMtnMashupPayment,
+          onBack: () => setState(
+            () => _mashupStep =
+                _mashupTier?.id == 'ghc30' ? 'tier' : 'allocation',
+          ),
+          onPick: (option) => setState(() {
+            _mashupPayment = option;
+            _mashupStep = 'review';
+          }),
+        );
+
+      case 'review':
+        final recipient =
+            _recipientMode == 'self' ? 'Myself' : _phoneCtrl.text.trim();
+        final tier = _mashupTier;
+        final allocation = _mashupAllocation;
+        final payment = _mashupPayment;
+
+        return ListView(
+          children: [
+            _dbBack(() => setState(() => _mashupStep = 'payment')),
+            Text(
+              'Review MashUp',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 16),
+            _mashupReviewRow(context, 'Recipient', recipient),
+            _mashupReviewRow(context, 'Amount', tier?.label ?? '—'),
+            if (allocation != null)
+              _mashupReviewRow(context, 'Bundle', allocation.label),
+            _mashupReviewRow(context, 'Payment', payment?.label ?? '—'),
+            const SizedBox(height: 18),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: context.appSurface,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: context.appDivider),
+              ),
+              child: Text(
+                payment?.digit == '2'
+                    ? 'AgentPro will automate the MTN Pulse menus and stop at the PIN prompt. Enter the PIN yourself on the network screen.'
+                    : 'AgentPro will automate the MTN Pulse menus and classify the final MTN response.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: context.appSecondaryText,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            AppButton(
+              label: 'Start MashUp',
+              onPressed: _submitMtnMashup,
+              isLoading: _loading,
+            ),
+          ],
+        );
+
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  Widget _mashupReviewRow(
+    BuildContext context,
+    String label,
+    String value,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 86,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: context.appSecondaryText,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _submitMtnMashup() async {
+    final tier = _mashupTier;
+    final payment = _mashupPayment;
+    final bundleCategory = _mashupBundleCategory();
+
+    if (tier == null ||
+        payment == null ||
+        bundleCategory == null ||
+        _recipientMode == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Complete the MashUp choices first.')),
+      );
+      return;
+    }
+
+    if (tier.id != 'ghc30' && _mashupAllocation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Choose a MashUp allocation.')),
+      );
+      return;
+    }
+
+    if (_recipientMode == 'other' && _phoneCtrl.text.trim().length < 9) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid recipient phone number.')),
+      );
+      return;
+    }
+
+    if (!_simDetectionComplete) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('SIM detection is still in progress.')),
+      );
+      return;
+    }
+
+    final selectedSim = _selectedSim;
+    if (selectedSim == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _simPermissionDenied
+                ? 'Allow phone permission before starting this transaction.'
+                : 'The $_providerLabel SIM selected for this transaction is required.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _loading = true);
+    String? progressAction;
+
+    final recipientPhone =
+        _recipientMode == 'other' ? _phoneCtrl.text.trim() : null;
+
+    final requestFields = <String, dynamic>{
+      'provider': widget.provider,
+      'transaction_type': widget.transactionType,
+      'amount': tier.amount,
+      'bundle_category': bundleCategory,
+      'recipient_mode': _recipientMode,
+      if (recipientPhone != null) 'recipient_phone': recipientPhone,
+      if (selectedSim.iccid.isNotEmpty) 'sim_iccid': selectedSim.iccid,
+      'sim_slot': selectedSim.slot,
+      'sim_subscription_id': selectedSim.subscriptionId,
+    };
+
+    try {
+      final res = await ApiClient.instance.post(
+        '/personal-transactions',
+        data: requestFields,
+      );
+
+      final transaction = res.data['data'];
+      if (!mounted) return;
+
+      progressAction = await context.push<String>(
+        '/transactions/progress',
+        extra: {
+          'is_personal': true,
+          'transaction': transaction,
+          'provider': widget.provider,
+          'transaction_type': widget.transactionType,
+          'bundle_category': bundleCategory,
+          'recipient_mode': _recipientMode,
+          'selections_in_order': [
+            if (_mashupAllocation != null) _mashupAllocation!.digit,
+          ],
+          'amount': tier.amount.toString(),
+          'customer_phone': recipientPhone,
+          'sim_slot': selectedSim.slot,
+          'sim_iccid': selectedSim.iccid.isNotEmpty ? selectedSim.iccid : null,
+          'sim_subscription_id': selectedSim.subscriptionId,
+          'request_fields': requestFields,
+        },
+      );
+    } on DioException catch (e) {
+      final msg = e.response?.data?['message'] ??
+          'Failed to start MashUp. Please try again.';
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+
+    if (mounted && progressAction == 'retry_now') {
+      await _submitMtnMashup();
+    }
+  }
+
   Widget _buildDataBundleFlow(BuildContext context) {
     switch (_dbStep) {
       case 'recipient_mode':
@@ -1145,6 +1580,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
               child: _dbBigOption(context, 'Self', Icons.person_outline, () {
                 setState(() {
                   _recipientMode = 'self';
+                  _phoneCtrl.clear();
                   _dbStep = _isMtnDataBundle ? 'mtn_bundle' : 'category';
                 });
               }),
@@ -1154,6 +1590,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
               child: _dbBigOption(context, 'Other', Icons.people_outline, () {
                 setState(() {
                   _recipientMode = 'other';
+                  _phoneCtrl.clear();
                   _dbStep = 'recipient_phone';
                 });
               }),

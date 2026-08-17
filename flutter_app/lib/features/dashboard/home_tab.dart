@@ -34,6 +34,11 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   Map<String, List<QuickActionPreference>> _personalQuickActions = {};
   QuickActionCatalog? _agentQuickActionCatalog;
   QuickActionCatalog? _personalQuickActionCatalog;
+
+  bool _simPurposesResolved = false;
+  bool _agentQuickActionCatalogResolved = false;
+  bool _personalQuickActionCatalogResolved = false;
+
   StreamSubscription<DashboardRefreshEvent>? _dashboardRefreshSubscription;
   final DashboardRecentTransactionsController _recentTransactionsController =
       DashboardRecentTransactionsController();
@@ -185,21 +190,47 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
       // Keep cached values when the preference request fails.
     }
 
-    try {
-      final catalogs = await Future.wait([
-        QuickActionCatalog.load(mode: 'business'),
-        QuickActionCatalog.load(mode: 'personal'),
-      ]);
+    Future<void> loadCatalog({
+      required String mode,
+      required bool personal,
+    }) async {
+      QuickActionCatalog? catalog;
+
+      try {
+        catalog = await QuickActionCatalog.load(mode: mode);
+      } catch (_) {
+        // Keep the last successfully loaded catalog, if any.
+      }
 
       if (!mounted) return;
 
       setState(() {
-        _agentQuickActionCatalog = catalogs[0];
-        _personalQuickActionCatalog = catalogs[1];
+        if (personal) {
+          if (catalog != null) {
+            _personalQuickActionCatalog = catalog;
+          }
+
+          _personalQuickActionCatalogResolved = true;
+        } else {
+          if (catalog != null) {
+            _agentQuickActionCatalog = catalog;
+          }
+
+          _agentQuickActionCatalogResolved = true;
+        }
       });
-    } catch (_) {
-      // Saved actions can still render with generic metadata fallbacks.
     }
+
+    await Future.wait([
+      loadCatalog(
+        mode: 'business',
+        personal: false,
+      ),
+      loadCatalog(
+        mode: 'personal',
+        personal: true,
+      ),
+    ]);
   }
 
   Future<void> _loadSimPurposes() async {
@@ -210,6 +241,7 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
     if (cached is Map && mounted) {
       setState(() {
         _simPurposes = Map<int, String>.from(cached);
+        _simPurposesResolved = true;
       });
     }
 
@@ -226,10 +258,18 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
       AppCacheService.set(cacheKey, map);
 
       if (mounted) {
-        setState(() => _simPurposes = map);
+        setState(() {
+          _simPurposes = map;
+          _simPurposesResolved = true;
+        });
       }
     } catch (_) {
-      // Keep cached values if refresh fails.
+      // Keep cached values if refresh fails. If there was no cache,
+      // mark the lookup resolved so the UI can show a proper
+      // unavailable/unknown state instead of loading forever.
+      if (mounted && !_simPurposesResolved) {
+        setState(() => _simPurposesResolved = true);
+      }
     }
   }
 
@@ -377,6 +417,14 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
                     personalQuickActions: _personalQuickActions,
                     agentCatalog: _agentQuickActionCatalog,
                     personalCatalog: _personalQuickActionCatalog,
+                    simDetectionComplete: _simDetectionComplete,
+                    simPurposesResolved: _simPurposesResolved,
+                    agentCatalogResolved: _agentQuickActionCatalogResolved,
+                    personalCatalogResolved:
+                        _personalQuickActionCatalogResolved,
+                    onReloadQuickActions: () {
+                      unawaited(_loadQuickActions());
+                    },
                   ),
                 ),
                 DashboardRecentTransactionsSection(
