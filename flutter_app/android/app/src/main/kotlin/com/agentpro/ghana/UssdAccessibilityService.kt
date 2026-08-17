@@ -88,6 +88,7 @@ class UssdAccessibilityService : AccessibilityService() {
         @Volatile private var lastScreenHandledAt: Long = 0L
         @Volatile private var lastResponseValue: String? = null
         @Volatile private var lastResponseAt: Long = 0L
+        @Volatile private var lastResponseStepIndex: Int = -1
 
         // Generic-flow-only state. Null for every MTN/Telecel session -
         // those never set these, so their behavior is 100% unchanged
@@ -132,6 +133,7 @@ class UssdAccessibilityService : AccessibilityService() {
             lastScreenHandledAt = 0L
             lastResponseValue = null
             lastResponseAt = 0L
+            lastResponseStepIndex = -1
 
             isSessionActive = true
             reachedPinPrompt = false
@@ -161,6 +163,7 @@ class UssdAccessibilityService : AccessibilityService() {
             lastScreenHandledAt = 0L
             lastResponseValue = null
             lastResponseAt = 0L
+            lastResponseStepIndex = -1
         }
     }
 
@@ -371,6 +374,11 @@ class UssdAccessibilityService : AccessibilityService() {
     // matching step wins (steps are already ordered by step_order),
     // mirroring the same top-to-bottom priority the hardcoded `when`
     // block above already uses.
+    private fun normalizeUssdText(value: String): String =
+        value.lowercase()
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
     private fun handleGenericStep(root: AccessibilityNodeInfo, screenText: String) {
         val steps = pendingSteps ?: return
         // Only ever considers steps at or after currentStepIndex, and
@@ -385,7 +393,10 @@ class UssdAccessibilityService : AccessibilityService() {
             if (
                 step.matchAll.isNotEmpty() &&
                 step.matchAll.all { marker ->
-                    marker.isNotBlank() && screenText.contains(marker)
+                    marker.isNotBlank() &&
+                        normalizeUssdText(screenText).contains(
+                            normalizeUssdText(marker)
+                        )
                 }
             ) {
                 val completed = when (step.action) {
@@ -466,9 +477,10 @@ class UssdAccessibilityService : AccessibilityService() {
         // accessibility events after a successful response.
         if (
             value == lastResponseValue &&
+            currentStepIndex == lastResponseStepIndex &&
             now - lastResponseAt < 500L
         ) {
-            Log.d(TAG, "Ignored duplicate USSD response")
+            Log.d(TAG, "Ignored duplicate USSD response for the same flow step")
             return false
         }
 
@@ -510,6 +522,7 @@ class UssdAccessibilityService : AccessibilityService() {
 
         lastResponseValue = value
         lastResponseAt = now
+        lastResponseStepIndex = currentStepIndex
         return true
     }
 
