@@ -4,6 +4,7 @@ import '../../core/api/api_client.dart';
 import '../../core/services/sim_card_service.dart';
 import '../../core/services/dashboard_refresh_service.dart';
 import '../../core/services/app_cache_service.dart';
+import '../../core/services/storage_service.dart';
 import '../../core/router/app_router.dart';
 import '../ussd_settings/quick_action_preference.dart';
 import '../ussd_settings/quick_action_catalog.dart';
@@ -122,9 +123,7 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
             if (preference.actionKey.trim().isEmpty) continue;
 
             items.add(preference);
-          } catch (_) {
-            // Ignore malformed saved Quick Action records.
-          }
+          } catch (_) {}
         }
 
         items.sort((a, b) => a.position.compareTo(b.position));
@@ -152,11 +151,11 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
       };
     }
 
-    final cached = AppCacheService.get(cacheKey);
+    final memoryCached = AppCacheService.get(cacheKey);
 
-    if (cached is Map && mounted) {
-      final agent = parseProfile(cached['agent']);
-      final personal = parseProfile(cached['personal']);
+    if (memoryCached is Map && mounted) {
+      final agent = parseProfile(memoryCached['agent']);
+      final personal = parseProfile(memoryCached['personal']);
 
       if (agent.isNotEmpty || personal.isNotEmpty) {
         setState(() {
@@ -164,6 +163,47 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
           _personalQuickActions = personal;
         });
       }
+    }
+
+    final durable =
+        await StorageService.getOfflineDashboardSnapshot(widget.user);
+
+    if (durable != null && mounted) {
+      final quickActions = durable['quick_actions'];
+
+      if (quickActions is Map) {
+        final agent = parseProfile(quickActions['agent']);
+        final personal = parseProfile(quickActions['personal']);
+
+        setState(() {
+          _agentQuickActions = agent;
+          _personalQuickActions = personal;
+        });
+      }
+
+      final businessCatalog = durable['business_catalog'];
+
+      if (businessCatalog is Map) {
+        try {
+          _agentQuickActionCatalog = QuickActionCatalog.fromCacheJson(
+            Map<String, dynamic>.from(businessCatalog),
+            fallbackMode: 'business',
+          );
+        } catch (_) {}
+      }
+
+      final personalCatalog = durable['personal_catalog'];
+
+      if (personalCatalog is Map) {
+        try {
+          _personalQuickActionCatalog = QuickActionCatalog.fromCacheJson(
+            Map<String, dynamic>.from(personalCatalog),
+            fallbackMode: 'personal',
+          );
+        } catch (_) {}
+      }
+
+      setState(() {});
     }
 
     try {
@@ -175,10 +215,12 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
       final agent = parseProfile(data['agent']);
       final personal = parseProfile(data['personal']);
 
-      AppCacheService.set(cacheKey, {
+      final serialized = {
         'agent': serializeProfile(agent),
         'personal': serializeProfile(personal),
-      });
+      };
+
+      AppCacheService.set(cacheKey, serialized);
 
       if (mounted) {
         setState(() {
@@ -186,61 +228,100 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
           _personalQuickActions = personal;
         });
       }
-    } catch (_) {
-      // Keep cached values when the preference request fails.
-    }
+
+      await StorageService.mergeOfflineDashboardSnapshot(
+        widget.user,
+        {
+          'quick_actions': serialized,
+        },
+      );
+    } catch (_) {}
 
     Future<void> loadCatalog({
       required String mode,
       required bool personal,
     }) async {
-      QuickActionCatalog? catalog;
+      QuickActionCatalog? freshCatalog;
 
       try {
-        catalog = await QuickActionCatalog.load(mode: mode);
-      } catch (_) {
-        // Keep the last successfully loaded catalog, if any.
-      }
+        freshCatalog = await QuickActionCatalog.load(mode: mode);
+      } catch (_) {}
 
       if (!mounted) return;
 
       setState(() {
         if (personal) {
-          if (catalog != null) {
-            _personalQuickActionCatalog = catalog;
+          if (freshCatalog != null) {
+            _personalQuickActionCatalog = freshCatalog;
           }
 
           _personalQuickActionCatalogResolved = true;
         } else {
-          if (catalog != null) {
-            _agentQuickActionCatalog = catalog;
+          if (freshCatalog != null) {
+            _agentQuickActionCatalog = freshCatalog;
           }
 
           _agentQuickActionCatalogResolved = true;
         }
       });
+
+      if (freshCatalog != null) {
+        await StorageService.mergeOfflineDashboardSnapshot(
+          widget.user,
+          {
+            personal ? 'personal_catalog' : 'business_catalog':
+                freshCatalog.toCacheJson(),
+          },
+        );
+      }
     }
 
     await Future.wait([
-      loadCatalog(
-        mode: 'business',
-        personal: false,
-      ),
-      loadCatalog(
-        mode: 'personal',
-        personal: true,
-      ),
+      loadCatalog(mode: 'business', personal: false),
+      loadCatalog(mode: 'personal', personal: true),
     ]);
   }
 
   Future<void> _loadSimPurposes() async {
     const cacheKey = 'dashboard_sim_purposes';
 
-    final cached = AppCacheService.get(cacheKey);
+    Map<int, String> parsePurposes(dynamic raw) {
+      final parsed = <int, String>{};
 
-    if (cached is Map && mounted) {
+      if (raw is! Map) return parsed;
+
+      for (final entry in raw.entries) {
+        final slot = entry.key is int
+            ? entry.key as int
+            : int.tryParse(entry.key.toString());
+
+        final purpose = entry.value?.toString().trim();
+
+        if (slot != null && purpose != null && purpose.isNotEmpty) {
+          parsed[slot] = purpose;
+        }
+      }
+
+      return parsed;
+    }
+
+    final memoryCached = AppCacheService.get(cacheKey);
+
+    if (memoryCached is Map && mounted) {
       setState(() {
-        _simPurposes = Map<int, String>.from(cached);
+        _simPurposes = parsePurposes(memoryCached);
+        _simPurposesResolved = true;
+      });
+    }
+
+    final durable =
+        await StorageService.getOfflineDashboardSnapshot(widget.user);
+
+    final durablePurposes = durable?['sim_purposes'];
+
+    if (durablePurposes is Map && mounted) {
+      setState(() {
+        _simPurposes = parsePurposes(durablePurposes);
         _simPurposesResolved = true;
       });
     }
@@ -263,10 +344,16 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
           _simPurposesResolved = true;
         });
       }
+
+      await StorageService.mergeOfflineDashboardSnapshot(
+        widget.user,
+        {
+          'sim_purposes': {
+            for (final entry in map.entries) entry.key.toString(): entry.value,
+          },
+        },
+      );
     } catch (_) {
-      // Keep cached values if refresh fails. If there was no cache,
-      // mark the lookup resolved so the UI can show a proper
-      // unavailable/unknown state instead of loading forever.
       if (mounted && !_simPurposesResolved) {
         setState(() => _simPurposesResolved = true);
       }
@@ -276,11 +363,22 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   Future<void> _loadFeatureFlags() async {
     const cacheKey = 'dashboard_feature_flags';
 
-    final cached = AppCacheService.get(cacheKey);
+    final memoryCached = AppCacheService.get(cacheKey);
 
-    if (cached is List && mounted) {
+    if (memoryCached is List && mounted) {
       setState(() {
-        _disabledTypes = cached.map((e) => e.toString()).toSet();
+        _disabledTypes = memoryCached.map((e) => e.toString()).toSet();
+      });
+    }
+
+    final durable =
+        await StorageService.getOfflineDashboardSnapshot(widget.user);
+
+    final durableFlags = durable?['disabled_transaction_types'];
+
+    if (durableFlags is List && mounted) {
+      setState(() {
+        _disabledTypes = durableFlags.map((e) => e.toString()).toSet();
       });
     }
 
@@ -299,9 +397,14 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
           _disabledTypes = disabled.toSet();
         });
       }
-    } catch (_) {
-      // Keep cached values. Server remains the source of truth.
-    }
+
+      await StorageService.mergeOfflineDashboardSnapshot(
+        widget.user,
+        {
+          'disabled_transaction_types': disabled,
+        },
+      );
+    } catch (_) {}
   }
 
   Future<void> _loadSimMap() async {

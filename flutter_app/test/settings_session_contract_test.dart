@@ -132,7 +132,14 @@ void main() {
           check,
           isNot(contains('ApiClient.refreshToken()')),
           reason:
-              'A normal startup AuthCheckEvent must not exchange a preserved refresh token after the app has been soft-locked.',
+              'A normal startup AuthCheckEvent must never use the network to bypass a local inactivity lock.',
+        );
+
+        expect(
+          check,
+          contains('StorageService.isSessionLocked()'),
+          reason:
+              'Startup must consult the durable local lock state before restoring an authenticated session.',
         );
 
         expect(
@@ -156,9 +163,23 @@ void main() {
 
         expect(
           unlock,
-          contains('ApiClient.refreshToken()'),
+          isNot(contains('ApiClient.refreshToken()')),
           reason:
-              'Only the authenticated unlock path should exchange the preserved refresh token.',
+              'Successful phone authentication must unlock AgentPro locally without consuming internet data.',
+        );
+
+        expect(
+          unlock,
+          contains('StorageService.setSessionLocked(false)'),
+          reason:
+              'The authenticated unlock path must clear the durable local lock.',
+        );
+
+        expect(
+          unlock,
+          contains('StorageService.getAccessToken()'),
+          reason:
+              'Offline unlock requires an existing encrypted authenticated session.',
         );
       },
     );
@@ -268,6 +289,26 @@ void main() {
           'lib/core/api/api_client.dart',
         );
 
+        final requestGuard = _slice(
+          source,
+          'onRequest: (options, handler) async {',
+          'onError: (DioException error, handler) async {',
+        );
+
+        expect(
+          requestGuard,
+          contains('StorageService.isSessionLocked()'),
+          reason:
+              'Every API request must check the durable local lock before network transmission.',
+        );
+
+        expect(
+          requestGuard,
+          contains("error: 'SESSION_LOCKED'"),
+          reason:
+              'Locked non-auth requests must be rejected locally instead of reaching the network.',
+        );
+
         final interceptor = _slice(
           source,
           'onError: (DioException error, handler) async {',
@@ -280,7 +321,8 @@ void main() {
         );
 
         final refreshIndex = interceptor.indexOf(
-          'final refreshed = await refreshToken();',
+          'final refreshOutcome = '
+          'await _refreshTokenWithOutcome();',
         );
 
         expect(
@@ -301,13 +343,13 @@ void main() {
           interceptor,
           matches(
             RegExp(
-              r'final\s+canRefresh\s*=\s*'
+              r'final\s+canRefresh\s*=\s*!sessionLocked\s*&&\s*'
               r'currentAccessToken\s*!=\s*null\s*&&\s*'
               r'currentAccessToken\.isNotEmpty\s*;',
             ),
           ),
           reason:
-              'The interceptor needs an explicit current-session refresh guard.',
+              'Token refresh must require both an unlocked local session and an existing access token.',
         );
 
         expect(
@@ -319,6 +361,183 @@ void main() {
           ),
           reason:
               'A 401 must not exchange a preserved refresh token after the session has been soft-locked.',
+        );
+      },
+    );
+
+    test(
+      'automatic refresh invalidates only terminal session rejection',
+      () {
+        final source = _readSource(
+          'lib/core/api/api_client.dart',
+        );
+
+        expect(
+          source,
+          contains(
+            'enum TokenRefreshOutcome',
+          ),
+        );
+
+        final interceptor = _slice(
+          source,
+          'onError: (DioException error, handler) async {',
+          'static Future<void> _invalidateSession()',
+        );
+
+        expect(
+          interceptor,
+          contains(
+            'await _refreshTokenWithOutcome()',
+          ),
+        );
+
+        final terminalIndex = interceptor.indexOf(
+          'TokenRefreshOutcome.terminalFailure',
+        );
+
+        final invalidationIndex = interceptor.indexOf(
+          'await _invalidateSession();',
+        );
+
+        expect(
+          terminalIndex,
+          greaterThanOrEqualTo(0),
+        );
+
+        expect(
+          invalidationIndex,
+          greaterThan(terminalIndex),
+          reason:
+              'Only a terminal credential/session rejection may destroy the local session.',
+        );
+
+        final refreshLogic = _slice(
+          source,
+          'static Future<TokenRefreshOutcome> _performTokenRefresh() async {',
+          '\n}',
+        );
+
+        final terminalStatusHelper = _slice(
+          source,
+          'static bool _isTerminalRefreshStatus(',
+          'static Future<TokenRefreshOutcome> '
+              '_performTokenRefresh() async {',
+        );
+
+        expect(
+          terminalStatusHelper,
+          contains('statusCode == 401'),
+        );
+
+        expect(
+          terminalStatusHelper,
+          contains('statusCode == 403'),
+        );
+
+        expect(
+          refreshLogic,
+          contains(
+            '_isTerminalRefreshStatus(statusCode)',
+          ),
+          reason:
+              'The refresh path must classify explicit terminal HTTP responses through the dedicated helper.',
+        );
+
+        expect(
+          refreshLogic,
+          contains(
+            'TokenRefreshOutcome.transientFailure',
+          ),
+          reason:
+              'Network, server and malformed-response failures must retain the encrypted session.',
+        );
+
+        expect(
+          refreshLogic,
+          contains('validateStatus: (_) => true'),
+          reason:
+              'The refresh client must inspect HTTP status explicitly instead of collapsing all non-2xx responses into Dio exceptions.',
+        );
+
+        final invalidation = _slice(
+          source,
+          'static Future<void> _invalidateSession()',
+          'static Future<bool> refreshToken()',
+        );
+
+        final clearIndex = invalidation.indexOf(
+          'StorageService.clearSession()',
+        );
+
+        final publishIndex = invalidation.indexOf(
+          '_sessionInvalidationController.add(null)',
+        );
+
+        expect(
+          clearIndex,
+          greaterThanOrEqualTo(0),
+        );
+
+        expect(
+          publishIndex,
+          greaterThan(clearIndex),
+          reason:
+              'Credentials must be cleared before authenticated UI invalidation is published.',
+        );
+      },
+    );
+
+    test(
+      'AuthBloc immediately leaves authenticated state after API session invalidation',
+      () {
+        final source = _readSource(
+          'lib/core/auth/auth_bloc.dart',
+        );
+
+        expect(
+          source,
+          contains(
+            'class AuthSessionInvalidatedEvent extends AuthEvent',
+          ),
+        );
+
+        expect(
+          source,
+          contains(
+            'ApiClient.sessionInvalidations.listen',
+          ),
+          reason:
+              'AuthBloc must observe irrecoverable API session failures instead of relying only on secure-storage mutation.',
+        );
+
+        expect(
+          source,
+          contains(
+            'on<AuthSessionInvalidatedEvent>',
+          ),
+        );
+
+        final handler = _slice(
+          source,
+          'Future<void> _onSessionInvalidated(',
+          'Future<void> _onLogout(',
+        );
+
+        expect(
+          handler,
+          contains('emit(AuthUnauthenticated())'),
+          reason:
+              'The visible application state must immediately become unauthenticated.',
+        );
+
+        expect(
+          source,
+          contains(
+            'await _sessionInvalidationSubscription.cancel();',
+          ),
+          reason:
+              'AuthBloc must release its global API invalidation listener when disposed.',
         );
       },
     );

@@ -2,11 +2,13 @@
 import 'dart:collection';
 import 'dart:convert';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/api/api_client.dart';
+import '../../core/services/offline_queue_service.dart';
 import '../../core/services/sim_card_service.dart';
 import '../../core/services/storage_service.dart';
 import '../../shared/theme/app_theme.dart';
@@ -165,18 +167,21 @@ const List<MtnMashupTier> kMtnMashupTiers = [
 
 const Map<String, List<DataBundleOption>> kMtnMashupAllocations = {
   'ghc1': [
+    DataBundleOption('15.27MB + 15.64 mins', '1'),
     DataBundleOption('25.45MB + 11.17 mins', '2'),
     DataBundleOption('30.53MB + 8.94 mins', '3'),
     DataBundleOption('35.62MB + 6.7 mins', '4'),
     DataBundleOption('50.89MB only', '5'),
   ],
   'ghc5': [
+    DataBundleOption('86.12MB + 83.24 mins', '1'),
     DataBundleOption('143.54MB + 59.45 mins', '2'),
     DataBundleOption('172.25MB + 47.56 mins', '3'),
     DataBundleOption('200.06MB + 35.67 mins', '4'),
     DataBundleOption('287.08MB only', '5'),
   ],
   'ghc10': [
+    DataBundleOption('180.72MB + 173.39 mins', '1'),
     DataBundleOption('301.19MB + 123.85 mins', '2'),
     DataBundleOption('361.43MB + 99.08 mins', '3'),
     DataBundleOption('421.67MB + 74.31 mins', '4'),
@@ -422,10 +427,30 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         detected = await SimCardService.getSimCards();
       }
 
-      // Apply the same Personal-vs-Business SIM purpose rule used by
-      // Personal Home. A SIM explicitly reserved for Agent/Business
-      // must not become selectable merely because this form re-detected it.
       final purposes = <int, String>{};
+      var purposesKnown = false;
+
+      final cachedUser = await StorageService.getUser();
+
+      if (cachedUser != null) {
+        final durable =
+            await StorageService.getOfflineDashboardSnapshot(cachedUser);
+
+        final rawPurposes = durable?['sim_purposes'];
+
+        if (rawPurposes is Map) {
+          purposesKnown = true;
+
+          for (final entry in rawPurposes.entries) {
+            final slot = int.tryParse(entry.key.toString());
+            final purpose = entry.value?.toString().trim();
+
+            if (slot != null && purpose != null && purpose.isNotEmpty) {
+              purposes[slot] = purpose;
+            }
+          }
+        }
+      }
 
       try {
         final response = await ApiClient.instance.get(
@@ -433,6 +458,8 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         );
 
         final saved = (response.data['data'] as List?) ?? const [];
+
+        purposes.clear();
 
         for (final value in saved) {
           if (value is! Map) continue;
@@ -444,9 +471,38 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
             purposes[slot] = purpose;
           }
         }
+
+        purposesKnown = true;
+
+        if (cachedUser != null) {
+          await StorageService.mergeOfflineDashboardSnapshot(
+            cachedUser,
+            {
+              'sim_purposes': {
+                for (final entry in purposes.entries)
+                  entry.key.toString(): entry.value,
+              },
+            },
+          );
+        }
       } catch (_) {
-        // Match Personal Home: if purpose lookup is unavailable,
-        // keep detected supported SIMs available.
+        // Keep the encrypted last-known server assignments.
+      }
+
+      if (!purposesKnown) {
+        // Financial actions must not guess SIM purpose simply because
+        // the server is unavailable.
+        if (!mounted) return;
+
+        setState(() {
+          _simCards = const [];
+          _selectedSimSlot = null;
+          _simDetectionComplete = true;
+          _simPermissionDenied = false;
+          _initialSimIdentityUnavailable = true;
+        });
+
+        return;
       }
 
       final supported = detected
@@ -607,15 +663,247 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     });
   }
 
+  void _showPersonalStartFailure(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppTheme.errorColor,
+      ),
+    );
+  }
+
+  Future<String?> _startPreparedPersonalTransaction({
+    required Map<String, dynamic> requestFields,
+    required SimCard selectedSim,
+    required String? displayAmount,
+    required String? customerPhone,
+  }) async {
+    final transactionType =
+        requestFields['transaction_type']?.toString().trim() ?? '';
+
+    if (transactionType.isEmpty) {
+      _showPersonalStartFailure(
+        'The transaction type is unavailable.',
+      );
+      return null;
+    }
+
+    final bundleCategory = requestFields['bundle_category']?.toString().trim();
+
+    final recipientMode = requestFields['recipient_mode']?.toString().trim();
+
+    final selectionsInOrder = (requestFields['selections_in_order'] as List?)
+            ?.map((value) => value.toString())
+            .toList() ??
+        const <String>[];
+
+    try {
+      final connectivity = await Connectivity().checkConnectivity();
+
+      final isOffline = connectivity.isEmpty ||
+          connectivity.every(
+            (result) => result == ConnectivityResult.none,
+          );
+
+      Map<String, dynamic> transaction;
+
+      if (isOffline) {
+        final trust = await StorageService.evaluateOfflineTransactionTrust(
+          isPersonal: true,
+        );
+
+        if (!trust.isValid) {
+          _showPersonalStartFailure(
+            'Offline transaction access needs a fresh server '
+            'verification. Connect to the internet, open AgentPro, '
+            'then try again.',
+          );
+          return null;
+        }
+
+        try {
+          await OfflineQueueService.init();
+        } catch (_) {
+          _showPersonalStartFailure(
+            'AgentPro could not open its offline transaction storage. '
+            'Please restart the app and try again.',
+          );
+          return null;
+        }
+
+        final user = await StorageService.getUser();
+
+        final identity = OfflineQueueService.identityFromUser(user);
+
+        if (identity == null || user == null) {
+          _showPersonalStartFailure(
+            'Your authenticated account identity is unavailable. '
+            'Connect to the internet and sign in again.',
+          );
+          return null;
+        }
+
+        Map<String, dynamic>? cachedFlow;
+
+        try {
+          cachedFlow = OfflineQueueService.getCachedFlow(
+            widget.provider,
+            transactionType,
+            identity: identity,
+            isPersonal: true,
+            bundleCategory: bundleCategory == null || bundleCategory.isEmpty
+                ? null
+                : bundleCategory,
+            recipientMode: recipientMode == null || recipientMode.isEmpty
+                ? null
+                : recipientMode,
+          );
+        } catch (_) {
+          cachedFlow = null;
+        }
+
+        if (cachedFlow == null) {
+          _showPersonalStartFailure(
+            'This Quick Action has not been prepared for offline use yet. '
+            'Connect to the internet, open Personal Home, and try again.',
+          );
+          return null;
+        }
+
+        final ownerUserId =
+            cachedFlow['owner_user_id']?.toString().trim() ?? '';
+
+        final companyId = cachedFlow['company_id']?.toString().trim() ?? '';
+
+        // A Personal offline cache must never contain a company-owned flow.
+        if (companyId.isNotEmpty) {
+          _showPersonalStartFailure(
+            'The cached USSD configuration does not belong to Personal mode. '
+            'Connect to the internet to refresh it.',
+          );
+          return null;
+        }
+
+        final isPersonalOverride = ownerUserId.isNotEmpty;
+
+        if (isPersonalOverride &&
+            (ownerUserId != identity.userId ||
+                !trust.hasPersonalPaidEntitlement)) {
+          _showPersonalStartFailure(
+            'This cached Personal override can no longer be verified for '
+            'offline use. Connect to the internet to refresh your plan '
+            'and USSD configuration.',
+          );
+          return null;
+        }
+
+        final localId = 'local_${const Uuid().v4()}';
+
+        transaction = <String, dynamic>{
+          'transaction_id': localId,
+          'reference': localId,
+          'status': 'initiated',
+          'provider': widget.provider,
+          'transaction_type': transactionType,
+
+          // The cached resolver result was previously returned by the
+          // authenticated Personal resolver. Global flows are available
+          // to every Personal account. Personal-owned flows additionally
+          // require the server-issued Paid entitlement in the current
+          // session-bound Personal offline trust proof.
+          'automation_entitled': true,
+          'personal_override_entitled': isPersonalOverride,
+          'manual_dial_code': null,
+
+          'automation_params': {
+            'amount': requestFields['amount']?.toString() ?? '',
+            'customer_phone':
+                requestFields['recipient_phone']?.toString() ?? '',
+            'recipient_phone':
+                requestFields['recipient_phone']?.toString() ?? '',
+            'payment_reference': requestFields['notes']?.toString() ?? '',
+            'merchant_id': requestFields['merchant_id']?.toString() ?? '',
+          },
+
+          // TransactionProgressScreen treats an explicitly supplied,
+          // identity-scoped cached flow as the genuine offline path and
+          // validates it again immediately before native execution.
+          'cached_flow': cachedFlow,
+        };
+      } else {
+        final response = await ApiClient.instance.post(
+          '/personal-transactions',
+          data: requestFields,
+        );
+
+        final rawTransaction = response.data['data'];
+
+        if (rawTransaction is! Map) {
+          throw const FormatException(
+            'Invalid personal transaction initiation response',
+          );
+        }
+
+        transaction = Map<String, dynamic>.from(rawTransaction);
+      }
+
+      if (!mounted) return null;
+
+      return context.push<String>(
+        '/transactions/progress',
+        extra: {
+          'is_personal': true,
+          'transaction': transaction,
+          'provider': widget.provider,
+          'transaction_type': transactionType,
+          if (bundleCategory != null && bundleCategory.isNotEmpty)
+            'bundle_category': bundleCategory,
+          if (recipientMode != null && recipientMode.isNotEmpty)
+            'recipient_mode': recipientMode,
+          'selections_in_order': selectionsInOrder,
+          'amount': displayAmount,
+          'customer_phone': customerPhone,
+          'sim_slot': selectedSim.slot,
+          'sim_iccid': selectedSim.iccid.isNotEmpty ? selectedSim.iccid : null,
+          'sim_subscription_id': selectedSim.subscriptionId,
+          'request_fields': requestFields,
+        },
+      );
+    } on DioException catch (error) {
+      final responseData = error.response?.data;
+
+      final message =
+          responseData is Map ? responseData['message']?.toString() : null;
+
+      _showPersonalStartFailure(
+        message ?? 'Failed to start transaction. Please try again.',
+      );
+
+      return null;
+    } on FormatException catch (error) {
+      _showPersonalStartFailure(error.message);
+      return null;
+    } catch (_) {
+      _showPersonalStartFailure(
+        'The transaction could not be started. Please try again.',
+      );
+      return null;
+    }
+  }
+
   Future<void> _submit() async {
     if (_isMtnMashup) {
       await _submitMtnMashup();
       return;
     }
+
     if (_isDataBundle) {
       await _submitDataBundle();
       return;
     }
+
     if (!_formKey.currentState!.validate()) return;
 
     if (!_simDetectionComplete) {
@@ -661,7 +949,9 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       'sim_slot': selectedSim.slot,
       'sim_subscription_id': selectedSim.subscriptionId,
       if (_isMtnCrossNetwork && _crossNetworkSelection != null)
-        'selections_in_order': <String>[_crossNetworkSelection!],
+        'selections_in_order': <String>[
+          _crossNetworkSelection!,
+        ],
     };
 
     final requestFields = await _withStableClientOperation(baseRequestFields);
@@ -671,46 +961,15 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       return;
     }
 
-    try {
-      final res = await ApiClient.instance.post(
-        '/personal-transactions',
-        data: requestFields,
-      );
+    progressAction = await _startPreparedPersonalTransaction(
+      requestFields: requestFields,
+      selectedSim: selectedSim,
+      displayAmount: _needsAmount ? _amountCtrl.text.trim() : null,
+      customerPhone: _needsPhone ? _phoneCtrl.text.trim() : null,
+    );
 
-      final transaction = res.data['data'];
-      if (!mounted) return;
-
-      progressAction = await context.push<String>(
-        '/transactions/progress',
-        extra: {
-          'is_personal': true,
-          'transaction': transaction,
-          'provider': widget.provider,
-          'transaction_type': transactionType,
-          if (_isMtnAirtime && _recipientMode != null)
-            'recipient_mode': _recipientMode,
-          'amount': _needsAmount ? _amountCtrl.text.trim() : null,
-          'customer_phone': _needsPhone ? _phoneCtrl.text.trim() : null,
-          'sim_slot': selectedSim.slot,
-          'sim_iccid': selectedSim.iccid.isNotEmpty ? selectedSim.iccid : null,
-          'sim_subscription_id': selectedSim.subscriptionId,
-          'request_fields': requestFields,
-          if (_isMtnCrossNetwork && _crossNetworkSelection != null)
-            'selections_in_order': [
-              _crossNetworkSelection!,
-            ],
-        },
-      );
-    } on DioException catch (e) {
-      final msg = e.response?.data?['message'] ??
-          'Failed to start transaction. Please try again.';
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
+    if (mounted) {
+      setState(() => _loading = false);
     }
 
     if (mounted && progressAction == 'retry_now') {
@@ -748,8 +1007,10 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
 
     setState(() => _loading = true);
     String? progressAction;
+
     final recipientPhone =
         _recipientMode == 'other' ? _phoneCtrl.text.trim() : null;
+
     final flexiAmount =
         _bundleCategory == 'flexi' ? _flexiAmountCtrl.text.trim() : null;
 
@@ -779,43 +1040,15 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       return;
     }
 
-    try {
-      final res = await ApiClient.instance.post(
-        '/personal-transactions',
-        data: requestFields,
-      );
+    progressAction = await _startPreparedPersonalTransaction(
+      requestFields: requestFields,
+      selectedSim: selectedSim,
+      displayAmount: flexiAmount,
+      customerPhone: recipientPhone,
+    );
 
-      final transaction = res.data['data'];
-      if (!mounted) return;
-
-      progressAction = await context.push<String>(
-        '/transactions/progress',
-        extra: {
-          'is_personal': true,
-          'transaction': transaction,
-          'provider': widget.provider,
-          'transaction_type': widget.transactionType,
-          'bundle_category': resolvedBundleCategory,
-          'recipient_mode': _recipientMode,
-          'selections_in_order': _computeSelections(),
-          'amount': flexiAmount,
-          'customer_phone': recipientPhone,
-          'sim_slot': selectedSim.slot,
-          'sim_iccid': selectedSim.iccid.isNotEmpty ? selectedSim.iccid : null,
-          'sim_subscription_id': selectedSim.subscriptionId,
-          'request_fields': requestFields,
-        },
-      );
-    } on DioException catch (e) {
-      final msg = e.response?.data?['message'] ??
-          'Failed to start transaction. Please try again.';
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
+    if (mounted) {
+      setState(() => _loading = false);
     }
 
     if (mounted && progressAction == 'retry_now') {
@@ -1203,18 +1436,6 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     );
   }
 
-  bool _mashupAllocationUsesSecondPage() {
-    final tier = _mashupTier;
-    final allocation = _mashupAllocation;
-    if (tier == null || allocation == null) return false;
-
-    if (tier.id == 'ghc1') {
-      return allocation.digit == '4' || allocation.digit == '5';
-    }
-
-    return (tier.id == 'ghc5' || tier.id == 'ghc10') && allocation.digit == '5';
-  }
-
   String? _mashupBundleCategory() {
     final tier = _mashupTier;
     final payment = _mashupPayment;
@@ -1226,8 +1447,11 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       return '${tier.id}_$paymentKey';
     }
 
-    final page = _mashupAllocationUsesSecondPage() ? 'page2' : 'page1';
-    return '${tier.id}_${page}_$paymentKey';
+    // MTN accepts allocation digits 1-5 directly from the first
+    // allocation response, even when option 5 is visually shown after
+    // "99. More". Keep using the existing page1 flow identity so old
+    // deployed flow rows remain compatible.
+    return '${tier.id}_page1_$paymentKey';
   }
 
   Widget _buildMtnMashupFlow(BuildContext context) {
@@ -1487,33 +1711,44 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         bundleCategory == null ||
         _recipientMode == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Complete the MashUp choices first.')),
+        const SnackBar(
+          content: Text('Complete the MashUp choices first.'),
+        ),
       );
       return;
     }
 
     if (tier.id != 'ghc30' && _mashupAllocation == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Choose a MashUp allocation.')),
+        const SnackBar(
+          content: Text('Choose a MashUp allocation.'),
+        ),
       );
       return;
     }
 
     if (_recipientMode == 'other' && _phoneCtrl.text.trim().length < 9) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid recipient phone number.')),
+        const SnackBar(
+          content: Text(
+            'Enter a valid recipient phone number.',
+          ),
+        ),
       );
       return;
     }
 
     if (!_simDetectionComplete) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('SIM detection is still in progress.')),
+        const SnackBar(
+          content: Text('SIM detection is still in progress.'),
+        ),
       );
       return;
     }
 
     final selectedSim = _selectedSim;
+
     if (selectedSim == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -1555,45 +1790,15 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       return;
     }
 
-    try {
-      final res = await ApiClient.instance.post(
-        '/personal-transactions',
-        data: requestFields,
-      );
+    progressAction = await _startPreparedPersonalTransaction(
+      requestFields: requestFields,
+      selectedSim: selectedSim,
+      displayAmount: tier.amount.toString(),
+      customerPhone: recipientPhone,
+    );
 
-      final transaction = res.data['data'];
-      if (!mounted) return;
-
-      progressAction = await context.push<String>(
-        '/transactions/progress',
-        extra: {
-          'is_personal': true,
-          'transaction': transaction,
-          'provider': widget.provider,
-          'transaction_type': widget.transactionType,
-          'bundle_category': bundleCategory,
-          'recipient_mode': _recipientMode,
-          'selections_in_order': [
-            if (_mashupAllocation != null) _mashupAllocation!.digit,
-          ],
-          'amount': tier.amount.toString(),
-          'customer_phone': recipientPhone,
-          'sim_slot': selectedSim.slot,
-          'sim_iccid': selectedSim.iccid.isNotEmpty ? selectedSim.iccid : null,
-          'sim_subscription_id': selectedSim.subscriptionId,
-          'request_fields': requestFields,
-        },
-      );
-    } on DioException catch (e) {
-      final msg = e.response?.data?['message'] ??
-          'Failed to start MashUp. Please try again.';
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
+    if (mounted) {
+      setState(() => _loading = false);
     }
 
     if (mounted && progressAction == 'retry_now') {

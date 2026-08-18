@@ -8,6 +8,7 @@ class MainActivity : FlutterFragmentActivity() {
     private val USSD_CHANNEL = "com.agentpro.ghana/ussd"
     private val SIM_CHANNEL = "com.agentpro.ghana/sim"
     private val USSD_ACCESSIBILITY_CHANNEL = "com.agentpro.ghana/ussd_accessibility"
+    private val DEVICE_CLOCK_CHANNEL = "com.agentpro.ghana/device_clock"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -23,5 +24,12 @@ class MainActivity : FlutterFragmentActivity() {
         // Register USSD Accessibility Service channel (MTN Cash In pilot)
         UssdAccessibilityChannel(this)
             .register(flutterEngine.dartExecutor.binaryMessenger, USSD_ACCESSIBILITY_CHANNEL)
+
+        // Monotonic Android clock used for bounded offline transaction trust.
+        DeviceClockChannel(this)
+            .register(
+                flutterEngine.dartExecutor.binaryMessenger,
+                DEVICE_CLOCK_CHANNEL,
+            )
     }
 }

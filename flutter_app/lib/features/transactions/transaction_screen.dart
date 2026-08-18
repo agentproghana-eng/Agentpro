@@ -572,7 +572,34 @@ class _TransactionScreenState extends State<TransactionScreen> {
     // this combo needs to succeed online at least once before it can
     // work offline.
     final connectivity = await Connectivity().checkConnectivity();
-    final isOffline = connectivity.every((r) => r == ConnectivityResult.none);
+    final isOffline = connectivity.every(
+      (result) => result == ConnectivityResult.none,
+    );
+
+    if (isOffline) {
+      final trust = await StorageService.evaluateOfflineTransactionTrust(
+        isPersonal: false,
+      );
+
+      if (!trust.isValid) {
+        if (!mounted) return;
+
+        setState(() => _loading = false);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Offline transaction access needs a fresh server '
+              'verification. Connect to the internet, open AgentPro, '
+              'then try again.',
+            ),
+          ),
+        );
+
+        return;
+      }
+    }
+
     final identity = _offlineIdentity;
 
     final cachedTemplate = identity == null

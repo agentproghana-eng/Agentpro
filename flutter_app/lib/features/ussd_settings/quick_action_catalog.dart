@@ -50,6 +50,16 @@ class QuickActionCatalogDefinition {
   }
 
   IconData get icon => quickActionCatalogIcon(type);
+
+  Map<String, dynamic> toCacheJson() {
+    return {
+      'provider': provider,
+      'transaction_type': type,
+      'display_label': displayLabel,
+      'quick_action_group': quickActionGroup,
+      'variants': variants.map((variant) => variant.toCacheJson()).toList(),
+    };
+  }
 }
 
 class QuickActionCatalogVariant {
@@ -72,6 +82,12 @@ class QuickActionCatalogVariant {
         json['recipient_mode'],
       ),
     );
+  }
+  Map<String, dynamic> toCacheJson() {
+    return {
+      'bundle_category': bundleCategory,
+      'recipient_mode': recipientMode,
+    };
   }
 }
 
@@ -105,35 +121,34 @@ class QuickActionCatalog {
     return null;
   }
 
-  static Future<QuickActionCatalog> load({
-    required String mode,
-  }) async {
-    final response = await ApiClient.instance.get(
-      '/users/me/quick-actions/catalog',
-      queryParameters: {
-        'mode': mode,
-      },
-    );
+  Map<String, dynamic> toCacheJson() {
+    return {
+      'mode': mode,
+      'providers': byProvider.entries
+          .map(
+            (entry) => {
+              'provider': entry.key,
+              'actions': entry.value
+                  .map((definition) => definition.toCacheJson())
+                  .toList(),
+            },
+          )
+          .toList(),
+    };
+  }
 
-    final responseData = response.data;
-
-    if (responseData is! Map) {
-      throw const FormatException(
-        'Quick Action catalog response is invalid',
-      );
-    }
-
-    final root = responseData['data'];
-
-    if (root is! Map) {
-      throw const FormatException(
-        'Quick Action catalog data is unavailable',
-      );
-    }
-
-    final data = Map<String, dynamic>.from(root);
+  static QuickActionCatalog fromCacheJson(
+    Map<String, dynamic> data, {
+    String? fallbackMode,
+  }) {
     final providerRows = data['providers'];
-    final resolvedMode = (data['mode'] ?? mode).toString();
+    final resolvedMode = (data['mode'] ?? fallbackMode ?? '').toString().trim();
+
+    if (resolvedMode.isEmpty) {
+      throw const FormatException(
+        'Quick Action catalog mode is unavailable',
+      );
+    }
 
     final byProvider = <String, List<QuickActionCatalogDefinition>>{};
 
@@ -185,6 +200,38 @@ class QuickActionCatalog {
     return QuickActionCatalog(
       mode: resolvedMode,
       byProvider: byProvider,
+    );
+  }
+
+  static Future<QuickActionCatalog> load({
+    required String mode,
+  }) async {
+    final response = await ApiClient.instance.get(
+      '/users/me/quick-actions/catalog',
+      queryParameters: {
+        'mode': mode,
+      },
+    );
+
+    final responseData = response.data;
+
+    if (responseData is! Map) {
+      throw const FormatException(
+        'Quick Action catalog response is invalid',
+      );
+    }
+
+    final root = responseData['data'];
+
+    if (root is! Map) {
+      throw const FormatException(
+        'Quick Action catalog data is unavailable',
+      );
+    }
+
+    return fromCacheJson(
+      Map<String, dynamic>.from(root),
+      fallbackMode: mode,
     );
   }
 }

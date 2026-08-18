@@ -70,13 +70,21 @@ void main() {
 
   test('personal form stays mounted and can repeat a confirmed failure', () {
     expect(
-      RegExp(r'progressAction = await context\.push<String>')
-          .allMatches(personal)
-          .length,
+      RegExp(
+        r'progressAction = await _startPreparedPersonalTransaction\(',
+      ).allMatches(personal).length,
       3,
     );
+
     expect(
-      RegExp(r"progressAction == 'retry_now'").allMatches(personal).length,
+      personal,
+      contains('return context.push<String>('),
+    );
+
+    expect(
+      RegExp(
+        r"progressAction == 'retry_now'",
+      ).allMatches(personal).length,
       3,
     );
   });

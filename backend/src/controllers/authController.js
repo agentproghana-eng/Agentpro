@@ -563,10 +563,29 @@ exports.refreshToken = async (req, res) => {
 
   } catch (error) {
     if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({ success: false, message: 'Refresh token expired. Please login again.' });
+      return res.status(401).json({
+        success: false,
+        message: 'Refresh token expired. Please login again.',
+      });
     }
+
+    if (
+      error.name === 'JsonWebTokenError' ||
+      error.name === 'NotBeforeError'
+    ) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid refresh token',
+      });
+    }
+
     logger.error('Token refresh error:', error);
-    res.status(401).json({ success: false, message: 'Invalid refresh token' });
+
+    return res.status(503).json({
+      success: false,
+      code: 'SESSION_REFRESH_TEMPORARILY_UNAVAILABLE',
+      message: 'Unable to refresh session. Please try again.',
+    });
   }
 };
 

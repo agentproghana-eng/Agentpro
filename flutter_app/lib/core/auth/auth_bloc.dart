@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../services/storage_service.dart';
@@ -20,6 +22,8 @@ class AuthLogoutEvent extends AuthEvent {}
 class AuthLockEvent extends AuthEvent {}
 
 class AuthUnlockEvent extends AuthEvent {}
+
+class AuthSessionInvalidatedEvent extends AuthEvent {}
 
 // Personal Subscriber registration - lightweight, no company involved,
 // mirrors AuthLoginEvent's save-tokens-and-emit pattern but posts to
@@ -73,14 +77,26 @@ class AuthError extends AuthState {
 
 // ── BLoC ──────────────────────────────────────────────────────
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
+  late final StreamSubscription<void> _sessionInvalidationSubscription;
+
   AuthBloc() : super(AuthInitial()) {
     on<AuthCheckEvent>(_onCheck);
     on<AuthLoginEvent>(_onLogin);
     on<AuthRegisterPersonalEvent>(_onRegisterPersonal);
     on<AuthLockEvent>(_onLock);
     on<AuthUnlockEvent>(_onUnlock);
+    on<AuthSessionInvalidatedEvent>(
+      _onSessionInvalidated,
+    );
     on<AuthLogoutEvent>(_onLogout);
     on<AuthUpdateUserEvent>(_onUpdateUser);
+
+    _sessionInvalidationSubscription =
+        ApiClient.sessionInvalidations.listen((_) {
+      if (!isClosed) {
+        add(AuthSessionInvalidatedEvent());
+      }
+    });
   }
 
   Future<void> _onCheck(
@@ -89,11 +105,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     final user = await StorageService.getUser();
     final token = await StorageService.getAccessToken();
+    final sessionLocked = await StorageService.isSessionLocked();
 
-    // A normal startup check may restore only an already-open session.
-    // It must never exchange a preserved refresh token because doing so
-    // would bypass an inactivity/device-authentication lock.
-    if (user != null && token != null) {
+    // Startup may restore only an already-unlocked local session.
+    // A durable local lock survives navigation/process state changes and
+    // must be cleared only by an explicit phone-authentication challenge.
+    if (user != null && token != null && token.isNotEmpty && !sessionLocked) {
       emit(AuthAuthenticated(user));
     } else {
       emit(AuthUnauthenticated());
@@ -113,6 +130,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await StorageService.saveAccessToken(data['access_token']);
       await StorageService.saveRefreshToken(data['refresh_token']);
       await StorageService.saveUser(data['user']);
+
+      await StorageService.setSessionLocked(false);
 
       emit(AuthAuthenticated(data['user']));
     } on Exception catch (e) {
@@ -142,6 +161,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await StorageService.saveAccessToken(data['access_token']);
       await StorageService.saveRefreshToken(data['refresh_token']);
       await StorageService.saveUser(data['user']);
+      await StorageService.setSessionLocked(false);
       emit(AuthAuthenticated(data['user']));
     } on Exception catch (e) {
       String message = 'Registration failed. Please try again.';
@@ -159,9 +179,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     final deviceAuthEnabled = await BiometricService.isBiometricEnabled();
 
     if (deviceAuthEnabled) {
-      // Soft-lock: preserve the refresh token so a successful device
-      // authentication challenge can restore this same session.
-      await StorageService.clearAccessTokenOnly();
+      // Soft-lock locally without destroying the encrypted server session.
+      // API requests are blocked while this flag is set, and successful
+      // phone authentication can unlock AgentPro with zero network traffic.
+      await StorageService.setSessionLocked(true);
     } else {
       // Without device authentication there is no trusted unlock path,
       // so inactivity becomes a normal session termination.
@@ -187,21 +208,30 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) async {
     final user = await StorageService.getUser();
+    final accessToken = await StorageService.getAccessToken();
     final refreshToken = await StorageService.getRefreshToken();
 
-    if (user == null || refreshToken == null || refreshToken.isEmpty) {
+    if (user == null ||
+        accessToken == null ||
+        accessToken.isEmpty ||
+        refreshToken == null ||
+        refreshToken.isEmpty) {
       emit(AuthUnauthenticated());
       return;
     }
 
-    final refreshed = await ApiClient.refreshToken();
-    final token = await StorageService.getAccessToken();
+    // The phone-authentication challenge has already succeeded before this
+    // event is dispatched. Unlock only the local app state here. Do not
+    // refresh tokens or perform any network request as part of app unlock.
+    await StorageService.setSessionLocked(false);
+    emit(AuthAuthenticated(user));
+  }
 
-    if (refreshed && token != null) {
-      emit(AuthAuthenticated(user));
-    } else {
-      emit(AuthUnauthenticated());
-    }
+  Future<void> _onSessionInvalidated(
+    AuthSessionInvalidatedEvent event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthUnauthenticated());
   }
 
   Future<void> _onLogout(
@@ -235,5 +265,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await StorageService.saveUser(updatedUser);
       emit(AuthAuthenticated(updatedUser));
     }
+  }
+
+  @override
+  Future<void> close() async {
+    await _sessionInvalidationSubscription.cancel();
+    return super.close();
   }
 }

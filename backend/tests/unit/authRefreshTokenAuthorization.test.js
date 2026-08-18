@@ -235,4 +235,58 @@ describe('Refresh token persistence authorization', () => {
     },
   );
 
+
+  test(
+    'invalid signed refresh credential remains a terminal 401',
+    async () => {
+      const error = new Error('invalid signature');
+      error.name = 'JsonWebTokenError';
+
+      jwt.verify.mockImplementationOnce(() => {
+        throw error;
+      });
+
+      const req = makeRequest();
+      const res = makeResponse();
+
+      await authController.refreshToken(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          message: 'Invalid refresh token',
+        }),
+      );
+
+      expect(query).not.toHaveBeenCalled();
+      expect(jwt.sign).not.toHaveBeenCalled();
+    },
+  );
+
+  test(
+    'refresh persistence failure is temporary and returns 503',
+    async () => {
+      query.mockRejectedValueOnce(
+        new Error('database temporarily unavailable'),
+      );
+
+      const req = makeRequest();
+      const res = makeResponse();
+
+      await authController.refreshToken(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(503);
+
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        code: 'SESSION_REFRESH_TEMPORARILY_UNAVAILABLE',
+        message: 'Unable to refresh session. Please try again.',
+      });
+
+      expect(jwt.sign).not.toHaveBeenCalled();
+    },
+  );
+
 });

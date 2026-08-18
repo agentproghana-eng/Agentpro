@@ -17,7 +17,8 @@ const VALUE_REQUIRED_FLOW_ACTIONS = new Set([
   'auto_confirm_once',
 ]);
 
-function validateFlowSteps(steps) {
+function validateFlowSteps(steps, options = {}) {
+  const allowPinless = options.allowPinless === true;
   if (!Array.isArray(steps) || steps.length === 0) {
     return 'At least one step is required.';
   }
@@ -85,6 +86,24 @@ function validateFlowSteps(steps) {
     .filter((index) => index >= 0);
 
   if (pinPromptIndexes.length === 0) {
+    // A PIN-less flow may never contain a post-PIN confirmation action.
+    // allowPinless is deliberately opt-in so all existing callers remain
+    // fail-closed unless they explicitly identify a trusted read-only flow.
+    const hasAutoConfirmWithoutPin = steps.some(
+      (step) => step.action === 'auto_confirm_once'
+    );
+
+    if (hasAutoConfirmWithoutPin) {
+      return (
+        'auto_confirm_once requires a pin_prompt step — post-PIN ' +
+        'confirmation cannot exist in a PIN-less flow.'
+      );
+    }
+
+    if (allowPinless) {
+      return null;
+    }
+
     return (
       'Flow has no pin_prompt step — without one, the app will never ' +
       'pause for real PIN entry, and may try to auto-submit a sensitive screen.'

@@ -40,6 +40,7 @@ function makeResponse() {
   return {
     status: jest.fn().mockReturnThis(),
     json: jest.fn().mockReturnThis(),
+    set: jest.fn().mockReturnThis(),
   };
 }
 
@@ -51,6 +52,7 @@ function activeSession() {
     email: 'current@example.com',
     status: 'active',
     session_id: 'session-1',
+    session_expires_at: '2099-12-31T23:59:59.000Z',
   };
 }
 
@@ -84,12 +86,16 @@ describe('Access token durable session authorization', () => {
 
       expect(next).toHaveBeenCalledTimes(1);
 
+      expect(res.set).not.toHaveBeenCalled();
+
       expect(req.user).toEqual({
         id: 'user-1',
         role: 'agent',
         company_id: 'company-1',
         email: 'current@example.com',
         session_id: 'session-1',
+        session_expires_at:
+          '2099-12-31T23:59:59.000Z',
       });
 
       const [sql, params] = query.mock.calls[0];
@@ -102,6 +108,10 @@ describe('Access token durable session authorization', () => {
       );
       expect(sql).toContain(
         'rt.id = $2',
+      );
+
+      expect(sql).toContain(
+        'rt.expires_at AS session_expires_at',
       );
       expect(sql).toContain(
         'rt.revoked_at IS NULL',

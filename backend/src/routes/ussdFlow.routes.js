@@ -1,7 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const ussdFlowController = require('../controllers/ussdFlowController');
-const { authenticate, authorize } = require('../middleware/auth');
+const {
+  authenticate,
+  authorize,
+  requireActiveSubscription,
+} = require('../middleware/auth');
 
 router.use(authenticate);
 
@@ -11,7 +15,11 @@ router.use(authenticate);
 // This endpoint is Business-runtime resolution only:
 // Company override -> Global. Personal runtime resolution uses the
 // separately protected /personal-ussd-flows/resolve endpoint.
-router.get('/resolve', ussdFlowController.resolveFlow);
+router.get(
+  '/resolve',
+  requireActiveSubscription,
+  ussdFlowController.resolveFlow
+);
 
 // Builder metadata is protected by the same role boundary as Business
 // Flow Builder CRUD and must be registered before /:id.

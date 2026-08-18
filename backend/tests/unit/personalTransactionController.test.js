@@ -364,3 +364,94 @@ describe('personalTransactionController physical SIM activity scoping', () => {
     });
   });
 });
+
+describe('personalTransactionController completion SQL typing', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockAuditLog.mockResolvedValue(undefined);
+  });
+
+  test(
+    'explicitly types status parameter as transaction_status',
+    async () => {
+      mockQuery
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 'personal-tx-complete-1',
+              status: 'initiated',
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 'personal-tx-complete-1',
+              reference: 'PER-COMPLETE',
+              status: 'success',
+              completed_at:
+                '2026-08-18T21:00:00.000Z',
+            },
+          ],
+        });
+
+      const req = {
+        user: {
+          id: 'personal-user-1',
+        },
+        params: {
+          transaction_id:
+            'personal-tx-complete-1',
+        },
+        body: {
+          status: 'success',
+          network_reference: null,
+          failure_reason: null,
+          ussd_session_log: [],
+          notes: null,
+        },
+        ip: '127.0.0.1',
+        headers: {
+          'user-agent': 'jest',
+        },
+        requestId: 'request-complete-1',
+      };
+
+      const res = makeRes();
+
+      await personalTransactionController
+        .completeTransaction(req, res);
+
+      expect(mockQuery)
+        .toHaveBeenCalledTimes(2);
+
+      const [updateSql, updateParams] =
+        mockQuery.mock.calls[1];
+
+      expect(updateSql).toContain(
+        'status = $1::transaction_status',
+      );
+
+      expect(updateSql).toContain(
+        "'success'::transaction_status",
+      );
+
+      expect(updateSql).toContain(
+        "'failed'::transaction_status",
+      );
+
+      expect(updateParams[0]).toBe('success');
+
+      expect(res.json).toHaveBeenCalledWith({
+        success: true,
+        data: expect.objectContaining({
+          id: 'personal-tx-complete-1',
+          status: 'success',
+        }),
+      });
+
+      expect(mockAuditLog)
+        .toHaveBeenCalledTimes(1);
+    },
+  );
+});

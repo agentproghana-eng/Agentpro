@@ -3,6 +3,24 @@ const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
 const { validateFlowSteps } = require('../utils/ussdFlowValidation');
 const { validateFlowMetadata } = require('../utils/ussdFlowMetadataValidation');
+
+//
+// PIN-less runtime execution is intentionally exceptional.
+//
+// The only currently device-verified PIN-less Personal flow is the
+// centrally managed Global MTN Pulse balance flow:
+//
+//   *567# -> 1 -> 99 -> 7
+//
+// Do not broaden this by transaction type alone. Personal-owned overrides,
+// company flows, different providers, or a different dial code must continue
+// to satisfy the normal PIN-boundary rule.
+const isTrustedPinlessRuntimeFlow = (flow) =>
+  flow?.owner_user_id == null &&
+  flow?.company_id == null &&
+  flow?.provider === 'mtn' &&
+  flow?.transaction_type === 'check_airtime_balance' &&
+  flow?.dial_code === '*567#';
 const {
   getFlowBuilderCapabilities,
   getFlowBuilderEligibility,
@@ -143,7 +161,13 @@ exports.resolveFlow = async (req, res) => {
       [flow.id]
     );
 
-    const runtimeStepError = validateFlowSteps(stepsResult.rows);
+    const runtimeStepError = validateFlowSteps(
+      stepsResult.rows,
+      {
+        allowPinless:
+          isTrustedPinlessRuntimeFlow(flow),
+      },
+    );
 
     if (runtimeStepError) {
       logger.warn('Unsafe Personal USSD flow blocked at runtime', {

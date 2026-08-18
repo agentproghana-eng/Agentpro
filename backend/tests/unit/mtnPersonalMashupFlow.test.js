@@ -10,6 +10,14 @@ describe('MTN Personal MashUp global flow seed', () => {
     'utf8'
   );
 
+  const repairSql = fs.readFileSync(
+    path.join(
+      __dirname,
+      '../../migrations/085_fix_mtn_personal_mashup_direct_allocations.sql'
+    ),
+    'utf8'
+  );
+
   test('uses the captured Pulse code and Personal MashUp transaction type', () => {
     expect(sql).toContain("'buy_mashup'");
     expect(sql).toContain("'*567#'");
@@ -25,10 +33,11 @@ describe('MTN Personal MashUp global flow seed', () => {
     expect(sql).toContain("'pin_prompt'::ussd_flow_action");
   });
 
-  test('supports recipient confirmation and response-driven allocation paging', () => {
-    expect(sql).toContain("ARRAY['confirm phone number']");
-    expect(sql).toContain("ARRAY['99. more']");
-    expect(sql).toContain("'send_selection'::ussd_flow_action");
+  test('repairs allocation flows to send digits 1-5 directly', () => {
+    expect(repairSql).toContain("ARRAY['confirm phone number']");
+    expect(repairSql).toContain("ARRAY['mins']");
+    expect(repairSql).toContain("'send_selection'::ussd_flow_action");
+    expect(repairSql).not.toContain("ARRAY['99. more']");
   });
 
   test('covers the four fixed tiers captured live', () => {

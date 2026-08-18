@@ -5,6 +5,162 @@ const { logger } = require('../utils/logger');
 
 // ─── JWT Authentication Middleware ────────────────────────────
 
+const _parseOfflineTrustDate = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  const parsed =
+    value instanceof Date
+      ? value
+      : new Date(value);
+
+  return Number.isNaN(parsed.getTime())
+    ? null
+    : parsed;
+};
+
+const _setOfflineTransactionTrustHeaders = ({
+  req,
+  res,
+  mode,
+  entitlementExpiresAt = null,
+  personalPaid = false,
+  personalPaidExpiresAt = null,
+}) => {
+  if (
+    !req.user ||
+    !req.user.id ||
+    !req.user.session_id ||
+    typeof res.set !== 'function' ||
+    (mode !== 'business' && mode !== 'personal')
+  ) {
+    return false;
+  }
+
+  const now = new Date();
+
+  const sessionExpiresAt =
+    _parseOfflineTrustDate(
+      req.user.session_expires_at,
+    );
+
+  if (
+    !sessionExpiresAt ||
+    sessionExpiresAt <= now
+  ) {
+    return false;
+  }
+
+  let authorizedUntil = sessionExpiresAt;
+
+  if (
+    entitlementExpiresAt !== null &&
+    entitlementExpiresAt !== undefined
+  ) {
+    const entitlementExpiry =
+      _parseOfflineTrustDate(
+        entitlementExpiresAt,
+      );
+
+    // A known but malformed/already-expired entitlement must never
+    // manufacture offline financial authorization.
+    if (
+      !entitlementExpiry ||
+      entitlementExpiry <= now
+    ) {
+      return false;
+    }
+
+    if (entitlementExpiry < authorizedUntil) {
+      authorizedUntil = entitlementExpiry;
+    }
+  }
+
+  let paidPersonal = false;
+  let paidPersonalUntil = null;
+
+  if (mode === 'personal' && personalPaid === true) {
+    paidPersonalUntil = sessionExpiresAt;
+
+    if (
+      personalPaidExpiresAt !== null &&
+      personalPaidExpiresAt !== undefined
+    ) {
+      const parsedPaidExpiry =
+        _parseOfflineTrustDate(
+          personalPaidExpiresAt,
+        );
+
+      if (
+        parsedPaidExpiry &&
+        parsedPaidExpiry > now
+      ) {
+        if (parsedPaidExpiry < paidPersonalUntil) {
+          paidPersonalUntil = parsedPaidExpiry;
+        }
+
+        paidPersonal = true;
+      }
+    } else {
+      // Current Personal policy treats a Paid row with no expiry as
+      // active; the durable session remains the hard upper bound.
+      paidPersonal = true;
+    }
+  }
+
+  res.set(
+    'X-AgentPro-Offline-Trust',
+    '1'
+  );
+
+  res.set(
+    'X-AgentPro-Offline-Trust-Version',
+    '2'
+  );
+
+  res.set(
+    'X-AgentPro-Offline-Trust-Mode',
+    mode
+  );
+
+  res.set(
+    'X-AgentPro-Offline-Trust-User-Id',
+    String(req.user.id)
+  );
+
+  res.set(
+    'X-AgentPro-Offline-Trust-Session-Id',
+    String(req.user.session_id)
+  );
+
+  res.set(
+    'X-AgentPro-Offline-Trust-Verified-At',
+    now.toISOString()
+  );
+
+  res.set(
+    'X-AgentPro-Offline-Trust-Authorized-Until',
+    authorizedUntil.toISOString()
+  );
+
+  if (mode === 'personal') {
+    res.set(
+      'X-AgentPro-Offline-Trust-Personal-Paid',
+      paidPersonal ? '1' : '0'
+    );
+
+    if (paidPersonal && paidPersonalUntil) {
+      res.set(
+        'X-AgentPro-Offline-Trust-Personal-Paid-Until',
+        paidPersonalUntil.toISOString()
+      );
+    }
+  }
+
+  return true;
+};
+
 const authenticate = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -66,7 +222,8 @@ const authenticate = async (req, res, next) => {
          u.company_id,
          u.email,
          u.status,
-         rt.id AS session_id
+         rt.id AS session_id,
+         rt.expires_at AS session_expires_at
        FROM users u
        JOIN refresh_tokens rt
          ON rt.user_id = u.id
@@ -95,6 +252,8 @@ const authenticate = async (req, res, next) => {
       company_id: activeSession.company_id,
       email: activeSession.email,
       session_id: activeSession.session_id,
+      session_expires_at:
+        activeSession.session_expires_at,
     };
 
     next();
@@ -170,7 +329,15 @@ const requireSameCompany = async (req, res, next) => {
  * Check active subscription for business features
  */
 const requireActiveSubscription = async (req, res, next) => {
-  if (req.user.role === 'superuser') return next();
+  if (req.user.role === 'superuser') {
+    _setOfflineTransactionTrustHeaders({
+      req,
+      res,
+      mode: 'business',
+    });
+
+    return next();
+  }
 
   try {
     const result = await query(
@@ -209,6 +376,14 @@ const requireActiveSubscription = async (req, res, next) => {
         });
       }
       req.subscription = sub;
+
+      _setOfflineTransactionTrustHeaders({
+        req,
+        res,
+        mode: 'business',
+        entitlementExpiresAt: sub.expires_at,
+      });
+
       return next();
     }
 
@@ -221,6 +396,14 @@ const requireActiveSubscription = async (req, res, next) => {
     }
 
     req.subscription = sub;
+
+    _setOfflineTransactionTrustHeaders({
+      req,
+      res,
+      mode: 'business',
+      entitlementExpiresAt: sub.expires_at,
+    });
+
     next();
   } catch (error) {
     logger.error('Subscription check error:', error);
@@ -251,6 +434,33 @@ const requirePersonalAccount = async (req, res, next) => {
       });
     }
     req.personalSubscription = result.rows[0];
+
+    const personalExpiry =
+      _parseOfflineTrustDate(
+        req.personalSubscription.expires_at,
+      );
+
+    const personalPaid =
+      req.personalSubscription.plan === 'paid' &&
+      (
+        req.personalSubscription.expires_at == null ||
+        (
+          personalExpiry != null &&
+          personalExpiry > new Date()
+        )
+      );
+
+    _setOfflineTransactionTrustHeaders({
+      req,
+      res,
+      mode: 'personal',
+      personalPaid,
+      personalPaidExpiresAt:
+        personalPaid
+          ? req.personalSubscription.expires_at
+          : null,
+    });
+
     next();
   } catch (error) {
     logger.error('Personal account check error:', error);

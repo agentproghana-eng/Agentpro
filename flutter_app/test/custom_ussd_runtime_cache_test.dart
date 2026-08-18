@@ -173,7 +173,7 @@ void main() {
       expect(
         source,
         contains(
-          'final flowValidationError = validateUssdFlowDraftSteps(steps);',
+          'final flowValidationError = validateUssdFlowDraftSteps(',
         ),
       );
 

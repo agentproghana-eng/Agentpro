@@ -106,9 +106,46 @@ const Set<String> kValueRequiredUssdFlowActions = {
   'auto_confirm_once',
 };
 
+/// Returns true only for the one centrally managed Personal flow that
+/// has been verified to be legitimately PIN-less on a real device.
+///
+/// MTN Pulse balance:
+///   *567# -> 1 -> 99 -> 7
+///
+/// This is deliberately narrower than transaction type alone. Both the
+/// transaction context and the resolved flow metadata must match, and the
+/// flow must explicitly identify itself as Global rather than Personal-
+/// or company-owned.
+bool isTrustedPinlessPersonalRuntimeFlow({
+  required bool isPersonal,
+  required String provider,
+  required String transactionType,
+  required String dialCode,
+  required Map<String, dynamic> flowData,
+}) {
+  if (!isPersonal ||
+      provider != 'mtn' ||
+      transactionType != 'check_airtime_balance' ||
+      dialCode != '*567#') {
+    return false;
+  }
+
+  if (!flowData.containsKey('owner_user_id') ||
+      !flowData.containsKey('company_id')) {
+    return false;
+  }
+
+  return flowData['owner_user_id'] == null &&
+      flowData['company_id'] == null &&
+      flowData['provider']?.toString() == 'mtn' &&
+      flowData['transaction_type']?.toString() == 'check_airtime_balance' &&
+      flowData['dial_code']?.toString() == '*567#';
+}
+
 String? validateUssdFlowDraftSteps(
-  List<Map<String, dynamic>> steps,
-) {
+  List<Map<String, dynamic>> steps, {
+  bool allowPinless = false,
+}) {
   if (steps.isEmpty) {
     return 'At least one step is required.';
   }
@@ -158,6 +195,24 @@ String? validateUssdFlowDraftSteps(
   }
 
   if (pinPromptIndexes.isEmpty) {
+    // A PIN-less flow must never contain an action whose only safe meaning
+    // is automatic confirmation after real PIN entry.
+    final hasAutoConfirmWithoutPin = steps.any(
+      (step) => step['action'] == 'auto_confirm_once',
+    );
+
+    if (hasAutoConfirmWithoutPin) {
+      return 'Auto-Confirm Once requires a PIN Prompt step; '
+          'post-PIN confirmation cannot exist in a PIN-less flow.';
+    }
+
+    // Deliberately opt-in. Flow Builder and every existing caller remain
+    // PIN-bound by default. Only the final runtime boundary may enable this
+    // after independently recognizing the trusted global Pulse flow.
+    if (allowPinless) {
+      return null;
+    }
+
     return 'Add exactly one PIN Prompt step so AgentPro stops automation '
         'for secure PIN entry.';
   }

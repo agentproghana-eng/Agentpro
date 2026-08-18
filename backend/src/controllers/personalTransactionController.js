@@ -433,12 +433,19 @@ exports.completeTransaction = async (req, res) => {
 
     const result = await query(
       `UPDATE personal_transactions
-       SET status = $1,
+       SET status = $1::transaction_status,
            network_reference = COALESCE($2, network_reference),
            failure_reason = $3,
            ussd_session_log = $4,
            notes = COALESCE($5, notes),
-           completed_at = CASE WHEN $1 IN ('success', 'failed') THEN NOW() ELSE completed_at END
+           completed_at = CASE
+             WHEN $1::transaction_status IN (
+               'success'::transaction_status,
+               'failed'::transaction_status
+             )
+             THEN NOW()
+             ELSE completed_at
+           END
        WHERE id = $6
        RETURNING id, reference, status, completed_at`,
       [

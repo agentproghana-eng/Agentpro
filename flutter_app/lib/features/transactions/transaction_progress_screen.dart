@@ -11,6 +11,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 import '../../core/services/offline_queue_service.dart';
 import '../../core/services/dashboard_refresh_service.dart';
+import '../../core/services/storage_service.dart';
 import '../ussd_flows/ussd_flow_runtime_policy.dart';
 import '../ussd_flows/ussd_flow_draft_validation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -242,6 +243,28 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         'Your authenticated account identity is unavailable. Sign in again before starting this transaction.',
       );
       return;
+    }
+
+    final suppliedTransaction = widget.data['transaction'];
+
+    final suppliedTransactionId = suppliedTransaction is Map
+        ? suppliedTransaction['transaction_id']?.toString().trim()
+        : null;
+
+    if (suppliedTransactionId != null &&
+        suppliedTransactionId.startsWith('local_')) {
+      final trust = await StorageService.evaluateOfflineTransactionTrust(
+        isPersonal: widget.isPersonal,
+      );
+
+      if (!trust.isValid) {
+        _showStartupFailure(
+          'Offline transaction access needs a fresh server '
+          'verification. Connect to the internet, open AgentPro, '
+          'then try again.',
+        );
+        return;
+      }
     }
 
     // Backend validation/creation and local device preparation begin
@@ -782,7 +805,18 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     // Never trust historical/offline configuration solely because it came
     // from the scoped cache or database. Validate again at the final device
     // execution boundary before Accessibility is allowed to act on it.
-    final flowValidationError = validateUssdFlowDraftSteps(steps);
+    final allowPinless = isTrustedPinlessPersonalRuntimeFlow(
+      isPersonal: widget.isPersonal,
+      provider: provider,
+      transactionType: transactionType,
+      dialCode: dialCode,
+      flowData: flowData,
+    );
+
+    final flowValidationError = validateUssdFlowDraftSteps(
+      steps,
+      allowPinless: allowPinless,
+    );
 
     if (flowValidationError != null) {
       final reason =

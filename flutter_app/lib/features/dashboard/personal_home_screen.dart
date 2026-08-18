@@ -1,5 +1,6 @@
 import 'dart:async';
 // personal_home_screen.dart
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -8,6 +9,8 @@ import '../../core/auth/auth_bloc.dart';
 import '../../core/api/api_client.dart';
 import '../../core/services/sim_card_service.dart';
 import '../../core/services/dashboard_refresh_service.dart';
+import '../../core/services/storage_service.dart';
+import '../../core/services/offline_queue_service.dart';
 import '../../core/router/app_router.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
@@ -160,51 +163,100 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
 
   // Same shape as the Agent HomeTab's _load() (limit=5, filtered by the
   // selected provider tab) - just pointed at /personal-transactions.
-  Future<void> _loadQuickActions() async {
-    QuickActionCatalog? catalog;
+  Future<void> _preloadPersonalQuickActionFlows(
+    QuickActionCatalog catalog,
+    Map<String, dynamic> user,
+  ) async {
+    final identity = OfflineQueueService.identityFromUser(user);
+
+    if (identity == null) return;
 
     try {
-      catalog = await QuickActionCatalog.load(
-        mode: 'personal',
-      );
-
-      if (mounted) {
-        setState(() {
-          _quickActionCatalog = catalog;
-
-          // Once SIM detection has completed, the physical
-          // Personal-assigned SIM is the provider source of truth.
-          // The catalog only decides which actions that provider has.
-          if (_simMap == null &&
-              catalog!.providers.isNotEmpty &&
-              !catalog.providers.contains(_provider)) {
-            _provider = catalog.providers.first;
-          }
-        });
-      }
+      await OfflineQueueService.init();
     } catch (_) {
-      // Existing saved actions remain usable with generic fallbacks.
+      return;
     }
 
-    try {
-      final response = await ApiClient.instance.get('/users/me/quick-actions');
+    for (final provider in catalog.providers) {
+      for (final definition in catalog.definitionsFor(provider)) {
+        final variants = definition.variants.isEmpty
+            ? const <QuickActionCatalogVariant>[
+                QuickActionCatalogVariant(),
+              ]
+            : definition.variants;
 
-      final data =
-          response.data['data'] as Map<String, dynamic>? ?? <String, dynamic>{};
+        for (final variant in variants) {
+          try {
+            final response = await ApiClient.instance.get(
+              '/personal-ussd-flows/resolve',
+              queryParameters: {
+                'provider': provider,
+                'transaction_type': definition.type,
+                if (variant.bundleCategory != null)
+                  'bundle_category': variant.bundleCategory,
+                if (variant.recipientMode != null)
+                  'recipient_mode': variant.recipientMode,
+              },
+            );
 
-      final personal = data['personal'];
+            final rawFlow = response.data['data'];
 
-      if (!mounted || personal is! Map) return;
+            if (rawFlow is! Map) {
+              continue;
+            }
 
+            await OfflineQueueService.cacheFlow(
+              provider,
+              definition.type,
+              Map<String, dynamic>.from(rawFlow),
+              identity: identity,
+              isPersonal: true,
+              bundleCategory: variant.bundleCategory,
+              recipientMode: variant.recipientMode,
+            );
+          } on DioException catch (error) {
+            final statusCode = error.response?.statusCode;
+
+            final mayKeepCachedFlow = error.response == null ||
+                statusCode == 408 ||
+                statusCode == 429 ||
+                (statusCode != null && statusCode >= 500);
+
+            if (!mayKeepCachedFlow) {
+              try {
+                await OfflineQueueService.deleteCachedFlow(
+                  provider,
+                  definition.type,
+                  identity: identity,
+                  isPersonal: true,
+                  bundleCategory: variant.bundleCategory,
+                  recipientMode: variant.recipientMode,
+                );
+              } catch (_) {
+                // A failed cache deletion already leaves the action
+                // unavailable if local storage itself is unhealthy.
+              }
+            }
+          } catch (_) {
+            // Malformed/non-network preload failures are not permission
+            // to replace a previously verified configuration.
+          }
+        }
+      }
+    }
+  }
+
+  Future<void> _loadQuickActions() async {
+    Map<String, List<QuickActionPreference>> parseProfile(dynamic raw) {
       final parsed = <String, List<QuickActionPreference>>{};
 
-      for (final entry in personal.entries) {
+      if (raw is! Map) return parsed;
+
+      for (final entry in raw.entries) {
         final provider = entry.key.toString().trim();
         final value = entry.value;
 
-        if (provider.isEmpty || value is! List) {
-          continue;
-        }
+        if (provider.isEmpty || value is! List) continue;
 
         final items = <QuickActionPreference>[];
 
@@ -215,19 +267,12 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
               fallbackPosition: index,
             );
 
-            if (preference.actionKey.trim().isEmpty) {
-              continue;
-            }
-
+            if (preference.actionKey.trim().isEmpty) continue;
             items.add(preference);
-          } catch (_) {
-            // Ignore malformed individual records.
-          }
+          } catch (_) {}
         }
 
-        items.sort(
-          (a, b) => a.position.compareTo(b.position),
-        );
+        items.sort((a, b) => a.position.compareTo(b.position));
 
         parsed[provider] = items
             .take(9)
@@ -235,12 +280,105 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
             .asMap()
             .entries
             .map(
-              (entry) => entry.value.copyWith(
-                position: entry.key,
-              ),
+              (entry) => entry.value.copyWith(position: entry.key),
             )
             .toList();
       }
+
+      return parsed;
+    }
+
+    Map<String, dynamic> serializeProfile(
+      Map<String, List<QuickActionPreference>> profile,
+    ) {
+      return {
+        for (final entry in profile.entries)
+          entry.key: entry.value.map((item) => item.toJson()).toList(),
+      };
+    }
+
+    final authState = context.read<AuthBloc>().state;
+    final user = authState is AuthAuthenticated ? authState.user : null;
+
+    if (user != null) {
+      final durable = await StorageService.getOfflineDashboardSnapshot(user);
+
+      if (durable != null && mounted) {
+        final quickActions = durable['quick_actions'];
+
+        if (quickActions is Map) {
+          _personalQuickActions = parseProfile(quickActions['personal']);
+        }
+
+        final rawCatalog = durable['personal_catalog'];
+
+        if (rawCatalog is Map) {
+          try {
+            _quickActionCatalog = QuickActionCatalog.fromCacheJson(
+              Map<String, dynamic>.from(rawCatalog),
+              fallbackMode: 'personal',
+            );
+          } catch (_) {}
+        }
+
+        if (_simMap == null) {
+          final providers = <String>{
+            ...?_quickActionCatalog?.providers,
+            ..._personalQuickActions.keys,
+          };
+
+          if (providers.isNotEmpty && !providers.contains(_provider)) {
+            _provider = providers.first;
+          }
+        }
+
+        setState(() {});
+      }
+    }
+
+    QuickActionCatalog? freshCatalog;
+
+    try {
+      freshCatalog = await QuickActionCatalog.load(
+        mode: 'personal',
+      );
+
+      if (mounted) {
+        setState(() {
+          _quickActionCatalog = freshCatalog;
+
+          if (_simMap == null &&
+              freshCatalog!.providers.isNotEmpty &&
+              !freshCatalog.providers.contains(_provider)) {
+            _provider = freshCatalog.providers.first;
+          }
+        });
+      }
+
+      if (user != null) {
+        await StorageService.mergeOfflineDashboardSnapshot(
+          user,
+          {
+            'personal_catalog': freshCatalog.toCacheJson(),
+          },
+        );
+
+        unawaited(
+          _preloadPersonalQuickActionFlows(
+            freshCatalog,
+            user,
+          ),
+        );
+      }
+    } catch (_) {}
+
+    try {
+      final response = await ApiClient.instance.get('/users/me/quick-actions');
+
+      final data =
+          response.data['data'] as Map<String, dynamic>? ?? <String, dynamic>{};
+
+      final parsed = parseProfile(data['personal']);
 
       if (mounted) {
         setState(() {
@@ -253,14 +391,23 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
 
           if (_simMap == null &&
               providers.isNotEmpty &&
-              providers.contains(_provider) == false) {
+              !providers.contains(_provider)) {
             _provider = providers.first;
           }
         });
       }
-    } catch (_) {
-      // Catalog defaults remain available when preferences cannot load.
-    }
+
+      if (user != null) {
+        await StorageService.mergeOfflineDashboardSnapshot(
+          user,
+          {
+            'quick_actions': {
+              'personal': serializeProfile(parsed),
+            },
+          },
+        );
+      }
+    } catch (_) {}
   }
 
   QuickActionCatalogDefinition? _quickActionDefinition(
@@ -425,11 +572,39 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
         detected = await SimCardService.getSimCards();
       }
 
+      if (!mounted) return;
+
+      final authState = context.read<AuthBloc>().state;
+      final user = authState is AuthAuthenticated ? authState.user : null;
+
       final purposes = <int, String>{};
+      var purposesKnown = false;
+
+      if (user != null) {
+        final durable = await StorageService.getOfflineDashboardSnapshot(user);
+
+        final rawPurposes = durable?['sim_purposes'];
+
+        if (rawPurposes is Map) {
+          purposesKnown = true;
+
+          for (final entry in rawPurposes.entries) {
+            final slot = int.tryParse(entry.key.toString());
+            final purpose = entry.value?.toString().trim();
+
+            if (slot != null && purpose != null && purpose.isNotEmpty) {
+              purposes[slot] = purpose;
+            }
+          }
+        }
+      }
 
       try {
         final res = await ApiClient.instance.get('/user-sim-purposes');
+
         final saved = (res.data['data'] as List?) ?? const [];
+
+        purposes.clear();
 
         for (final value in saved) {
           if (value is! Map) continue;
@@ -441,9 +616,36 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
             purposes[slot] = purpose;
           }
         }
-      } catch (_) {
-        // No saved purposes yet, or purpose lookup failed. In that case
-        // every detected supported SIM remains Personal-available.
+
+        purposesKnown = true;
+
+        if (user != null) {
+          await StorageService.mergeOfflineDashboardSnapshot(
+            user,
+            {
+              'sim_purposes': {
+                for (final entry in purposes.entries)
+                  entry.key.toString(): entry.value,
+              },
+            },
+          );
+        }
+      } catch (_) {}
+
+      if (!purposesKnown) {
+        if (!mounted) return;
+
+        setState(() {
+          _simMap = const {
+            'mtn': null,
+            'telecel': null,
+            'at_money': null,
+          };
+          _personalSimsByProvider = const {};
+          _selectedSimSlot = null;
+        });
+
+        return;
       }
 
       final personalSims = detected
@@ -502,10 +704,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
           _provider = selectedSim.network;
         }
       });
-    } catch (_) {
-      // Permission denied or SIM detection failure: retain the existing
-      // catalog fallback instead of inventing physical SIM identities.
-    }
+    } catch (_) {}
   }
 
   void _startTransaction(String type) {

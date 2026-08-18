@@ -21,11 +21,42 @@ class OfflineQueueService {
   static const int _maxSyncAttempts = 10;
 
   static final Map<String, Future<Map<String, int>>> _activeSyncs = {};
+  static Future<void>? _initialization;
 
   static Future<void> init() async {
+    final existing = _initialization;
+
+    if (existing != null) {
+      await existing;
+
+      if (Hive.isBoxOpen(_boxName) && Hive.isBoxOpen(_templateBoxName)) {
+        return;
+      }
+    }
+
+    final future = _initialize();
+    _initialization = future;
+
+    try {
+      await future;
+    } catch (_) {
+      if (identical(_initialization, future)) {
+        _initialization = null;
+      }
+      rethrow;
+    }
+  }
+
+  static Future<void> _initialize() async {
     await Hive.initFlutter();
-    await Hive.openBox(_boxName);
-    await Hive.openBox(_templateBoxName);
+
+    if (!Hive.isBoxOpen(_boxName)) {
+      await Hive.openBox(_boxName);
+    }
+
+    if (!Hive.isBoxOpen(_templateBoxName)) {
+      await Hive.openBox(_templateBoxName);
+    }
   }
 
   static Box get _box => Hive.box(_boxName);
