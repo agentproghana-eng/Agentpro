@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const { query } = require('../config/database');
 const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
@@ -6,14 +7,144 @@ const {
   sanitizeFailureReason,
 } = require('./transactionController');
 
+const normalizePersonalOperationString = (value) =>
+  value === null || value === undefined
+    ? ''
+    : String(value).trim();
+
+const normalizePersonalOperationInteger = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : normalizePersonalOperationString(value);
+};
+
+const normalizePersonalOperationAmount = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed)
+    ? parsed.toFixed(2)
+    : normalizePersonalOperationString(value);
+};
+
+const buildPersonalOperationFingerprint = (body) => {
+  const selections = Array.isArray(body.selections_in_order)
+    ? body.selections_in_order.map((value) =>
+        normalizePersonalOperationString(value)
+      )
+    : [];
+
+  const normalizedIccid =
+    normalizePersonalOperationString(body.sim_iccid);
+
+  // Fixed property order makes JSON deterministic. The stored digest is
+  // deliberately irreversible: it protects retry identity without storing
+  // another copy of customer transaction data.
+  const canonicalPayload = {
+    provider: normalizePersonalOperationString(body.provider),
+    transaction_type: normalizePersonalOperationString(
+      body.transaction_type
+    ),
+    amount: normalizePersonalOperationAmount(body.amount),
+    recipient_phone: normalizePersonalOperationString(
+      body.recipient_phone
+    ),
+    merchant_id: normalizePersonalOperationString(body.merchant_id),
+    notes: normalizePersonalOperationString(body.notes),
+    sim_iccid: normalizedIccid,
+    sim_slot: normalizePersonalOperationInteger(body.sim_slot),
+
+    // ICCID + observed slot is authoritative when ICCID is available.
+    // Installation/subscription metadata is only a fallback identity.
+    installation_id: normalizedIccid
+      ? ''
+      : normalizePersonalOperationString(
+          body.installation_id
+        ),
+    sim_subscription_id: normalizedIccid
+      ? null
+      : normalizePersonalOperationInteger(
+          body.sim_subscription_id
+        ),
+    bundle_category: normalizePersonalOperationString(
+      body.bundle_category
+    ),
+    recipient_mode: normalizePersonalOperationString(
+      body.recipient_mode
+    ),
+    selections_in_order: selections,
+  };
+
+  return crypto
+    .createHash('sha256')
+    .update(JSON.stringify(canonicalPayload))
+    .digest('hex');
+};
+
+const sendPersonalIdempotentReplay = ({
+  res,
+  existing,
+  requestBody,
+  personalOverrideEntitled,
+  message,
+}) => res.status(200).json({
+  success: true,
+  message,
+  data: {
+    transaction_id: existing.id,
+    reference: existing.reference,
+    status: existing.status,
+    created_at: existing.created_at,
+    automation_entitled: true,
+    personal_override_entitled: personalOverrideEntitled,
+    manual_dial_code: null,
+    automation_params: {
+      amount:
+        requestBody.amount != null
+          ? requestBody.amount.toString()
+          : '',
+      customer_phone: requestBody.recipient_phone || '',
+      recipient_phone: requestBody.recipient_phone || '',
+      payment_reference: requestBody.notes || '',
+      merchant_id: requestBody.merchant_id || '',
+    },
+    idempotent_replay: true,
+  },
+});
+
 // ─── Initiate Personal Transaction ─────────────────────────────
 // Deliberately simpler than the Agent side: no branch/company, no fee,
 // no commission - Personal transactions genuinely don't have any of
 // those concepts.
 
 exports.initiateTransaction = async (req, res) => {
-  const { provider, transaction_type, amount, recipient_phone, merchant_id, sim_iccid, sim_slot, notes, bundle_category, recipient_mode } = req.body;
+  const {
+    provider,
+    transaction_type,
+    amount,
+    recipient_phone,
+    merchant_id,
+    sim_iccid,
+    sim_slot,
+    notes,
+    bundle_category,
+    recipient_mode,
+    installation_id,
+    sim_subscription_id,
+    client_operation_id,
+  } = req.body;
+
   const userId = req.user.id;
+
+  const clientOperationFingerprint = client_operation_id
+    ? buildPersonalOperationFingerprint(req.body)
+    : null;
 
   try {
     // Centrally managed Global USSD automation is available to every
@@ -27,6 +158,44 @@ exports.initiateTransaction = async (req, res) => {
       subscription?.plan === 'paid' &&
       (!subscription.expires_at ||
         new Date(subscription.expires_at) >= new Date());
+
+    // Resolve a retry before any flow lookup or INSERT. If the original
+    // response was lost after the server committed the row, the same
+    // client-generated UUID must return that exact transaction.
+    if (client_operation_id) {
+      const existingResult = await query(
+        `SELECT id, reference, status, created_at,
+                client_operation_fingerprint
+         FROM personal_transactions
+         WHERE user_id = $1
+           AND client_operation_id = $2`,
+        [userId, client_operation_id]
+      );
+
+      if (existingResult.rows.length > 0) {
+        const existing = existingResult.rows[0];
+
+        if (
+          existing.client_operation_fingerprint !==
+          clientOperationFingerprint
+        ) {
+          return res.status(409).json({
+            success: false,
+            code: 'CLIENT_OPERATION_CONFLICT',
+            message:
+              'client_operation_id has already been used for a different transaction'
+          });
+        }
+
+        return sendPersonalIdempotentReplay({
+          res,
+          existing,
+          requestBody: req.body,
+          personalOverrideEntitled,
+          message: 'Existing personal transaction returned for retry.',
+        });
+      }
+    }
 
     // Paid users resolve their own Personal override first, then Global.
     // Free users must never consume a Personal override after downgrade:
@@ -99,14 +268,79 @@ exports.initiateTransaction = async (req, res) => {
 
     const reference = `PER-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
 
-    const result = await query(
-      `INSERT INTO personal_transactions (
-        user_id, reference, provider, transaction_type, status,
-        amount, recipient_phone, sim_iccid, sim_slot, notes
-      ) VALUES ($1, $2, $3, $4, 'initiated', $5, $6, $7, $8, $9)
-      RETURNING id, reference, status, created_at`,
-      [userId, reference, provider, transaction_type, amount || null, recipient_phone || null, sim_iccid || null, sim_slot ?? null, notes || null]
-    );
+    let result;
+
+    try {
+      result = await query(
+        `INSERT INTO personal_transactions (
+          user_id, reference, provider, transaction_type, status,
+          amount, recipient_phone, sim_iccid, sim_slot, notes,
+          client_operation_id, client_operation_fingerprint
+        ) VALUES (
+          $1, $2, $3, $4, 'initiated', $5, $6, $7, $8, $9,
+          $10, $11
+        )
+        RETURNING id, reference, status, created_at`,
+        [
+          userId,
+          reference,
+          provider,
+          transaction_type,
+          amount || null,
+          recipient_phone || null,
+          sim_iccid || null,
+          sim_slot ?? null,
+          notes || null,
+          client_operation_id || null,
+          clientOperationFingerprint,
+        ]
+      );
+    } catch (insertError) {
+      // Two identical retries can race past the initial lookup. The unique
+      // index is the final concurrency barrier: exactly one INSERT wins.
+      if (
+        client_operation_id &&
+        insertError.code === '23505' &&
+        insertError.constraint ===
+          'idx_personal_transactions_user_client_operation'
+      ) {
+        const replayResult = await query(
+          `SELECT id, reference, status, created_at,
+                  client_operation_fingerprint
+           FROM personal_transactions
+           WHERE user_id = $1
+             AND client_operation_id = $2`,
+          [userId, client_operation_id]
+        );
+
+        if (replayResult.rows.length > 0) {
+          const existing = replayResult.rows[0];
+
+          if (
+            existing.client_operation_fingerprint !==
+            clientOperationFingerprint
+          ) {
+            return res.status(409).json({
+              success: false,
+              code: 'CLIENT_OPERATION_CONFLICT',
+              message:
+                'client_operation_id has already been used for a different transaction'
+            });
+          }
+
+          return sendPersonalIdempotentReplay({
+            res,
+            existing,
+            requestBody: req.body,
+            personalOverrideEntitled,
+            message:
+              'Existing personal transaction returned for concurrent retry.',
+          });
+        }
+      }
+
+      throw insertError;
+    }
 
     const transaction = result.rows[0];
 

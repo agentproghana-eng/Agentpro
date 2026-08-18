@@ -39,6 +39,28 @@ router.post('/', [
     .trim()
     .notEmpty()
     .withMessage('Invalid provider'),
+  body('client_operation_id')
+    .isUUID()
+    .withMessage('client_operation_id must be a valid UUID'),
+  body('installation_id')
+    .optional({ nullable: true, checkFalsy: true })
+    .isUUID()
+    .withMessage('installation_id must be a valid UUID'),
+  body('sim_subscription_id')
+    .optional({ nullable: true })
+    .isInt({ min: 0 })
+    .withMessage('sim_subscription_id must be a non-negative integer')
+    .toInt(),
+  body('selections_in_order')
+    .optional({ nullable: true })
+    .isArray({ max: 16 })
+    .withMessage('selections_in_order must be an array'),
+  body('selections_in_order.*')
+    .optional({ nullable: true })
+    .isString()
+    .trim()
+    .isLength({ min: 1, max: 32 })
+    .withMessage('Each USSD selection must be a short string'),
   body('transaction_type')
     .isString()
     .trim()

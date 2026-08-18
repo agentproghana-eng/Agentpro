@@ -1,9 +1,14 @@
 // personal_transaction_screen.dart
+import 'dart:collection';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
+import 'package:uuid/uuid.dart';
 import '../../core/api/api_client.dart';
 import '../../core/services/sim_card_service.dart';
+import '../../core/services/storage_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
@@ -213,6 +218,12 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   final _tillNumberCtrl = TextEditingController();
   final _flexiAmountCtrl = TextEditingController();
   bool _loading = false;
+
+  // Retained while this screen is handling the same financial attempt.
+  // A retry with identical request data reuses the same UUID; changing
+  // any request field creates a new operation identity.
+  String? _pendingClientOperationId;
+  String? _pendingClientOperationFingerprint;
 
   List<SimCard> _simCards = const [];
   int? _selectedSimSlot;
@@ -526,6 +537,63 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     super.dispose();
   }
 
+  Future<Map<String, dynamic>?> _withStableClientOperation(
+    Map<String, dynamic> baseRequest,
+  ) async {
+    String installationId;
+
+    try {
+      installationId = await StorageService.getOrCreateInstallationId();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'AgentPro could not establish this device identity. Please try again.',
+            ),
+          ),
+        );
+      }
+      return null;
+    }
+
+    final request = <String, dynamic>{
+      ...baseRequest,
+      'installation_id': installationId,
+    };
+
+    // Sorted JSON is only a local comparison key. The backend independently
+    // creates the authoritative SHA-256 fingerprint.
+    final canonicalSource = Map<String, dynamic>.from(request);
+
+    final normalizedIccid =
+        canonicalSource['sim_iccid']?.toString().trim() ?? '';
+
+    if (normalizedIccid.isNotEmpty) {
+      // ICCID + slot identifies the physical SIM. Do not split one
+      // physical SIM merely because Android fallback metadata changes.
+      canonicalSource['installation_id'] = '';
+      canonicalSource['sim_subscription_id'] = null;
+    }
+
+    final canonical = SplayTreeMap<String, dynamic>.from(canonicalSource);
+    final fingerprint = jsonEncode(canonical);
+
+    if (_pendingClientOperationId == null ||
+        _pendingClientOperationFingerprint != fingerprint) {
+      _pendingClientOperationId = const Uuid().v4();
+      _pendingClientOperationFingerprint = fingerprint;
+    }
+
+    request['client_operation_id'] = _pendingClientOperationId;
+    return request;
+  }
+
+  void _resetClientOperationForNewAttempt() {
+    _pendingClientOperationId = null;
+    _pendingClientOperationFingerprint = null;
+  }
+
   void _selectCategory(String id) {
     setState(() {
       _bundleCategory = id;
@@ -580,7 +648,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     final reference = _referenceCtrl.text.trim();
     final transactionType = _effectiveTransactionType;
 
-    final requestFields = <String, dynamic>{
+    final baseRequestFields = <String, dynamic>{
       'provider': widget.provider,
       'transaction_type': transactionType,
       if (_isMtnAirtime && _recipientMode != null)
@@ -592,7 +660,16 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       if (selectedSim.iccid.isNotEmpty) 'sim_iccid': selectedSim.iccid,
       'sim_slot': selectedSim.slot,
       'sim_subscription_id': selectedSim.subscriptionId,
+      if (_isMtnCrossNetwork && _crossNetworkSelection != null)
+        'selections_in_order': <String>[_crossNetworkSelection!],
     };
+
+    final requestFields = await _withStableClientOperation(baseRequestFields);
+
+    if (requestFields == null) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
 
     try {
       final res = await ApiClient.instance.post(
@@ -637,7 +714,10 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     }
 
     if (mounted && progressAction == 'retry_now') {
+      _resetClientOperationForNewAttempt();
       await _submit();
+    } else if (mounted && progressAction == 'edit_retry') {
+      _resetClientOperationForNewAttempt();
     }
   }
 
@@ -679,20 +759,30 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         ? '${_bundleCategory}_${_flexiPayment!.digit == '1' ? 'airtime' : 'momo'}'
         : _bundleCategory;
 
+    final baseRequestFields = <String, dynamic>{
+      'provider': widget.provider,
+      'transaction_type': widget.transactionType,
+      'bundle_category': resolvedBundleCategory,
+      'recipient_mode': _recipientMode,
+      if (recipientPhone != null) 'recipient_phone': recipientPhone,
+      if (flexiAmount != null) 'amount': double.tryParse(flexiAmount),
+      if (selectedSim.iccid.isNotEmpty) 'sim_iccid': selectedSim.iccid,
+      'sim_slot': selectedSim.slot,
+      'sim_subscription_id': selectedSim.subscriptionId,
+      'selections_in_order': _computeSelections(),
+    };
+
+    final requestFields = await _withStableClientOperation(baseRequestFields);
+
+    if (requestFields == null) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
+
     try {
       final res = await ApiClient.instance.post(
         '/personal-transactions',
-        data: {
-          'provider': widget.provider,
-          'transaction_type': widget.transactionType,
-          'bundle_category': resolvedBundleCategory,
-          'recipient_mode': _recipientMode,
-          if (recipientPhone != null) 'recipient_phone': recipientPhone,
-          if (flexiAmount != null) 'amount': double.tryParse(flexiAmount),
-          if (selectedSim.iccid.isNotEmpty) 'sim_iccid': selectedSim.iccid,
-          'sim_slot': selectedSim.slot,
-          'sim_subscription_id': selectedSim.subscriptionId,
-        },
+        data: requestFields,
       );
 
       final transaction = res.data['data'];
@@ -713,10 +803,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           'sim_slot': selectedSim.slot,
           'sim_iccid': selectedSim.iccid.isNotEmpty ? selectedSim.iccid : null,
           'sim_subscription_id': selectedSim.subscriptionId,
-          'request_fields': {
-            if (flexiAmount != null) 'amount': flexiAmount,
-            if (recipientPhone != null) 'customer_phone': recipientPhone,
-          },
+          'request_fields': requestFields,
         },
       );
     } on DioException catch (e) {
@@ -732,7 +819,10 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     }
 
     if (mounted && progressAction == 'retry_now') {
+      _resetClientOperationForNewAttempt();
       await _submitDataBundle();
+    } else if (mounted && progressAction == 'edit_retry') {
+      _resetClientOperationForNewAttempt();
     }
   }
 
@@ -1443,7 +1533,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     final recipientPhone =
         _recipientMode == 'other' ? _phoneCtrl.text.trim() : null;
 
-    final requestFields = <String, dynamic>{
+    final baseRequestFields = <String, dynamic>{
       'provider': widget.provider,
       'transaction_type': widget.transactionType,
       'amount': tier.amount,
@@ -1453,7 +1543,17 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       if (selectedSim.iccid.isNotEmpty) 'sim_iccid': selectedSim.iccid,
       'sim_slot': selectedSim.slot,
       'sim_subscription_id': selectedSim.subscriptionId,
+      'selections_in_order': <String>[
+        if (_mashupAllocation != null) _mashupAllocation!.digit,
+      ],
     };
+
+    final requestFields = await _withStableClientOperation(baseRequestFields);
+
+    if (requestFields == null) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
 
     try {
       final res = await ApiClient.instance.post(
@@ -1497,7 +1597,10 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     }
 
     if (mounted && progressAction == 'retry_now') {
+      _resetClientOperationForNewAttempt();
       await _submitMtnMashup();
+    } else if (mounted && progressAction == 'edit_retry') {
+      _resetClientOperationForNewAttempt();
     }
   }
 
