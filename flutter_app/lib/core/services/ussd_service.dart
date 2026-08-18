@@ -514,15 +514,28 @@ class UssdAccessibilityEngine {
         _postPinTimeout = null;
         final args = call.arguments as Map;
         final outcome = args['outcome'] as String? ?? 'failure';
-        final success = outcome == 'success';
+
+        final mappedOutcome = switch (outcome) {
+          'success' => USSDStatus.success,
+          'pending_confirmation' => USSDStatus.pendingConfirmation,
+          _ => USSDStatus.failed,
+        };
+
+        final failureReason = switch (mappedOutcome) {
+          USSDStatus.success => null,
+          USSDStatus.pendingConfirmation =>
+            'The USSD session ended without a confirmed provider result. '
+                'Please verify the transaction before trying again.',
+          _ => 'The network reported that the transaction failed.',
+        };
+
         final completer = _resultCompleter;
+
         if (completer != null && !completer.isCompleted) {
           completer.complete(
             USSDResult(
-              outcome: success ? USSDStatus.success : USSDStatus.failed,
-              failureReason: success
-                  ? null
-                  : 'The network reported that the transaction failed.',
+              outcome: mappedOutcome,
+              failureReason: failureReason,
               sessionLog: const [],
             ),
           );

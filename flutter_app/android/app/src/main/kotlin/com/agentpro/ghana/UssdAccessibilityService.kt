@@ -62,11 +62,10 @@ class UssdAccessibilityService : AccessibilityService() {
         private const val TAG = "UssdAccessibility"
 
         // Set by UssdAccessibilityChannel right before the dial is
-        // placed. reachedPinPrompt is NOT terminal - the service keeps
-        // watching for a final result after it, it just stops all
-        // sensitive input. confirmSent guards the one-time post-PIN
-        // auto-confirm (MTN/Telecel hardcoded, or generic) so it's
-        // never sent more than once.
+        // placed. reachedPinPrompt is a strict WRITE boundary: after it
+        // becomes true, the service may continue observing provider screens
+        // for a final success/failure result, but it must never submit any
+        // further text, menu choice, button click, or confirmation.
         @Volatile var pendingCustomerPhone: String? = null
         @Volatile var pendingAmount: String? = null
         @Volatile var pendingTransactionType: String? = null
@@ -77,7 +76,6 @@ class UssdAccessibilityService : AccessibilityService() {
         @Volatile var currentStepIndex: Int = 0
         @Volatile var isSessionActive: Boolean = false
         @Volatile var reachedPinPrompt: Boolean = false
-        @Volatile var confirmSent: Boolean = false
 
         // Duplicate-event suppression is session state too. lastScreenText
         // may contain raw provider text, while lastResponseValue may contain
@@ -137,13 +135,11 @@ class UssdAccessibilityService : AccessibilityService() {
 
             isSessionActive = true
             reachedPinPrompt = false
-            confirmSent = false
         }
 
         fun endSession() {
             isSessionActive = false
             reachedPinPrompt = false
-            confirmSent = false
             pendingCustomerPhone = null
             pendingAmount = null
             pendingTransactionType = null
@@ -189,6 +185,22 @@ class UssdAccessibilityService : AccessibilityService() {
 
     override fun onInterrupt() {
         Log.w(TAG, "UssdAccessibilityService interrupted")
+
+        // Android has interrupted an active Accessibility session after the
+        // provider call may already have been dispatched. The financial
+        // outcome is therefore ambiguous: never report a definite failure
+        // that could encourage the agent to repeat a transaction.
+        if (!isSessionActive) {
+            return
+        }
+
+        listener?.onResult(
+            "pending_confirmation",
+            "Accessibility session interrupted before a final provider result"
+        )
+
+        endSession()
+        UssdForegroundService.stop(this)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
@@ -294,7 +306,7 @@ class UssdAccessibilityService : AccessibilityService() {
         lastScreenHandledAt = now
 
         when {
-            reachedPinPrompt -> handleAfterPinPrompt(root, screenText)
+            reachedPinPrompt -> handleAfterPinPrompt(screenText)
 
             // Generic Flow Builder flows (Airtime, Data Bundle, Commission
             // types, Pay to Agent/Merchant, etc.) must be checked before any
@@ -341,7 +353,7 @@ class UssdAccessibilityService : AccessibilityService() {
             pendingProvider == "telecel" && screenText.contains("enter pin") -> {
                 reachedPinPrompt = true
                 listener?.onPinPromptReached()
-                Log.d(TAG, "Telecel PIN prompt reached - automation stops sensitive input, will auto-confirm after")
+                Log.d(TAG, "Telecel PIN prompt reached - all automated input stops here")
             }
 
             // ── Generic interpreter (new provider/type combos only -
@@ -350,92 +362,60 @@ class UssdAccessibilityService : AccessibilityService() {
         }
     }
 
-    // Once the PIN prompt has been seen, we never touch the PIN itself
-    // again. MTN/Telecel's hardcoded post-PIN handling is completely
-    // unchanged; the generic-flow checks below only ever activate when
-    // pendingSteps was actually supplied (i.e. never for MTN/Telecel).
-    private fun handleAfterPinPrompt(root: AccessibilityNodeInfo, screenText: String) {
-        if (pendingProvider == "telecel" && !confirmSent && screenText.contains("press 1 to confirm")) {
-            if (respond(root, "1")) {
-                confirmSent = true
-                Log.d(TAG, "Telecel: auto-confirmed transaction (non-sensitive step)")
-                return
-            }
+    // PIN BOUNDARY:
+    // Once the provider asks for the user's PIN, AgentPro becomes read-only.
+    // The user manually enters the PIN and handles every provider screen that
+    // follows. The service may only observe a final success/failure marker.
+    //
+    // This function deliberately receives only screenText, not the
+    // Accessibility root node. That makes post-PIN input impossible here.
+    private fun handleAfterPinPrompt(screenText: String) {
+        // MTN/Telecel use the legacy hardcoded marker lists when custom
+        // markers are absent. Generic flows use their configured markers.
+        val successMarkers = pendingSuccessMarkers ?: listOf(
+            "receive cash in",
+            "cash in successful",
+            "transaction successful",
+            "successful",
+            "received"
+        )
 
-            Log.w(
-                TAG,
-                "Telecel confirmation UI was not ready; waiting for another accessibility event"
-            )
-        }
+        val failureMarkers = pendingFailureMarkers ?: listOf(
+            "failed",
+            "insufficient",
+            "not found",
+            "error"
+        )
 
-        val steps = pendingSteps
-        if (steps != null && !confirmSent) {
-            val confirmStep = steps.find {
-                it.action == "auto_confirm_once" &&
-                    it.matchAll.isNotEmpty() &&
-                    it.matchAll.all { marker ->
-                        marker.isNotBlank() && screenText.contains(marker)
-                    }
-            }
-            if (confirmStep != null) {
-                val confirmValue = confirmStep.actionValue
+        // Android can display the same trailing "connection problem or
+        // invalid MMI code" text after both genuine completion and abort.
+        // The distinguishing signal already used by AgentPro is whether
+        // "MMI complete" is also present.
+        val hasConnectionProblemText =
+            screenText.contains("connection problem") ||
+                screenText.contains("invalid mmi code")
 
-                // Backend validation enforces this too, but the device must
-                // never trust persisted/configured flow data blindly. A
-                // post-PIN automatic action is restricted to one menu digit.
-                // Anything else is ignored so Flutter's 20-second post-PIN
-                // watchdog can fall back to mandatory manual confirmation.
-                if (confirmValue != null && confirmValue.matches(Regex("^[0-9]$"))) {
-                    if (respond(root, confirmValue)) {
-                        confirmSent = true
-                        Log.d(
-                            TAG,
-                            "Generic flow: auto-confirmed transaction (non-sensitive step)"
-                        )
-                        return
-                    }
+        val hasMmiComplete =
+            screenText.contains("mmi complete")
 
-                    Log.w(
-                        TAG,
-                        "Generic confirmation UI was not ready; waiting for another accessibility event"
-                    )
-                }
+        val isSuccess =
+            successMarkers.any { screenText.contains(it) } ||
+                (hasConnectionProblemText && hasMmiComplete)
 
-                Log.w(TAG, "Blocked unsafe auto_confirm_once action value")
-            }
-        }
-
-        // MTN/Telecel keep their exact original hardcoded marker lists
-        // (pendingSuccessMarkers/pendingFailureMarkers are null for
-        // them). Generic flows use the markers configured on their own
-        // ussd_flows row.
-        //
-        // "Connection problem or invalid MMI code" is Android's own
-        // generic USSD wrapper text - confirmed via live device testing
-        // to appear identically in TWO different real situations that
-        // must be told apart:
-        //   - preceded by "MMI complete." -> the USSD session actually
-        //     finished end-to-end (Android's own MMI transaction
-        //     completed), even though the trailing text is misleadingly
-        //     worded - this is a genuine SUCCESS.
-        //   - with no "MMI complete." anywhere on screen -> the session
-        //     was aborted before ever completing - a genuine FAILURE.
-        // What actually distinguishes the two is the presence of "MMI
-        // complete.", not the "connection problem" text itself, which
-        // is identical either way.
-        val successMarkers = pendingSuccessMarkers ?: listOf("receive cash in", "cash in successful", "transaction successful", "successful", "received")
-        val failureMarkers = pendingFailureMarkers ?: listOf("failed", "insufficient", "not found", "error")
-        val hasConnectionProblemText = screenText.contains("connection problem") || screenText.contains("invalid mmi code")
-        val hasMmiComplete = screenText.contains("mmi complete")
-
-        val isSuccess = successMarkers.any { screenText.contains(it) } || (hasConnectionProblemText && hasMmiComplete)
-        val isFailure = failureMarkers.any { screenText.contains(it) } || (hasConnectionProblemText && !hasMmiComplete)
+        val isFailure =
+            failureMarkers.any { screenText.contains(it) } ||
+                (hasConnectionProblemText && !hasMmiComplete)
 
         if (isSuccess || isFailure) {
             listener?.onResult(
                 if (isSuccess) "success" else "failure",
-                if (isSuccess) "Provider reported success" else "Provider reported failure"
+                if (isSuccess) {
+                    "Provider reported success"
+                } else {
+                    "Provider reported failure"
+                }
             )
+
             endSession()
             UssdForegroundService.stop(this)
         }
@@ -510,8 +490,9 @@ class UssdAccessibilityService : AccessibilityService() {
                         true
                     }
 
-                    // auto_confirm_once is only ever actioned from
-                    // handleAfterPinPrompt(), never here.
+                    // Legacy/configured post-PIN auto-confirm actions
+                    // are intentionally inert on-device. Once pin_prompt
+                    // fires, handleGenericStep() is no longer entered.
                     "auto_confirm_once" -> false
 
                     else -> {
@@ -539,9 +520,9 @@ class UssdAccessibilityService : AccessibilityService() {
     // submitted. Flow progression and one-shot confirmation state must only
     // advance after a true result.
     //
-    // Only ever called for menu digits, phone numbers, amounts, Operator ID,
-    // references, selections, and non-sensitive post-PIN confirm digits -
-    // never for PIN entry itself.
+    // Only ever called for pre-PIN menu digits, phone numbers, amounts,
+    // Operator ID, references, and selections. It is never called for PIN
+    // entry or for any provider screen after the PIN boundary.
     private fun respond(root: AccessibilityNodeInfo, value: String): Boolean {
         val now = SystemClock.elapsedRealtime()
 
