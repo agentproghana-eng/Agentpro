@@ -305,16 +305,17 @@ describe('Staff Management status session revocation', () => {
   ])(
     '%s staff status revokes all active refresh tokens',
     async (newStatus) => {
-      query
-        .mockResolvedValueOnce({
-          rows: [
-            {
-              id: 'staff-1',
-              company_id: 'company-1',
-              role: 'agent',
-            },
-          ],
-        })
+      query.mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'staff-1',
+            company_id: 'company-1',
+            role: 'agent',
+          },
+        ],
+      });
+
+      const transactionQuery = jest.fn()
         .mockResolvedValueOnce({
           rows: [
             {
@@ -330,6 +331,13 @@ describe('Staff Management status session revocation', () => {
         .mockResolvedValueOnce({
           rows: [],
         });
+
+      withTransaction.mockImplementation(
+        async (callback) =>
+          callback({
+            query: transactionQuery,
+          }),
+      );
 
       const req = {
         user: {
@@ -351,22 +359,43 @@ describe('Staff Management status session revocation', () => {
 
       await userController.updateUser(req, res);
 
-      const revokeCall = query.mock.calls.find(
-        ([sql]) =>
-          sql.includes(
-            'UPDATE refresh_tokens SET revoked_at = NOW()'
-          )
+      expect(withTransaction).toHaveBeenCalledTimes(1);
+
+      // The authorization lookup may use the pool, but both security
+      // writes must use the exact same transaction client.
+      expect(transactionQuery).toHaveBeenCalledTimes(2);
+
+      const [statusWrite] =
+        transactionQuery.mock.calls[0];
+
+      const [
+        revokeSql,
+        revokeParams,
+      ] = transactionQuery.mock.calls[1];
+
+      expect(statusWrite).toContain(
+        'UPDATE users SET'
       );
 
-      expect(revokeCall).toBeDefined();
+      expect(revokeSql).toContain(
+        'UPDATE refresh_tokens'
+      );
 
-      expect(revokeCall[0]).toContain(
+      expect(revokeSql).toContain(
         'revoked_at IS NULL'
       );
 
-      expect(revokeCall[1]).toEqual([
+      expect(revokeParams).toEqual([
         'staff-1',
       ]);
+
+      const poolSecurityWrites = query.mock.calls.filter(
+        ([sql]) =>
+          sql.includes('UPDATE users SET') ||
+          sql.includes('UPDATE refresh_tokens')
+      );
+
+      expect(poolSecurityWrites).toHaveLength(0);
 
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -428,6 +457,7 @@ describe('Staff Management status session revocation', () => {
       );
 
       expect(refreshWrites).toHaveLength(0);
+      expect(withTransaction).not.toHaveBeenCalled();
 
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -436,6 +466,82 @@ describe('Staff Management status session revocation', () => {
       );
     }
   );
+
+  test(
+    'does not report suspension success when session revocation transaction fails',
+    async () => {
+      query.mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'staff-1',
+            company_id: 'company-1',
+            role: 'agent',
+          },
+        ],
+      });
+
+      const transactionQuery = jest.fn()
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 'staff-1',
+              email: 'staff@example.com',
+              role: 'agent',
+              status: 'suspended',
+              first_name: 'Ama',
+              last_name: 'Mensah',
+            },
+          ],
+        })
+        .mockRejectedValueOnce(
+          new Error('session revocation failed'),
+        );
+
+      withTransaction.mockImplementation(
+        async (callback) =>
+          callback({
+            query: transactionQuery,
+          }),
+      );
+
+      const req = {
+        user: {
+          id: 'owner-1',
+          role: 'business_owner',
+          company_id: 'company-1',
+        },
+        params: {
+          user_id: 'staff-1',
+        },
+        body: {
+          status: 'suspended',
+        },
+        ip: '127.0.0.1',
+        requestId: 'request-status-failure',
+      };
+
+      const res = makeResponse();
+
+      await userController.updateUser(req, res);
+
+      expect(withTransaction).toHaveBeenCalledTimes(1);
+      expect(transactionQuery).toHaveBeenCalledTimes(2);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        message: 'Failed to update user',
+      });
+
+      expect(
+        res.json.mock.calls.some(
+          ([payload]) => payload?.success === true
+        )
+      ).toBe(false);
+    },
+  );
+
 });
 
 describe('Staff Management manager direct-read role scope', () => {

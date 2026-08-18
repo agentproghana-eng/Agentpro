@@ -441,23 +441,49 @@ exports.updateUser = async (req, res) => {
       return res.status(400).json({ success: false, message: 'You cannot change your own account status' });
     }
 
-    const result = await query(
+    const updateSql =
       `UPDATE users SET first_name = COALESCE($1, first_name),
        last_name = COALESCE($2, last_name), phone = COALESCE($3, phone),
        status = COALESCE($4, status), updated_at = NOW()
-       WHERE id = $5 RETURNING id, email, role, status, first_name, last_name`,
-      [first_name, last_name, phone, status, user_id]
-    );
+       WHERE id = $5 RETURNING id, email, role, status, first_name, last_name`;
 
-    // A staff lifecycle restriction must survive beyond the current
-    // 15-minute access-token window. Revoke all persisted refresh sessions
-    // whenever the account is moved away from active. Reactivation does not
-    // undo these revocations; the user must authenticate again to establish
-    // a fresh session.
+    const updateParams = [
+      first_name,
+      last_name,
+      phone,
+      status,
+      user_id,
+    ];
+
+    let result;
+
+    // Moving an account away from active and revoking every durable
+    // session are one security state transition. They must commit or
+    // roll back together; otherwise a partial database failure could
+    // leave an inconsistent account/session state.
     if (status && status !== 'active') {
-      await query(
-        'UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL',
-        [user_id]
+      result = await withTransaction(async (client) => {
+        const updatedUser = await client.query(
+          updateSql,
+          updateParams,
+        );
+
+        await client.query(
+          `UPDATE refresh_tokens
+           SET revoked_at = NOW()
+           WHERE user_id = $1
+             AND revoked_at IS NULL`,
+          [user_id]
+        );
+
+        return updatedUser;
+      });
+    } else {
+      // Ordinary profile edits and reactivation do not create or restore
+      // session state. Previously revoked sessions remain revoked.
+      result = await query(
+        updateSql,
+        updateParams,
       );
     }
 
