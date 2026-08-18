@@ -160,18 +160,21 @@ const List<MtnMashupTier> kMtnMashupTiers = [
 
 const Map<String, List<DataBundleOption>> kMtnMashupAllocations = {
   'ghc1': [
+    DataBundleOption('15.27MB + 15.64 mins', '1'),
     DataBundleOption('25.45MB + 11.17 mins', '2'),
     DataBundleOption('30.53MB + 8.94 mins', '3'),
     DataBundleOption('35.62MB + 6.7 mins', '4'),
     DataBundleOption('50.89MB only', '5'),
   ],
   'ghc5': [
+    DataBundleOption('86.12MB + 83.24 mins', '1'),
     DataBundleOption('143.54MB + 59.45 mins', '2'),
     DataBundleOption('172.25MB + 47.56 mins', '3'),
     DataBundleOption('200.06MB + 35.67 mins', '4'),
     DataBundleOption('287.08MB only', '5'),
   ],
   'ghc10': [
+    DataBundleOption('180.72MB + 173.39 mins', '1'),
     DataBundleOption('301.19MB + 123.85 mins', '2'),
     DataBundleOption('361.43MB + 99.08 mins', '3'),
     DataBundleOption('421.67MB + 74.31 mins', '4'),
@@ -1113,18 +1116,6 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     );
   }
 
-  bool _mashupAllocationUsesSecondPage() {
-    final tier = _mashupTier;
-    final allocation = _mashupAllocation;
-    if (tier == null || allocation == null) return false;
-
-    if (tier.id == 'ghc1') {
-      return allocation.digit == '4' || allocation.digit == '5';
-    }
-
-    return (tier.id == 'ghc5' || tier.id == 'ghc10') && allocation.digit == '5';
-  }
-
   String? _mashupBundleCategory() {
     final tier = _mashupTier;
     final payment = _mashupPayment;
@@ -1136,8 +1127,11 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       return '${tier.id}_$paymentKey';
     }
 
-    final page = _mashupAllocationUsesSecondPage() ? 'page2' : 'page1';
-    return '${tier.id}_${page}_$paymentKey';
+    // MTN accepts allocation digits 1-5 directly. Some choices are
+    // visually listed after "99. More", but entering the choice digit
+    // directly continues without first sending 99. The existing page1
+    // backend flow already sends selections directly.
+    return '${tier.id}_page1_$paymentKey';
   }
 
   Widget _buildMtnMashupFlow(BuildContext context) {
