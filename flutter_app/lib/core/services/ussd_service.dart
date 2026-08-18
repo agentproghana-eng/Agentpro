@@ -518,14 +518,19 @@ class UssdAccessibilityEngine {
         final mappedOutcome = switch (outcome) {
           'success' => USSDStatus.success,
           'pending_confirmation' => USSDStatus.pendingConfirmation,
+          'flow_mismatch' => USSDStatus.pendingConfirmation,
           _ => USSDStatus.failed,
         };
 
         final failureReason = switch (mappedOutcome) {
           USSDStatus.success => null,
-          USSDStatus.pendingConfirmation =>
-            'The USSD session ended without a confirmed provider result. '
-                'Please verify the transaction before trying again.',
+          USSDStatus.pendingConfirmation => outcome == 'flow_mismatch'
+              ? 'The provider menu no longer matched the configured USSD '
+                  'flow. AgentPro stopped automation and did not retry. '
+                  'Please verify the transaction before trying again.'
+              : 'The USSD session ended without a confirmed provider '
+                  'result. Please verify the transaction before trying '
+                  'again.',
           _ => 'The network reported that the transaction failed.',
         };
 

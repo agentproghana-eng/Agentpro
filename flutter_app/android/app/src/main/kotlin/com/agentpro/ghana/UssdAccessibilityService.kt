@@ -6,6 +6,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import java.security.MessageDigest
 
 /**
  * USSD Accessibility Automation - MTN Cash In/Out, Telecel Deposit
@@ -61,6 +62,13 @@ class UssdAccessibilityService : AccessibilityService() {
     companion object {
         private const val TAG = "UssdAccessibility"
 
+        // A single unmatched Accessibility event is not enough evidence
+        // that the provider menu changed. Android commonly publishes
+        // duplicate/stale roots while the USSD dialog is transitioning.
+        private const val MAX_GENERIC_FLOW_MISMATCHES = 3
+        private const val REPEATED_MISMATCH_MIN_INTERVAL_MS = 2000L
+        private const val RECENT_MATCH_SCREEN_GRACE_MS = 8000L
+
         // Set by UssdAccessibilityChannel right before the dial is
         // placed. reachedPinPrompt is a strict WRITE boundary: after it
         // becomes true, the service may continue observing provider screens
@@ -87,6 +95,14 @@ class UssdAccessibilityService : AccessibilityService() {
         @Volatile private var lastResponseValue: String? = null
         @Volatile private var lastResponseAt: Long = 0L
         @Volatile private var lastResponseStepIndex: Int = -1
+
+        // Generic pre-PIN flow-mismatch evidence. Raw screen text is never
+        // written to mismatch telemetry; only a SHA-256 digest is retained.
+        @Volatile private var genericFlowMismatchCount: Int = 0
+        @Volatile private var lastMismatchScreenHash: String? = null
+        @Volatile private var lastMismatchAt: Long = 0L
+        @Volatile private var lastMatchedScreenHash: String? = null
+        @Volatile private var lastMatchedScreenAt: Long = 0L
 
         // Generic-flow-only state. Null for every MTN/Telecel session -
         // those never set these, so their behavior is 100% unchanged
@@ -132,6 +148,11 @@ class UssdAccessibilityService : AccessibilityService() {
             lastResponseValue = null
             lastResponseAt = 0L
             lastResponseStepIndex = -1
+            genericFlowMismatchCount = 0
+            lastMismatchScreenHash = null
+            lastMismatchAt = 0L
+            lastMatchedScreenHash = null
+            lastMatchedScreenAt = 0L
 
             isSessionActive = true
             reachedPinPrompt = false
@@ -160,6 +181,11 @@ class UssdAccessibilityService : AccessibilityService() {
             lastResponseValue = null
             lastResponseAt = 0L
             lastResponseStepIndex = -1
+            genericFlowMismatchCount = 0
+            lastMismatchScreenHash = null
+            lastMismatchAt = 0L
+            lastMatchedScreenHash = null
+            lastMatchedScreenAt = 0L
         }
     }
 
@@ -431,8 +457,116 @@ class UssdAccessibilityService : AccessibilityService() {
             .replace(Regex("\\s+"), " ")
             .trim()
 
+    private fun hashUssdScreen(screenText: String): String {
+        val normalized = normalizeUssdText(screenText)
+
+        return MessageDigest.getInstance("SHA-256")
+            .digest(normalized.toByteArray(Charsets.UTF_8))
+            .joinToString("") { byte ->
+                "%02x".format(byte.toInt() and 0xff)
+            }
+    }
+
+    private fun resetGenericFlowMismatchState() {
+        genericFlowMismatchCount = 0
+        lastMismatchScreenHash = null
+        lastMismatchAt = 0L
+    }
+
+    private fun recordGenericFlowMismatch(
+        root: AccessibilityNodeInfo,
+        screenText: String
+    ) {
+        // Strictly pre-PIN. After PIN AgentPro remains read-only and the
+        // existing post-PIN ambiguity handling remains authoritative.
+        if (
+            !isSessionActive ||
+            reachedPinPrompt ||
+            pendingSteps == null
+        ) {
+            return
+        }
+
+        // Do not interpret unrelated Phone/System UI as provider-menu
+        // drift. AgentPro only counts mismatch evidence from the same
+        // interactive structure it can actually automate: a text input plus
+        // the USSD Send control.
+        if (
+            findByClassName(
+                root,
+                "android.widget.EditText"
+            ) == null ||
+            findByText(root, "send") == null
+        ) {
+            return
+        }
+
+        val now = SystemClock.elapsedRealtime()
+        val screenHash = hashUssdScreen(screenText)
+
+        // After AgentPro submits an expected step, Android can continue
+        // publishing that old provider screen briefly while the network
+        // advances. Do not count it as evidence of a new mismatch.
+        if (
+            screenHash == lastMatchedScreenHash &&
+            now - lastMatchedScreenAt <
+                RECENT_MATCH_SCREEN_GRACE_MS
+        ) {
+            return
+        }
+
+        // Rate-limit identical mismatch events so an Accessibility event
+        // burst cannot consume the entire mismatch budget instantly.
+        if (
+            screenHash == lastMismatchScreenHash &&
+            now - lastMismatchAt <
+                REPEATED_MISMATCH_MIN_INTERVAL_MS
+        ) {
+            return
+        }
+
+        genericFlowMismatchCount += 1
+        lastMismatchScreenHash = screenHash
+        lastMismatchAt = now
+
+        val provider = pendingProvider ?: "unknown"
+        val transactionType =
+            pendingTransactionType ?: "unknown"
+        val stepCount = pendingSteps?.size ?: 0
+
+        // SECURITY: never include screenText, customer phone, amount,
+        // Operator ID, merchant ID, reference or PIN in this telemetry.
+        Log.w(
+            TAG,
+            "FLOW_MISMATCH " +
+                "provider=$provider " +
+                "transaction_type=$transactionType " +
+                "step_index=$currentStepIndex " +
+                "step_count=$stepCount " +
+                "mismatch_count=$genericFlowMismatchCount " +
+                "screen_hash=$screenHash"
+        )
+
+        if (
+            genericFlowMismatchCount <
+            MAX_GENERIC_FLOW_MISMATCHES
+        ) {
+            return
+        }
+
+        listener?.onResult(
+            "flow_mismatch",
+            "Provider menu no longer matches the configured USSD flow"
+        )
+
+        endSession()
+        UssdForegroundService.stop(this)
+    }
+
     private fun handleGenericStep(root: AccessibilityNodeInfo, screenText: String) {
         val steps = pendingSteps ?: return
+        val normalizedScreen =
+            normalizeUssdText(screenText)
         // Only ever considers steps at or after currentStepIndex, and
         // advances past whichever step fires - critical because
         // matchAll conditions can be short, generic phrases (e.g.
@@ -446,11 +580,17 @@ class UssdAccessibilityService : AccessibilityService() {
                 step.matchAll.isNotEmpty() &&
                 step.matchAll.all { marker ->
                     marker.isNotBlank() &&
-                        normalizeUssdText(screenText).contains(
+                        normalizedScreen.contains(
                             normalizeUssdText(marker)
                         )
                 }
             ) {
+                lastMatchedScreenHash =
+                    hashUssdScreen(screenText)
+                lastMatchedScreenAt =
+                    SystemClock.elapsedRealtime()
+                resetGenericFlowMismatchState()
+
                 val completed = when (step.action) {
                     "send_digit", "send_literal" ->
                         step.actionValue?.let { respond(root, it) } ?: false
@@ -513,6 +653,11 @@ class UssdAccessibilityService : AccessibilityService() {
                 return
             }
         }
+
+        // No configured remaining step matched this genuine provider screen.
+        // Collect bounded evidence instead of stalling indefinitely.
+        recordGenericFlowMismatch(root, screenText)
+
     }
 
     // Finds the single EditText on screen, sets its text, then finds and
