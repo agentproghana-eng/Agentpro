@@ -34,7 +34,6 @@ router.post('/', [
     .notEmpty()
     .withMessage('Invalid provider'),
   body('client_operation_id')
-    .optional({ nullable: true, checkFalsy: true })
     .isUUID()
     .withMessage('client_operation_id must be a valid UUID'),
   body('sim_iccid')
