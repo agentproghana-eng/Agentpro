@@ -10,13 +10,20 @@ const { auditLog } = require('../services/auditService');
 
 // ─── Token Helpers ───────────────────────────────────────────
 
-function generateAccessToken(user) {
+function generateAccessToken(user, sessionId) {
+  if (!sessionId) {
+    throw new Error(
+      'A durable session ID is required to issue an access token'
+    );
+  }
+
   return jwt.sign(
     {
       id: user.id,
       role: user.role,
       company_id: user.company_id,
-      email: user.email
+      email: user.email,
+      session_id: sessionId,
     },
     process.env.JWT_ACCESS_SECRET,
     { expiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '15m' }
@@ -25,7 +32,14 @@ function generateAccessToken(user) {
 
 function generateRefreshToken(user) {
   return jwt.sign(
-    { id: user.id, type: 'refresh' },
+    {
+      id: user.id,
+      type: 'refresh',
+
+      // Every newly issued refresh credential must be unique to one
+      // login/session even when the same user authenticates concurrently.
+      jti: uuidv4(),
+    },
     process.env.JWT_REFRESH_SECRET,
     { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d' }
   );
@@ -183,14 +197,25 @@ exports.registerPersonal = async (req, res) => {
       return newUser;
     });
 
-    // Auto-login: no approval gate to wait on, so hand back working
-    // tokens immediately rather than making the user log in again.
-    const accessToken = generateAccessToken(user);
+    // Auto-login: persist the durable session first, then bind the
+    // access token to that exact refresh-session row.
     const refreshToken = generateRefreshToken(user);
     const tokenHash = await bcrypt.hash(refreshToken, 8);
-    await query(
-      `INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+
+    const sessionResult = await query(
+      `INSERT INTO refresh_tokens (
+         user_id,
+         token_hash,
+         expires_at
+       )
+       VALUES ($1, $2, $3)
+       RETURNING id`,
       [user.id, tokenHash, getRefreshTokenExpiry()]
+    );
+
+    const accessToken = generateAccessToken(
+      user,
+      sessionResult.rows[0].id,
     );
 
     res.status(201).json({
@@ -360,16 +385,31 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Generate tokens
-    const accessToken = generateAccessToken(user);
+    // Create the durable refresh session before issuing its access
+    // token. Every access token is bound to exactly one session row.
     const refreshToken = generateRefreshToken(user);
-
-    // Store refresh token
     const tokenHash = await bcrypt.hash(refreshToken, 8);
-    await query(
-      `INSERT INTO refresh_tokens (user_id, token_hash, expires_at, device_info)
-       VALUES ($1, $2, $3, $4)`,
-      [user.id, tokenHash, getRefreshTokenExpiry(), device_info ? JSON.stringify(device_info) : null]
+
+    const sessionResult = await query(
+      `INSERT INTO refresh_tokens (
+         user_id,
+         token_hash,
+         expires_at,
+         device_info
+       )
+       VALUES ($1, $2, $3, $4)
+       RETURNING id`,
+      [
+        user.id,
+        tokenHash,
+        getRefreshTokenExpiry(),
+        device_info ? JSON.stringify(device_info) : null,
+      ]
+    );
+
+    const accessToken = generateAccessToken(
+      user,
+      sessionResult.rows[0].id,
     );
 
     // Update FCM token and last login
@@ -451,7 +491,7 @@ exports.refreshToken = async (req, res) => {
     // suspension/deactivation, and other server-side revocations remain
     // authoritative even if the signed token has not expired yet.
     const storedTokens = await query(
-      `SELECT token_hash
+      `SELECT id, token_hash
        FROM refresh_tokens
        WHERE user_id = $1
          AND revoked_at IS NULL
@@ -460,20 +500,40 @@ exports.refreshToken = async (req, res) => {
       [decoded.id]
     );
 
-    let storedTokenMatches = false;
+    const matchedSessions = [];
+
     for (const storedToken of storedTokens.rows) {
-      if (await bcrypt.compare(refresh_token, storedToken.token_hash)) {
-        storedTokenMatches = true;
-        break;
+      if (
+        await bcrypt.compare(
+          refresh_token,
+          storedToken.token_hash,
+        )
+      ) {
+        matchedSessions.push(storedToken);
       }
     }
 
-    if (!storedTokenMatches) {
+    if (matchedSessions.length === 0) {
       return res.status(401).json({
         success: false,
         message: 'Refresh token is no longer valid',
       });
     }
+
+    // Legacy refresh tokens were issued before each credential carried a
+    // unique jti. If one presented credential matches more than one active
+    // session row, selecting either session would defeat per-device
+    // revocation. Fail closed and require a fresh login instead.
+    if (matchedSessions.length > 1) {
+      return res.status(401).json({
+        success: false,
+        code: 'SESSION_AMBIGUOUS',
+        message:
+          'Refresh token matches more than one session. Please login again.',
+      });
+    }
+
+    const matchedSession = matchedSessions[0];
 
     // Fetch user only after the refresh session itself has been validated.
     // Suspended/deactivated users cannot exchange even a still-stored token.
@@ -490,7 +550,11 @@ exports.refreshToken = async (req, res) => {
     }
 
     const user = result.rows[0];
-    const newAccessToken = generateAccessToken(user);
+
+    const newAccessToken = generateAccessToken(
+      user,
+      matchedSession.id,
+    );
 
     res.json({
       success: true,
@@ -509,58 +573,52 @@ exports.refreshToken = async (req, res) => {
 // ─── Logout ───────────────────────────────────────────────────
 
 exports.logout = async (req, res) => {
-  const { refresh_token } = req.body;
   const authHeader = req.headers.authorization;
 
   try {
-    // Blacklist the currently presented access token.
+    const sessionId = req.user.session_id;
+
+    if (!sessionId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Session is no longer valid',
+        code: 'SESSION_REVOKED',
+      });
+    }
+
+    // PostgreSQL is authoritative: revoke exactly the authenticated
+    // device/session. Other devices keep their own refresh rows.
+    await query(
+      `UPDATE refresh_tokens
+       SET revoked_at = NOW()
+       WHERE id = $1
+         AND user_id = $2
+         AND revoked_at IS NULL`,
+      [sessionId, req.user.id]
+    );
+
+    // Keep Redis only as a fast cache. A Redis outage cannot undo the
+    // durable database revocation above.
     if (authHeader) {
       const accessToken = authHeader.split(' ')[1];
+
       try {
         const decoded = jwt.decode(accessToken);
+
         if (decoded) {
           const expiresIn =
             decoded.exp - Math.floor(Date.now() / 1000);
+
           if (expiresIn > 0) {
-            await blacklistToken(accessToken, expiresIn);
+            await blacklistToken(
+              accessToken,
+              expiresIn,
+            );
           }
         }
-      } catch (e) { /* ignore */ }
-    }
-
-    // Revoke only the refresh-token row that matches the token presented
-    // by this device/session. Signing out on one device must not revoke
-    // every other active device belonging to the same user.
-    if (refresh_token) {
-      const storedTokens = await query(
-        `SELECT id, token_hash
-         FROM refresh_tokens
-         WHERE user_id = $1
-           AND revoked_at IS NULL
-           AND expires_at > NOW()
-         ORDER BY created_at DESC`,
-        [req.user.id]
-      );
-
-      let matchedTokenId = null;
-
-      for (const storedToken of storedTokens.rows) {
-        if (await bcrypt.compare(refresh_token, storedToken.token_hash)) {
-          matchedTokenId = storedToken.id;
-          break;
-        }
+      } catch (e) {
+        // PostgreSQL already revoked the session.
       }
-
-      if (matchedTokenId) {
-        await query(
-          'UPDATE refresh_tokens SET revoked_at = NOW() WHERE id = $1',
-          [matchedTokenId]
-        );
-      }
-
-      // Keep the supplied token unusable even if its database row was
-      // already revoked or otherwise absent.
-      await blacklistToken(refresh_token, 30 * 24 * 3600);
     }
 
     await auditLog({
@@ -578,6 +636,7 @@ exports.logout = async (req, res) => {
     });
   } catch (error) {
     logger.error('Logout error:', error);
+
     res.status(500).json({
       success: false,
       message: 'Logout failed'

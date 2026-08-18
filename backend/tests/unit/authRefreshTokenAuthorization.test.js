@@ -134,6 +134,7 @@ describe('Refresh token persistence authorization', () => {
           return {
             rows: [
               {
+                id: 'session-1',
                 token_hash: 'stored-refresh-hash',
               },
             ],
@@ -169,6 +170,15 @@ describe('Refresh token persistence authorization', () => {
         'stored-refresh-hash'
       );
 
+      expect(jwt.sign).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'staff-1',
+          session_id: 'session-1',
+        }),
+        process.env.JWT_ACCESS_SECRET,
+        expect.any(Object),
+      );
+
       expect(res.json).toHaveBeenCalledWith({
         success: true,
         data: {
@@ -177,4 +187,52 @@ describe('Refresh token persistence authorization', () => {
       });
     }
   );
+  test(
+    'ambiguous duplicate legacy refresh credential fails closed',
+    async () => {
+      query.mockImplementation(async (sql) => {
+        if (sql.includes('FROM refresh_tokens')) {
+          return {
+            rows: [
+              {
+                id: 'legacy-session-1',
+                token_hash: 'legacy-hash-1',
+              },
+              {
+                id: 'legacy-session-2',
+                token_hash: 'legacy-hash-2',
+              },
+            ],
+          };
+        }
+
+        if (sql.includes('FROM users u')) {
+          return { rows: [activeUser()] };
+        }
+
+        return { rows: [] };
+      });
+
+      // Simulates a pre-jti credential whose exact value was
+      // persisted into more than one active session row.
+      bcrypt.compare.mockResolvedValue(true);
+
+      const req = makeRequest();
+      const res = makeResponse();
+
+      await authController.refreshToken(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          code: 'SESSION_AMBIGUOUS',
+        }),
+      );
+
+      expect(jwt.sign).not.toHaveBeenCalled();
+    },
+  );
+
 });

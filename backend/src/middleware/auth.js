@@ -18,24 +18,83 @@ const authenticate = async (req, res, next) => {
 
     const token = authHeader.split(' ')[1];
 
-    // Check blacklist
-    const blacklisted = await isTokenBlacklisted(token);
-    if (blacklisted) {
+    // Verify the JWT before doing any external lookup.
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_ACCESS_SECRET,
+    );
+
+    const sessionId =
+      typeof decoded.session_id === 'string'
+        ? decoded.session_id.trim()
+        : '';
+
+    // Access tokens issued before durable session binding deliberately
+    // fail closed. Clients may exchange their still-valid persisted
+    // refresh token for a new session-bound access token.
+    if (!sessionId) {
       return res.status(401).json({
         success: false,
-        message: 'Token has been revoked. Please login again.'
+        message: 'Session must be refreshed. Please try again.',
+        code: 'SESSION_REFRESH_REQUIRED',
       });
     }
 
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+    // Redis remains a fast revocation/cache layer, but it is no longer
+    // the security authority. A Redis miss or outage cannot bypass the
+    // PostgreSQL session check below.
+    const blacklisted = await isTokenBlacklisted(token);
 
-    // Attach user to request
+    if (blacklisted) {
+      return res.status(401).json({
+        success: false,
+        message: 'Token has been revoked. Please login again.',
+        code: 'SESSION_REVOKED',
+      });
+    }
+
+    // Every access token is bound to exactly one persisted refresh-session
+    // row. This makes logout, password reset and staff revocation durable
+    // even when Redis is unavailable.
+    //
+    // Role, company and email also come from PostgreSQL rather than stale
+    // JWT claims, so privilege changes take effect immediately.
+    const sessionResult = await query(
+      `SELECT
+         u.id,
+         u.role,
+         u.company_id,
+         u.email,
+         u.status,
+         rt.id AS session_id
+       FROM users u
+       JOIN refresh_tokens rt
+         ON rt.user_id = u.id
+       WHERE u.id = $1
+         AND u.status = 'active'
+         AND rt.id = $2
+         AND rt.revoked_at IS NULL
+         AND rt.expires_at > NOW()
+       LIMIT 1`,
+      [decoded.id, sessionId]
+    );
+
+    if (sessionResult.rows.length === 0) {
+      return res.status(401).json({
+        success: false,
+        message: 'Session has been revoked or is no longer active.',
+        code: 'SESSION_REVOKED',
+      });
+    }
+
+    const activeSession = sessionResult.rows[0];
+
     req.user = {
-      id: decoded.id,
-      role: decoded.role,
-      company_id: decoded.company_id,
-      email: decoded.email
+      id: activeSession.id,
+      role: activeSession.role,
+      company_id: activeSession.company_id,
+      email: activeSession.email,
+      session_id: activeSession.session_id,
     };
 
     next();
@@ -47,14 +106,21 @@ const authenticate = async (req, res, next) => {
         code: 'TOKEN_EXPIRED'
       });
     }
+
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({
         success: false,
         message: 'Invalid token. Please login again.'
       });
     }
+
     logger.error('Auth middleware error:', error);
-    return res.status(500).json({ success: false, message: 'Authentication failed' });
+
+    // Database/session verification failures must fail closed.
+    return res.status(500).json({
+      success: false,
+      message: 'Authentication failed',
+    });
   }
 };
 

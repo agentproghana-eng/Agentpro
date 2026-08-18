@@ -26,7 +26,7 @@ function functionSlice(source, startMarker) {
 
 describe('Settings session security contracts', () => {
   test(
-    'logout revokes only the presented refresh session',
+    'logout durably revokes only the authenticated session',
     () => {
       const source = readSource(
         'src/controllers/authController.js',
@@ -42,16 +42,20 @@ describe('Settings session security contracts', () => {
           'WHERE user_id = $1 AND revoked_at IS NULL',
       );
 
-      expect(logout).toContain(
-        'SELECT id, token_hash',
-      );
-
-      expect(logout).toContain(
+      expect(logout).not.toContain(
         'bcrypt.compare(refresh_token',
       );
 
+      expect(logout).toContain(
+        'req.user.session_id',
+      );
+
       expect(logout).toMatch(
-        /UPDATE refresh_tokens[\s\S]*WHERE id = \$1/,
+        /UPDATE refresh_tokens[\s\S]*WHERE id = \$1[\s\S]*AND user_id = \$2/,
+      );
+
+      expect(logout).toContain(
+        '[sessionId, req.user.id]',
       );
     },
   );
