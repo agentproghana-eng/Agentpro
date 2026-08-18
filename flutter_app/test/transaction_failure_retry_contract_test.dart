@@ -73,11 +73,11 @@ void main() {
       RegExp(r'progressAction = await context\.push<String>')
           .allMatches(personal)
           .length,
-      2,
+      3,
     );
     expect(
       RegExp(r"progressAction == 'retry_now'").allMatches(personal).length,
-      2,
+      3,
     );
   });
 

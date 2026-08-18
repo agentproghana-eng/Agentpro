@@ -103,7 +103,15 @@ void main() {
     );
     expect(
       homeSource,
-      contains('preferences: _visibleQuickActions'),
+      contains('List<QuickActionPreference> get _homeQuickActions'),
+    );
+    expect(
+      homeSource,
+      contains('final visible = _visibleQuickActions;'),
+    );
+    expect(
+      homeSource,
+      contains('preferences: visible'),
     );
 
     expect(

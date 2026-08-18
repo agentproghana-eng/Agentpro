@@ -271,7 +271,7 @@ void main() {
         final interceptor = _slice(
           source,
           'onError: (DioException error, handler) async {',
-          '// Logging in debug mode',
+          'static Future<bool> refreshToken()',
         );
 
         final accessGuardIndex = interceptor.indexOf(
