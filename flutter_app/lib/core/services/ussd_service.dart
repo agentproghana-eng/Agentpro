@@ -606,7 +606,32 @@ class UssdAccessibilityEngine {
         if (failureMarkers != null) 'failure_markers': failureMarkers,
         if (selections != null) 'selections': selections,
       });
-    } catch (e) {
+    } on PlatformException catch (e) {
+      _prePinTimeout?.cancel();
+      _prePinTimeout = null;
+      _postPinTimeout?.cancel();
+      _postPinTimeout = null;
+      await cancelAutomation();
+
+      final failureReason = switch (e.code) {
+        'SIM_REQUIRED' =>
+          'A physical SIM must be selected before USSD automation can start.',
+        'SIM_UNAVAILABLE' =>
+          'AgentPro could not safely resolve the selected physical SIM. '
+              'No USSD call was placed.',
+        'PERMISSION_DENIED' =>
+          'Phone permission is required before USSD automation can start.',
+        'SERVICE_DISABLED' =>
+          'AgentPro Accessibility Service is not enabled.',
+        _ => 'USSD automation could not start (${e.code}).',
+      };
+
+      return USSDResult(
+        outcome: USSDStatus.failed,
+        failureReason: failureReason,
+        sessionLog: const [],
+      );
+    } catch (_) {
       _prePinTimeout?.cancel();
       _prePinTimeout = null;
       _postPinTimeout?.cancel();

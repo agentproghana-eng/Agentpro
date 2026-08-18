@@ -100,29 +100,37 @@ class UssdAccessibilityChannel(
         }
     }
 
-    // Resolves which PhoneAccountHandle corresponds to a physical SIM
-    // slot, so the outgoing call intent can be pinned to the right SIM
-    // instead of falling back to the device's default calling SIM (or
-    // triggering the native "Call with" picker, which this automation
-    // can't read). Primary match relies on the fact that on stock/AOSP
-    // telecom stacks a SIM-backed PhoneAccountHandle's id is the
-    // subscription id itself; falls back to positional match against
-    // callCapablePhoneAccounts (slot-ordered on virtually all devices)
-    // if that assumption doesn't hold on a given OEM stack.
+    // Resolves which PhoneAccountHandle belongs to the exact physical
+    // SIM slot selected by AgentPro.
+    //
+    // SECURITY: never infer SIM identity from the position of a handle in
+    // callCapablePhoneAccounts. Android/OEM telecom implementations do not
+    // give AgentPro a financial guarantee that list position == SIM slot.
+    // If the active subscription cannot be matched exactly, callers must
+    // fail closed and must not place the call.
     @SuppressLint("MissingPermission")
     private fun phoneAccountHandleForSimSlot(simSlot: Int): PhoneAccountHandle? {
-        val subscriptionManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? SubscriptionManager
-            ?: return null
-        val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
-            ?: return null
+        if (simSlot < 0) return null
 
-        val subInfo = subscriptionManager.getActiveSubscriptionInfoForSimSlotIndex(simSlot) ?: return null
+        val subscriptionManager =
+            context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE)
+                as? SubscriptionManager
+                ?: return null
+        val telecomManager =
+            context.getSystemService(Context.TELECOM_SERVICE)
+                as? TelecomManager
+                ?: return null
+
+        val subInfo =
+            subscriptionManager.getActiveSubscriptionInfoForSimSlotIndex(
+                simSlot
+            ) ?: return null
+
         val targetSubId = subInfo.subscriptionId.toString()
 
-        val handles = telecomManager.callCapablePhoneAccounts
-
-        handles.firstOrNull { it.id == targetSubId }?.let { return it }
-        return handles.getOrNull(simSlot)
+        return telecomManager.callCapablePhoneAccounts.firstOrNull {
+            it.id == targetSubId
+        }
     }
 
     // Opens the real provider USSD menu without starting an Accessibility
@@ -138,21 +146,24 @@ class UssdAccessibilityChannel(
             return
         }
 
-        try {
-            val phoneAccountHandle = if (simSlot != null) {
-                phoneAccountHandleForSimSlot(simSlot)
-            } else {
+        if (simSlot == null || simSlot < 0) {
+            result.error(
+                "SIM_REQUIRED",
+                "A valid physical SIM slot is required for dialing",
                 null
-            }
+            )
+            return
+        }
 
-            // TransactionDevicePreparationService has already verified the
-            // physical SIM. If Android cannot map that verified slot to an
-            // outgoing PhoneAccountHandle, fail closed instead of silently
-            // falling back to the device's default SIM or SIM picker.
-            if (simSlot != null && phoneAccountHandle == null) {
+        try {
+            val phoneAccountHandle =
+                phoneAccountHandleForSimSlot(simSlot)
+
+            // Never let Android substitute the default calling SIM.
+            if (phoneAccountHandle == null) {
                 result.error(
                     "SIM_UNAVAILABLE",
-                    "The selected SIM is unavailable for dialing",
+                    "The selected SIM cannot be resolved safely for dialing",
                     null
                 )
                 return
@@ -164,12 +175,10 @@ class UssdAccessibilityChannel(
             )
             dialIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
-            phoneAccountHandle?.let { handle ->
-                dialIntent.putExtra(
-                    TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE,
-                    handle
-                )
-            }
+            dialIntent.putExtra(
+                TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE,
+                phoneAccountHandle
+            )
 
             context.startActivity(dialIntent)
             result.success(true)
@@ -322,6 +331,35 @@ class UssdAccessibilityChannel(
             return
         }
 
+        if (simSlot == null || simSlot < 0) {
+            result.error(
+                "SIM_REQUIRED",
+                "A valid physical SIM slot is required for USSD automation",
+                null
+            )
+            return
+        }
+
+        val phoneAccountHandle = try {
+            phoneAccountHandleForSimSlot(simSlot)
+        } catch (e: SecurityException) {
+            result.error(
+                "PERMISSION_DENIED",
+                "Phone permission is required to resolve the selected SIM",
+                null
+            )
+            return
+        }
+
+        if (phoneAccountHandle == null) {
+            result.error(
+                "SIM_UNAVAILABLE",
+                "The selected SIM cannot be resolved safely for USSD automation",
+                null
+            )
+            return
+        }
+
         UssdAccessibilityService.startSession(
             customerPhone, amount, transactionType, provider, operatorId, reference, merchantId,
             steps, selections, successMarkers, failureMarkers
@@ -333,11 +371,10 @@ class UssdAccessibilityChannel(
         try {
             val dialIntent = Intent(Intent.ACTION_CALL, Uri.parse("tel:" + Uri.encode(dialCode)))
             dialIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            if (simSlot != null) {
-                phoneAccountHandleForSimSlot(simSlot)?.let { handle ->
-                    dialIntent.putExtra(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, handle)
-                }
-            }
+            dialIntent.putExtra(
+                TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE,
+                phoneAccountHandle
+            )
             context.startActivity(dialIntent)
             result.success(true)
         } catch (e: SecurityException) {

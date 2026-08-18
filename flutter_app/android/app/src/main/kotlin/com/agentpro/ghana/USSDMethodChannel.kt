@@ -92,10 +92,19 @@ class USSDMethodChannel(
     @RequiresApi(Build.VERSION_CODES.O)
     private fun dialUSSD(call: MethodCall, result: MethodChannel.Result) {
         val ussdCode = call.argument<String>("ussd_code")
-        val simSlot = call.argument<Int>("sim_slot") ?: 0
+        val simSlot = call.argument<Int>("sim_slot")
 
-        if (ussdCode == null) {
+        if (ussdCode.isNullOrBlank()) {
             result.error("INVALID_ARGS", "USSD code is required", null)
+            return
+        }
+
+        if (simSlot == null || simSlot < 0) {
+            result.error(
+                "SIM_REQUIRED",
+                "A valid physical SIM slot is required for USSD dialing",
+                null
+            )
             return
         }
 
@@ -111,14 +120,35 @@ class USSDMethodChannel(
             val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
             val subscriptionManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
 
-            val subscriptionId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                subscriptionManager.getActiveSubscriptionInfoForSimSlotIndex(simSlot)?.subscriptionId
-                    ?: SubscriptionManager.getDefaultSubscriptionId()
-            } else {
-                SubscriptionManager.getDefaultSubscriptionId()
+            val subscriptionInfo =
+                subscriptionManager.getActiveSubscriptionInfoForSimSlotIndex(
+                    simSlot
+                )
+
+            if (subscriptionInfo == null) {
+                sessions.remove(sessionId)
+                result.error(
+                    "SIM_UNAVAILABLE",
+                    "The selected SIM is not active or cannot be resolved",
+                    null
+                )
+                return
             }
 
-            val tmForSub = telephonyManager.createForSubscriptionId(subscriptionId)
+            val subscriptionId = subscriptionInfo.subscriptionId
+
+            if (subscriptionId < 0) {
+                sessions.remove(sessionId)
+                result.error(
+                    "SIM_UNAVAILABLE",
+                    "The selected SIM has no valid subscription",
+                    null
+                )
+                return
+            }
+
+            val tmForSub =
+                telephonyManager.createForSubscriptionId(subscriptionId)
 
             // This same callback instance handles every response for this
             // session — including a possible second invocation after a
