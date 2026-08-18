@@ -51,6 +51,8 @@ class USSDTemplate {
   final List<String> successStrings;
   final List<String> failureStrings;
   final int timeoutSeconds;
+  // Legacy template metadata retained for API/database compatibility.
+  // Financial execution never uses this value to automatically redial.
   final int retryCount;
 
   const USSDTemplate({
@@ -121,17 +123,17 @@ class USSDEngine {
     required this.simSlot,
   });
 
-  /// Execute the transaction: resolve the pattern, dial once, interpret
-  /// the response (or lack of one) into a definite outcome. Retries
-  /// (per template.retryCount) apply ONLY when the network never
-  /// responded at all to the initial dial — in that case nothing
-  /// engaged with the request, so no money could plausibly have moved,
-  /// and a clean retry is safe. Once a PIN prompt has been seen, this
-  /// method NEVER retries automatically under any circumstance — the
-  /// network has already engaged with the request at that point, and
-  /// an automatic retry could mean genuinely double-submitting a
-  /// transaction that already succeeded. That specific ambiguity is
-  /// reported as pendingConfirmation instead, for a human to resolve.
+  /// Execute exactly one USSD dispatch.
+  ///
+  /// FINANCIAL SAFETY:
+  /// Once [_dialUSSD] returns a session ID, AgentPro must assume that the
+  /// request may have reached the provider. A timeout, missing callback,
+  /// transport exception, or unrecognized response after that point is
+  /// therefore an ambiguous financial outcome and MUST NOT cause another
+  /// automatic dial.
+  ///
+  /// [USSDTemplate.retryCount] is retained only for backwards-compatible
+  /// template decoding. It is deliberately ignored here.
   Future<USSDResult> execute() async {
     final resolvedCode = _resolvePattern(template.ussdStringPattern);
 
@@ -145,106 +147,140 @@ class USSDEngine {
       );
     }
 
-    final maxAttempts = 1 + (template.retryCount.clamp(0, 3));
+    _emitProgress(
+      USSDStatus.dialing,
+      'Dialing network...',
+    );
 
-    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        _emitProgress(
-          USSDStatus.dialing,
-          attempt == 1
-              ? 'Dialing network...'
-              : 'Dialing network... (attempt $attempt of $maxAttempts)',
-        );
+    late final String sessionId;
 
-        final sessionId = await _dialUSSD(resolvedCode);
-        _logStep('dial', resolvedCode);
+    try {
+      sessionId = await _dialUSSD(resolvedCode);
+    } on PlatformException catch (e) {
+      // These native errors are emitted before a usable USSD session is
+      // returned and have explicit no-dispatch/preflight semantics.
+      final definitePreDispatchFailure = switch (e.code) {
+        'INVALID_ARGS' ||
+        'SIM_REQUIRED' ||
+        'SIM_UNAVAILABLE' ||
+        'PERMISSION_DENIED' =>
+          true,
+        _ => false,
+      };
 
-        _emitProgress(USSDStatus.processing, 'Processing transaction...');
-        final firstResponse = await _waitForUSSDResponse(
-          sessionId,
-          template.timeoutSeconds,
-        );
-        _logStep('response', null, firstResponse);
+      if (definitePreDispatchFailure) {
+        final failureReason = switch (e.code) {
+          'SIM_REQUIRED' =>
+            'A physical SIM must be selected before USSD dialing can start.',
+          'SIM_UNAVAILABLE' =>
+            'AgentPro could not safely resolve the selected physical SIM. '
+                'No USSD session was started.',
+          'PERMISSION_DENIED' =>
+            'Phone permission is required before USSD dialing can start.',
+          _ => 'USSD dialing could not start.',
+        };
 
-        final gotNoResponseAtAll =
-            firstResponse.isEmpty || firstResponse == 'TIMEOUT';
-
-        if (gotNoResponseAtAll) {
-          // Nothing engaged with this dial at all — safe to retry, since
-          // no money could plausibly have moved. Only retry if attempts remain.
-          if (attempt < maxAttempts) {
-            _logStep(
-              'retry',
-              null,
-              'No response — retrying (attempt $attempt of $maxAttempts)',
-            );
-            continue;
-          }
-          return USSDResult(
-            outcome: USSDStatus.failed,
-            failureReason:
-                'No response received from the network after $maxAttempts attempt(s). '
-                'Please check network signal and try again.',
-            sessionLog: _sessionLog,
-          );
-        }
-
-        if (_matches(firstResponse, template.successStrings)) {
-          _emitProgress(USSDStatus.success, 'Transaction successful!');
-          return USSDResult(
-            outcome: USSDStatus.success,
-            networkReference: _extractNetworkReference(firstResponse),
-            sessionLog: _sessionLog,
-          );
-        }
-
-        if (_matches(firstResponse, template.failureStrings)) {
-          // A definite negative outcome from the network — never retried
-          // automatically. Retrying an explicit "insufficient funds" or
-          // "invalid recipient" would just fail identically again, and
-          // silently redialing after a clear failure message is confusing
-          // for the agent watching the screen.
-          return USSDResult(
-            outcome: USSDStatus.failed,
-            failureReason: 'The network reported that the transaction failed.',
-            sessionLog: _sessionLog,
-          );
-        }
-
-        if (_matches(firstResponse, template.pinPromptStrings)) {
-          return await _handlePinPrompt(sessionId);
-        }
-
-        // The network responded with something, but it matches none of
-        // our known patterns. It DID engage with the request (unlike the
-        // no-response case above), so we cannot assume it's safe to
-        // retry — genuinely unknown outcomes are never retried.
-        return USSDResult(
-          outcome: USSDStatus.pendingConfirmation,
-          failureReason: 'The network returned an unrecognized response. '
-              'Please verify manually before repeating this transaction.',
-          sessionLog: _sessionLog,
-        );
-      } catch (e) {
-        if (attempt < maxAttempts) {
-          _logStep('retry', null, 'Exception on attempt $attempt: $e');
-          continue;
-        }
         return USSDResult(
           outcome: USSDStatus.failed,
-          failureReason: 'USSD automation could not complete.',
+          failureReason: failureReason,
           sessionLog: _sessionLog,
         );
       }
+
+      // For an unknown dial-stage platform failure, we cannot prove that
+      // dispatch did not occur. Fail closed against duplicate money movement.
+      return USSDResult(
+        outcome: USSDStatus.pendingConfirmation,
+        failureReason:
+            'AgentPro could not confirm whether the USSD request was sent. '
+            'Please verify the transaction before trying again.',
+        sessionLog: _sessionLog,
+      );
+    } catch (_) {
+      // Unknown failures while crossing the native dial boundary are also
+      // treated as ambiguous. Retrying automatically would be unsafe.
+      return USSDResult(
+        outcome: USSDStatus.pendingConfirmation,
+        failureReason:
+            'AgentPro could not confirm whether the USSD request was sent. '
+            'Please verify the transaction before trying again.',
+        sessionLog: _sessionLog,
+      );
     }
 
-    // Unreachable in practice (the loop always returns or continues),
-    // but required for type-soundness.
-    return USSDResult(
-      outcome: USSDStatus.failed,
-      failureReason: 'Unexpected error: exhausted retries without a result.',
-      sessionLog: _sessionLog,
-    );
+    // A returned session ID is the dispatch boundary. From this point onward
+    // there is no code path that automatically calls _dialUSSD again.
+    _logStep('dial', resolvedCode);
+
+    try {
+      _emitProgress(
+        USSDStatus.processing,
+        'Processing transaction...',
+      );
+
+      final firstResponse = await _waitForUSSDResponse(
+        sessionId,
+        template.timeoutSeconds,
+      );
+
+      _logStep('response', null, firstResponse);
+
+      final gotNoResponse = firstResponse.isEmpty || firstResponse == 'TIMEOUT';
+
+      if (gotNoResponse) {
+        return USSDResult(
+          outcome: USSDStatus.pendingConfirmation,
+          failureReason:
+              'No final network result was received after the USSD request '
+              'was sent. Please verify the transaction before trying again.',
+          sessionLog: _sessionLog,
+        );
+      }
+
+      if (_matches(firstResponse, template.successStrings)) {
+        _emitProgress(
+          USSDStatus.success,
+          'Transaction successful!',
+        );
+
+        return USSDResult(
+          outcome: USSDStatus.success,
+          networkReference: _extractNetworkReference(firstResponse),
+          sessionLog: _sessionLog,
+        );
+      }
+
+      if (_matches(firstResponse, template.failureStrings)) {
+        // An explicit provider failure is definite. We still never
+        // automatically redial; any new attempt must be user initiated.
+        return USSDResult(
+          outcome: USSDStatus.failed,
+          failureReason: 'The network reported that the transaction failed.',
+          sessionLog: _sessionLog,
+        );
+      }
+
+      if (_matches(firstResponse, template.pinPromptStrings)) {
+        return await _handlePinPrompt(sessionId);
+      }
+
+      return USSDResult(
+        outcome: USSDStatus.pendingConfirmation,
+        failureReason: 'The network returned an unrecognized response. '
+            'Please verify manually before repeating this transaction.',
+        sessionLog: _sessionLog,
+      );
+    } catch (_) {
+      // The dial already crossed the dispatch boundary. A callback/channel
+      // failure cannot establish whether the provider processed the request.
+      return USSDResult(
+        outcome: USSDStatus.pendingConfirmation,
+        failureReason:
+            'The USSD request was sent, but AgentPro could not confirm its '
+            'outcome. Please verify the transaction before trying again.',
+        sessionLog: _sessionLog,
+      );
+    }
   }
 
   /// Handles the PIN-prompt branch in isolation, since it has its own
@@ -568,27 +604,6 @@ class UssdAccessibilityEngine {
       ),
     );
 
-    _prePinTimeout = Timer(const Duration(seconds: 45), () async {
-      final completer = _resultCompleter;
-
-      if (_pinPromptReached || completer == null || completer.isCompleted) {
-        return;
-      }
-
-      await cancelAutomation();
-
-      if (!completer.isCompleted) {
-        completer.complete(
-          const USSDResult(
-            outcome: USSDStatus.failed,
-            failureReason:
-                'No response received from the USSD session. Please check your network and try again.',
-            sessionLog: [],
-          ),
-        );
-      }
-    });
-
     try {
       await _channel.invokeMethod('startAutomation', {
         if (customerPhone != null && customerPhone.isNotEmpty)
@@ -606,6 +621,34 @@ class UssdAccessibilityEngine {
         if (failureMarkers != null) 'failure_markers': failureMarkers,
         if (selections != null) 'selections': selections,
       });
+
+      // startAutomation returning successfully means native code has crossed
+      // the provider-dial boundary. From here, absence of a provider screen
+      // or result is ambiguous and must never be classified as a safe retry.
+      if (!_pinPromptReached && !(_resultCompleter?.isCompleted ?? true)) {
+        _prePinTimeout = Timer(const Duration(seconds: 45), () async {
+          final completer = _resultCompleter;
+
+          if (_pinPromptReached || completer == null || completer.isCompleted) {
+            return;
+          }
+
+          await cancelAutomation();
+
+          if (!completer.isCompleted) {
+            completer.complete(
+              const USSDResult(
+                outcome: USSDStatus.pendingConfirmation,
+                failureReason:
+                    'No provider result was received after the USSD session '
+                    'started. Please verify the transaction before trying '
+                    'again.',
+                sessionLog: [],
+              ),
+            );
+          }
+        });
+      }
     } on PlatformException catch (e) {
       _prePinTimeout?.cancel();
       _prePinTimeout = null;
@@ -613,23 +656,64 @@ class UssdAccessibilityEngine {
       _postPinTimeout = null;
       await cancelAutomation();
 
-      final failureReason = switch (e.code) {
-        'SIM_REQUIRED' =>
-          'A physical SIM must be selected before USSD automation can start.',
-        'SIM_UNAVAILABLE' =>
-          'AgentPro could not safely resolve the selected physical SIM. '
-              'No USSD call was placed.',
-        'PERMISSION_DENIED' =>
-          'Phone permission is required before USSD automation can start.',
-        'SERVICE_DISABLED' =>
-          'AgentPro Accessibility Service is not enabled.',
-        _ => 'USSD automation could not start (${e.code}).',
+      // These native errors are emitted from validation/resolution or from
+      // a startActivity failure where Android did not successfully launch
+      // the selected-SIM USSD call. They remain definite startup failures.
+      const definitePreDispatchCodes = <String>{
+        'INVALID_ARGS',
+        'SIM_REQUIRED',
+        'SIM_UNAVAILABLE',
+        'PERMISSION_DENIED',
+        'SERVICE_DISABLED',
+        'MISSING_CUSTOMER_PHONE',
+        'MISSING_AMOUNT',
+        'MISSING_REFERENCE',
+        'MISSING_SELECTION',
+        'MISSING_OPERATOR_ID',
+        'MISSING_DIAL_CODE',
+        'DIAL_ERROR',
       };
 
-      return USSDResult(
-        outcome: USSDStatus.failed,
-        failureReason: failureReason,
-        sessionLog: const [],
+      if (definitePreDispatchCodes.contains(e.code)) {
+        final failureReason = switch (e.code) {
+          'SIM_REQUIRED' =>
+            'A physical SIM must be selected before USSD automation can start.',
+          'SIM_UNAVAILABLE' =>
+            'AgentPro could not safely resolve the selected physical SIM. '
+                'No USSD call was placed.',
+          'PERMISSION_DENIED' =>
+            'Phone permission is required before USSD automation can start.',
+          'SERVICE_DISABLED' =>
+            'AgentPro Accessibility Service is not enabled.',
+          'MISSING_CUSTOMER_PHONE' =>
+            'This USSD flow requires a customer phone number.',
+          'MISSING_AMOUNT' => 'This USSD flow requires an amount.',
+          'MISSING_REFERENCE' => 'This USSD flow requires a reference.',
+          'MISSING_SELECTION' =>
+            'This USSD flow is missing a required menu selection.',
+          'MISSING_OPERATOR_ID' =>
+            'This USSD flow requires the configured Operator ID.',
+          'MISSING_DIAL_CODE' => 'This USSD flow has no valid dial code.',
+          'DIAL_ERROR' => 'Android could not start the selected USSD call.',
+          _ => 'USSD automation could not start.',
+        };
+
+        return USSDResult(
+          outcome: USSDStatus.failed,
+          failureReason: failureReason,
+          sessionLog: const [],
+        );
+      }
+
+      // An unknown platform-channel failure is ambiguous. Native code may
+      // have successfully dispatched startActivity before its reply to
+      // Flutter was lost. Never expose an automatic financial retry here.
+      return const USSDResult(
+        outcome: USSDStatus.pendingConfirmation,
+        failureReason:
+            'AgentPro could not confirm whether the USSD session started. '
+            'Please verify the transaction before trying again.',
+        sessionLog: [],
       );
     } catch (_) {
       _prePinTimeout?.cancel();
@@ -638,9 +722,13 @@ class UssdAccessibilityEngine {
       _postPinTimeout = null;
       await cancelAutomation();
 
+      // A generic Dart/platform transport failure at the native dispatch
+      // boundary cannot prove that the provider call was never launched.
       return const USSDResult(
-        outcome: USSDStatus.failed,
-        failureReason: 'USSD automation could not start.',
+        outcome: USSDStatus.pendingConfirmation,
+        failureReason:
+            'AgentPro could not confirm whether the USSD session started. '
+            'Please verify the transaction before trying again.',
         sessionLog: [],
       );
     }

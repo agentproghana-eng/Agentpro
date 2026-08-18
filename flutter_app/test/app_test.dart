@@ -169,13 +169,20 @@ void main() {
     });
 
     test(
-        'a clean no-response timeout (no PIN prompt seen) is a definite failure, not pendingConfirmation',
+        'timeout after dial dispatch is pending confirmation and never redials',
         () async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
         log.add(call);
-        if (call.method == 'dialUSSD') return 'mock-session-id';
-        if (call.method == 'waitForResponse') return 'TIMEOUT';
+
+        if (call.method == 'dialUSSD') {
+          return 'mock-session-id';
+        }
+
+        if (call.method == 'waitForResponse') {
+          return 'TIMEOUT';
+        }
+
         return null;
       });
 
@@ -186,7 +193,10 @@ void main() {
         successStrings: ['balance'],
         failureStrings: ['failed'],
         timeoutSeconds: 5,
-        retryCount: 0, // no retries, to keep this test deterministic
+
+        // Deliberately non-zero. Legacy retry metadata must not cause
+        // another financial USSD dispatch.
+        retryCount: 3,
       );
 
       final engine = USSDEngine(
@@ -198,10 +208,119 @@ void main() {
 
       final result = await engine.execute();
 
-      // Nothing ever engaged with this dial — no PIN prompt was ever
-      // seen, so no money could plausibly have moved. This is safe to
-      // report as a definite failure, unlike the post-PIN-prompt case above.
+      expect(
+        result.outcome,
+        USSDStatus.pendingConfirmation,
+      );
+
+      expect(
+        log.where((call) => call.method == 'dialUSSD').length,
+        1,
+      );
+
+      expect(
+        log.where((call) => call.method == 'waitForResponse').length,
+        1,
+      );
+    });
+
+    test(
+        'response-channel exception after dispatch is pending and never redials',
+        () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        log.add(call);
+
+        if (call.method == 'dialUSSD') {
+          return 'mock-session-id';
+        }
+
+        if (call.method == 'waitForResponse') {
+          throw PlatformException(
+            code: 'WAIT_FAILED',
+            message: 'mock callback failure',
+          );
+        }
+
+        return null;
+      });
+
+      const template = USSDTemplate(
+        id: 'test-template',
+        ussdStringPattern: '*170*1*6*1#',
+        pinPromptStrings: ['pin'],
+        successStrings: ['balance'],
+        failureStrings: ['failed'],
+        timeoutSeconds: 5,
+        retryCount: 3,
+      );
+
+      final engine = USSDEngine(
+        template: template,
+        automationParams: const {},
+        provider: 'mtn',
+        simSlot: 0,
+      );
+
+      final result = await engine.execute();
+
+      expect(
+        result.outcome,
+        USSDStatus.pendingConfirmation,
+      );
+
+      expect(
+        log.where((call) => call.method == 'dialUSSD').length,
+        1,
+      );
+    });
+
+    test('known SIM failure before dispatch remains a definite failure',
+        () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        log.add(call);
+
+        if (call.method == 'dialUSSD') {
+          throw PlatformException(
+            code: 'SIM_UNAVAILABLE',
+            message: 'mock exact-SIM failure',
+          );
+        }
+
+        return null;
+      });
+
+      const template = USSDTemplate(
+        id: 'test-template',
+        ussdStringPattern: '*170*1*6*1#',
+        pinPromptStrings: ['pin'],
+        successStrings: ['balance'],
+        failureStrings: ['failed'],
+        timeoutSeconds: 5,
+        retryCount: 3,
+      );
+
+      final engine = USSDEngine(
+        template: template,
+        automationParams: const {},
+        provider: 'mtn',
+        simSlot: 0,
+      );
+
+      final result = await engine.execute();
+
       expect(result.outcome, USSDStatus.failed);
+
+      expect(
+        log.where((call) => call.method == 'dialUSSD').length,
+        1,
+      );
+
+      expect(
+        log.where((call) => call.method == 'waitForResponse').length,
+        0,
+      );
     });
   });
 
