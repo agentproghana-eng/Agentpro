@@ -952,7 +952,7 @@ function validateQuickActionPreferences(value, fieldName, registeredProviders) {
       return `${fieldName}.${provider} cannot contain more than 9 actions`;
     }
 
-    const actionKeys = [];
+    const actionIdentities = [];
 
     for (let index = 0; index < actions.length; index += 1) {
       const item = actions[index];
@@ -966,7 +966,7 @@ function validateQuickActionPreferences(value, fieldName, registeredProviders) {
           return `${fieldName}.${provider}[${index}] must not be empty`;
         }
 
-        actionKeys.push(actionKey);
+        actionIdentities.push(`${actionKey}||`);
         continue;
       }
 
@@ -979,6 +979,9 @@ function validateQuickActionPreferences(value, fieldName, registeredProviders) {
         custom_name,
         icon_key,
         icon_color,
+        icon_background_color,
+        bundle_category,
+        recipient_mode,
         position,
         is_visible,
       } = item;
@@ -1019,6 +1022,43 @@ function validateQuickActionPreferences(value, fieldName, registeredProviders) {
       }
 
       if (
+        icon_background_color !== undefined &&
+        icon_background_color !== null &&
+        (
+          typeof icon_background_color !== 'string' ||
+          !QUICK_ACTION_ICON_COLORS.has(
+            icon_background_color.trim().toUpperCase()
+          )
+        )
+      ) {
+        return `${fieldName}.${provider}[${index}].icon_background_color is invalid`;
+      }
+
+      if (
+        bundle_category !== undefined &&
+        bundle_category !== null &&
+        (
+          typeof bundle_category !== 'string' ||
+          bundle_category.trim().length === 0 ||
+          bundle_category.trim().length > 100
+        )
+      ) {
+        return `${fieldName}.${provider}[${index}].bundle_category is invalid`;
+      }
+
+      if (
+        recipient_mode !== undefined &&
+        recipient_mode !== null &&
+        (
+          typeof recipient_mode !== 'string' ||
+          recipient_mode.trim().length === 0 ||
+          recipient_mode.trim().length > 100
+        )
+      ) {
+        return `${fieldName}.${provider}[${index}].recipient_mode is invalid`;
+      }
+
+      if (
         position !== undefined &&
         (!Number.isInteger(position) || position < 0 || position > 8)
       ) {
@@ -1032,11 +1072,26 @@ function validateQuickActionPreferences(value, fieldName, registeredProviders) {
         return `${fieldName}.${provider}[${index}].is_visible must be boolean`;
       }
 
-      actionKeys.push(action_key.trim());
+      const normalizedBundleCategory =
+        typeof bundle_category === 'string'
+          ? bundle_category.trim()
+          : '';
+
+      const normalizedRecipientMode =
+        typeof recipient_mode === 'string'
+          ? recipient_mode.trim()
+          : '';
+
+      actionIdentities.push(
+        `${action_key.trim()}|${normalizedBundleCategory}|${normalizedRecipientMode}`
+      );
     }
 
-    if (new Set(actionKeys).size !== actionKeys.length) {
-      return `${fieldName}.${provider} cannot contain duplicate actions`;
+    if (
+      new Set(actionIdentities).size !==
+      actionIdentities.length
+    ) {
+      return `${fieldName}.${provider} cannot contain duplicate action variants`;
     }
   }
 

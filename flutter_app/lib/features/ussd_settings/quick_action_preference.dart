@@ -5,6 +5,9 @@ class QuickActionPreference {
   final String? customName;
   final String? iconKey;
   final String? iconColorHex;
+  final String? iconBackgroundColorHex;
+  final String? bundleCategory;
+  final String? recipientMode;
   final int position;
   final bool isVisible;
 
@@ -13,6 +16,9 @@ class QuickActionPreference {
     this.customName,
     this.iconKey,
     this.iconColorHex,
+    this.iconBackgroundColorHex,
+    this.bundleCategory,
+    this.recipientMode,
     required this.position,
     this.isVisible = true,
   });
@@ -38,6 +44,9 @@ class QuickActionPreference {
         customName: _nullableString(map['custom_name']),
         iconKey: _nullableString(map['icon_key']),
         iconColorHex: _nullableString(map['icon_color']),
+        iconBackgroundColorHex: _nullableString(map['icon_background_color']),
+        bundleCategory: _nullableString(map['bundle_category']),
+        recipientMode: _nullableString(map['recipient_mode']),
         position:
             map['position'] is int ? map['position'] as int : fallbackPosition,
         isVisible: map['is_visible'] is bool ? map['is_visible'] as bool : true,
@@ -53,6 +62,9 @@ class QuickActionPreference {
       'custom_name': customName,
       'icon_key': iconKey,
       'icon_color': iconColorHex,
+      'icon_background_color': iconBackgroundColorHex,
+      'bundle_category': bundleCategory,
+      'recipient_mode': recipientMode,
       'position': position,
       'is_visible': isVisible,
     };
@@ -66,6 +78,12 @@ class QuickActionPreference {
     bool clearIconKey = false,
     String? iconColorHex,
     bool clearIconColor = false,
+    String? iconBackgroundColorHex,
+    bool clearIconBackgroundColor = false,
+    String? bundleCategory,
+    bool clearBundleCategory = false,
+    String? recipientMode,
+    bool clearRecipientMode = false,
     int? position,
     bool? isVisible,
   }) {
@@ -74,6 +92,13 @@ class QuickActionPreference {
       customName: clearCustomName ? null : customName ?? this.customName,
       iconKey: clearIconKey ? null : iconKey ?? this.iconKey,
       iconColorHex: clearIconColor ? null : iconColorHex ?? this.iconColorHex,
+      iconBackgroundColorHex: clearIconBackgroundColor
+          ? null
+          : iconBackgroundColorHex ?? this.iconBackgroundColorHex,
+      bundleCategory:
+          clearBundleCategory ? null : bundleCategory ?? this.bundleCategory,
+      recipientMode:
+          clearRecipientMode ? null : recipientMode ?? this.recipientMode,
       position: position ?? this.position,
       isVisible: isVisible ?? this.isVisible,
     );
@@ -83,12 +108,101 @@ class QuickActionPreference {
     return quickActionColorFromHex(iconColorHex) ?? defaultColor;
   }
 
+  Color resolvedIconBackgroundColor(Color defaultColor) {
+    return quickActionColorFromHex(iconBackgroundColorHex) ?? defaultColor;
+  }
+
+  String get identityKey {
+    final bundle = bundleCategory?.trim() ?? '';
+    final recipient = recipientMode?.trim() ?? '';
+
+    return '$actionKey|$bundle|$recipient';
+  }
+
+  String get variantDescription {
+    final parts = <String>[];
+
+    final recipient = recipientMode?.trim().toLowerCase();
+
+    if (recipient == 'self') {
+      parts.add('Myself');
+    } else if (recipient == 'other') {
+      parts.add('Someone Else');
+    } else if (recipient != null && recipient.isNotEmpty) {
+      parts.add(_titleVariantToken(recipient));
+    }
+
+    final bundle = bundleCategory?.trim();
+
+    if (bundle != null && bundle.isNotEmpty) {
+      parts.add(_formatBundleCategory(bundle));
+    }
+
+    return parts.join(' · ');
+  }
+
+  String resolvedDisplayLabel(String defaultLabel) {
+    final custom = customName?.trim();
+
+    if (custom != null && custom.isNotEmpty) {
+      return custom;
+    }
+
+    final variant = variantDescription;
+
+    return variant.isEmpty ? defaultLabel : '$defaultLabel · $variant';
+  }
+
   String resolvedLabel(String defaultLabel) {
     final custom = customName?.trim();
     if (custom != null && custom.isNotEmpty) {
       return custom;
     }
     return defaultLabel;
+  }
+
+  static String _formatBundleCategory(String value) {
+    final normalized = value.trim().toLowerCase();
+
+    final mashup = RegExp(
+      r'^ghc(\d+)(?:_page[12])?_(airtime|momo)$',
+    ).firstMatch(normalized);
+
+    if (mashup != null) {
+      final amount = mashup.group(1)!;
+      final payment = mashup.group(2) == 'momo' ? 'MoMo' : 'Airtime';
+
+      return 'GHS $amount · $payment';
+    }
+
+    return switch (normalized) {
+      'flexi_airtime' => 'Flexi · Airtime',
+      'flexi_momo' => 'Flexi · MoMo',
+      'fixed_page1_airtime' => 'Bundles · Airtime',
+      'fixed_page1_momo' => 'Bundles · MoMo',
+      'fixed_page2_airtime' => 'More Bundles · Airtime',
+      'fixed_page2_momo' => 'More Bundles · MoMo',
+      _ => normalized
+          .split('_')
+          .where((part) => part.isNotEmpty)
+          .map(_titleVariantToken)
+          .join(' '),
+    };
+  }
+
+  static String _titleVariantToken(String value) {
+    final normalized = value.trim();
+
+    if (normalized.isEmpty) {
+      return normalized;
+    }
+
+    if (normalized.toLowerCase() == 'momo') {
+      return 'MoMo';
+    }
+
+    return '${normalized[0].toUpperCase()}'
+        '${normalized.substring(1)}';
   }
 
   static String? _nullableString(dynamic value) {

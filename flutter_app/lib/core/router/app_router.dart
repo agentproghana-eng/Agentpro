@@ -171,6 +171,8 @@ class AppRouter {
             final simIccid = state.uri.queryParameters['sim_iccid'];
             final simSubscriptionIdStr =
                 state.uri.queryParameters['sim_subscription_id'];
+            final bundleCategory = state.uri.queryParameters['bundle_category'];
+            final recipientMode = state.uri.queryParameters['recipient_mode'];
 
             return TransactionScreen(
               transactionType: type,
@@ -181,6 +183,8 @@ class AppRouter {
               initialSimSubscriptionId: simSubscriptionIdStr != null
                   ? int.tryParse(simSubscriptionIdStr)
                   : null,
+              initialBundleCategory: bundleCategory,
+              initialRecipientMode: recipientMode,
             );
           },
         ),
@@ -194,6 +198,8 @@ class AppRouter {
             final simIccid = state.uri.queryParameters['sim_iccid'];
             final simSubscriptionIdStr =
                 state.uri.queryParameters['sim_subscription_id'];
+            final bundleCategory = state.uri.queryParameters['bundle_category'];
+            final recipientMode = state.uri.queryParameters['recipient_mode'];
 
             return PersonalTransactionScreen(
               transactionType: type,
@@ -203,6 +209,8 @@ class AppRouter {
               simSubscriptionId: simSubscriptionIdStr != null
                   ? int.tryParse(simSubscriptionIdStr)
                   : null,
+              initialBundleCategory: bundleCategory,
+              initialRecipientMode: recipientMode,
             );
           },
         ),

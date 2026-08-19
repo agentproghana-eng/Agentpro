@@ -200,6 +200,8 @@ class PersonalTransactionScreen extends StatefulWidget {
   final int? simSlot;
   final String? simIccid;
   final int? simSubscriptionId;
+  final String? initialBundleCategory;
+  final String? initialRecipientMode;
 
   const PersonalTransactionScreen({
     super.key,
@@ -208,6 +210,8 @@ class PersonalTransactionScreen extends StatefulWidget {
     this.simSlot,
     this.simIccid,
     this.simSubscriptionId,
+    this.initialBundleCategory,
+    this.initialRecipientMode,
   });
 
   @override
@@ -400,11 +404,159 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     return [if (_bundleChoice != null) _bundleChoice!.digit];
   }
 
+  DataBundleOption? _presetMtnDataPayment(
+    String bundleCategory,
+  ) {
+    final normalized = bundleCategory.trim().toLowerCase();
+
+    if (normalized.endsWith('_momo')) {
+      return kMtnDataPayment.firstWhere(
+        (item) => item.digit == '2',
+      );
+    }
+
+    if (normalized.endsWith('_airtime')) {
+      return kMtnDataPayment.firstWhere(
+        (item) => item.digit == '1',
+      );
+    }
+
+    return null;
+  }
+
+  DataBundleOption? _presetMashupPayment(
+    String bundleCategory,
+  ) {
+    final normalized = bundleCategory.trim().toLowerCase();
+
+    if (normalized.endsWith('_momo')) {
+      return kMtnMashupPayment.firstWhere(
+        (item) => item.digit == '2',
+      );
+    }
+
+    if (normalized.endsWith('_airtime')) {
+      return kMtnMashupPayment.firstWhere(
+        (item) => item.digit == '1',
+      );
+    }
+
+    return null;
+  }
+
+  void _applyInitialQuickActionPreset() {
+    final recipient = widget.initialRecipientMode?.trim().toLowerCase();
+
+    if (recipient == 'self' || recipient == 'other') {
+      _recipientMode = recipient;
+    }
+
+    final rawBundle = widget.initialBundleCategory?.trim();
+
+    if (rawBundle == null || rawBundle.isEmpty) {
+      if (_isMtnMashup && _recipientMode != null) {
+        _mashupStep = _recipientMode == 'other' ? 'recipient_phone' : 'tier';
+      } else if (_isDataBundle && _recipientMode != null) {
+        _dbStep = _recipientMode == 'other'
+            ? 'recipient_phone'
+            : (_isMtnDataBundle ? 'mtn_bundle' : 'category');
+      }
+
+      return;
+    }
+
+    final bundle = rawBundle.toLowerCase();
+
+    if (_isMtnDataBundle) {
+      if (bundle.startsWith('flexi_')) {
+        _bundleCategory = 'flexi';
+
+        _bundleChoice = const DataBundleOption(
+          'Flexi Bundle',
+          '1',
+        );
+
+        _flexiPayment = _presetMtnDataPayment(bundle);
+
+        _dbStep = _recipientMode == 'other'
+            ? 'recipient_phone'
+            : _recipientMode == 'self'
+                ? 'mtn_flexi_amount'
+                : 'recipient_mode';
+
+        return;
+      }
+
+      if (bundle.startsWith(
+        'fixed_page1_',
+      )) {
+        _bundleCategory = 'fixed_page1';
+
+        _flexiPayment = _presetMtnDataPayment(bundle);
+
+        _dbStep = _recipientMode == 'other'
+            ? 'recipient_phone'
+            : _recipientMode == 'self'
+                ? 'mtn_bundle'
+                : 'recipient_mode';
+
+        return;
+      }
+
+      if (bundle.startsWith(
+        'fixed_page2_',
+      )) {
+        _bundleCategory = 'fixed_page2';
+
+        _flexiPayment = _presetMtnDataPayment(bundle);
+
+        _dbStep = _recipientMode == 'other'
+            ? 'recipient_phone'
+            : _recipientMode == 'self'
+                ? 'mtn_bundle'
+                : 'recipient_mode';
+
+        return;
+      }
+    }
+
+    if (_isMtnMashup) {
+      final match = RegExp(
+        r'^(ghc1|ghc5|ghc10|ghc30)'
+        r'(?:_page[12])?_(airtime|momo)$',
+      ).firstMatch(bundle);
+
+      if (match != null) {
+        final tierId = match.group(1)!;
+
+        for (final tier in kMtnMashupTiers) {
+          if (tier.id == tierId) {
+            _mashupTier = tier;
+            break;
+          }
+        }
+
+        _mashupPayment = _presetMashupPayment(bundle);
+
+        if (_recipientMode == 'other') {
+          _mashupStep = 'recipient_phone';
+        } else if (_recipientMode == 'self') {
+          _mashupStep = tierId == 'ghc30' ? 'review' : 'allocation';
+        } else {
+          _mashupStep = 'recipient_mode';
+        }
+
+        return;
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
 
     _selectedSimSlot = widget.simSlot;
+    _applyInitialQuickActionPreset();
     _loadSimIdentity();
   }
 
@@ -1531,7 +1683,16 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
                   );
                   return;
                 }
-                setState(() => _mashupStep = 'tier');
+                setState(() {
+                  if (_mashupTier == null) {
+                    _mashupStep = 'tier';
+                  } else if (_mashupTier!.id == 'ghc30' &&
+                      _mashupPayment != null) {
+                    _mashupStep = 'review';
+                  } else {
+                    _mashupStep = 'allocation';
+                  }
+                });
               },
             ),
           ],
@@ -1595,7 +1756,8 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
                 option,
                 () => setState(() {
                   _mashupAllocation = option;
-                  _mashupStep = 'payment';
+
+                  _mashupStep = _mashupPayment != null ? 'review' : 'payment';
                 }),
               ),
             ),
@@ -1965,9 +2127,15 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
               );
               return;
             }
-            setState(
-              () => _dbStep = _isMtnDataBundle ? 'mtn_bundle' : 'category',
-            );
+            setState(() {
+              if (!_isMtnDataBundle) {
+                _dbStep = 'category';
+              } else if (_bundleCategory == 'flexi') {
+                _dbStep = 'mtn_flexi_amount';
+              } else {
+                _dbStep = 'mtn_bundle';
+              }
+            });
           },
         ),
       ],
@@ -2017,20 +2185,38 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         ...kMtnDataPage1.map(
           (opt) => _dbOptionTile(opt, () {
             setState(() {
+              final keepPresetPayment =
+                  (widget.initialBundleCategory ?? '').toLowerCase().startsWith(
+                        'fixed_page1_',
+                      );
+
               _bundleCategory = 'fixed_page1';
               _bundleChoice = opt;
-              _flexiPayment = null;
-              _dbStep = 'mtn_payment';
+
+              if (!keepPresetPayment) {
+                _flexiPayment = null;
+              }
+
+              _dbStep = _flexiPayment != null ? 'review' : 'mtn_payment';
             });
           }),
         ),
         ...kMtnDataPage2.map(
           (opt) => _dbOptionTile(opt, () {
             setState(() {
+              final keepPresetPayment =
+                  (widget.initialBundleCategory ?? '').toLowerCase().startsWith(
+                        'fixed_page2_',
+                      );
+
               _bundleCategory = 'fixed_page2';
               _bundleChoice = opt;
-              _flexiPayment = null;
-              _dbStep = 'mtn_payment';
+
+              if (!keepPresetPayment) {
+                _flexiPayment = null;
+              }
+
+              _dbStep = _flexiPayment != null ? 'review' : 'mtn_payment';
             });
           }),
         ),
@@ -2075,7 +2261,9 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
               return;
             }
 
-            setState(() => _dbStep = 'mtn_payment');
+            setState(() {
+              _dbStep = _flexiPayment != null ? 'review' : 'mtn_payment';
+            });
           },
         ),
       ],
