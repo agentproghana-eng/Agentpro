@@ -45,7 +45,7 @@
 
     <!-- ── Package Visibility (Android 11+ / API 30+) ──
          Without this, launchUrl() for mailto: intents can silently fail
-         even when a real email app is installed, because targetSdk 34
+         even when a real email app is installed, because modern Android
          apps cannot query other installed apps' intent filters unless
          explicitly declared here. Only declaring what's actually used
          (Settings → Contact Support) — add more entries here only when

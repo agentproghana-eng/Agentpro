@@ -80,8 +80,6 @@ dependencies:
   flutter_jailbreak_detection: ^1.10.0
 
   # SIM/USSD
-  sim_card_info: ^1.0.1
-
   # USSD runner (Dart FFI bridge to Android telephony)
   # ussd_advanced: ^1.0.0  # Add after confirming Play Store policy
 
