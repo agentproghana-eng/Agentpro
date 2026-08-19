@@ -24,36 +24,66 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _obscurePassword = true;
-  bool _biometricAvailable = false;
+  bool _deviceAuthAvailable = false;
 
   @override
   void initState() {
     super.initState();
-    _checkBiometric();
+    _checkDeviceAuth();
   }
 
-  Future<void> _checkBiometric() async {
-    final enabled = await BiometricService.isBiometricEnabled();
+  Future<void> _checkDeviceAuth() async {
+    final enabled = await BiometricService.isDeviceAuthEnabled();
+    final user = await StorageService.getUser();
+    final accessToken = await StorageService.getAccessToken();
     final refreshToken = await StorageService.getRefreshToken();
-    final canResume = refreshToken != null && refreshToken.isNotEmpty;
+
+    final canResume = user != null &&
+        accessToken != null &&
+        accessToken.isNotEmpty &&
+        refreshToken != null &&
+        refreshToken.isNotEmpty;
+
     if (!mounted) return;
-    setState(() => _biometricAvailable = enabled && canResume);
-    if (_biometricAvailable) _tryBiometric();
+
+    setState(
+      () => _deviceAuthAvailable = enabled && canResume,
+    );
+
+    if (_deviceAuthAvailable) {
+      _tryDeviceAuth();
+    }
   }
 
-  Future<void> _tryBiometric() async {
+  Future<void> _tryDeviceAuth() async {
     final result = await BiometricService.authenticateToUnlock();
     if (!mounted) return;
 
     switch (result) {
       case BiometricResult.success:
-        context.read<AuthBloc>().add(AuthUnlockEvent());
+        final approval = BiometricService.pendingUnlockApproval;
+
+        if (approval == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'AgentPro could not verify the phone authentication result. '
+                'Please try again.',
+              ),
+            ),
+          );
+          break;
+        }
+
+        context.read<AuthBloc>().add(
+              AuthUnlockEvent(approval),
+            );
         break;
       case BiometricResult.lockedOut:
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Too many failed attempts. Try again shortly, or use your password.',
+              'Phone authentication is temporarily locked. Unlock your phone normally, then try AgentPro again.',
             ),
           ),
         );
@@ -62,15 +92,43 @@ class _LoginScreenState extends State<LoginScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Biometric login is locked. Please sign in with your password.',
+              'Phone authentication is locked. Unlock the phone with its PIN, pattern, or password, then try AgentPro again.',
             ),
           ),
         );
         break;
       case BiometricResult.cancelled:
+        break;
       case BiometricResult.notAvailable:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Phone authentication is unavailable. '
+              'Set up a phone PIN, pattern, password, fingerprint, or face '
+              'unlock in your phone Settings, then try again.',
+            ),
+          ),
+        );
+        break;
       case BiometricResult.notEnrolled:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Phone security is not fully set up. '
+              'Configure a screen lock in your phone Settings, then try again.',
+            ),
+          ),
+        );
+        break;
       case BiometricResult.error:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'AgentPro could not open phone authentication. '
+              'Try again, or use your AgentPro password when internet is available.',
+            ),
+          ),
+        );
         break;
     }
   }
@@ -215,12 +273,23 @@ class _LoginScreenState extends State<LoginScreen> {
                                 onPressed: _login,
                                 isLoading: state is AuthLoading,
                               ),
-                              if (_biometricAvailable) ...[
+                              if (_deviceAuthAvailable) ...[
                                 const SizedBox(height: 14),
                                 OutlinedButton.icon(
-                                  onPressed: _tryBiometric,
-                                  icon: const Icon(Icons.fingerprint_rounded),
-                                  label: const Text('Sign in with Biometrics'),
+                                  onPressed: _tryDeviceAuth,
+                                  icon: const Icon(Icons.lock_open_rounded),
+                                  label: const Text('Unlock AgentPro'),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'No internet required - use your phone security.',
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        color: context.appSecondaryText,
+                                      ),
                                 ),
                               ],
                               const SizedBox(height: 32),

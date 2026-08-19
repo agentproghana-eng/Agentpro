@@ -1,5 +1,7 @@
 package com.agentpro.ghana
 
+import android.app.KeyguardManager
+import android.content.Context
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -9,6 +11,7 @@ class MainActivity : FlutterFragmentActivity() {
     private val SIM_CHANNEL = "com.agentpro.ghana/sim"
     private val USSD_ACCESSIBILITY_CHANNEL = "com.agentpro.ghana/ussd_accessibility"
     private val DEVICE_CLOCK_CHANNEL = "com.agentpro.ghana/device_clock"
+    private val DEVICE_SECURITY_CHANNEL = "com.agentpro.ghana/device_security"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -31,5 +34,20 @@ class MainActivity : FlutterFragmentActivity() {
                 flutterEngine.dartExecutor.binaryMessenger,
                 DEVICE_CLOCK_CHANNEL,
             )
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            DEVICE_SECURITY_CHANNEL
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "isDeviceSecure" -> {
+                    val keyguardManager =
+                        getSystemService(Context.KEYGUARD_SERVICE)
+                            as KeyguardManager
+                    result.success(keyguardManager.isDeviceSecure)
+                }
+                else -> result.notImplemented()
+            }
+        }
     }
 }
