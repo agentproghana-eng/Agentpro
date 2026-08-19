@@ -27,20 +27,10 @@ async function getAppliedFilenames(client) {
   return new Set(result.rows.map(r => r.filename));
 }
 
-// Read-only status check - safe to call anytime, used to show an
-// admin what WOULD happen before they commit to actually running it.
-async function getMigrationStatus(client) {
-  await ensureMigrationsTable(client);
-  const files = listMigrationFiles();
-  const appliedSet = await getAppliedFilenames(client);
-  return files.map(file => ({ filename: file, applied: appliedSet.has(file) }));
-}
-
 // Applies every pending migration file, in order, each in its own
-// transaction. This IS scripts/migrate.js's core logic, extracted so
-// both the CLI script and the admin portal's "Run Pending Migrations"
-// button execute the exact same code path, rather than two versions
-// that could silently drift out of sync.
+// transaction. This is the deployment/CLI migration engine used by
+// scripts/migrate.js and CI. It is intentionally not exposed through
+// any application HTTP route.
 async function runMigrations(client) {
   await ensureMigrationsTable(client);
   const appliedSet = await getAppliedFilenames(client);
@@ -77,4 +67,4 @@ async function runMigrations(client) {
   return { applied, skipped, total: applied.length };
 }
 
-module.exports = { runMigrations, getMigrationStatus, listMigrationFiles };
+module.exports = { runMigrations, listMigrationFiles };

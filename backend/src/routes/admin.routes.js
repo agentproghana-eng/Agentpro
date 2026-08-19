@@ -8,8 +8,6 @@ const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
 const { query } = require('../config/database');
 const { withTransaction } = require('../config/database');
-const { pool } = require('../config/database');
-const { runMigrations, getMigrationStatus } = require('../services/migrationService');
 const { sendWelcomeEmail } = require('../services/emailService');
 const { sendRegistrationApprovedSMS, sendAdPaymentConfirmedSMS } = require('../services/smsService');
 const { logger } = require('../utils/logger');
@@ -811,53 +809,6 @@ router.patch('/ussd-flows/:id', async (req, res) => {
     }
     logger.error('Update flow error:', e);
     res.status(500).json({ success: false, message: 'Failed to update flow' });
-  }
-});
-
-// ── Database Migrations ─────────────────────────────────────────
-// Runs pending SQL migration files directly from the running server,
-// against the same database connection everything else already uses.
-// Exists specifically so applying a migration never again requires
-// pasting production credentials into a terminal by hand.
-router.get('/migrations/status', async (req, res) => {
-  const client = await pool.connect();
-  try {
-    const status = await getMigrationStatus(client);
-    res.json({ success: true, data: status });
-  } catch (e) {
-    logger.error('Migration status error:', e);
-    res.status(500).json({ success: false, message: 'Failed to check migration status' });
-  } finally {
-    client.release();
-  }
-});
-
-router.post('/migrations/run', async (req, res) => {
-  const client = await pool.connect();
-  try {
-    const result = await runMigrations(client);
-
-    try {
-      await auditLog({
-        userId: req.user.id, companyId: null,
-        action: 'MIGRATIONS_RUN', entityType: 'database', entityId: null,
-        newValues: result,
-        ipAddress: req.ip, requestId: req.requestId,
-      });
-    } catch (auditErr) {
-      logger.error('Failed to write audit log for migration run:', auditErr);
-    }
-
-    res.json({ success: true, data: result });
-  } catch (e) {
-    logger.error('Migration run error:', e);
-    res.status(500).json({
-      success: false,
-      message: e.message || 'Migration failed',
-      data: { applied: e.applied || [], skipped: e.skipped || [], failedFile: e.failedFile },
-    });
-  } finally {
-    client.release();
   }
 });
 

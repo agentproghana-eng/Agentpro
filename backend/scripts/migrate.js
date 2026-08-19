@@ -8,10 +8,9 @@
  * Applies all pending SQL migration files in order.
  * Tracks applied migrations in a migrations_log table.
  *
- * Core apply logic lives in src/services/migrationService.js, shared
- * with the admin portal's "Run Pending Migrations" button so both
- * paths execute the exact same code, not two versions that could
- * drift out of sync.
+ * Core apply logic lives in src/services/migrationService.js.
+ * Schema changes are deployment/CLI controlled and are deliberately
+ * not executable through the application HTTP API or Admin Portal.
  */
 
 require('dotenv').config();
