@@ -1,5 +1,8 @@
 const crypto = require('crypto');
-const { query } = require('../config/database');
+const {
+  query,
+  withTransaction,
+} = require('../config/database');
 const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
 const {
@@ -271,8 +274,9 @@ exports.initiateTransaction = async (req, res) => {
     let result;
 
     try {
-      result = await query(
-        `INSERT INTO personal_transactions (
+      result = await withTransaction(async (client) => {
+        const insertResult = await client.query(
+          `INSERT INTO personal_transactions (
           user_id, reference, provider, transaction_type, status,
           amount, recipient_phone, sim_iccid, sim_slot, notes,
           client_operation_id, client_operation_fingerprint
@@ -294,7 +298,34 @@ exports.initiateTransaction = async (req, res) => {
           client_operation_id || null,
           clientOperationFingerprint,
         ]
-      );
+        );
+
+        const transaction =
+          insertResult.rows[0];
+
+        await auditLog({
+          userId,
+          companyId: null,
+          action:
+            'PERSONAL_TRANSACTION_INITIATED',
+          entityType:
+            'personal_transaction',
+          entityId: transaction.id,
+          newValues: {
+            provider,
+            transaction_type,
+            amount,
+          },
+          ipAddress: req.ip,
+          userAgent:
+            req.headers['user-agent'],
+          requestId: req.requestId,
+          dbClient: client,
+          strict: true,
+        });
+
+        return insertResult;
+      });
     } catch (insertError) {
       // Two identical retries can race past the initial lookup. The unique
       // index is the final concurrency barrier: exactly one INSERT wins.
@@ -343,18 +374,6 @@ exports.initiateTransaction = async (req, res) => {
     }
 
     const transaction = result.rows[0];
-
-    await auditLog({
-      userId,
-      companyId: null,
-      action: 'PERSONAL_TRANSACTION_INITIATED',
-      entityType: 'personal_transaction',
-      entityId: transaction.id,
-      newValues: { provider, transaction_type, amount },
-      ipAddress: req.ip,
-      userAgent: req.headers['user-agent'],
-      requestId: req.requestId
-    });
 
     // Every Personal account may execute a centrally managed Global flow.
     // personal_override_entitled separately tells Flutter whether cached
@@ -411,70 +430,132 @@ exports.completeTransaction = async (req, res) => {
   const userId = req.user.id;
 
   try {
-    const existing = await query(
-      'SELECT id, status FROM personal_transactions WHERE id = $1 AND user_id = $2',
-      [transaction_id, userId]
-    );
-    if (existing.rows.length === 0) {
-      return res.status(404).json({ success: false, message: 'Transaction not found' });
+    // PIN-sensitive trace values are sanitized before persistence.
+    const sanitizedLog =
+      sanitizeUSSDLog(ussd_session_log);
+
+    const sanitizedFailureReason =
+      sanitizeFailureReason(
+        failure_reason,
+        status
+      );
+
+    const completion =
+      await withTransaction(async (client) => {
+        // Serialize completion attempts for this Personal transaction.
+        // A concurrent second request must observe the first committed
+        // final state rather than racing a second UPDATE/audit.
+        const existing = await client.query(
+          `SELECT id, status
+           FROM personal_transactions
+           WHERE id = $1
+             AND user_id = $2
+           FOR UPDATE`,
+          [
+            transaction_id,
+            userId,
+          ]
+        );
+
+        if (existing.rows.length === 0) {
+          return {
+            outcome: 'not_found',
+          };
+        }
+
+        const tx = existing.rows[0];
+
+        // Preserve the existing API contract: Personal completion of an
+        // already-final transaction is rejected rather than reposted.
+        if (
+          tx.status !== 'initiated' &&
+          tx.status !== 'processing'
+        ) {
+          return {
+            outcome: 'already_final',
+            status: tx.status,
+          };
+        }
+
+        const result = await client.query(
+          `UPDATE personal_transactions
+           SET status = $1::transaction_status,
+               network_reference =
+                 COALESCE($2, network_reference),
+               failure_reason = $3,
+               ussd_session_log = $4,
+               notes = COALESCE($5, notes),
+               completed_at = CASE
+                 WHEN $1::transaction_status IN (
+                   'success'::transaction_status,
+                   'failed'::transaction_status
+                 )
+                 THEN NOW()
+                 ELSE completed_at
+               END
+           WHERE id = $6
+           RETURNING
+             id,
+             reference,
+             status,
+             completed_at`,
+          [
+            status,
+            network_reference || null,
+            sanitizedFailureReason,
+            JSON.stringify(sanitizedLog),
+            notes || null,
+            transaction_id,
+          ]
+        );
+
+        await auditLog({
+          userId,
+          companyId: null,
+          action:
+            `PERSONAL_TRANSACTION_${status.toUpperCase()}`,
+          entityType:
+            'personal_transaction',
+          entityId: transaction_id,
+          newValues: {
+            status,
+            network_reference,
+            failure_reason:
+              sanitizedFailureReason,
+          },
+          ipAddress: req.ip,
+          userAgent:
+            req.headers['user-agent'],
+          requestId: req.requestId,
+          dbClient: client,
+          strict: true,
+        });
+
+        return {
+          outcome: 'completed',
+          transaction: result.rows[0],
+        };
+      });
+
+    if (completion.outcome === 'not_found') {
+      return res.status(404).json({
+        success: false,
+        message: 'Transaction not found',
+      });
     }
 
-    // Same idempotency guard as the Agent side - refuse to re-complete
-    // a transaction that has already reached a final state.
-    const tx = existing.rows[0];
-    if (tx.status !== 'initiated' && tx.status !== 'processing') {
-      return res.status(400).json({ success: false, message: `Transaction already ${tx.status}` });
+    if (completion.outcome === 'already_final') {
+      return res.status(400).json({
+        success: false,
+        message:
+          `Transaction already ${completion.status}`,
+      });
     }
 
-    // CRITICAL: same PIN-safety check as the Agent side - never store
-    // raw USSD trace without stripping PIN entry steps first.
-    const sanitizedLog = sanitizeUSSDLog(ussd_session_log);
-    const sanitizedFailureReason = sanitizeFailureReason(failure_reason, status);
-
-    const result = await query(
-      `UPDATE personal_transactions
-       SET status = $1::transaction_status,
-           network_reference = COALESCE($2, network_reference),
-           failure_reason = $3,
-           ussd_session_log = $4,
-           notes = COALESCE($5, notes),
-           completed_at = CASE
-             WHEN $1::transaction_status IN (
-               'success'::transaction_status,
-               'failed'::transaction_status
-             )
-             THEN NOW()
-             ELSE completed_at
-           END
-       WHERE id = $6
-       RETURNING id, reference, status, completed_at`,
-      [
-        status,
-        network_reference || null,
-        sanitizedFailureReason,
-        JSON.stringify(sanitizedLog),
-        notes || null,
-        transaction_id,
-      ]
-    );
-
-    await auditLog({
-      userId,
-      companyId: null,
-      action: `PERSONAL_TRANSACTION_${status.toUpperCase()}`,
-      entityType: 'personal_transaction',
-      entityId: transaction_id,
-      newValues: {
-        status,
-        network_reference,
-        failure_reason: sanitizedFailureReason,
-      },
-      ipAddress: req.ip,
-      userAgent: req.headers['user-agent'],
-      requestId: req.requestId
+    res.json({
+      success: true,
+      data: completion.transaction,
     });
-
-    res.json({ success: true, data: result.rows[0] });
 
   } catch (error) {
     logger.error('Complete personal transaction error:', error);

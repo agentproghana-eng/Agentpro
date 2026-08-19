@@ -572,35 +572,33 @@ exports.topUpFloat = async (req, res) => {
           ]
         );
 
+        await auditLog({
+          userId,
+          companyId: branch.company_id,
+          action: 'FLOAT_TOP_UP',
+          entityType: 'float_account',
+          entityId: updatedFloat.id,
+          newValues: {
+            branch_id,
+            provider,
+            amount: normalizedAmount,
+            reference:
+              normalizedReference || null,
+            client_operation_id:
+              operationId,
+          },
+          ipAddress: req.ip,
+          requestId: req.requestId,
+          dbClient: client,
+          strict: true,
+        });
+
         return {
           updatedFloat:
             floatAccountResponse(updatedFloat),
           idempotentReplay: false,
         };
       });
-
-    // Replays must not create duplicate audit events.
-    if (!operation.idempotentReplay) {
-      await auditLog({
-        userId,
-        companyId: branch.company_id,
-        action: 'FLOAT_TOP_UP',
-        entityType: 'float_account',
-        entityId:
-          operation.updatedFloat?.id,
-        newValues: {
-          branch_id,
-          provider,
-          amount: normalizedAmount,
-          reference:
-            normalizedReference || null,
-          client_operation_id:
-            operationId,
-        },
-        ipAddress: req.ip,
-        requestId: req.requestId,
-      });
-    }
 
     return res.json({
       success: true,

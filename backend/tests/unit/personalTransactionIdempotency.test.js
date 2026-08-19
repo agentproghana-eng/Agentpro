@@ -3,10 +3,13 @@
 const crypto = require('crypto');
 
 const mockQuery = jest.fn();
+const mockWithTransaction = jest.fn();
 const mockAuditLog = jest.fn();
 
 jest.mock('../../src/config/database', () => ({
   query: (...args) => mockQuery(...args),
+  withTransaction: (...args) =>
+    mockWithTransaction(...args),
 }));
 
 jest.mock('../../src/utils/logger', () => ({
@@ -132,6 +135,15 @@ function existingFor(req, overrides = {}) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+
+  mockWithTransaction.mockImplementation(
+    async (callback) =>
+      callback({
+        query: (...args) =>
+          mockQuery(...args),
+      })
+  );
+
   mockAuditLog.mockResolvedValue(undefined);
 });
 

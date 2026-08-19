@@ -2,7 +2,17 @@ const { query } = require('../config/database');
 const { logger } = require('../utils/logger');
 
 /**
- * Record an audit log entry
+ * Record an audit log entry.
+ *
+ * Default behaviour remains best-effort for ordinary operational events:
+ * audit failure is logged but does not break the application.
+ *
+ * Financial/security-critical callers may provide the PostgreSQL transaction
+ * client through dbClient and set strict=true. In that mode:
+ *
+ * - the audit INSERT uses the caller's exact database transaction;
+ * - an audit failure is re-thrown;
+ * - PostgreSQL therefore rolls back both the financial mutation and audit.
  */
 async function auditLog({
   userId,
@@ -16,10 +26,17 @@ async function auditLog({
   userAgent,
   requestId,
   result = 'success',
-  errorMessage
+  errorMessage,
+  dbClient = null,
+  strict = false
 }) {
+  const executeQuery =
+    dbClient && typeof dbClient.query === 'function'
+      ? dbClient.query.bind(dbClient)
+      : query;
+
   try {
-    await query(
+    await executeQuery(
       `INSERT INTO audit_logs (
         user_id, company_id, action, entity_type, entity_id,
         old_values, new_values, ip_address, user_agent,
@@ -41,8 +58,11 @@ async function auditLog({
       ]
     );
   } catch (error) {
-    // Audit logging should never break the application
     logger.error('Audit log write error:', error);
+
+    if (strict) {
+      throw error;
+    }
   }
 }
 

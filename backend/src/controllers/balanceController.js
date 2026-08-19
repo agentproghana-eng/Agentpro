@@ -717,6 +717,24 @@ exports.recordCashOutManual = async (req, res) => {
         ]
       );
 
+      await auditLog({
+        userId: agentId,
+        companyId,
+        action: "CASH_OUT_MANUAL_RECORDED",
+        entityType: "transaction",
+        entityId: transaction.id,
+        newValues: {
+          provider,
+          amount: amt,
+          sim_wallet_id: simWallet.id,
+          client_operation_id
+        },
+        ipAddress: req.ip,
+        requestId: req.requestId,
+        dbClient: client,
+        strict: true
+      });
+
       return {
         transaction,
         idempotentReplay: false
@@ -1141,6 +1159,24 @@ exports.recordFloatReceived = async (req, res) => {
         ]
       );
 
+      await auditLog({
+        userId: agentId,
+        companyId,
+        action: "FLOAT_RECEIVED_RECORDED",
+        entityType: "transaction",
+        entityId: transaction.id,
+        newValues: {
+          provider,
+          amount: amt,
+          sim_wallet_id: simWallet.id,
+          client_operation_id
+        },
+        ipAddress: req.ip,
+        requestId: req.requestId,
+        dbClient: client,
+        strict: true
+      });
+
       return {
         transaction: {
           ...transaction,
@@ -1272,6 +1308,25 @@ exports.submitCashAdjustment = async (req, res) => {
           ]
         );
 
+        await auditLog({
+          userId: agentId,
+          companyId: req.user.company_id,
+          action: "CASH_BALANCE_SET",
+          entityType: "cash_balance",
+          entityId: cashBalance.id,
+          oldValues: {
+            cash_at_hand: cashBefore
+          },
+          newValues: {
+            cash_at_hand: amt,
+            adjustment_type: "cash_set"
+          },
+          ipAddress: req.ip,
+          requestId: req.requestId,
+          dbClient: client,
+          strict: true
+        });
+
         return { immediate: true };
       }
 
@@ -1317,6 +1372,23 @@ exports.submitCashAdjustment = async (req, res) => {
           cashBalance.id
         ]
       );
+
+      await auditLog({
+        userId: agentId,
+        companyId: req.user.company_id,
+        action: "CASH_ADJUSTMENT_SUBMITTED",
+        entityType: "balance_movement",
+        entityId: movementResult.rows[0].id,
+        newValues: {
+          adjustment_type,
+          amount: signedAmt,
+          status: "pending"
+        },
+        ipAddress: req.ip,
+        requestId: req.requestId,
+        dbClient: client,
+        strict: true
+      });
 
       return {
         immediate: false,
@@ -1477,6 +1549,29 @@ exports.reviewCashAdjustment = async (req, res) => {
           ]
         );
       }
+
+      const reviewAuditAction =
+        action === "approve"
+          ? "CASH_ADJUSTMENT_APPROVED"
+          : "CASH_ADJUSTMENT_REJECTED";
+
+      await auditLog({
+        userId: reviewerId,
+        companyId: reviewerCompanyId || null,
+        action: reviewAuditAction,
+        entityType: "balance_movement",
+        entityId: movement_id,
+        newValues: {
+          status: requestedStatus,
+          movement_type: movement.movement_type,
+          amount: movement.amount,
+          agent_id: movement.agent_id
+        },
+        ipAddress: req.ip,
+        requestId: req.requestId,
+        dbClient: client,
+        strict: true
+      });
 
       return {
         status: requestedStatus,
