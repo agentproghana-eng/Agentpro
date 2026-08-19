@@ -30,7 +30,7 @@ class AppConstants {
   static const Map<String, String> providerUSSDCodes = {
     'mtn': '*170#',
     'telecel': '*110#',
-    'at_money': '*500#',
+    'at_money': '*110#',
   };
 
   // Network help differs by account context. Personal MTN customers
