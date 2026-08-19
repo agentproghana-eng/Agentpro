@@ -12,7 +12,6 @@ const mockGetGlobalFlowBuilderEligibility = jest.fn();
 jest.mock('../../src/config/database', () => ({
   query: (...args) => mockQuery(...args),
   withTransaction: (...args) => mockWithTransaction(...args),
-  pool: {},
 }));
 
 jest.mock('../../src/middleware/auth', () => ({
@@ -33,10 +32,6 @@ jest.mock('../../src/utils/ussdFlowCapabilities', () => ({
     mockGetGlobalFlowBuilderEligibility(...args),
 }));
 
-jest.mock('../../src/services/migrationService', () => ({
-  runMigrations: jest.fn(),
-  getMigrationStatus: jest.fn(),
-}));
 
 jest.mock('../../src/services/emailService', () => ({
   sendWelcomeEmail: jest.fn(),

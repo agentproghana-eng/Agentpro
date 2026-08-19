@@ -885,46 +885,10 @@ function SubscriptionsPage() {
 function ConfigPage() {
   const [configs, setConfigs] = useState([]);
   const [editing, setEditing] = useState({});
-  const [migrations, setMigrations] = useState([]);
-  const [migrationsLoading, setMigrationsLoading] = useState(true);
-  const [running, setRunning] = useState(false);
-  const [runResult, setRunResult] = useState(null);
 
   useEffect(() => {
     API.get('/admin/config').then(r => setConfigs(r.data.data || []));
-    loadMigrations();
   }, []);
-
-  const loadMigrations = () => {
-    setMigrationsLoading(true);
-    API.get('/admin/migrations/status')
-      .then(r => setMigrations(r.data.data || []))
-      .catch(() => toast.error('Failed to load migration status'))
-      .finally(() => setMigrationsLoading(false));
-  };
-
-  const pendingMigrations = migrations.filter(m => !m.applied);
-
-  const runPendingMigrations = async () => {
-    if (pendingMigrations.length === 0) return;
-    if (!window.confirm(`Apply ${pendingMigrations.length} pending migration(s) to the LIVE production database? This cannot be undone.`)) {
-      return;
-    }
-    setRunning(true);
-    setRunResult(null);
-    try {
-      const res = await API.post('/admin/migrations/run');
-      setRunResult(res.data.data);
-      toast.success(`Applied ${res.data.data.total} migration(s)`);
-      loadMigrations();
-    } catch (e) {
-      const data = e.response?.data;
-      setRunResult(data?.data || null);
-      toast.error(data?.message || 'Migration failed');
-    } finally {
-      setRunning(false);
-    }
-  };
 
   const save = async (key, value) => {
     try {
@@ -938,43 +902,6 @@ function ConfigPage() {
   return (
     <div>
       <h2 className="text-xl font-bold text-gray-900 mb-6">System Configuration</h2>
-
-      <div className="bg-white rounded-xl shadow-sm p-5 mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h3 className="font-bold text-gray-900">Database Migrations</h3>
-            <p className="text-xs text-gray-500">Apply pending schema changes directly — no terminal or production credentials needed.</p>
-          </div>
-          <button onClick={runPendingMigrations}
-            disabled={running || migrationsLoading || pendingMigrations.length === 0}
-            className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-dark disabled:opacity-50 transition">
-            {running ? 'Running...' : `Run ${pendingMigrations.length} Pending`}
-          </button>
-        </div>
-
-        {migrationsLoading ? (
-          <div className="text-sm text-gray-400">Checking status...</div>
-        ) : pendingMigrations.length === 0 ? (
-          <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg p-3">
-            ✅ Database is up to date — {migrations.length} migration(s) applied.
-          </div>
-        ) : (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-            <p className="text-xs font-semibold text-amber-800 mb-2">{pendingMigrations.length} pending:</p>
-            <ul className="text-xs font-mono text-amber-700 space-y-1">
-              {pendingMigrations.map(m => <li key={m.filename}>• {m.filename}</li>)}
-            </ul>
-          </div>
-        )}
-
-        {runResult && (
-          <div className={`mt-3 text-xs rounded-lg p-3 ${runResult.failedFile ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-blue-50 border border-blue-200 text-blue-700'}`}>
-            {runResult.failedFile
-              ? <>❌ Failed on <strong>{runResult.failedFile}</strong> — rolled back. {runResult.applied?.length || 0} applied before failure.</>
-              : <>Applied: {runResult.applied?.length ? runResult.applied.join(', ') : 'none'}</>}
-          </div>
-        )}
-      </div>
 
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <table className="w-full text-sm">
