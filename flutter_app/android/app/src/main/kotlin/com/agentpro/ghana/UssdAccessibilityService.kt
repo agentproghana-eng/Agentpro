@@ -750,6 +750,13 @@ class UssdAccessibilityService : AccessibilityService() {
     }
 
     private fun collectText(node: AccessibilityNodeInfo): String {
+        // Fail closed around password/PIN fields. Even if an OEM exposes
+        // password-node text through Accessibility, AgentPro must never read
+        // or retain that node or anything beneath it.
+        if (node.isPassword) {
+            return ""
+        }
+
         val builder = StringBuilder()
         node.text?.let { builder.append(it).append(" ") }
         node.contentDescription?.let { builder.append(it).append(" ") }

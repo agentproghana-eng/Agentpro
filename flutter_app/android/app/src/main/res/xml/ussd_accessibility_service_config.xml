@@ -5,4 +5,7 @@
     android:canRetrieveWindowContent="true"
     android:accessibilityFlags="flagRetrieveInteractiveWindows|flagIncludeNotImportantViews"
     android:notificationTimeout="80"
+    android:isAccessibilityTool="false"
+    android:summary="@string/ussd_accessibility_service_summary"
+    android:intro="@string/ussd_accessibility_service_intro"
     android:description="@string/ussd_accessibility_service_description" />

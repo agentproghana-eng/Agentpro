@@ -135,11 +135,14 @@
             </intent-filter>
         </service>
 
-        <!-- USSD Accessibility Service - MTN Cash In automation ONLY.
-             See UssdAccessibilityService.kt for the full explanation of
-             why this exists and its security guarantees around the PIN. -->
+        <!-- User-initiated USSD Accessibility automation.
+             This is not an accessibility tool for disability support.
+             It is used only for narrow USSD automation initiated by the
+             user and stops all automated input at the Mobile Money PIN
+             boundary. See UssdAccessibilityService.kt. -->
         <service
             android:name=".UssdAccessibilityService"
+            android:label="@string/ussd_accessibility_service_label"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
             android:exported="true">
             <intent-filter>

@@ -9,6 +9,7 @@ import '../../core/services/permission_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
+import '../../shared/widgets/ussd_accessibility_disclosure.dart';
 import '../../core/services/offline_queue_service.dart';
 import '../../core/services/dashboard_refresh_service.dart';
 import '../../core/services/storage_service.dart';
@@ -933,12 +934,61 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     final accessEngine = UssdAccessibilityEngine();
 
     final enabled = await accessEngine.isServiceEnabled();
+
     if (!enabled) {
-      const reason = 'Accessibility permission is required for automated '
-          'USSD transactions. Enable Agent Pro Ghana under Settings > '
-          'Accessibility, then try again.';
-      if (mounted) setState(() => _simWarning = reason);
-      await accessEngine.openAccessibilitySettings();
+      if (!mounted) return;
+
+      final consented = await showUssdAccessibilityDisclosure(
+        context,
+      );
+
+      if (!mounted) return;
+
+      if (!consented) {
+        const reason =
+            'USSD automation was not enabled. No USSD request was sent.';
+
+        setState(() => _simWarning = reason);
+
+        await _reportResult(
+          transactionId,
+          const USSDResult(
+            outcome: USSDStatus.failed,
+            failureReason: reason,
+            sessionLog: [],
+          ),
+        );
+
+        return;
+      }
+
+      const reason = 'Enable AgentPro USSD Automation in Android Accessibility '
+          'Settings, then return to AgentPro and start the transaction '
+          'again. No USSD request was sent.';
+
+      setState(() => _simWarning = reason);
+
+      try {
+        await accessEngine.openAccessibilitySettings();
+      } catch (_) {
+        const settingsReason =
+            'AgentPro could not open Android Accessibility Settings. '
+            'No USSD request was sent.';
+
+        setState(() => _simWarning = settingsReason);
+
+        await _reportResult(
+          transactionId,
+          const USSDResult(
+            outcome: USSDStatus.failed,
+            failureReason: settingsReason,
+            sessionLog: [],
+          ),
+        );
+
+        return;
+      }
+
       await _reportResult(
         transactionId,
         const USSDResult(
@@ -947,6 +997,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
           sessionLog: [],
         ),
       );
+
       return;
     }
 
