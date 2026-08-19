@@ -139,41 +139,73 @@ async function sendSubscriptionReminderEmail(email, firstName, daysLeft, expiryD
   });
 }
 
-async function sendNewEmployeeEmail(email, firstName, lastName, role, companyName, tempPassword) {
-  const roleLabel = role.charAt(0).toUpperCase() + role.slice(1);
+async function sendNewEmployeeEmail(
+  email,
+  firstName,
+  lastName,
+  role,
+  companyName,
+  setupUrl
+) {
+  const roleLabel =
+    role.charAt(0).toUpperCase() + role.slice(1);
+
   return sendEmail({
     to: email,
-    subject: `Agent Pro Ghana - You have been added as ${roleLabel} at ${companyName}`,
+    subject:
+      `Agent Pro Ghana - Set up your ${roleLabel} account at ${companyName}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background: #006B5E; padding: 24px; text-align: center;">
           <h1 style="color: white; margin: 0;">Agent Pro Ghana</h1>
-          <p style="color: #4DB6A9; margin: 4px 0 0;">One App. Every Mobile Money Business.</p>
+          <p style="color: #4DB6A9; margin: 4px 0 0;">One App. Every Business.</p>
         </div>
+
         <div style="padding: 32px; background: #f9f9f9;">
           <h2>Akwaaba, ${firstName}!</h2>
-          <p>You have been added by <strong>${companyName}</strong> to Agent Pro Ghana
-             as a <strong>${roleLabel}</strong>. Welcome to the team!</p>
-          <div style="background: white; border: 2px solid #006B5E; border-radius: 8px; padding: 20px; margin: 24px 0;">
-            <h3 style="margin-top: 0; color: #006B5E;">Your Login Details</h3>
-            <p style="margin: 8px 0;"><strong>Username (Email):</strong> ${email}</p>
-            <p style="margin: 8px 0;"><strong>Temporary Password:</strong> 
-              <span style="font-family: monospace; background: #f0f0f0; padding: 4px 8px; border-radius: 4px;">${tempPassword}</span>
-            </p>
+
+          <p>
+            You have been added by <strong>${companyName}</strong>
+            to Agent Pro Ghana as a <strong>${roleLabel}</strong>.
+          </p>
+
+          <p>
+            For security, nobody at ${companyName} or Agent Pro Ghana
+            has been given a password for your account.
+            Choose your own password using the secure button below.
+          </p>
+
+          <div style="text-align: center; margin: 32px 0;">
+            <a
+              href="${setupUrl}"
+              style="background: #006B5E; color: white; padding: 14px 32px;
+                     text-decoration: none; border-radius: 8px;
+                     font-weight: bold;"
+            >
+              Set Your Password
+            </a>
           </div>
+
           <p style="color: #b00020; font-size: 14px;">
-            For your security, please log in and change this password as soon as possible
-            (Settings screen inside the app).
+            This one-time setup link expires in 1 hour.
+            Do not forward or share it.
           </p>
+
           <p style="color: #666; font-size: 14px;">
-            Download the Agent Pro Ghana app and sign in with the details above to get started.
+            If the link expires, open Agent Pro Ghana and use
+            Forgot Password with ${email}.
           </p>
+
           <p style="color: #666; font-size: 14px;">
-            Never share your password or MoMo PIN with anyone, including Agent Pro Ghana staff.
+            Never share your password or MoMo PIN with anyone,
+            including Agent Pro Ghana staff.
           </p>
         </div>
-        <div style="padding: 16px; text-align: center; color: #999; font-size: 12px;">
-          &copy; ${new Date().getFullYear()} Agent Pro Ghana. All rights reserved.
+
+        <div style="padding: 16px; text-align: center;
+                    color: #999; font-size: 12px;">
+          &copy; ${new Date().getFullYear()}
+          Agent Pro Ghana. All rights reserved.
         </div>
       </div>
     `,

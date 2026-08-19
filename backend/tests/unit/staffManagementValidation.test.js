@@ -81,6 +81,31 @@ describe('Staff Management input validation', () => {
   );
 
   test(
+    'staff creation rejects a creator-supplied initial password',
+    async () => {
+      const response = await request(app)
+        .post('/users')
+        .send({
+          ...validStaff,
+          password: 'CreatorMustNotKnow9',
+        });
+
+      expect(response.status).toBe(422);
+      expect(response.body.success).toBe(false);
+
+      expect(
+        response.body.errors.some(
+          (error) =>
+            error.field === 'password' &&
+            error.message.includes(
+              'Staff passwords are set by the staff member'
+            )
+        )
+      ).toBe(true);
+    }
+  );
+
+  test(
     'staff creation rejects malformed branch_id',
     async () => {
       const response = await request(app)

@@ -35,7 +35,7 @@ final List<HelpSection> _helpSections = [
         HelpItem(
           question: 'How do new staff get their login details?',
           answer:
-              'A temporary password is automatically generated and sent by email. If a phone number is saved for the staff member, the same temporary password is also sent by SMS. It must be changed the first time they log in.',
+              'New staff receive a secure one-time password setup link by email. No password is sent by email, SMS, or push notification. The setup link expires after one hour. If it expires or does not arrive, the staff member can use Forgot Password in the app.',
         ),
       ]),
   const HelpSection(

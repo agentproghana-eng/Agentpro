@@ -8,10 +8,75 @@ const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
 const { sendEmail, sendNewEmployeeEmail } = require('../services/emailService');
 const { sendNewEmployeeSMS } = require('../services/smsService');
-const { sendEphemeral } = require('../services/notificationService');
 const {
   getRegisteredProviders,
 } = require('../utils/ussdFlowCapabilities');
+
+
+const STAFF_SETUP_TOKEN_TTL_MS = 60 * 60 * 1000;
+
+async function createStaffSetupArtifacts() {
+  // Keep the users.password_hash column populated with a credential that
+  // nobody knows. Staff never receive this random bootstrap credential.
+  const passwordHash = await bcrypt.hash(
+    crypto.randomBytes(48).toString('base64url'),
+    parseInt(process.env.BCRYPT_ROUNDS, 10) || 12
+  );
+
+  // The only usable onboarding credential is a short-lived setup token.
+  // Only its bcrypt hash is persisted.
+  const setupToken = crypto.randomBytes(32).toString('hex');
+  const setupTokenHash = await bcrypt.hash(setupToken, 8);
+  const setupExpiresAt = new Date(
+    Date.now() + STAFF_SETUP_TOKEN_TTL_MS
+  );
+
+  return {
+    passwordHash,
+    setupToken,
+    setupTokenHash,
+    setupExpiresAt,
+  };
+}
+
+async function replaceStaffSetupToken(
+  client,
+  userId,
+  setupTokenHash,
+  setupExpiresAt
+) {
+  await client.query(
+    `UPDATE password_reset_tokens
+     SET used_at = NOW()
+     WHERE user_id = $1
+       AND used_at IS NULL`,
+    [userId]
+  );
+
+  await client.query(
+    `INSERT INTO password_reset_tokens (
+       user_id,
+       token_hash,
+       expires_at
+     )
+     VALUES ($1, $2, $3)`,
+    [userId, setupTokenHash, setupExpiresAt]
+  );
+}
+
+function buildStaffSetupUrl(userId, setupToken) {
+  const appUrl = String(process.env.APP_URL || '')
+    .trim()
+    .replace(/\/+$/, '');
+
+  if (!appUrl) return null;
+
+  return (
+    `${appUrl}/reset-password` +
+    `?token=${encodeURIComponent(setupToken)}` +
+    `&uid=${encodeURIComponent(userId)}`
+  );
+}
 
 exports.changePassword = async (req, res) => {
   const { current_password, new_password } = req.body;
@@ -185,7 +250,17 @@ exports.listUsers = async (req, res) => {
 };
 
 exports.createUser = async (req, res) => {
-  const { first_name, last_name, email, phone, role, password, branch_id } = req.body;
+  const { first_name, last_name, email, phone, role, branch_id } = req.body;
+
+  // A creator must never choose or know a staff member's initial password.
+  // Staff establish their own password through the one-time setup link.
+  if (Object.prototype.hasOwnProperty.call(req.body, 'password')) {
+    return res.status(422).json({
+      success: false,
+      message:
+        'Do not supply an initial password. Staff set their own password using the secure setup link.',
+    });
+  }
 
   // Staff creation is role-sensitive:
   // - superuser: platform-wide administrative roles
@@ -212,10 +287,6 @@ exports.createUser = async (req, res) => {
     });
   }
 
-  // Generate a cryptographically secure temporary password if none was provided.
-  // It is NEVER returned in the API response or persisted in plaintext; it is passed only to the configured one-time delivery channels.
-  const tempPassword = password || generateTempPassword();
-
   try {
     const existing = await query("SELECT id, status, company_id FROM users WHERE email = $1", [email.toLowerCase()]);
     if (existing.rows.length > 0) {
@@ -226,7 +297,12 @@ exports.createUser = async (req, res) => {
       if (existingUser.company_id !== req.user.company_id) {
         return res.status(409).json({ success: false, message: "Email already in use" });
       }
-      return exports.reactivateStaffMember(req, res, existingUser.id, { first_name, last_name, phone, role, branch_id, tempPassword });
+      return exports.reactivateStaffMember(
+        req,
+        res,
+        existingUser.id,
+        { first_name, last_name, phone, role, branch_id }
+      );
     }
 
 
@@ -261,10 +337,12 @@ exports.createUser = async (req, res) => {
       }
     }
 
-    const passwordHash = await bcrypt.hash(
-      tempPassword,
-      parseInt(process.env.BCRYPT_ROUNDS) || 12
-    );
+    const {
+      passwordHash,
+      setupToken,
+      setupTokenHash,
+      setupExpiresAt,
+    } = await createStaffSetupArtifacts();
 
     // User creation + branch assignment must succeed or fail together —
     // a user with no branch assignment (when one was requested) is an
@@ -294,6 +372,13 @@ exports.createUser = async (req, res) => {
         }
       }
 
+      await replaceStaffSetupToken(
+        client,
+        createdUser.id,
+        setupTokenHash,
+        setupExpiresAt
+      );
+
       return createdUser;
     });
 
@@ -301,7 +386,6 @@ exports.createUser = async (req, res) => {
       userId: req.user.id, companyId: req.user.company_id,
       action: 'USER_CREATED', entityType: 'user', entityId: user.id,
       newValues: { email, role }, ipAddress: req.ip, requestId: req.requestId,
-      // Note: tempPassword is intentionally NOT included in audit log values
     });
     // Fetch company name once, used by both email and SMS notifications
     // below. Wrapped defensively - a failure here should not prevent the
@@ -314,64 +398,74 @@ exports.createUser = async (req, res) => {
       logger.error("Failed to fetch company name for notifications:", e);
     }
 
-    // Deliver the temporary password through the configured one-time staff channels after account creation succeeds.
+    // The staff member chooses their own password. The setup token is
+    // delivered only inside the one-time email link; it is never sent to
+    // the creator, SMS, push notifications, API responses, logs, or audit.
+    const setupUrl = buildStaffSetupUrl(user.id, setupToken);
+
     let emailSent = false;
-    try {
-      const emailResult = await sendNewEmployeeEmail(
-        user.email,
-        first_name,
-        last_name,
-        role,
-        companyName,
-        tempPassword
+
+    if (setupUrl) {
+      try {
+        const emailResult = await sendNewEmployeeEmail(
+          user.email,
+          first_name,
+          last_name,
+          role,
+          companyName,
+          setupUrl
+        );
+
+        emailSent = emailResult?.skipped !== true;
+      } catch (emailError) {
+        logger.error(
+          "Failed to send new employee setup email:",
+          emailError
+        );
+      }
+    } else {
+      logger.error(
+        "APP_URL is not configured; staff setup email was not sent"
       );
-      emailSent = emailResult?.skipped !== true;
-    } catch (emailError) {
-      logger.error("Failed to send new employee email:", emailError);
     }
 
     let smsSent = false;
+
     if (phone) {
       try {
         const smsResult = await sendNewEmployeeSMS(
           phone,
           first_name,
           role,
-          companyName,
-          tempPassword
+          companyName
         );
+
         smsSent = smsResult?.skipped !== true;
       } catch (smsErr) {
-        logger.error("Failed to send new employee SMS:", smsErr);
+        logger.error(
+          "Failed to send new employee notification SMS:",
+          smsErr
+        );
       }
     }
 
-    // Ephemeral push to the owner as a backup, in case email/SMS
-    // delivery to the new staff member is not yet confirmed working.
-    // Never persisted to the database - see sendEphemeral.
-    try {
-      await sendEphemeral(req.user.id, {
-        title: `New staff account created: ${first_name} ${last_name}`,
-        body: `Login: ${email}. Temporary password: ${tempPassword}. Share this securely if email/SMS did not arrive.`,
-      });
-    } catch (pushErr) {
-      logger.error("Failed to send owner backup notification:", pushErr);
-    }
-
-
     let deliveryMessage;
+
     if (emailSent && smsSent) {
       deliveryMessage =
-        `Temporary login details were sent to ${user.email} and the staff phone by SMS.`;
+        `A secure password setup link was sent to ${user.email}; ` +
+        'the staff phone was also notified by SMS.';
     } else if (emailSent) {
       deliveryMessage =
-        `Temporary login details were sent to ${user.email}.`;
+        `A secure password setup link was sent to ${user.email}.`;
     } else if (smsSent) {
       deliveryMessage =
-        'Temporary login details were sent to the staff phone by SMS.';
+        'The staff phone was notified, but the setup email was not confirmed. ' +
+        'Ask the staff member to use Forgot Password if the email does not arrive.';
     } else {
       deliveryMessage =
-        'The account was created, but login details could not be delivered. Please use password reset to set the initial password.';
+        'The account was created, but setup delivery was not confirmed. ' +
+        'Ask the staff member to use Forgot Password to set their password.';
     }
 
     res.status(201).json({
@@ -391,27 +485,6 @@ exports.createUser = async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to create user' });
   }
 };
-
-/**
- * Generate a cryptographically secure temporary password.
- * Meets the same complexity rules enforced at registration:
- * min 8 chars, at least one uppercase letter, at least one number.
- */
-function generateTempPassword() {
-  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // no I/O to avoid ambiguity
-  const lower = 'abcdefghijkmnpqrstuvwxyz';
-  const digits = '23456789';
-  const all = upper + lower + digits;
-
-  const pick = (charset) => charset[crypto.randomInt(charset.length)];
-
-  // Guarantee at least one of each required character class
-  let pwd = pick(upper) + pick(lower) + pick(digits);
-  for (let i = 0; i < 9; i++) pwd += pick(all);
-
-  // Shuffle so the guaranteed characters aren't always in the same position
-  return pwd.split('').sort(() => crypto.randomInt(3) - 1).join('');
-}
 
 exports.updateUser = async (req, res) => {
   const { user_id } = req.params;
@@ -627,7 +700,7 @@ exports.reassignBranch = async (req, res) => {
 // creating a brand new one, since the email address is unique across
 // the whole platform and cannot simply be reused for a fresh account.
 exports.reactivateStaffMember = async (req, res, existingUserId, fields) => {
-  const { first_name, last_name, phone, role, branch_id, tempPassword } = fields;
+  const { first_name, last_name, phone, role, branch_id } = fields;
 
   const allowedRoles = req.user.role === "superuser"
     ? ["business_owner", "manager", "agent", "auditor", "customer"]
@@ -677,7 +750,12 @@ exports.reactivateStaffMember = async (req, res, existingUserId, fields) => {
       }
     }
 
-    const passwordHash = await bcrypt.hash(tempPassword, parseInt(process.env.BCRYPT_ROUNDS) || 12);
+    const {
+      passwordHash,
+      setupToken,
+      setupTokenHash,
+      setupExpiresAt,
+    } = await createStaffSetupArtifacts();
 
     const user = await withTransaction(async (client) => {
       const result = await client.query(
@@ -704,6 +782,13 @@ exports.reactivateStaffMember = async (req, res, existingUserId, fields) => {
         }
       }
 
+      await replaceStaffSetupToken(
+        client,
+        existingUserId,
+        setupTokenHash,
+        setupExpiresAt
+      );
+
       return reactivatedUser;
     });
 
@@ -715,27 +800,44 @@ exports.reactivateStaffMember = async (req, res, existingUserId, fields) => {
       logger.error("Failed to fetch company name for notifications:", e);
     }
 
-    try {
-      await sendNewEmployeeEmail(user.email, first_name, last_name, role, companyName, tempPassword);
-    } catch (emailError) {
-      logger.error("Failed to send reactivation email:", emailError);
+    const setupUrl = buildStaffSetupUrl(user.id, setupToken);
+
+    if (setupUrl) {
+      try {
+        await sendNewEmployeeEmail(
+          user.email,
+          first_name,
+          last_name,
+          role,
+          companyName,
+          setupUrl
+        );
+      } catch (emailError) {
+        logger.error(
+          "Failed to send reactivation setup email:",
+          emailError
+        );
+      }
+    } else {
+      logger.error(
+        "APP_URL is not configured; reactivation setup email was not sent"
+      );
     }
 
     if (phone) {
       try {
-        await sendNewEmployeeSMS(phone, first_name, role, companyName, tempPassword);
+        await sendNewEmployeeSMS(
+          phone,
+          first_name,
+          role,
+          companyName
+        );
       } catch (smsErr) {
-        logger.error("Failed to send reactivation SMS:", smsErr);
+        logger.error(
+          "Failed to send reactivation notification SMS:",
+          smsErr
+        );
       }
-    }
-
-    try {
-      await sendEphemeral(req.user.id, {
-        title: `Staff account reactivated: ${first_name} ${last_name}`,
-        body: `Login: ${user.email}. New temporary password: ${tempPassword}. Share this securely if email/SMS did not arrive.`,
-      });
-    } catch (pushErr) {
-      logger.error("Failed to send owner backup notification:", pushErr);
     }
 
     await auditLog({

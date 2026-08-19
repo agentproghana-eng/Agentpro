@@ -69,7 +69,7 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
                   controller: _currentCtrl,
                   obscureText: true,
                   decoration:
-                      const InputDecoration(labelText: 'Temporary Password'),
+                      const InputDecoration(labelText: 'Current Password'),
                   validator: (v) => v!.isEmpty ? 'Required' : null,
                 ),
                 const SizedBox(height: 16),
