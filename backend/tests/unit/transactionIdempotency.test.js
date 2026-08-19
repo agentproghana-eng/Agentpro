@@ -188,6 +188,10 @@ function existingTransaction(overrides = {}) {
 beforeEach(() => {
   jest.clearAllMocks();
 
+  // Prevent a transaction-client implementation from leaking between
+  // initiation and completion tests.
+  mockClientQuery.mockReset();
+
   mockAuditLog.mockResolvedValue(undefined);
   mockSendTransactionNotification.mockResolvedValue(undefined);
   mockGenerateTransactionReceipt.mockResolvedValue(null);
@@ -239,6 +243,15 @@ beforeEach(() => {
 });
 
 describe('Transaction initiation idempotency', () => {
+  beforeEach(() => {
+    // Initiation now performs only its INSERT through the transaction
+    // client. Delegate that client to the suite's existing query mock so
+    // all idempotency/preflight fixtures retain their original behavior.
+    mockClientQuery.mockImplementation(
+      (...args) => mockQuery(...args)
+    );
+  });
+
   it('returns the existing transaction for the same client operation', async () => {
     const existing = existingTransaction();
 

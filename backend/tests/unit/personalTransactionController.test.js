@@ -1,10 +1,13 @@
 'use strict';
 
 const mockQuery = jest.fn();
+const mockWithTransaction = jest.fn();
 const mockAuditLog = jest.fn();
 
 jest.mock('../../src/config/database', () => ({
   query: (...args) => mockQuery(...args),
+  withTransaction: (...args) =>
+    mockWithTransaction(...args),
 }));
 
 jest.mock('../../src/utils/logger', () => ({
@@ -77,6 +80,18 @@ function insertedTransaction() {
     created_at: '2026-08-13T12:00:00.000Z',
   };
 }
+
+beforeEach(() => {
+  mockWithTransaction.mockReset();
+
+  mockWithTransaction.mockImplementation(
+    async (callback) =>
+      callback({
+        query: (...args) =>
+          mockQuery(...args),
+      })
+  );
+});
 
 describe('personalTransactionController initiation entitlement', () => {
   beforeEach(() => {

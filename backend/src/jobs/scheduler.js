@@ -12,8 +12,12 @@
  * - Every hour: check low float alerts
  */
 
-const { query } = require('../config/database');
+const {
+  query,
+  withTransaction,
+} = require('../config/database');
 const { logger } = require('../utils/logger');
+const { auditLog } = require('../services/auditService');
 const { sendSubscriptionReminder, sendSubscriptionSuspended, sendAdNotification } = require('../services/notificationService');
 const { sendSubscriptionReminderEmail } = require('../services/emailService');
 
@@ -59,18 +63,49 @@ async function runHourlyJobs() {
 
 async function expirePersonalSubscriptions() {
   try {
-    const result = await query(
-      `UPDATE personal_subscriptions
-       SET plan = 'free', expires_at = NULL, updated_at = NOW()
-       WHERE plan = 'paid' AND expires_at < NOW()
-       RETURNING user_id`
-    );
+    const expiredSubscriptions =
+      await withTransaction(async (client) => {
+        const result = await client.query(
+          `UPDATE personal_subscriptions
+           SET plan = 'free',
+               expires_at = NULL,
+               updated_at = NOW()
+           WHERE plan = 'paid'
+             AND expires_at < NOW()
+           RETURNING id, user_id`
+        );
 
-    if (result.rows.length > 0) {
-      logger.info(`Reverted ${result.rows.length} expired Personal subscription(s) to free`);
+        for (const subscription of result.rows) {
+          await auditLog({
+            userId: null,
+            companyId: null,
+            action: 'PERSONAL_SUBSCRIPTION_EXPIRED',
+            entityType: 'personal_subscription',
+            entityId: subscription.id,
+            newValues: {
+              user_id: subscription.user_id,
+              plan: 'free',
+              expires_at: null,
+            },
+            dbClient: client,
+            strict: true,
+          });
+        }
+
+        return result.rows;
+      });
+
+    if (expiredSubscriptions.length > 0) {
+      logger.info(
+        `Reverted ${expiredSubscriptions.length} ` +
+        'expired Personal subscription(s) to free'
+      );
     }
   } catch (error) {
-    logger.error('Personal subscription expiry job error:', error);
+    logger.error(
+      'Personal subscription expiry job error:',
+      error
+    );
   }
 }
 
@@ -117,28 +152,73 @@ async function sendSubscriptionReminders() {
 
 async function suspendExpiredSubscriptions() {
   try {
-    const result = await query(
-      `UPDATE subscriptions
-       SET status = 'suspended', updated_at = NOW()
-       WHERE status IN ('active', 'grace_period')
-         AND grace_period_ends_at < NOW()
-       RETURNING company_id`
-    );
+    const suspendedSubscriptions =
+      await withTransaction(async (client) => {
+        const result = await client.query(
+          `UPDATE subscriptions
+           SET status = 'suspended',
+               updated_at = NOW()
+           WHERE status IN ('active', 'grace_period')
+             AND grace_period_ends_at < NOW()
+           RETURNING id, company_id`
+        );
 
-    for (const row of result.rows) {
-      await sendSubscriptionSuspended(row.company_id);
-      // Deactivate company users (except business owner so they can renew)
-      await query(
-        "UPDATE users SET status = 'suspended' WHERE company_id = $1 AND role IN ('manager', 'agent', 'auditor')",
-        [row.company_id]
+        for (const subscription of result.rows) {
+          await client.query(
+            `UPDATE users
+             SET status = 'suspended'
+             WHERE company_id = $1
+               AND role IN (
+                 'manager',
+                 'agent',
+                 'auditor'
+               )`,
+            [subscription.company_id]
+          );
+
+          await auditLog({
+            userId: null,
+            companyId: subscription.company_id,
+            action: 'SUBSCRIPTION_SUSPENDED_EXPIRED',
+            entityType: 'subscription',
+            entityId: subscription.id,
+            newValues: {
+              status: 'suspended',
+              company_id:
+                subscription.company_id,
+            },
+            dbClient: client,
+            strict: true,
+          });
+        }
+
+        return result.rows;
+      });
+
+    for (const subscription of suspendedSubscriptions) {
+      try {
+        await sendSubscriptionSuspended(
+          subscription.company_id
+        );
+      } catch (notificationError) {
+        logger.error(
+          'Subscription suspension notification error:',
+          notificationError
+        );
+      }
+    }
+
+    if (suspendedSubscriptions.length > 0) {
+      logger.info(
+        `Suspended ${suspendedSubscriptions.length} ` +
+        'expired subscription(s)'
       );
     }
-
-    if (result.rows.length > 0) {
-      logger.info(`Suspended ${result.rows.length} expired subscription(s)`);
-    }
   } catch (error) {
-    logger.error('Subscription suspension job error:', error);
+    logger.error(
+      'Subscription suspension job error:',
+      error
+    );
   }
 }
 
