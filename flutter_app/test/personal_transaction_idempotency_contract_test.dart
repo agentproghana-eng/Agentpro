@@ -39,7 +39,7 @@ void main() {
     ).readAsStringSync();
 
     final migration = File(
-      '../backend/migrations/084_personal_transaction_idempotency.sql',
+      '../backend/migrations/085_personal_transaction_idempotency.sql',
     ).readAsStringSync();
 
     expect(route, contains("body('client_operation_id')"));

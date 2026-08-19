@@ -40,6 +40,25 @@ describe('MTN Personal MashUp global flow seed', () => {
     expect(repairSql).not.toContain("ARRAY['99. more']");
   });
 
+  test('repairs page1 allocation matching for direct selections', () => {
+    const repairSql = fs.readFileSync(
+      path.join(
+        __dirname,
+        '../../migrations/084_fix_mtn_mashup_allocation_match.sql'
+      ),
+      'utf8'
+    );
+
+    expect(repairSql).toContain("SET match_all = ARRAY['mins']");
+    expect(repairSql).toContain(
+      "'^ghc(1|5|10)_page1_(airtime|momo)$'"
+    );
+    expect(repairSql).toContain(
+      "step.action = 'send_selection'::ussd_flow_action"
+    );
+    expect(repairSql).not.toContain("ARRAY['99. more']");
+  });
+
   test('covers the four fixed tiers captured live', () => {
     expect(sql).toContain("'ghc1'");
     expect(sql).toContain("'ghc5'");
