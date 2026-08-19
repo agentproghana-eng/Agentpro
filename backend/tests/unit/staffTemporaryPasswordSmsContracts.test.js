@@ -9,22 +9,40 @@ jest.mock('../../src/utils/logger', () => ({
   },
 }));
 
-const { logger } = require('../../src/utils/logger');
 const {
   sendNewEmployeeSMS,
 } = require('../../src/services/smsService');
 
-const controllerSource = fs.readFileSync(
-  path.join(__dirname, '../../src/controllers/userController.js'),
-  'utf8',
-);
+function readSource(relativePath) {
+  return fs.readFileSync(
+    path.join(__dirname, '../..', relativePath),
+    'utf8',
+  );
+}
 
-const envExample = fs.readFileSync(
-  path.join(__dirname, '../../.env.example'),
-  'utf8',
-);
+describe('Staff onboarding credential security contracts', () => {
+  const controllerSource = readSource(
+    'src/controllers/userController.js',
+  );
 
-describe('Staff temporary-password SMS contracts', () => {
+  const routeSource = readSource(
+    'src/routes/user.routes.js',
+  );
+
+  const emailSource = readSource(
+    'src/services/emailService.js',
+  );
+
+  const smsSource = readSource(
+    'src/services/smsService.js',
+  );
+
+  const authSource = readSource(
+    'src/controllers/authController.js',
+  );
+
+  const envExample = readSource('.env.example');
+
   const originalApiKey = process.env.ARKESEL_API_KEY;
   const originalFetch = global.fetch;
 
@@ -44,28 +62,55 @@ describe('Staff temporary-password SMS contracts', () => {
     global.fetch = originalFetch;
   });
 
-  test('new staff and reactivated staff pass the same ephemeral temporary password to SMS', () => {
-    const calls = controllerSource.match(
-      /sendNewEmployeeSMS\(\s*phone,\s*first_name,\s*role,\s*companyName,\s*tempPassword\s*\)/g,
-    ) || [];
-
-    expect(calls).toHaveLength(2);
-
-    expect(controllerSource).not.toContain(
-      'This is NEVER returned in the API response and is only ever sent via email.',
-    );
-
-    expect(controllerSource).not.toContain(
-      'Email the temporary password - this is the only place it is ever transmitted',
+  test('staff creator cannot supply or receive an initial password', () => {
+    expect(routeSource).toContain(
+      'Staff passwords are set by the staff member using the secure setup link',
     );
 
     expect(controllerSource).toContain(
-      'Temporary login details were sent to ${user.email} and the staff phone by SMS.',
+      "Object.prototype.hasOwnProperty.call(req.body, 'password')",
+    );
+
+    expect(controllerSource).not.toContain('tempPassword');
+    expect(controllerSource).not.toContain('generateTempPassword');
+    expect(controllerSource).not.toContain('sendEphemeral');
+  });
+
+  test('staff onboarding stores only hashes for bootstrap and setup credentials', () => {
+    expect(controllerSource).toContain(
+      "crypto.randomBytes(48).toString('base64url')",
+    );
+
+    expect(controllerSource).toContain(
+      "const setupToken = crypto.randomBytes(32).toString('hex')",
+    );
+
+    expect(controllerSource).toContain(
+      'const setupTokenHash = await bcrypt.hash(setupToken, 8)',
+    );
+
+    expect(controllerSource).toContain(
+      'INSERT INTO password_reset_tokens',
+    );
+
+    expect(controllerSource).toContain(
+      '[userId, setupTokenHash, setupExpiresAt]',
     );
   });
 
-  test('new-employee SMS sends the temporary password to the intended staff phone', async () => {
-    const tempPassword = 'SecureTemp9X';
+  test('staff email contains only an expiring setup link, never a password', () => {
+    expect(emailSource).toContain('setupUrl');
+    expect(emailSource).toContain('Set Your Password');
+    expect(emailSource).toContain(
+      'This one-time setup link expires in 1 hour',
+    );
+
+    expect(emailSource).not.toContain('tempPassword');
+    expect(emailSource).not.toContain('Temporary Password:');
+  });
+
+  test('staff SMS never carries an onboarding credential', async () => {
+    const forbiddenSecret = 'NeverTransmitThisCredential9X';
 
     global.fetch.mockResolvedValue({
       ok: true,
@@ -76,12 +121,14 @@ describe('Staff temporary-password SMS contracts', () => {
       }),
     });
 
+    // Extra fifth argument proves an old caller cannot accidentally
+    // reintroduce credential transmission through this API.
     await sendNewEmployeeSMS(
       '0244123456',
       'Ama',
       'agent',
       'Example Company',
-      tempPassword,
+      forbiddenSecret,
     );
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
@@ -90,61 +137,23 @@ describe('Staff temporary-password SMS contracts', () => {
     const payload = JSON.parse(request.body);
 
     expect(payload.recipients).toEqual(['+233244123456']);
-    expect(payload.message).toContain(tempPassword);
-    expect(payload.message.toLowerCase()).toContain('temporary password');
-  });
+    expect(payload.message).not.toContain(forbiddenSecret);
 
-  test('SMS provider failures never place temporary-password content in logs', async () => {
-    const tempPassword = 'NeverLogMe9X';
-
-    global.fetch.mockResolvedValue({
-      ok: false,
-      status: 400,
-      json: async () => ({
-        status: 'error',
-        message: `Provider rejected message containing ${tempPassword}`,
-      }),
-    });
-
-    await expect(
-      sendNewEmployeeSMS(
-        '0244123456',
-        'Ama',
-        'agent',
-        'Example Company',
-        tempPassword,
-      ),
-    ).rejects.toThrow();
-
-    const logged = logger.error.mock.calls
-      .flat()
-      .map((value) => {
-        if (value instanceof Error) {
-          return `${value.name}: ${value.message}`;
-        }
-        return String(value);
-      })
-      .join(' ');
-
-    expect(logged).not.toContain(tempPassword);
-  });
-
-  test('SMS reports an explicit skipped result when Arkesel is not configured', async () => {
-    delete process.env.ARKESEL_API_KEY;
-
-    const result = await sendNewEmployeeSMS(
-      '0244123456',
-      'Ama',
-      'agent',
-      'Example Company',
-      'SecureTemp9X',
+    expect(payload.message).toContain(
+      'Check your email for the secure password setup link',
     );
 
-    expect(global.fetch).not.toHaveBeenCalled();
-    expect(result).toEqual({ skipped: true });
+    expect(smsSource).not.toContain('tempPassword');
+    expect(smsSource).not.toContain('Temporary password:');
   });
 
-  test('create-staff delivery status only marks channels that actually delivered', () => {
+  test('successful setup/reset clears the forced-password-change state', () => {
+    expect(authSource).toMatch(
+      /SET password_hash = \$1,[\s\S]{0,250}must_change_password = false/,
+    );
+  });
+
+  test('create-staff delivery status marks only confirmed channels', () => {
     expect(controllerSource).toContain(
       'emailSent = emailResult?.skipped !== true',
     );
@@ -162,7 +171,7 @@ describe('Staff temporary-password SMS contracts', () => {
     );
   });
 
-  test('Arkesel SMS configuration is documented for deployment', () => {
+  test('Arkesel SMS configuration remains documented', () => {
     expect(envExample).toMatch(/^ARKESEL_API_KEY=/m);
   });
 });

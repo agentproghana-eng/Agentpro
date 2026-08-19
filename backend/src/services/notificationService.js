@@ -191,11 +191,9 @@ async function sendAdNotification(userId, { type, adTitle }) {
 }
 
 
-// Sends a push notification without ever writing it to the notifications
-// table. Used specifically for one-time sensitive content, like a new
-// staff member's temporary password shown to the owner as a backup
-// while email/SMS delivery is unconfirmed - this should never persist
-// in the database, only appear transiently on the recipient's device.
+// Sends a transient push notification without writing it to the
+// notifications table. Callers must never place passwords, PINs,
+// authentication tokens, setup links, or other credentials here.
 async function sendEphemeral(userId, { title, body, data = {} }) {
   try {
     const result = await query(

@@ -62,7 +62,6 @@ function makeRequest(overrides = {}) {
       phone: '0240000000',
       role: 'agent',
       branch_id: 'branch-1',
-      password: 'TempPass1',
     },
     ip: '127.0.0.1',
     requestId: 'request-1',

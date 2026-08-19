@@ -759,7 +759,13 @@ exports.resetPassword = async (req, res) => {
 
     await withTransaction(async (client) => {
       await client.query(
-        'UPDATE users SET password_hash = $1, login_attempts = 0, locked_until = NULL WHERE id = $2',
+        `UPDATE users
+         SET password_hash = $1,
+             login_attempts = 0,
+             locked_until = NULL,
+             must_change_password = false,
+             updated_at = NOW()
+         WHERE id = $2`,
         [passwordHash, user_id]
       );
       await client.query(

@@ -49,13 +49,20 @@ const createUserValidation = [
     .isUUID()
     .withMessage('Invalid branch ID'),
   body('password')
-    .optional({ nullable: true, checkFalsy: true })
-    .isLength({ min: 8 })
-    .withMessage('Password must be at least 8 characters')
-    .matches(/[A-Z]/)
-    .withMessage('Password must contain an uppercase letter')
-    .matches(/[0-9]/)
-    .withMessage('Password must contain a number'),
+    .custom((_value, { req }) => {
+      if (
+        Object.prototype.hasOwnProperty.call(
+          req.body,
+          'password'
+        )
+      ) {
+        throw new Error(
+          'Staff passwords are set by the staff member using the secure setup link'
+        );
+      }
+
+      return true;
+    }),
 ];
 
 const updateUserValidation = [

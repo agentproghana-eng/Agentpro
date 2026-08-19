@@ -71,29 +71,29 @@ describe('Help and Support knowledge contracts', () => {
     );
   });
 
-  test('AI staff onboarding copy matches implemented email and SMS delivery', () => {
+  test('AI staff onboarding copy matches secure setup-link delivery', () => {
     const source = readSource(
       'src/controllers/aiController.js',
     );
 
     expect(source).toContain(
-      'temporary password by email',
+      'secure one-time password setup link by email',
     );
 
     expect(source).toContain(
-      'the same temporary password is also sent by SMS',
+      'Passwords are never sent by email, SMS, or push notification',
     );
 
     expect(source).toContain(
-      'when a phone number is saved for the staff member',
+      'setup link expires after one hour',
     );
 
     expect(source).toContain(
+      'use Forgot Password',
+    );
+
+    expect(source.toLowerCase()).not.toContain(
       'temporary password',
-    );
-
-    expect(source).toContain(
-      'must change it the first time they log in',
     );
   });
 

@@ -399,7 +399,7 @@ void main() {
       );
     });
 
-    test('Help Guide reflects implemented email and SMS password delivery', () {
+    test('Help Guide reflects secure staff password setup', () {
       final source = readSource(
         'lib/features/support/help_guide_screen.dart',
       );
@@ -407,27 +407,34 @@ void main() {
       expect(
         source,
         contains(
-          'same temporary password is also sent by SMS',
+          'secure one-time password setup link by email',
         ),
       );
 
       expect(
         source,
         contains(
-          'If a phone number is saved for the staff member',
+          'No password is sent by email, SMS, or push notification',
         ),
-      );
-
-      expect(
-        source,
-        contains('temporary password'),
       );
 
       expect(
         source,
         contains(
-          'must be changed the first time',
+          'setup link expires after one hour',
         ),
+      );
+
+      expect(
+        source,
+        contains(
+          'use Forgot Password',
+        ),
+      );
+
+      expect(
+        source.toLowerCase(),
+        isNot(contains('temporary password')),
       );
     });
 

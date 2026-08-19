@@ -61,12 +61,11 @@ async function sendNewEmployeeSMS(
   phone,
   firstName,
   role,
-  companyName,
-  tempPassword
+  companyName
 ) {
   return sendSMS(
     phone,
-    `Agent Pro Ghana: Hi ${firstName}, you have been added as ${role} at ${companyName}. Temporary password: ${tempPassword}. Sign in with your email and change this password immediately.`
+    `Agent Pro Ghana: Hi ${firstName}, your ${role} account at ${companyName} is ready. Check your email for the secure password setup link. The link expires in 1 hour. If it does not arrive, use Forgot Password in the app.`
   );
 }
 
