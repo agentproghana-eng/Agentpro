@@ -173,31 +173,15 @@ async function seedUSSDTemplates() {
       retry_count: 1,
     },
 
-    // ── AT Money (*500#) ──────────────────────────────────────
-    {
-      provider: 'at_money',
-      transaction_type: 'cash_in',
-      name: 'AT Money Cash In (Agent)',
-      ussd_string_pattern: '*500*1*3*{customer_phone}*{amount}#',
-      placeholder_fields: ['customer_phone', 'amount'],
-      pin_prompt_strings: ['pin', 'enter your pin', 'enter pin'],
-      success_strings: ['cash in successful', 'deposit done', 'successful'],
-      failure_strings: ['failed', 'insufficient', 'invalid', 'error'],
-      timeout_seconds: 60,
-      retry_count: 1,
-    },
-    {
-      provider: 'at_money',
-      transaction_type: 'cash_out',
-      name: 'AT Money Cash Out (Agent)',
-      ussd_string_pattern: '*500*1*2*{customer_phone}*{amount}#',
-      placeholder_fields: ['customer_phone', 'amount'],
-      pin_prompt_strings: ['pin', 'enter your pin', 'enter pin'],
-      success_strings: ['cash out successful', 'withdrawal done', 'successful'],
-      failure_strings: ['failed', 'insufficient', 'invalid', 'error'],
-      timeout_seconds: 60,
-      retry_count: 1,
-    },
+    // ── AT Money ──────────────────────────────────────────────
+    // Commercial safety:
+    // AT Money Agent automation is intentionally not seeded here.
+    //
+    // Live Agent SIM validation uses *110#, but exact screen text,
+    // success markers and failure markers must be verified before
+    // any shared AT Money automation is enabled.
+    //
+    // See migration 053 and the commercial-validation migrations.
   ];
 
   let created = 0;
