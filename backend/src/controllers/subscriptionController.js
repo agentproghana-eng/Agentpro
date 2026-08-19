@@ -99,6 +99,22 @@ exports.submitPayment = async (req, res) => {
          VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
         [sub.id, companyId, billing.amount, momo_reference, payment_phone, notes]
       );
+
+      await auditLog({
+        userId: req.user.id,
+        companyId,
+        action: 'SUBSCRIPTION_PAYMENT_SUBMITTED',
+        entityType: 'subscription_payment',
+        entityId: payment.rows[0].id,
+        newValues: {
+          momo_reference,
+          amount: billing.amount,
+        },
+        ipAddress: req.ip,
+        requestId: req.requestId,
+        dbClient: client,
+        strict: true,
+      });
     });
 
     if (pendingExists) {
@@ -108,26 +124,35 @@ exports.submitPayment = async (req, res) => {
       });
     }
 
-    await auditLog({
-      userId: req.user.id,
-      companyId,
-      action: 'SUBSCRIPTION_PAYMENT_SUBMITTED',
-      entityType: 'subscription_payment',
-      entityId: payment.rows[0].id,
-      newValues: { momo_reference, amount: billing.amount },
-      ipAddress: req.ip,
-      requestId: req.requestId,
-    });
+    // Notification delivery is post-commit and best-effort. A push
+    // failure must never make a successfully submitted payment look failed.
+    try {
+      const superusers = await query(
+        "SELECT id FROM users WHERE role = 'superuser' AND status = 'active'"
+      );
 
-    // Notify superuser (get all superuser IDs)
-    const superusers = await query("SELECT id FROM users WHERE role = 'superuser' AND status = 'active'");
-    const { sendToMultiple } = require('../services/notificationService');
-    await sendToMultiple(superusers.rows.map(u => u.id), {
-      type: 'system_update',
-      title: '💳 New Subscription Payment',
-      body: `Payment reference ${momo_reference} submitted. Awaiting verification.`,
-      data: { payment_id: payment.rows[0].id },
-    });
+      const { sendToMultiple } =
+        require('../services/notificationService');
+
+      await sendToMultiple(
+        superusers.rows.map((user) => user.id),
+        {
+          type: 'system_update',
+          title: '💳 New Subscription Payment',
+          body:
+            `Payment reference ${momo_reference} submitted. ` +
+            'Awaiting verification.',
+          data: {
+            payment_id: payment.rows[0].id,
+          },
+        }
+      );
+    } catch (notificationError) {
+      logger.error(
+        'Subscription payment notification error:',
+        notificationError
+      );
+    }
 
     res.status(201).json({
       success: true,
@@ -285,6 +310,27 @@ exports.verifyPayment = async (req, res) => {
 
         companyName = companyResult.rows[0]?.name || null;
       }
+
+      const verificationAuditAction =
+        action === 'approve'
+          ? 'SUBSCRIPTION_PAYMENT_APPROVED'
+          : 'SUBSCRIPTION_PAYMENT_REJECTED';
+
+      await auditLog({
+        userId: req.user.id,
+        companyId: payment.company_id,
+        action: verificationAuditAction,
+        entityType: 'subscription_payment',
+        entityId: payment_id,
+        newValues: {
+          action,
+          rejection_reason,
+        },
+        ipAddress: req.ip,
+        requestId: req.requestId,
+        dbClient: client,
+        strict: true,
+      });
     });
 
     if (verificationError) {
@@ -311,16 +357,23 @@ exports.verifyPayment = async (req, res) => {
           );
         }
 
-        await sendToUser(owner.id, {
-          type: 'renewal_approved',
-          title: '✅ Subscription Activated!',
-          body:
-            `Your Business Plan is now active until ` +
-            `${approvedExpiresAt.toLocaleDateString('en-GH')}.`,
-          data: {
-            expires_at: approvedExpiresAt.toISOString(),
-          },
-        });
+        try {
+          await sendToUser(owner.id, {
+            type: 'renewal_approved',
+            title: '✅ Subscription Activated!',
+            body:
+              `Your Business Plan is now active until ` +
+              `${approvedExpiresAt.toLocaleDateString('en-GH')}.`,
+            data: {
+              expires_at: approvedExpiresAt.toISOString(),
+            },
+          });
+        } catch (notificationError) {
+          logger.error(
+            'Subscription approval notification error:',
+            notificationError
+          );
+        }
 
         if (owner.phone) {
           try {
@@ -338,26 +391,23 @@ exports.verifyPayment = async (req, res) => {
           }
         }
       } else {
-        await sendToUser(owner.id, {
-          type: 'system_update',
-          title: '❌ Payment Not Verified',
-          body:
-            `Your subscription payment could not be verified. ` +
-            `Reason: ${rejection_reason || 'Please contact support.'}`,
-          data: {},
-        });
+        try {
+          await sendToUser(owner.id, {
+            type: 'system_update',
+            title: '❌ Payment Not Verified',
+            body:
+              `Your subscription payment could not be verified. ` +
+              `Reason: ${rejection_reason || 'Please contact support.'}`,
+            data: {},
+          });
+        } catch (notificationError) {
+          logger.error(
+            'Subscription rejection notification error:',
+            notificationError
+          );
+        }
       }
     }
-
-    await auditLog({
-      userId: req.user.id,
-      action: `SUBSCRIPTION_PAYMENT_${action.toUpperCase()}ED`,
-      entityType: 'subscription_payment',
-      entityId: payment_id,
-      newValues: { action, rejection_reason },
-      ipAddress: req.ip,
-      requestId: req.requestId,
-    });
 
     res.json({
       success: true,
@@ -396,60 +446,6 @@ exports.listPendingPayments = async (req, res) => {
   } catch (error) {
     logger.error('List pending payments error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch pending payments' });
-  }
-};
-
-// ── Subscription Renewal Reminder Job (called by cron) ───────
-
-exports.sendRenewalReminders = async () => {
-  try {
-    const result = await query(
-      `SELECT s.company_id, s.expires_at,
-              EXTRACT(DAY FROM s.expires_at - NOW())::int as days_left
-       FROM subscriptions s
-       WHERE s.status = 'active'
-         AND s.expires_at BETWEEN NOW() AND NOW() + INTERVAL '7 days'`
-    );
-
-    for (const sub of result.rows) {
-      const daysLeft = sub.days_left;
-      if ([7, 3, 1].includes(daysLeft)) {
-        await sendSubscriptionReminder(sub.company_id, daysLeft);
-
-        // Also send email
-        const owner = await query(
-          "SELECT email, first_name FROM users WHERE company_id = $1 AND role = 'business_owner' LIMIT 1",
-          [sub.company_id]
-        );
-        if (owner.rows.length > 0) {
-          await sendSubscriptionReminderEmail(
-            owner.rows[0].email,
-            owner.rows[0].first_name,
-            daysLeft,
-            sub.expires_at
-          );
-        }
-      }
-    }
-
-    // Suspend overdue subscriptions (past grace period)
-    const overdue = await query(
-      `SELECT company_id FROM subscriptions
-       WHERE status IN ('active', 'grace_period')
-         AND grace_period_ends_at < NOW()`
-    );
-
-    for (const sub of overdue.rows) {
-      await query(
-        "UPDATE subscriptions SET status = 'suspended' WHERE company_id = $1",
-        [sub.company_id]
-      );
-      await sendSubscriptionSuspended(sub.company_id);
-    }
-
-    logger.info(`Renewal reminders sent. Suspended ${overdue.rows.length} overdue subscriptions.`);
-  } catch (error) {
-    logger.error('Renewal reminder job error:', error);
   }
 };
 

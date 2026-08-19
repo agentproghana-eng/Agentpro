@@ -517,8 +517,9 @@ exports.initiateTransaction = async (req, res) => {
     let txResult;
 
     try {
-      txResult = await query(
-        `INSERT INTO transactions (
+      txResult = await withTransaction(async (client) => {
+        const insertResult = await client.query(
+          `INSERT INTO transactions (
           reference, agent_id, branch_id, company_id, provider,
           transaction_type, status, amount, customer_phone, customer_name,
           recipient_phone, recipient_name, biller_code, biller_name,
@@ -540,7 +541,32 @@ exports.initiateTransaction = async (req, res) => {
           installation_id || null, normalizeSlot(sim_subscription_id),
           client_operation_id || null
         ]
-      );
+        );
+
+        const transaction =
+          insertResult.rows[0];
+
+        await auditLog({
+          userId: agentId,
+          companyId,
+          action: 'TRANSACTION_INITIATED',
+          entityType: 'transaction',
+          entityId: transaction.id,
+          newValues: {
+            reference,
+            provider,
+            transaction_type,
+            amount,
+            customer_phone
+          },
+          ipAddress: req.ip,
+          requestId: req.requestId,
+          dbClient: client,
+          strict: true
+        });
+
+        return insertResult;
+      });
     } catch (insertError) {
       if (
         client_operation_id &&
@@ -628,17 +654,6 @@ exports.initiateTransaction = async (req, res) => {
 
     const transaction = txResult.rows[0];
 
-    await auditLog({
-      userId: agentId,
-      companyId,
-      action: 'TRANSACTION_INITIATED',
-      entityType: 'transaction',
-      entityId: transaction.id,
-      newValues: { reference, provider, transaction_type, amount, customer_phone },
-      ipAddress: req.ip,
-      requestId: req.requestId
-    });
-
     // Return transaction details + USSD template for the Flutter app
     // The app will execute USSD automation using this template
     res.status(201).json({
@@ -720,6 +735,7 @@ exports.completeTransaction = async (req, res) => {
     let idempotentReplay = false;
     let conflictingStatus = null;
     let manualCashOutRequired = false;
+    let completionNotification = null;
 
     await withTransaction(async (client) => {
       // Lock the transaction before checking its status. Without this lock,
@@ -998,22 +1014,10 @@ exports.completeTransaction = async (req, res) => {
         // the real provider debit later.
       }
 
-      const notificationType = {
-        success: 'transaction_success',
-        failed: 'transaction_failed',
-        pending_confirmation: 'transaction_pending_confirmation',
-      }[finalStatus];
-
-      await sendTransactionNotification(agentId, {
-        type: notificationType,
-        transaction: {
-          ...tx,
-          status: finalStatus,
-          network_reference,
-          failure_reason: sanitizedFailureReason
-        }
-      });
-
+      // This is a required financial audit record. It must use the exact
+      // PostgreSQL client that owns the transaction above. If this INSERT
+      // fails, strict mode rethrows and withTransaction rolls back the
+      // transaction status plus every principal/commission ledger mutation.
       await auditLog({
         userId: agentId,
         companyId: tx.company_id,
@@ -1026,8 +1030,29 @@ exports.completeTransaction = async (req, res) => {
           failure_reason: sanitizedFailureReason
         },
         ipAddress: req.ip,
-        requestId: req.requestId
+        requestId: req.requestId,
+        dbClient: client,
+        strict: true
       });
+
+      const notificationType = {
+        success: 'transaction_success',
+        failed: 'transaction_failed',
+        pending_confirmation: 'transaction_pending_confirmation',
+      }[finalStatus];
+
+      // Prepare only. The external notification is sent after PostgreSQL
+      // commits so a later rollback can never leave the user with a false
+      // success/failure notification.
+      completionNotification = {
+        type: notificationType,
+        transaction: {
+          ...tx,
+          status: finalStatus,
+          network_reference,
+          failure_reason: sanitizedFailureReason
+        }
+      };
     });
 
     if (transactionNotFound) {
@@ -1063,6 +1088,22 @@ exports.completeTransaction = async (req, res) => {
         message:
           'Telecel and AT Money Cash Out must be recorded through the manual Cash Out flow.'
       });
+    }
+
+    // PostgreSQL has committed at this point. Notification delivery is an
+    // external side effect and must never roll back or falsify money state.
+    if (completionNotification) {
+      try {
+        await sendTransactionNotification(
+          agentId,
+          completionNotification
+        );
+      } catch (notificationError) {
+        logger.error(
+          'Transaction completion notification error:',
+          notificationError
+        );
+      }
     }
 
     // Generate receipt PDF only on confirmed success

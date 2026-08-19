@@ -220,17 +220,29 @@ exports.openShift = async (req, res) => {
         );
       }
 
-      return result.rows[0];
-    });
+      const openedShift = result.rows[0];
 
-    await auditLog({
-      userId: agentId, companyId, action: 'SHIFT_OPENED', entityType: 'shift', entityId: shift.id,
-      newValues: {
-        opening_cash_expected: shift.opening_cash_expected,
-        opening_cash_declared: shift.opening_cash_declared,
-        opening_cash_variance: shift.opening_cash_variance,
-      },
-      ipAddress: req.ip, requestId: req.requestId,
+      await auditLog({
+        userId: agentId,
+        companyId,
+        action: 'SHIFT_OPENED',
+        entityType: 'shift',
+        entityId: openedShift.id,
+        newValues: {
+          opening_cash_expected:
+            openedShift.opening_cash_expected,
+          opening_cash_declared:
+            openedShift.opening_cash_declared,
+          opening_cash_variance:
+            openedShift.opening_cash_variance,
+        },
+        ipAddress: req.ip,
+        requestId: req.requestId,
+        dbClient: client,
+        strict: true,
+      });
+
+      return openedShift;
     });
 
     res.status(201).json({ success: true, data: shift });
@@ -606,24 +618,39 @@ exports.closeShift = async (req, res) => {
           shift_id,
         ]
       );
-      return result.rows[0];
+
+      const closedShift = result.rows[0];
+
+      await auditLog({
+        userId: agentId,
+        companyId: req.user.company_id,
+        action: 'SHIFT_CLOSED',
+        entityType: 'shift',
+        entityId: shift_id,
+        newValues: {
+          closing_cash_expected:
+            closedShift.closing_cash_expected,
+          closing_cash_declared:
+            closedShift.closing_cash_declared,
+          closing_cash_variance:
+            closedShift.closing_cash_variance,
+          closing_cash_actual:
+            closedShift.closing_cash_actual,
+          variance: closedShift.variance,
+        },
+        ipAddress: req.ip,
+        requestId: req.requestId,
+        dbClient: client,
+        strict: true,
+      });
+
+      return closedShift;
     });
 
     const threshold = await getVarianceThreshold();
-    const flagged = Math.abs(closed.variance) >= threshold;
 
-    await auditLog({
-      userId: agentId, companyId: req.user.company_id, action: 'SHIFT_CLOSED', entityType: 'shift', entityId: shift_id,
-      newValues: {
-        closing_cash_expected: closed.closing_cash_expected,
-        closing_cash_declared: closed.closing_cash_declared,
-        closing_cash_variance: closed.closing_cash_variance,
-        closing_cash_actual: closed.closing_cash_actual,
-        variance: closed.variance,
-        flagged,
-      },
-      ipAddress: req.ip, requestId: req.requestId,
-    });
+    const flagged =
+      Math.abs(closed.variance) >= threshold;
 
     res.json({ success: true, data: { ...closed, flagged, threshold } });
   } catch (error) {

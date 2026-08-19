@@ -81,6 +81,23 @@ exports.submitPayment = async (req, res) => {
          VALUES ($1, 5.00, $2, $3) RETURNING *`,
         [req.user.id, momo_reference, payment_phone]
       );
+
+      await auditLog({
+        userId: req.user.id,
+        companyId: null,
+        action: 'PERSONAL_SUBSCRIPTION_PAYMENT_SUBMITTED',
+        entityType: 'personal_subscription_payment',
+        entityId: result.rows[0].id,
+        newValues: {
+          amount: 5.00,
+          momo_reference,
+        },
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        requestId: req.requestId,
+        dbClient: client,
+        strict: true,
+      });
     });
 
     if (pendingExists) {
@@ -182,12 +199,22 @@ exports.verifyPayment = async (req, res) => {
       await auditLog({
         userId: req.user.id,
         companyId: null,
-        action: action === 'approve' ? 'PERSONAL_SUBSCRIPTION_PAYMENT_VERIFIED' : 'PERSONAL_SUBSCRIPTION_PAYMENT_REJECTED',
+        action:
+          action === 'approve'
+            ? 'PERSONAL_SUBSCRIPTION_PAYMENT_VERIFIED'
+            : 'PERSONAL_SUBSCRIPTION_PAYMENT_REJECTED',
         entityType: 'personal_subscription_payment',
         entityId: payment_id,
+        newValues: {
+          action,
+          rejection_reason:
+            rejection_reason || null,
+        },
         ipAddress: req.ip,
         userAgent: req.headers['user-agent'],
-        requestId: req.requestId
+        requestId: req.requestId,
+        dbClient: client,
+        strict: true,
       });
     });
 
@@ -198,20 +225,36 @@ exports.verifyPayment = async (req, res) => {
       });
     }
 
-    await sendToUser(payment.user_id, {
-      type: action === 'approve'
-        ? 'personal_subscription_approved'
-        : 'personal_subscription_rejected',
-      title: action === 'approve'
-        ? '✅ Personal Subscription Activated'
-        : '❌ Personal Subscription Payment Not Verified',
-      body: action === 'approve'
-        ? `Your Personal Plan is active until ${approvedExpiresAt.toLocaleDateString('en-GH')}.`
-        : `Your Personal subscription payment could not be verified. Reason: ${rejection_reason || 'Please contact support.'}`,
-      data: action === 'approve'
-        ? { expires_at: approvedExpiresAt.toISOString() }
-        : {},
-    });
+    // Notification is an external post-commit side effect. Delivery
+    // failure must not make a committed payment verification look failed.
+    try {
+      await sendToUser(payment.user_id, {
+        type:
+          action === 'approve'
+            ? 'personal_subscription_approved'
+            : 'personal_subscription_rejected',
+        title:
+          action === 'approve'
+            ? '✅ Personal Subscription Activated'
+            : '❌ Personal Subscription Payment Not Verified',
+        body:
+          action === 'approve'
+            ? `Your Personal Plan is active until ${approvedExpiresAt.toLocaleDateString('en-GH')}.`
+            : `Your Personal subscription payment could not be verified. Reason: ${rejection_reason || 'Please contact support.'}`,
+        data:
+          action === 'approve'
+            ? {
+                expires_at:
+                  approvedExpiresAt.toISOString(),
+              }
+            : {},
+      });
+    } catch (notificationError) {
+      logger.error(
+        'Personal subscription notification error:',
+        notificationError
+      );
+    }
 
     res.json({
       success: true,
