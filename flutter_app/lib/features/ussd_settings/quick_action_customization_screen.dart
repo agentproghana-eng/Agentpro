@@ -18,6 +18,46 @@ class QuickActionCustomizationScreen extends StatefulWidget {
       _QuickActionCustomizationScreenState();
 }
 
+class _QuickActionChoice {
+  final QuickActionCatalogDefinition definition;
+  final QuickActionCatalogVariant? variant;
+
+  const _QuickActionChoice({
+    required this.definition,
+    this.variant,
+  });
+
+  String? get bundleCategory => variant?.bundleCategory;
+  String? get recipientMode => variant?.recipientMode;
+
+  QuickActionPreference preferenceAt(int position) {
+    return QuickActionPreference(
+      actionKey: definition.type,
+      bundleCategory: bundleCategory,
+      recipientMode: recipientMode,
+      position: position,
+    );
+  }
+
+  String get identityKey => preferenceAt(0).identityKey;
+
+  String get displayLabel => preferenceAt(0).resolvedDisplayLabel(
+        definition.displayLabel,
+      );
+
+  String get technicalLabel {
+    final fields = <String>[
+      definition.type,
+      if ((recipientMode ?? '').trim().isNotEmpty)
+        'recipient: ${recipientMode!.trim()}',
+      if ((bundleCategory ?? '').trim().isNotEmpty)
+        'flow: ${bundleCategory!.trim()}',
+    ];
+
+    return fields.join(' · ');
+  }
+}
+
 class _QuickActionCustomizationScreenState
     extends State<QuickActionCustomizationScreen> {
   String _provider = '';
@@ -39,6 +79,51 @@ class _QuickActionCustomizationScreenState
   List<QuickActionCatalogDefinition> get _availableDefinitions =>
       _catalog?.definitionsFor(_provider) ??
       const <QuickActionCatalogDefinition>[];
+
+  List<_QuickActionChoice> get _availableChoices {
+    final choices = <_QuickActionChoice>[];
+
+    for (final definition in _availableDefinitions) {
+      // Keep the normal generic entry so existing behaviour remains
+      // available even when a transaction also has detailed flow variants.
+      choices.add(
+        _QuickActionChoice(
+          definition: definition,
+        ),
+      );
+
+      for (final variant in definition.variants) {
+        final canonicalBundle =
+            (variant.bundleCategory ?? '').trim().toLowerCase();
+
+        // MTN MashUp page1/page2 are historical flow identities.
+        // Live validation established that allocation digits 1-5 are
+        // accepted directly, so page2 must not create duplicate-looking
+        // Quick Actions. Keep page1 as the canonical selectable identity.
+        if (definition.provider == 'mtn' &&
+            definition.type == 'buy_mashup' &&
+            canonicalBundle.contains('_page2_')) {
+          continue;
+        }
+        final hasBundle = (variant.bundleCategory ?? '').trim().isNotEmpty;
+
+        final hasRecipient = (variant.recipientMode ?? '').trim().isNotEmpty;
+
+        if (!hasBundle && !hasRecipient) {
+          continue;
+        }
+
+        choices.add(
+          _QuickActionChoice(
+            definition: definition,
+            variant: variant,
+          ),
+        );
+      }
+    }
+
+    return choices;
+  }
 
   List<QuickActionPreference> get _selected =>
       _preferences[_provider] ?? <QuickActionPreference>[];
@@ -218,9 +303,12 @@ class _QuickActionCustomizationScreenState
     });
   }
 
-  void _toggle(String type) {
+  void _toggleChoice(_QuickActionChoice choice) {
     final selected = List<QuickActionPreference>.from(_selected);
-    final existingIndex = selected.indexWhere((item) => item.actionKey == type);
+
+    final existingIndex = selected.indexWhere(
+      (item) => item.identityKey == choice.identityKey,
+    );
 
     setState(() {
       if (existingIndex >= 0) {
@@ -229,17 +317,16 @@ class _QuickActionCustomizationScreenState
         if (selected.length >= 9) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('A 3×3 grid can contain at most 9 actions.'),
+              content: Text(
+                'A 3×3 grid can contain at most 9 actions.',
+              ),
             ),
           );
           return;
         }
 
         selected.add(
-          QuickActionPreference(
-            actionKey: type,
-            position: selected.length,
-          ),
+          choice.preferenceAt(selected.length),
         );
       }
 
@@ -247,7 +334,31 @@ class _QuickActionCustomizationScreenState
           .asMap()
           .entries
           .map(
-            (entry) => entry.value.copyWith(position: entry.key),
+            (entry) => entry.value.copyWith(
+              position: entry.key,
+            ),
+          )
+          .toList();
+    });
+  }
+
+  void _removePreference(
+    QuickActionPreference preference,
+  ) {
+    final selected = List<QuickActionPreference>.from(_selected);
+
+    selected.removeWhere(
+      (item) => item.identityKey == preference.identityKey,
+    );
+
+    setState(() {
+      _preferences[_provider] = selected
+          .asMap()
+          .entries
+          .map(
+            (entry) => entry.value.copyWith(
+              position: entry.key,
+            ),
           )
           .toList();
     });
@@ -339,11 +450,16 @@ class _QuickActionCustomizationScreenState
   }
 
   void _updatePreference(
-    String actionKey,
-    QuickActionPreference Function(QuickActionPreference current) update,
+    QuickActionPreference preference,
+    QuickActionPreference Function(
+      QuickActionPreference current,
+    ) update,
   ) {
     final selected = List<QuickActionPreference>.from(_selected);
-    final index = selected.indexWhere((item) => item.actionKey == actionKey);
+
+    final index = selected.indexWhere(
+      (item) => item.identityKey == preference.identityKey,
+    );
 
     if (index < 0) return;
 
@@ -416,7 +532,7 @@ class _QuickActionCustomizationScreenState
 
     if (result.isEmpty) {
       _updatePreference(
-        preference.actionKey,
+        preference,
         (current) => current.copyWith(
           clearCustomName: true,
         ),
@@ -425,7 +541,7 @@ class _QuickActionCustomizationScreenState
     }
 
     _updatePreference(
-      preference.actionKey,
+      preference,
       (current) => current.copyWith(
         customName: result,
       ),
@@ -521,14 +637,14 @@ class _QuickActionCustomizationScreenState
 
     if (result.isEmpty) {
       _updatePreference(
-        preference.actionKey,
+        preference,
         (current) => current.copyWith(clearIconKey: true),
       );
       return;
     }
 
     _updatePreference(
-      preference.actionKey,
+      preference,
       (current) => current.copyWith(iconKey: result),
     );
   }
@@ -670,7 +786,7 @@ class _QuickActionCustomizationScreenState
 
     if (result.isEmpty) {
       _updatePreference(
-        preference.actionKey,
+        preference,
         (current) => current.copyWith(
           clearIconColor: true,
         ),
@@ -679,15 +795,172 @@ class _QuickActionCustomizationScreenState
     }
 
     _updatePreference(
-      preference.actionKey,
+      preference,
       (current) => current.copyWith(
         iconColorHex: result,
       ),
     );
   }
 
+  Future<void> _chooseIconBackgroundColor(
+    QuickActionPreference preference,
+  ) async {
+    final selectedHex = preference.iconBackgroundColorHex;
+
+    final result = await showModalBottomSheet<String?>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return SafeArea(
+          top: false,
+          child: Container(
+            decoration: BoxDecoration(
+              color: sheetContext.appSurface,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
+            ),
+            padding: const EdgeInsets.fromLTRB(18, 10, 18, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 44,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: sheetContext.appSecondaryText.withValues(
+                      alpha: 0.28,
+                    ),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Change Icon Background Colour',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: kQuickActionColorOptions.length,
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 5,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 18,
+                    childAspectRatio: 0.72,
+                  ),
+                  itemBuilder: (context, index) {
+                    final option = kQuickActionColorOptions[index];
+                    final selected =
+                        option.hex.toUpperCase() == selectedHex?.toUpperCase();
+
+                    final checkColor =
+                        option.hex == '#FDD835' || option.hex == '#F9A825'
+                            ? Colors.black
+                            : Colors.white;
+
+                    return InkWell(
+                      onTap: () => Navigator.pop(sheetContext, option.hex),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: option.color,
+                              shape: BoxShape.circle,
+                              border: selected
+                                  ? Border.all(
+                                      color: AppTheme.primaryColor,
+                                      width: 3,
+                                    )
+                                  : null,
+                              boxShadow: selected
+                                  ? [
+                                      BoxShadow(
+                                        color: AppTheme.primaryColor
+                                            .withValues(alpha: 0.22),
+                                        blurRadius: 6,
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: selected
+                                ? Icon(
+                                    Icons.check_rounded,
+                                    color: checkColor,
+                                  )
+                                : null,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            option.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 10),
+                TextButton.icon(
+                  onPressed: () => Navigator.pop(sheetContext, ''),
+                  icon: const Icon(Icons.restart_alt_rounded),
+                  label: const Text('Use default background'),
+                ),
+                const SizedBox(height: 2),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(sheetContext),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted || result == null) return;
+
+    if (result.isEmpty) {
+      _updatePreference(
+        preference,
+        (current) => current.copyWith(
+          clearIconBackgroundColor: true,
+        ),
+      );
+      return;
+    }
+
+    _updatePreference(
+      preference,
+      (current) => current.copyWith(
+        iconBackgroundColorHex: result,
+      ),
+    );
+  }
+
   void _reorder(int oldIndex, int newIndex) {
     final items = List<QuickActionPreference>.from(_selected);
+
+    if (newIndex > oldIndex) {
+      newIndex -= 1;
+    }
 
     final item = items.removeAt(oldIndex);
     items.insert(newIndex, item);
@@ -833,6 +1106,7 @@ class _QuickActionCustomizationScreenState
                   ReorderableListView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
+                    buildDefaultDragHandles: false,
                     itemCount: _selected.length,
                     onReorderItem: _reorder,
                     itemBuilder: (context, index) {
@@ -848,16 +1122,26 @@ class _QuickActionCustomizationScreenState
                           definition?.icon ??
                           quickActionCatalogIcon(preference.actionKey);
 
-                      final label = preference.resolvedLabel(defaultLabel);
+                      final label =
+                          preference.resolvedDisplayLabel(defaultLabel);
 
                       return Card(
-                        key: ValueKey(preference.actionKey),
+                        key: ValueKey(preference.identityKey),
                         child: ListTile(
                           leading: InkWell(
                             onTap: () => _chooseIcon(preference),
                             borderRadius: BorderRadius.circular(24),
-                            child: Padding(
-                              padding: const EdgeInsets.all(8),
+                            child: Container(
+                              width: 42,
+                              height: 42,
+                              decoration: BoxDecoration(
+                                color: preference.resolvedIconBackgroundColor(
+                                  context.appTileColor(
+                                    const Color(0xFFE6F4F1),
+                                  ),
+                                ),
+                                borderRadius: BorderRadius.circular(11),
+                              ),
                               child: Icon(
                                 icon,
                                 color: preference.resolvedIconColor(
@@ -880,12 +1164,23 @@ class _QuickActionCustomizationScreenState
                                 value: preference.isVisible,
                                 onChanged: (value) {
                                   _updatePreference(
-                                    preference.actionKey,
+                                    preference,
                                     (current) => current.copyWith(
                                       isVisible: value,
                                     ),
                                   );
                                 },
+                              ),
+                              ReorderableDragStartListener(
+                                index: index,
+                                child: const Padding(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                  ),
+                                  child: Icon(
+                                    Icons.drag_handle_rounded,
+                                  ),
+                                ),
                               ),
                               PopupMenuButton<String>(
                                 onSelected: (value) {
@@ -895,8 +1190,10 @@ class _QuickActionCustomizationScreenState
                                     _chooseIcon(preference);
                                   } else if (value == 'color') {
                                     _chooseIconColor(preference);
+                                  } else if (value == 'background') {
+                                    _chooseIconBackgroundColor(preference);
                                   } else if (value == 'remove') {
-                                    _toggle(preference.actionKey);
+                                    _removePreference(preference);
                                   }
                                 },
                                 itemBuilder: (context) => const [
@@ -915,6 +1212,16 @@ class _QuickActionCustomizationScreenState
                                         Icon(Icons.palette_outlined),
                                         SizedBox(width: 10),
                                         Text('Change icon colour'),
+                                      ],
+                                    ),
+                                  ),
+                                  PopupMenuItem(
+                                    value: 'background',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.format_color_fill_outlined),
+                                        SizedBox(width: 10),
+                                        Text('Change icon background colour'),
                                       ],
                                     ),
                                   ),
@@ -973,19 +1280,19 @@ class _QuickActionCustomizationScreenState
   List<Widget> _buildGroupedAvailableActions(
     BuildContext context,
   ) {
-    final grouped = <String, List<QuickActionCatalogDefinition>>{};
+    final grouped = <String, List<_QuickActionChoice>>{};
 
-    for (final definition in _availableDefinitions) {
-      final group = definition.quickActionGroup.isEmpty
+    for (final choice in _availableChoices) {
+      final group = choice.definition.quickActionGroup.isEmpty
           ? 'Other Services'
-          : definition.quickActionGroup;
+          : choice.definition.quickActionGroup;
 
       grouped
           .putIfAbsent(
             group,
-            () => <QuickActionCatalogDefinition>[],
+            () => <_QuickActionChoice>[],
           )
-          .add(definition);
+          .add(choice);
     }
 
     final widgets = <Widget>[];
@@ -1008,21 +1315,21 @@ class _QuickActionCustomizationScreenState
         ),
       );
 
-      for (final definition in entry.value) {
+      for (final choice in entry.value) {
         final checked = _selected.any(
-          (item) => item.actionKey == definition.type,
+          (item) => item.identityKey == choice.identityKey,
         );
 
         widgets.add(
           CheckboxListTile(
             value: checked,
-            onChanged: (_) => _toggle(definition.type),
+            onChanged: (_) => _toggleChoice(choice),
             secondary: Icon(
-              definition.icon,
+              choice.definition.icon,
               color: checked ? AppTheme.primaryColor : context.appSecondaryText,
             ),
-            title: Text(definition.displayLabel),
-            subtitle: Text(definition.type),
+            title: Text(choice.displayLabel),
+            subtitle: Text(choice.technicalLabel),
             controlAffinity: ListTileControlAffinity.trailing,
             contentPadding: EdgeInsets.zero,
           ),
@@ -1151,16 +1458,28 @@ class _QuickActionPreview extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  icon,
-                  color: preference.resolvedIconColor(
-                    AppTheme.primaryColor,
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: preference.resolvedIconBackgroundColor(
+                      context.appTileColor(
+                        const Color(0xFFE6F4F1),
+                      ),
+                    ),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  size: 23,
+                  child: Icon(
+                    icon,
+                    color: preference.resolvedIconColor(
+                      AppTheme.primaryColor,
+                    ),
+                    size: 23,
+                  ),
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  preference.resolvedLabel(defaultLabel),
+                  preference.resolvedDisplayLabel(defaultLabel),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,

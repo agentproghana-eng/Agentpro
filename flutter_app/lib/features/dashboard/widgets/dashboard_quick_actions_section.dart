@@ -55,13 +55,16 @@ class DashboardQuickActionsSection extends StatelessWidget {
         personal ? personalQuickActions[provider] : agentQuickActions[provider];
 
     if (saved != null && saved.isNotEmpty) {
+      final orderedSaved = List<QuickActionPreference>.from(saved)
+        ..sort((a, b) => a.position.compareTo(b.position));
+
       final normalizedSaved = personal
           ? normalizePersonalQuickActionPreferences(
-              preferences: saved,
+              preferences: orderedSaved,
             )
           : normalizeBusinessQuickActionPreferences(
               provider: provider,
-              preferences: saved,
+              preferences: orderedSaved,
             );
 
       return normalizedSaved.where((item) => item.isVisible).take(9).toList();
@@ -248,7 +251,7 @@ class DashboardQuickActionsSection extends StatelessWidget {
         catalogLabel: definition?.displayLabel,
       );
 
-      final label = preference.resolvedLabel(defaultLabel);
+      final label = preference.resolvedDisplayLabel(defaultLabel);
       final icon = quickActionIconFromKey(preference.iconKey) ??
           definition?.icon ??
           quickActionCatalogIcon(type);
@@ -258,7 +261,9 @@ class DashboardQuickActionsSection extends StatelessWidget {
           context: context,
           icon: icon,
           label: label,
-          bgColor: backgrounds[index % backgrounds.length],
+          bgColor: preference.resolvedIconBackgroundColor(
+            backgrounds[index % backgrounds.length],
+          ),
           iconColor: preference.resolvedIconColor(
             iconColors[index % iconColors.length],
           ),
@@ -267,6 +272,10 @@ class DashboardQuickActionsSection extends StatelessWidget {
             final query = <String, String>{
               'type': type,
               'provider': provider,
+              if ((preference.bundleCategory ?? '').trim().isNotEmpty)
+                'bundle_category': preference.bundleCategory!.trim(),
+              if ((preference.recipientMode ?? '').trim().isNotEmpty)
+                'recipient_mode': preference.recipientMode!.trim(),
               if (sim != null) 'sim_slot': sim.slot.toString(),
               if (sim != null && sim.iccid.isNotEmpty) 'sim_iccid': sim.iccid,
               if (sim != null)
@@ -325,7 +334,7 @@ class DashboardQuickActionsSection extends StatelessWidget {
           definition?.icon ??
           quickActionCatalogIcon(type);
 
-      final label = preference.resolvedLabel(
+      final label = preference.resolvedDisplayLabel(
         quickActionDisplayLabel(
           provider: provider,
           type: type,
@@ -338,7 +347,9 @@ class DashboardQuickActionsSection extends StatelessWidget {
           context: context,
           icon: icon,
           label: label,
-          bgColor: backgrounds[index % backgrounds.length],
+          bgColor: preference.resolvedIconBackgroundColor(
+            backgrounds[index % backgrounds.length],
+          ),
           iconColor: preference.resolvedIconColor(
             iconColors[index % iconColors.length],
           ),
@@ -347,6 +358,10 @@ class DashboardQuickActionsSection extends StatelessWidget {
             final query = <String, String>{
               'type': type,
               'provider': provider,
+              if ((preference.bundleCategory ?? '').trim().isNotEmpty)
+                'bundle_category': preference.bundleCategory!.trim(),
+              if ((preference.recipientMode ?? '').trim().isNotEmpty)
+                'recipient_mode': preference.recipientMode!.trim(),
               if (sim != null) 'sim_slot': sim.slot.toString(),
               if (sim != null && sim.iccid.isNotEmpty) 'sim_iccid': sim.iccid,
               if (sim != null)

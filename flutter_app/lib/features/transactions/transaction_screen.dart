@@ -59,6 +59,8 @@ class TransactionScreen extends StatefulWidget {
   final int? initialSimSlot;
   final String? initialSimIccid;
   final int? initialSimSubscriptionId;
+  final String? initialBundleCategory;
+  final String? initialRecipientMode;
 
   const TransactionScreen({
     super.key,
@@ -67,6 +69,8 @@ class TransactionScreen extends StatefulWidget {
     this.initialSimSlot,
     this.initialSimIccid,
     this.initialSimSubscriptionId,
+    this.initialBundleCategory,
+    this.initialRecipientMode,
   });
 
   @override
@@ -148,6 +152,18 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
     return _needsReference ||
         (initialProvider != null && initialProvider.isNotEmpty);
+  }
+
+  String? get _initialBundleCategory {
+    final value = widget.initialBundleCategory?.trim();
+
+    return value == null || value.isEmpty ? null : value;
+  }
+
+  String? get _initialRecipientMode {
+    final value = widget.initialRecipientMode?.trim();
+
+    return value == null || value.isEmpty ? null : value;
   }
 
   String get _selectedProviderLabel => switch (_selectedProvider) {
@@ -423,25 +439,32 @@ class _TransactionScreenState extends State<TransactionScreen> {
   Future<void> _preloadSelectedFlow() async {
     final provider = _selectedProvider;
     final transactionType = widget.transactionType;
-    final cacheKey = '$provider:$transactionType';
+    final bundleCategory = _initialBundleCategory;
+    final recipientMode = _initialRecipientMode;
+
+    final cacheKey = <String>[
+      provider,
+      transactionType,
+      bundleCategory ?? '',
+      recipientMode ?? '',
+    ].join(':');
+
     final identity = _offlineIdentity;
 
     if (identity == null) return;
 
-    // The progress screen can already start immediately when this
-    // definition is present, so no network refresh is needed here.
     if (OfflineQueueService.getCachedFlow(
           provider,
           transactionType,
           identity: identity,
           isPersonal: false,
+          bundleCategory: bundleCategory,
+          recipientMode: recipientMode,
         ) !=
         null) {
       return;
     }
 
-    // Avoid repeating a failed or successful warm-up request while this
-    // Transaction screen remains open.
     if (!_flowPreloadAttempts.add(cacheKey)) {
       return;
     }
@@ -453,10 +476,13 @@ class _TransactionScreenState extends State<TransactionScreen> {
           'provider': provider,
           'transaction_type': transactionType,
           'mode': 'business',
+          if (bundleCategory != null) 'bundle_category': bundleCategory,
+          if (recipientMode != null) 'recipient_mode': recipientMode,
         },
       );
 
       final rawFlow = response.data['data'];
+
       if (rawFlow is! Map) return;
 
       await OfflineQueueService.cacheFlow(
@@ -465,10 +491,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
         Map<String, dynamic>.from(rawFlow),
         identity: identity,
         isPersonal: false,
+        bundleCategory: bundleCategory,
+        recipientMode: recipientMode,
       );
     } catch (_) {
-      // Some combinations use hardcoded automation or have no custom
-      // flow. Preloading must never interrupt form entry or submission.
+      // Warming must never interrupt form entry or submission.
     }
   }
 
@@ -617,6 +644,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
             widget.transactionType,
             identity: identity,
             isPersonal: false,
+            bundleCategory: _initialBundleCategory,
+            recipientMode: _initialRecipientMode,
           );
 
     // MTN Cash In/Out/Send Money and Telecel Deposit never need a
@@ -673,6 +702,10 @@ class _TransactionScreenState extends State<TransactionScreen> {
           },
           'provider': _selectedProvider,
           'transaction_type': widget.transactionType,
+          if (_initialBundleCategory != null)
+            'bundle_category': _initialBundleCategory,
+          if (_initialRecipientMode != null)
+            'recipient_mode': _initialRecipientMode,
           'amount': _amountCtrl.text,
           'customer_phone': _customerPhoneCtrl.text.trim(),
           'customer_name': '',
@@ -734,6 +767,10 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'transaction_future': transactionFuture,
         'provider': _selectedProvider,
         'transaction_type': widget.transactionType,
+        if (_initialBundleCategory != null)
+          'bundle_category': _initialBundleCategory,
+        if (_initialRecipientMode != null)
+          'recipient_mode': _initialRecipientMode,
         'amount': _amountCtrl.text,
         'customer_phone': _customerPhoneCtrl.text.trim(),
         'customer_name': '',
@@ -783,6 +820,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
         provider: provider,
         transactionType: transactionType,
         template: template,
+        bundleCategory: _initialBundleCategory,
+        recipientMode: _initialRecipientMode,
       ),
     );
 
@@ -793,6 +832,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
     required String provider,
     required String transactionType,
     Map<String, dynamic>? template,
+    String? bundleCategory,
+    String? recipientMode,
   }) async {
     final identity = _offlineIdentity;
     if (identity == null) return;
@@ -817,6 +858,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
           'provider': provider,
           'transaction_type': transactionType,
           'mode': 'business',
+          if (bundleCategory != null) 'bundle_category': bundleCategory,
+          if (recipientMode != null) 'recipient_mode': recipientMode,
         },
       );
 
@@ -829,6 +872,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
         Map<String, dynamic>.from(rawData),
         identity: identity,
         isPersonal: false,
+        bundleCategory: bundleCategory,
+        recipientMode: recipientMode,
       );
     } catch (_) {
       // No custom flow, no network, or cache failure. The active
