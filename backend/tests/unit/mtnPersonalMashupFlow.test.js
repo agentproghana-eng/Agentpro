@@ -13,7 +13,7 @@ describe('MTN Personal MashUp global flow seed', () => {
   const repairSql = fs.readFileSync(
     path.join(
       __dirname,
-      '../../migrations/085_fix_mtn_personal_mashup_direct_allocations.sql'
+      '../../migrations/086_fix_mtn_personal_mashup_direct_allocations.sql'
     ),
     'utf8'
   );

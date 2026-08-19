@@ -6,7 +6,7 @@ const path = require('path');
 const sql = fs.readFileSync(
   path.join(
     __dirname,
-    '../../migrations/086_seed_mtn_personal_balance_flows.sql'
+    '../../migrations/087_seed_mtn_personal_balance_flows.sql'
   ),
   'utf8'
 );
