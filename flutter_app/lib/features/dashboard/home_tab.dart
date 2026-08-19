@@ -481,6 +481,20 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
         DashboardHeader(
           user: widget.user,
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: DashboardProviderSelector(
+            selectedProvider: _provider,
+            simMap: _simMap,
+            detectionComplete: _simDetectionComplete,
+            permissionDenied: _simPermissionDenied,
+            onProviderChanged: (provider) {
+              if (_provider == provider) return;
+
+              setState(() => _provider = provider);
+            },
+          ),
+        ),
         Expanded(
           child: RefreshIndicator(
             onRefresh: () => _recentTransactionsController.refresh(
@@ -493,22 +507,6 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
                   const SliverToBoxAdapter(
                     child: DashboardOwnerGlance(),
                   ),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                    child: DashboardProviderSelector(
-                      selectedProvider: _provider,
-                      simMap: _simMap,
-                      detectionComplete: _simDetectionComplete,
-                      permissionDenied: _simPermissionDenied,
-                      onProviderChanged: (provider) {
-                        if (_provider == provider) return;
-
-                        setState(() => _provider = provider);
-                      },
-                    ),
-                  ),
-                ),
                 const SliverToBoxAdapter(child: DashboardShiftCard()),
                 SliverToBoxAdapter(
                   child: DashboardQuickActionsSection(

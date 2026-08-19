@@ -732,6 +732,183 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
     context.push(uri.toString());
   }
 
+  Widget _buildFrozenSimIndicators(
+    BuildContext context, {
+    required List<String> visibleProviders,
+    required bool noSimsDetected,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: noSimsDetected
+              ? Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: context.isDarkMode
+                        ? const Color(0xFF3D2E1A)
+                        : Colors.orange[50],
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    'No Personal SIM is assigned. '
+                    'Use Settings > SIM Purpose to assign one.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: context.isDarkMode
+                          ? Colors.orange[200]
+                          : Colors.orange[900],
+                    ),
+                  ),
+                )
+              : Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: context.appSurface,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.06),
+                        blurRadius: 3,
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: visibleProviders.map((p) {
+                      final selected = _provider == p;
+                      final color = AppTheme.providerColor(p);
+
+                      return Expanded(
+                        child: GestureDetector(
+                          onTap: () => _selectProvider(p),
+                          child: AnimatedContainer(
+                            duration: const Duration(
+                              milliseconds: 220,
+                            ),
+                            curve: Curves.easeOutCubic,
+                            margin: const EdgeInsets.symmetric(
+                              horizontal: 2,
+                              vertical: 2,
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: selected ? color : Colors.transparent,
+                              borderRadius: BorderRadius.circular(11),
+                              boxShadow: selected
+                                  ? [
+                                      BoxShadow(
+                                        color: color.withValues(
+                                          alpha: 0.20,
+                                        ),
+                                        blurRadius: 7,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: Text(
+                              _providerLabel(p),
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                                color: selected
+                                    ? (p == 'mtn' ? Colors.black : Colors.white)
+                                    : context.appSecondaryText,
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+        ),
+        if (_selectedProviderSims.length > 1)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: context.appSurface,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 3,
+                  ),
+                ],
+              ),
+              child: Row(
+                children: _selectedProviderSims.map((sim) {
+                  final selected = _selectedSimSlot == sim.slot;
+                  final providerColor = AppTheme.providerColor(_provider);
+
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 3,
+                      ),
+                      child: Semantics(
+                        selected: selected,
+                        button: true,
+                        label:
+                            '${_providerLabel(_provider)} SIM ${sim.slot + 1}',
+                        child: OutlinedButton.icon(
+                          onPressed: () => _selectPhysicalSim(sim),
+                          icon: Icon(
+                            selected
+                                ? Icons.check_circle_rounded
+                                : Icons.sim_card_outlined,
+                            size: 17,
+                          ),
+                          label: Text(
+                            'SIM ${sim.slot + 1}',
+                            maxLines: 1,
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: selected
+                                ? (_provider == 'mtn'
+                                    ? Colors.black
+                                    : providerColor)
+                                : Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                            backgroundColor: selected
+                                ? providerColor.withValues(
+                                    alpha: 0.12,
+                                  )
+                                : Colors.transparent,
+                            side: BorderSide(
+                              color: selected
+                                  ? providerColor
+                                  : Theme.of(context)
+                                      .dividerColor
+                                      .withValues(alpha: 0.45),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 10,
+                              horizontal: 8,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   @override
   void dispose() {
     routeObserver.unsubscribe(this);
@@ -865,189 +1042,17 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
               ),
             ),
           ),
+          _buildFrozenSimIndicators(
+            context,
+            visibleProviders: visibleProviders,
+            noSimsDetected: noSimsDetected,
+          ),
           Expanded(
             child: RefreshIndicator(
               onRefresh: _refreshPersonalContext,
               child: CustomScrollView(
                 slivers: [
                   const SliverToBoxAdapter(child: OfflineStatusBanner()),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                      child: noSimsDetected
-                          ? Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: context.isDarkMode
-                                    ? const Color(0xFF3D2E1A)
-                                    : Colors.orange[50],
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(
-                                'No Personal SIM is assigned. '
-                                'Use Settings > SIM Purpose to assign one.',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: context.isDarkMode
-                                      ? Colors.orange[200]
-                                      : Colors.orange[900],
-                                ),
-                              ),
-                            )
-                          : Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: context.appSurface,
-                                borderRadius: BorderRadius.circular(12),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.06),
-                                    blurRadius: 3,
-                                  ),
-                                ],
-                              ),
-                              child: Row(
-                                children: visibleProviders.map((p) {
-                                  final selected = _provider == p;
-                                  final color = AppTheme.providerColor(
-                                    p,
-                                  );
-                                  return Expanded(
-                                    child: GestureDetector(
-                                      onTap: () => _selectProvider(p),
-                                      child: AnimatedContainer(
-                                        duration: const Duration(
-                                          milliseconds: 220,
-                                        ),
-                                        curve: Curves.easeOutCubic,
-                                        margin: const EdgeInsets.symmetric(
-                                          horizontal: 2,
-                                          vertical: 2,
-                                        ),
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 10,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: selected
-                                              ? color
-                                              : Colors.transparent,
-                                          borderRadius: BorderRadius.circular(
-                                            11,
-                                          ),
-                                          boxShadow: selected
-                                              ? [
-                                                  BoxShadow(
-                                                    color: color.withValues(
-                                                      alpha: 0.20,
-                                                    ),
-                                                    blurRadius: 7,
-                                                    offset: const Offset(0, 2),
-                                                  ),
-                                                ]
-                                              : null,
-                                        ),
-                                        child: Text(
-                                          _providerLabel(p),
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 12,
-                                            color: selected
-                                                ? (p == 'mtn'
-                                                    ? Colors.black
-                                                    : Colors.white)
-                                                : context.appSecondaryText,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                }).toList(),
-                              ),
-                            ),
-                    ),
-                  ),
-                  if (_selectedProviderSims.length > 1)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                        child: Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: context.appSurface,
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.05),
-                                blurRadius: 3,
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            children: _selectedProviderSims.map((sim) {
-                              final selected = _selectedSimSlot == sim.slot;
-                              final providerColor =
-                                  AppTheme.providerColor(_provider);
-
-                              return Expanded(
-                                child: Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(horizontal: 3),
-                                  child: Semantics(
-                                    selected: selected,
-                                    button: true,
-                                    label:
-                                        '${_providerLabel(_provider)} SIM ${sim.slot + 1}',
-                                    child: OutlinedButton.icon(
-                                      onPressed: () => _selectPhysicalSim(sim),
-                                      icon: Icon(
-                                        selected
-                                            ? Icons.check_circle_rounded
-                                            : Icons.sim_card_outlined,
-                                        size: 17,
-                                      ),
-                                      label: Text(
-                                        'SIM ${sim.slot + 1}',
-                                        maxLines: 1,
-                                      ),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: selected
-                                            ? (_provider == 'mtn'
-                                                ? Colors.black
-                                                : providerColor)
-                                            : Theme.of(context)
-                                                .colorScheme
-                                                .onSurfaceVariant,
-                                        backgroundColor: selected
-                                            ? providerColor.withValues(
-                                                alpha: 0.12,
-                                              )
-                                            : Colors.transparent,
-                                        side: BorderSide(
-                                          color: selected
-                                              ? providerColor
-                                              : Theme.of(context)
-                                                  .dividerColor
-                                                  .withValues(alpha: 0.45),
-                                        ),
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 10,
-                                          horizontal: 8,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(10),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                        ),
-                      ),
-                    ),
                   SliverToBoxAdapter(
                     child: noSimsDetected
                         ? const DashboardEmptyState(
