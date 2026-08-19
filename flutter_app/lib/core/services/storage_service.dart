@@ -333,9 +333,22 @@ class StorageService {
   static Future<void> setBiometricEnabled(bool value) =>
       _storage.write(key: _keyBiometricEnabled, value: value.toString());
 
+  static Future<bool?> getDeviceAuthPreference() async {
+    final value = await _storage.read(key: _keyBiometricEnabled);
+
+    if (value == 'true') {
+      return true;
+    }
+
+    if (value == 'false') {
+      return false;
+    }
+
+    return null;
+  }
+
   static Future<bool> isBiometricEnabled() async {
-    final val = await _storage.read(key: _keyBiometricEnabled);
-    return val == 'true';
+    return await getDeviceAuthPreference() == true;
   }
 
   /// Marks whether the authenticated session is locally locked.

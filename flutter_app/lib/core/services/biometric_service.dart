@@ -1,28 +1,72 @@
+import 'dart:io';
+
 import 'package:flutter/services.dart';
-import 'package:local_auth/local_auth.dart';
 import 'package:local_auth/error_codes.dart' as auth_error;
+import 'package:local_auth/local_auth.dart';
+
 import 'storage_service.dart';
 
-/// Biometric authentication service.
+/// Local phone-authentication service used to protect a cached AgentPro
+/// session.
+///
+/// The class keeps its historical [BiometricService] name so existing app
+/// integrations remain source-compatible, but authentication is deliberately
+/// broader than biometrics.
+///
+/// AgentPro may be unlocked with any secure authentication method supported
+/// by the phone, including fingerprint, face, PIN, pattern, or device
+/// password.
 ///
 /// CRITICAL SECURITY RULE:
-/// Biometrics are used ONLY to unlock the app (restore session).
-/// They are NEVER used as a substitute for or replacement of a MoMo PIN.
-/// The MoMo PIN is always entered by the user on the official network USSD screen.
+/// Phone authentication unlocks AgentPro only.
+/// It never replaces, captures, stores, pre-fills, or submits a mobile-money
+/// PIN. Mobile-money PIN entry remains exclusively on the provider USSD UI.
+class DeviceAuthApproval {
+  DeviceAuthApproval._();
+}
+
+/// Local phone-authentication boundary used only to unlock AgentPro.
+///
+/// It never replaces, captures, stores, pre-fills, or submits a mobile-money
+/// PIN. Mobile-money PIN entry remains exclusively on the provider USSD UI.
 class BiometricService {
   static final _auth = LocalAuthentication();
 
-  /// Check if biometric hardware is available and enrolled
-  static Future<BiometricAvailability> checkAvailability() async {
+  static const MethodChannel _deviceSecurityChannel = MethodChannel(
+    'com.agentpro.ghana/device_security',
+  );
+
+  static DeviceAuthApproval? _pendingUnlockApproval;
+
+  /// Checks whether secure local phone authentication is actually usable.
+  ///
+  /// `isDeviceSupported()` only establishes platform capability. Android also
+  /// requires KeyguardManager.isDeviceSecure so Swipe/None cannot qualify as
+  /// AgentPro authentication.
+  static Future<BiometricAvailability> checkDeviceAuthAvailability() async {
     try {
-      final canCheck = await _auth.canCheckBiometrics;
-      if (!canCheck) return BiometricAvailability.notAvailable;
+      final supported = await _auth.isDeviceSupported();
 
-      final isDeviceSupported = await _auth.isDeviceSupported();
-      if (!isDeviceSupported) return BiometricAvailability.notAvailable;
+      if (!supported) {
+        return BiometricAvailability.notAvailable;
+      }
 
-      final availableBiometrics = await _auth.getAvailableBiometrics();
-      if (availableBiometrics.isEmpty) return BiometricAvailability.notEnrolled;
+      if (Platform.isAndroid) {
+        try {
+          final secure = await _deviceSecurityChannel.invokeMethod<bool>(
+                'isDeviceSecure',
+              ) ??
+              false;
+
+          if (!secure) {
+            return BiometricAvailability.notEnrolled;
+          }
+        } on MissingPluginException {
+          return BiometricAvailability.notAvailable;
+        } on PlatformException {
+          return BiometricAvailability.notAvailable;
+        }
+      }
 
       return BiometricAvailability.available;
     } on PlatformException {
@@ -30,7 +74,9 @@ class BiometricService {
     }
   }
 
-  /// Get list of available biometric types
+  static Future<BiometricAvailability> checkAvailability() =>
+      checkDeviceAuthAvailability();
+
   static Future<List<BiometricType>> getAvailableTypes() async {
     try {
       return await _auth.getAvailableBiometrics();
@@ -39,23 +85,43 @@ class BiometricService {
     }
   }
 
-  /// Authenticate using biometrics to UNLOCK THE APP.
-  /// This restores the user's existing session — it does NOT collect a MoMo PIN.
+  /// Performs the local phone-authentication challenge.
+  ///
+  /// Success creates one in-memory approval object. AuthBloc must consume that
+  /// exact object before it is allowed to clear the persisted session lock.
   static Future<BiometricResult> authenticateToUnlock() async {
+    _pendingUnlockApproval = null;
+
+    final availability = await checkDeviceAuthAvailability();
+
+    if (availability == BiometricAvailability.notEnrolled) {
+      return BiometricResult.notEnrolled;
+    }
+
+    if (availability != BiometricAvailability.available) {
+      return BiometricResult.notAvailable;
+    }
+
     try {
       final authenticated = await _auth.authenticate(
-        localizedReason: 'Authenticate to open Agent Pro Ghana',
+        localizedReason: 'Unlock AgentPro',
         options: const AuthenticationOptions(
-          biometricOnly: false, // Allow PIN/pattern as fallback
+          biometricOnly: false,
           stickyAuth: true,
           sensitiveTransaction: false,
         ),
       );
 
-      return authenticated
-          ? BiometricResult.success
-          : BiometricResult.cancelled;
+      if (!authenticated) {
+        return BiometricResult.cancelled;
+      }
+
+      _pendingUnlockApproval = DeviceAuthApproval._();
+
+      return BiometricResult.success;
     } on PlatformException catch (e) {
+      _pendingUnlockApproval = null;
+
       switch (e.code) {
         case auth_error.notAvailable:
           return BiometricResult.notAvailable;
@@ -71,37 +137,98 @@ class BiometricService {
     }
   }
 
-  /// Enable biometric unlock (requires one successful authentication first)
-  static Future<bool> enableBiometric() async {
-    final result = await authenticateToUnlock();
-    if (result != BiometricResult.success) return false;
-    await StorageService.setBiometricEnabled(true);
+  static DeviceAuthApproval? get pendingUnlockApproval =>
+      _pendingUnlockApproval;
+
+  static bool consumeUnlockApproval(
+    DeviceAuthApproval approval,
+  ) {
+    if (!identical(
+      approval,
+      _pendingUnlockApproval,
+    )) {
+      return false;
+    }
+
+    _pendingUnlockApproval = null;
     return true;
   }
 
-  /// Disable biometric unlock
-  static Future<void> disableBiometric() async {
+  static void clearPendingUnlockApproval() {
+    _pendingUnlockApproval = null;
+  }
+
+  static Future<BiometricResult> enableDeviceAuthWithResult() async {
+    final result = await authenticateToUnlock();
+
+    clearPendingUnlockApproval();
+
+    if (result == BiometricResult.success) {
+      await StorageService.setBiometricEnabled(true);
+    }
+
+    return result;
+  }
+
+  static Future<bool> enableDeviceAuth() async {
+    return await enableDeviceAuthWithResult() == BiometricResult.success;
+  }
+
+  static Future<void> disableDeviceAuth() async {
+    clearPendingUnlockApproval();
     await StorageService.setBiometricEnabled(false);
   }
 
-  /// Check if biometric unlock is enabled by the user
-  static Future<bool> isBiometricEnabled() async {
-    final availability = await checkAvailability();
-    if (availability != BiometricAvailability.available) return false;
-    return StorageService.isBiometricEnabled();
+  static Future<bool> isDeviceAuthEnabled() async {
+    final availability = await checkDeviceAuthAvailability();
+
+    if (availability != BiometricAvailability.available) {
+      return false;
+    }
+
+    final preference = await StorageService.getDeviceAuthPreference();
+
+    return preference != false;
   }
 
-  /// Get human-readable name for available biometric type
-  static Future<String> getBiometricLabel() async {
+  static Future<String> getDeviceAuthLabel() async {
     final types = await getAvailableTypes();
-    if (types.contains(BiometricType.face)) return 'Face ID';
-    if (types.contains(BiometricType.fingerprint)) return 'Fingerprint';
-    if (types.contains(BiometricType.iris)) return 'Iris';
-    return 'Biometrics';
+
+    String? biometricLabel;
+
+    if (types.contains(BiometricType.face)) {
+      biometricLabel = 'face authentication';
+    } else if (types.contains(BiometricType.fingerprint)) {
+      biometricLabel = 'fingerprint';
+    } else if (types.contains(BiometricType.iris)) {
+      biometricLabel = 'iris authentication';
+    }
+
+    if (biometricLabel == null) {
+      return 'your phone PIN, pattern, or password';
+    }
+
+    return '$biometricLabel or your phone PIN, pattern, or password';
   }
+
+  static Future<bool> enableBiometric() => enableDeviceAuth();
+
+  static Future<void> disableBiometric() => disableDeviceAuth();
+
+  static Future<bool> isBiometricEnabled() => isDeviceAuthEnabled();
+
+  static Future<String> getBiometricLabel() => getDeviceAuthLabel();
 }
 
-enum BiometricAvailability { available, notAvailable, notEnrolled }
+/// Historical enum name retained for source compatibility.
+///
+/// `available` now means secure device-level authentication is supported; it
+/// does not require an enrolled biometric.
+enum BiometricAvailability {
+  available,
+  notAvailable,
+  notEnrolled,
+}
 
 enum BiometricResult {
   success,

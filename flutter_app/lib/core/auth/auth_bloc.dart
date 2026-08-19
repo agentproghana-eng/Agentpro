@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../services/storage_service.dart';
@@ -21,7 +22,11 @@ class AuthLogoutEvent extends AuthEvent {}
 
 class AuthLockEvent extends AuthEvent {}
 
-class AuthUnlockEvent extends AuthEvent {}
+class AuthUnlockEvent extends AuthEvent {
+  final DeviceAuthApproval approval;
+
+  AuthUnlockEvent(this.approval);
+}
 
 class AuthSessionInvalidatedEvent extends AuthEvent {}
 
@@ -103,18 +108,71 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     AuthCheckEvent event,
     Emitter<AuthState> emit,
   ) async {
+    final startupState = state;
+
     final user = await StorageService.getUser();
-    final token = await StorageService.getAccessToken();
+
+    if (!identical(state, startupState)) {
+      return;
+    }
+
+    final accessToken = await StorageService.getAccessToken();
+
+    if (!identical(state, startupState)) {
+      return;
+    }
+
+    final refreshToken = await StorageService.getRefreshToken();
+
+    if (!identical(state, startupState)) {
+      return;
+    }
+
     final sessionLocked = await StorageService.isSessionLocked();
 
-    // Startup may restore only an already-unlocked local session.
-    // A durable local lock survives navigation/process state changes and
-    // must be cleared only by an explicit phone-authentication challenge.
-    if (user != null && token != null && token.isNotEmpty && !sessionLocked) {
-      emit(AuthAuthenticated(user));
-    } else {
-      emit(AuthUnauthenticated());
+    if (!identical(state, startupState)) {
+      return;
     }
+
+    if (user == null ||
+        accessToken == null ||
+        accessToken.isEmpty ||
+        refreshToken == null ||
+        refreshToken.isEmpty) {
+      emit(AuthUnauthenticated());
+      return;
+    }
+
+    if (sessionLocked) {
+      emit(AuthUnauthenticated());
+      return;
+    }
+
+    final deviceAuthPreference = await StorageService.getDeviceAuthPreference();
+
+    if (!identical(state, startupState)) {
+      return;
+    }
+
+    if (deviceAuthPreference != false) {
+      await StorageService.setSessionLocked(true);
+
+      if (!identical(state, startupState)) {
+        if (state is AuthAuthenticated) {
+          await StorageService.setSessionLocked(false);
+        }
+        return;
+      }
+
+      emit(AuthUnauthenticated());
+      return;
+    }
+
+    if (!identical(state, startupState)) {
+      return;
+    }
+
+    emit(AuthAuthenticated(user));
   }
 
   Future<void> _onLogin(AuthLoginEvent event, Emitter<AuthState> emit) async {
@@ -134,13 +192,38 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await StorageService.setSessionLocked(false);
 
       emit(AuthAuthenticated(data['user']));
-    } on Exception catch (e) {
-      String message = 'Login failed. Please try again.';
-      if (e.toString().contains('403')) {
-        message = 'Your account is pending approval.';
+    } on DioException catch (e) {
+      final statusCode = e.response?.statusCode;
+
+      if (statusCode == 401) {
+        emit(AuthError('Invalid email or password.'));
+        return;
       }
-      if (e.toString().contains('401')) message = 'Invalid email or password.';
-      emit(AuthError(message));
+
+      if (statusCode == 403) {
+        emit(AuthError('Your account is pending approval.'));
+        return;
+      }
+
+      final serverUnreachable = e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.sendTimeout ||
+          e.type == DioExceptionType.receiveTimeout;
+
+      if (serverUnreachable) {
+        emit(
+          AuthError(
+            'AgentPro cannot reach the server. '
+            'If you have previously signed in on this phone, '
+            'use Unlock AgentPro.',
+          ),
+        );
+        return;
+      }
+
+      emit(AuthError('Login failed. Please try again.'));
+    } on Exception {
+      emit(AuthError('Login failed. Please try again.'));
     }
   }
 
@@ -176,7 +259,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     AuthLockEvent event,
     Emitter<AuthState> emit,
   ) async {
-    final deviceAuthEnabled = await BiometricService.isBiometricEnabled();
+    final deviceAuthEnabled = await BiometricService.isDeviceAuthEnabled();
 
     if (deviceAuthEnabled) {
       // Soft-lock locally without destroying the encrypted server session.
@@ -207,6 +290,14 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     AuthUnlockEvent event,
     Emitter<AuthState> emit,
   ) async {
+    // AuthUnlockEvent is not trusted by itself. Only the exact one-time
+    // approval object created after successful OS authentication can unlock.
+    if (!BiometricService.consumeUnlockApproval(event.approval)) {
+      await StorageService.setSessionLocked(true);
+      emit(AuthUnauthenticated());
+      return;
+    }
+
     final user = await StorageService.getUser();
     final accessToken = await StorageService.getAccessToken();
     final refreshToken = await StorageService.getRefreshToken();
@@ -216,13 +307,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         accessToken.isEmpty ||
         refreshToken == null ||
         refreshToken.isEmpty) {
+      await StorageService.setSessionLocked(true);
       emit(AuthUnauthenticated());
       return;
     }
 
-    // The phone-authentication challenge has already succeeded before this
-    // event is dispatched. Unlock only the local app state here. Do not
-    // refresh tokens or perform any network request as part of app unlock.
     await StorageService.setSessionLocked(false);
     emit(AuthAuthenticated(user));
   }

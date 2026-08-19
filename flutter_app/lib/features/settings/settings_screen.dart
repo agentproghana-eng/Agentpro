@@ -24,9 +24,9 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _biometricEnabled = false;
-  bool _canBiometric = false;
-  String _biometricLabel = 'Biometrics';
+  bool _deviceAuthEnabled = false;
+  bool _canDeviceAuth = false;
+  String _deviceAuthLabel = 'Biometrics';
   String _appVersion = '';
 
   @override
@@ -36,45 +36,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _init() async {
-    final availability = await BiometricService.checkAvailability();
-    final enabled = await BiometricService.isBiometricEnabled();
-    final label = await BiometricService.getBiometricLabel();
+    final availability = await BiometricService.checkDeviceAuthAvailability();
+    final enabled = await BiometricService.isDeviceAuthEnabled();
+    final label = await BiometricService.getDeviceAuthLabel();
     final packageInfo = await PackageInfo.fromPlatform();
 
     if (mounted) {
       setState(() {
-        _canBiometric = availability == BiometricAvailability.available;
-        _biometricEnabled = enabled;
-        _biometricLabel = label;
+        _canDeviceAuth = availability == BiometricAvailability.available;
+        _deviceAuthEnabled = enabled;
+        _deviceAuthLabel = label;
         _appVersion = 'v${packageInfo.version}+${packageInfo.buildNumber}';
       });
     }
   }
 
-  Future<void> _toggleBiometric(bool value) async {
+  Future<void> _toggleDeviceAuth(bool value) async {
     if (value) {
-      final success = await BiometricService.enableBiometric();
+      final result = await BiometricService.enableDeviceAuthWithResult();
 
-      if (!success) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Could not verify your phone authentication. Please try again.',
-              ),
-            ),
-          );
-        }
+      if (result != BiometricResult.success) {
+        if (!mounted) return;
+
+        final message = switch (result) {
+          BiometricResult.notAvailable =>
+            'Phone authentication is unavailable. Set up a phone PIN, '
+                'pattern, password, fingerprint, or face unlock first.',
+          BiometricResult.notEnrolled =>
+            'Set up a secure screen lock in your phone Settings first.',
+          BiometricResult.lockedOut =>
+            'Phone authentication is temporarily locked. Unlock your phone '
+                'normally, then try again.',
+          BiometricResult.permanentlyLockedOut =>
+            'Phone authentication is locked. Unlock the phone with its PIN, '
+                'pattern, or password, then try again.',
+          BiometricResult.cancelled =>
+            'Offline sign-in was not enabled because phone authentication '
+                'was cancelled.',
+          BiometricResult.error =>
+            'AgentPro could not open phone authentication. Please try again.',
+          BiometricResult.success => '',
+        };
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+          ),
+        );
+
         return;
       }
     } else {
       // This is a local device preference only. Do not use account logout
       // as a side effect of changing the preference.
-      await BiometricService.disableBiometric();
+      await BiometricService.disableDeviceAuth();
     }
 
     if (mounted) {
-      setState(() => _biometricEnabled = value);
+      setState(() => _deviceAuthEnabled = value);
     }
   }
 
@@ -150,19 +169,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   letterSpacing: 1)),
         ),
 
-        if (_canBiometric)
+        if (_canDeviceAuth)
           SwitchListTile(
             secondary: const Icon(
               Icons.security,
               color: AppTheme.primaryColor,
             ),
-            title: const Text('Require phone authentication'),
+            title: const Text('Offline sign-in'),
             subtitle: Text(
-              'Unlock AgentPro using $_biometricLabel '
-              'or your phone PIN, pattern, or password.',
+              'Use $_deviceAuthLabel to unlock a saved AgentPro session '
+              'without internet. Available by default after a successful '
+              'online sign-in.',
             ),
-            value: _biometricEnabled,
-            onChanged: _toggleBiometric,
+            value: _deviceAuthEnabled,
+            onChanged: _toggleDeviceAuth,
             activeThumbColor: AppTheme.primaryColor,
           ),
 

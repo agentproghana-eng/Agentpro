@@ -146,7 +146,7 @@ void main() {
           authSource,
           contains('class AuthUnlockEvent extends AuthEvent'),
           reason:
-              'Biometric restoration needs a distinct authenticated unlock event.',
+              'Device-auth restoration needs a distinct authenticated unlock event.',
         );
 
         expect(
@@ -191,21 +191,21 @@ void main() {
           'lib/features/auth/login_screen.dart',
         );
 
-        final biometricFlow = _slice(
+        final deviceAuthFlow = _slice(
           loginSource,
-          'Future<void> _tryBiometric() async',
+          'Future<void> _tryDeviceAuth() async',
           'void _login()',
         );
 
         expect(
-          biometricFlow,
-          contains('AuthUnlockEvent()'),
+          deviceAuthFlow,
+          contains('AuthUnlockEvent(approval)'),
           reason:
               'A successful device-authentication challenge must use the dedicated unlock event.',
         );
 
         expect(
-          biometricFlow,
+          deviceAuthFlow,
           isNot(contains('AuthCheckEvent()')),
           reason:
               'The generic startup check must not be reused as proof of device authentication.',
@@ -215,7 +215,7 @@ void main() {
           loginSource,
           contains('StorageService.getRefreshToken()'),
           reason:
-              'The biometric sign-in affordance must only appear when a resumable refresh session actually exists.',
+              'The offline unlock affordance must only appear when a resumable refresh session actually exists.',
         );
       },
     );
@@ -229,13 +229,13 @@ void main() {
 
         final toggle = _slice(
           source,
-          'Future<void> _toggleBiometric',
+          'Future<void> _toggleDeviceAuth',
           'Future<void> _addPersonalCapability',
         );
 
         expect(
           toggle,
-          contains('BiometricService.disableBiometric()'),
+          contains('BiometricService.disableDeviceAuth()'),
         );
 
         expect(
