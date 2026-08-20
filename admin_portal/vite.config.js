@@ -16,11 +16,22 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          charts: ['recharts'],
+        codeSplitting: {
+          groups: [
+            {
+              name: 'charts',
+              test: /node_modules[\\/]recharts(?:[\\/]|$)/,
+              priority: 20,
+            },
+            {
+              name: 'vendor',
+              test:
+                /node_modules[\\/](?:react|react-dom|react-router-dom)(?:[\\/]|$)/,
+              priority: 10,
+            },
+          ],
         },
       },
     },
