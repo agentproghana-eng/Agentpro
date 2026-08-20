@@ -5,7 +5,11 @@ const { logger } = require('../utils/logger');
 /**
  * Send a push notification to a single user
  */
-async function sendToUser(userId, { title, body, data = {}, type }) {
+async function sendToUser(
+  userId,
+  { title, body, data = {}, type },
+  { throwOnError = false } = {}
+) {
   try {
     const result = await query(
       'SELECT fcm_token FROM users WHERE id = $1 AND fcm_token IS NOT NULL',
@@ -44,6 +48,12 @@ async function sendToUser(userId, { title, body, data = {}, type }) {
       await query('UPDATE users SET fcm_token = NULL WHERE id = $1', [userId]);
     }
     logger.error(`FCM send error for user ${userId}:`, error);
+
+    if (throwOnError) {
+      throw error;
+    }
+
+    return undefined;
   }
 }
 
@@ -68,7 +78,11 @@ async function sendToCompany(companyId, notification) {
 
 // ── Specific Notification Types ──────────────────────────────
 
-async function sendTransactionNotification(agentId, { type, transaction }) {
+async function sendTransactionNotification(
+  agentId,
+  { type, transaction },
+  options = {}
+) {
   const amountStr = `GH₵${parseFloat(transaction.amount).toFixed(2)}`;
   const typeLabel = (transaction.transaction_type || '').replace('_', ' ');
 
@@ -105,7 +119,7 @@ async function sendTransactionNotification(agentId, { type, transaction }) {
       reference: transaction.reference,
       amount: String(transaction.amount),
     },
-  });
+  }, options);
 }
 
 async function sendLowFloatAlert(branchId, provider, currentBalance) {

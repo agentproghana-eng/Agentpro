@@ -117,9 +117,9 @@ describe('atomic audit service contract', () => {
   );
 });
 
-describe('transaction completion side-effect boundary', () => {
+describe('transaction completion outbox boundary', () => {
   test(
-    'keeps external completion notification after the strict DB transaction',
+    'enqueues completion intent after strict audit inside the owning DB transaction',
     () => {
       const fs = require('fs');
       const path = require('path');
@@ -152,31 +152,54 @@ describe('transaction completion side-effect boundary', () => {
           'strict: true'
         );
 
-      const postCommitMarker =
+      const outboxEnqueue =
         completionSource.indexOf(
-          'PostgreSQL has committed at this point'
+          'await enqueueOutboxEvent('
         );
 
-      const notificationSend =
+      const afterTransaction =
         completionSource.indexOf(
-          'await sendTransactionNotification(',
-          postCommitMarker
+          'if (transactionNotFound)'
         );
 
-      expect(strictAudit).toBeGreaterThanOrEqual(0);
-      expect(postCommitMarker).toBeGreaterThan(strictAudit);
-      expect(notificationSend).toBeGreaterThan(postCommitMarker);
+      expect(strictAudit)
+        .toBeGreaterThanOrEqual(0);
 
-      const beforePostCommit =
+      expect(outboxEnqueue)
+        .toBeGreaterThan(strictAudit);
+
+      expect(afterTransaction)
+        .toBeGreaterThan(outboxEnqueue);
+
+      const outboxSection =
         completionSource.slice(
-          0,
-          postCommitMarker
+          outboxEnqueue,
+          afterTransaction
         );
+
+      expect(outboxSection).toContain(
+        'dbClient: client'
+      );
+
+      expect(outboxSection).toContain(
+        "'notification.transaction.completed'"
+      );
+
+      expect(outboxSection).not.toContain(
+        'ussd_session_log'
+      );
 
       expect(
-        beforePostCommit
-          .match(/await sendTransactionNotification\(/g)
-      ).toBeNull();
+        completionSource.indexOf(
+          'await sendTransactionNotification('
+        )
+      ).toBe(-1);
+
+      expect(
+        completionSource.indexOf(
+          'completionNotification'
+        )
+      ).toBe(-1);
     }
   );
 });

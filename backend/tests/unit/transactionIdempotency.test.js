@@ -8,6 +8,7 @@ const mockWithTransaction = jest.fn();
 
 const mockAuditLog = jest.fn();
 const mockSendTransactionNotification = jest.fn();
+const mockEnqueueOutboxEvent = jest.fn();
 const mockGenerateTransactionReceipt = jest.fn();
 
 const mockCalculateAndPostCommission = jest.fn();
@@ -33,6 +34,11 @@ jest.mock('../../src/services/auditService', () => ({
 jest.mock('../../src/services/notificationService', () => ({
   sendTransactionNotification: (...args) =>
     mockSendTransactionNotification(...args),
+}));
+
+jest.mock('../../src/services/outboxService', () => ({
+  enqueueOutboxEvent: (...args) =>
+    mockEnqueueOutboxEvent(...args),
 }));
 
 jest.mock('../../src/services/reportService', () => ({
@@ -194,6 +200,26 @@ beforeEach(() => {
 
   mockAuditLog.mockResolvedValue(undefined);
   mockSendTransactionNotification.mockResolvedValue(undefined);
+
+  mockEnqueueOutboxEvent.mockImplementation(
+    async (event) => {
+      await mockSendTransactionNotification(
+        event.payload.agent_id,
+        {
+          type: event.payload.type,
+          transaction:
+            event.payload.transaction,
+        }
+      );
+
+      return {
+        id: 'outbox-event-1',
+        status: 'pending',
+        deduplicated: false,
+      };
+    }
+  );
+
   mockGenerateTransactionReceipt.mockResolvedValue(null);
 
   mockCalculateAndPostCommission.mockResolvedValue(null);
@@ -2261,6 +2287,123 @@ it('does not post Commission Transfer balances while outcome is pending confirma
       }),
     );
   });
+
+  it(
+    'atomically enqueues a minimal sanitized completion event',
+    async () => {
+      const initiated = existingTransaction({
+        status: 'initiated',
+        transaction_type: 'cash_in',
+        amount: '100.00',
+      });
+
+      const failed = {
+        ...initiated,
+        status: 'failed',
+        failure_reason: 'failed',
+      };
+
+      mockClientQuery
+        .mockResolvedValueOnce({
+          rows: [initiated],
+        })
+        .mockResolvedValueOnce({
+          rows: [],
+        });
+
+      mockQuery.mockResolvedValue({
+        rows: [failed],
+      });
+
+      const req = makeReq();
+
+      req.params = {
+        transaction_id: 'tx-1',
+      };
+
+      req.body = {
+        status: 'failed',
+        network_reference: null,
+        failure_reason: 'failed',
+        ussd_session_log: [
+          {
+            step: 'result',
+            response:
+              'unsafe provider response',
+          },
+        ],
+      };
+
+      const res = makeRes();
+
+      await transactionController.completeTransaction(
+        req,
+        res
+      );
+
+      expect(
+        mockEnqueueOutboxEvent
+      ).toHaveBeenCalledTimes(1);
+
+      const event =
+        mockEnqueueOutboxEvent
+          .mock.calls[0][0];
+
+      expect(event).toEqual(
+        expect.objectContaining({
+          dbClient:
+            expect.objectContaining({
+              query:
+                mockClientQuery,
+            }),
+          eventType:
+            'notification.transaction.completed',
+          aggregateType:
+            'transaction',
+          aggregateId:
+            'tx-1',
+          dedupeKey:
+            'transaction:tx-1:completion:failed',
+        })
+      );
+
+      expect(event.payload).toEqual({
+        agent_id: 'agent-1',
+        type:
+          'transaction_failed',
+        transaction: {
+          id: 'tx-1',
+          amount: '100.00',
+          transaction_type:
+            'cash_in',
+          reference:
+            'APG-TEST-001',
+          failure_reason:
+            expect.anything(),
+        },
+      });
+
+      expect(
+        event.payload.transaction
+      ).not.toHaveProperty(
+        'ussd_session_log'
+      );
+
+      expect(
+        event.payload
+      ).not.toHaveProperty(
+        'network_reference'
+      );
+
+      expect(
+        mockAuditLog
+          .mock.invocationCallOrder[0]
+      ).toBeLessThan(
+        mockEnqueueOutboxEvent
+          .mock.invocationCallOrder[0]
+      );
+    }
+  );
 
   it('returns success when the same final completion is retried', async () => {
     mockClientQuery.mockResolvedValueOnce({

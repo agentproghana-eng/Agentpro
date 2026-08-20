@@ -191,6 +191,32 @@ if (process.env.NODE_ENV !== 'test') {
   logger.info('⏭️ Skipping Firebase initialization in test environment');
 };
 
+    // The transactional outbox worker runs only in production and starts
+    // after PostgreSQL and Firebase are ready. Every production instance
+    // may safely run a worker because claims use FOR UPDATE SKIP LOCKED.
+    //
+    // OUTBOX_WORKER_ENABLED=false is an emergency operational kill switch.
+    // The default is enabled so committed outbox events cannot silently
+    // accumulate after a normal deployment.
+    if (
+      process.env.NODE_ENV === 'production' &&
+      process.env.OUTBOX_WORKER_ENABLED !== 'false'
+    ) {
+      const {
+        startOutboxWorker
+      } = require('./src/services/outboxWorker');
+
+      const {
+        dispatchOutboxEvent
+      } = require('./src/services/outboxDispatcher');
+
+      startOutboxWorker({
+        dispatchEvent: dispatchOutboxEvent,
+      });
+
+      logger.info('✅ Transactional outbox worker started');
+    }
+
     // Start background job scheduler (production only)
     if (process.env.NODE_ENV === 'production') {
       const { startScheduler } = require('./src/jobs/scheduler');
