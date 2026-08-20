@@ -1,14 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import axios from 'axios';
+import API from './lib/api.js';
 import toast from 'react-hot-toast';
-
-const API = axios.create({ baseURL: import.meta.env.VITE_API_URL || '/api' });
-API.interceptors.request.use(cfg => {
-  const t = localStorage.getItem('access_token');
-  if (t) cfg.headers.Authorization = `Bearer ${t}`;
-  return cfg;
-});
 
 // ── Shared Components ─────────────────────────────────────────
 

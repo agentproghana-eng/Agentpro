@@ -11,29 +11,16 @@ import {
 } from './components/PageState.jsx';
 import { ConfirmDialog } from './components/ConfirmDialog.jsx';
 import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import API from './lib/api.js';
+import {
+  clearAuthSession,
+  discardLegacyPersistentAuth,
+  getAccessToken,
+  getRefreshToken,
+  getStoredUser,
+  saveAuthSession,
+} from './lib/authStorage.js';
 import toast, { Toaster } from 'react-hot-toast';
-
-// ── API Setup ─────────────────────────────────────────────────
-
-const API = axios.create({ baseURL: import.meta.env.VITE_API_URL || '/api' });
-
-API.interceptors.request.use(config => {
-  const token = localStorage.getItem('access_token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
-
-API.interceptors.response.use(
-  r => r,
-  async err => {
-    if (err.response?.status === 401) {
-      localStorage.clear();
-      window.location.href = '/login';
-    }
-    return Promise.reject(err);
-  }
-);
 
 // ── Auth Context ──────────────────────────────────────────────
 
@@ -45,24 +32,70 @@ function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const stored = localStorage.getItem('user');
-    if (stored) setUser(JSON.parse(stored));
+    // Persistent browser storage is no longer an authentication
+    // authority for the admin portal.
+    discardLegacyPersistentAuth();
+
+    const storedUser = getStoredUser();
+    const hasCredential =
+      Boolean(getAccessToken()) ||
+      Boolean(getRefreshToken());
+
+    if (storedUser && hasCredential) {
+      setUser(storedUser);
+    } else {
+      clearAuthSession();
+    }
+
     setLoading(false);
   }, []);
 
   const login = async (email, password) => {
     const { data } = await API.post('/auth/login', { email, password });
-    if (data.data.user.role !== 'superuser') throw new Error('Access denied. Superuser only.');
-    localStorage.setItem('access_token', data.data.access_token);
-    localStorage.setItem('refresh_token', data.data.refresh_token);
-    localStorage.setItem('user', JSON.stringify(data.data.user));
+    if (data.data.user.role !== 'superuser') {
+      // The backend already created a durable session during login.
+      // Revoke that session immediately rather than leaving an
+      // unauthorized admin-portal login alive until expiry.
+      try {
+        await API.post(
+          '/auth/logout',
+          {},
+          {
+            headers: {
+              Authorization:
+                `Bearer ${data.data.access_token}`,
+            },
+          },
+        );
+      } catch (_) {
+        // Server-side expiry remains the final backstop.
+      }
+
+      clearAuthSession();
+
+      throw new Error(
+        'Access denied. Superuser only.',
+      );
+    }
+
+    saveAuthSession({
+      accessToken: data.data.access_token,
+      refreshToken: data.data.refresh_token,
+      user: data.data.user,
+    });
+
     setUser(data.data.user);
   };
 
   const logout = async () => {
-    try { await API.post('/auth/logout', { refresh_token: localStorage.getItem('refresh_token') }); }
-    catch (_) {}
-    localStorage.clear();
+    try {
+      await API.post('/auth/logout');
+    } catch (_) {
+      // Clear the local tab session even when the network is unavailable.
+      // PostgreSQL remains authoritative for remote session validity.
+    }
+
+    clearAuthSession();
     setUser(null);
   };
 

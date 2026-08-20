@@ -212,6 +212,8 @@ jobs:
           cache-dependency-path: admin_portal/package-lock.json
       - run: npm ci
         working-directory: admin_portal
+      - run: npm run test:security
+        working-directory: admin_portal
       - run: npm run build
         working-directory: admin_portal
       - name: Upload build artifact

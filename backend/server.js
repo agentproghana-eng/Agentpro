@@ -58,22 +58,50 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' }
 }));
 
-app.use(cors({
-  origin: [
-    process.env.APP_URL,
+const allowedCorsOrigins = new Set(
+  [
     process.env.ADMIN_URL,
     process.env.FRONTEND_URL,
-    // Allow mobile app
-    'capacitor://localhost',
-    'ionic://localhost',
+
+    // Local browser development.
     'http://localhost',
     'http://localhost:5173',
     'http://127.0.0.1:5173',
-    'https://fastidious-flan-33d060.netlify.app',
+
+    // Supported mobile WebView origins.
+    'capacitor://localhost',
+    'ionic://localhost',
+  ].filter(Boolean)
+);
+
+app.use(cors({
+  origin(origin, callback) {
+    // Native clients, curl, service-to-service calls and health probes
+    // commonly have no Origin header.
+    if (!origin || allowedCorsOrigins.has(origin)) {
+      return callback(null, true);
+    }
+
+    // CORS is not an authorization boundary. Simply omit permission
+    // headers for browser origins that are not explicitly trusted.
+    return callback(null, false);
+  },
+  methods: [
+    'GET',
+    'POST',
+    'PUT',
+    'PATCH',
+    'DELETE',
   ],
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
-  credentials: true
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Request-ID',
+  ],
+
+  // Browser/mobile API authentication uses explicit Bearer tokens,
+  // not ambient cross-origin cookies.
+  credentials: false
 }));
 
 app.use(compression());
