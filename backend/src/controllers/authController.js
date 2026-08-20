@@ -345,22 +345,33 @@ exports.login = async (req, res) => {
     // Verify password
     const passwordValid = await bcrypt.compare(password, user.password_hash);
     if (!passwordValid) {
-      // Increment failed attempts
       const maxAttempts = 5;
-      const newAttempts = user.login_attempts + 1;
-      let lockUntil = null;
+      const lockMinutes = 30;
 
-      if (newAttempts >= maxAttempts) {
-        const lockMinutes = 30;
-        lockUntil = new Date(Date.now() + lockMinutes * 60000);
-      }
-
+      // Increment in PostgreSQL itself so concurrent failed logins cannot
+      // overwrite one another with the same application-computed value.
+      // PostgreSQL remains authoritative for account lockout state.
       await query(
-        'UPDATE users SET login_attempts = $1, locked_until = $2 WHERE id = $3',
-        [newAttempts, lockUntil, user.id]
+        `UPDATE users
+         SET login_attempts = login_attempts + 1,
+             locked_until = CASE
+               WHEN login_attempts + 1 >= $1
+               THEN NOW() + ($2 * INTERVAL '1 minute')
+               ELSE locked_until
+             END
+         WHERE id = $3
+         RETURNING login_attempts, locked_until`,
+        [
+          maxAttempts,
+          lockMinutes,
+          user.id,
+        ]
       );
 
-      return res.status(401).json({ success: false, message: 'Invalid email or password' });
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password'
+      });
     }
 
     // Check account status

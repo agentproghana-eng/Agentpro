@@ -1,21 +1,123 @@
-const rateLimit = require('express-rate-limit');
+const rateLimit =
+  require('express-rate-limit');
 
-exports.apiLimiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    success: false,
-    message: 'Too many requests. Please wait a moment and try again.'
-  }
-});
+const RedisRateLimitStore =
+  require(
+    '../services/redisRateLimitStore'
+  );
 
-exports.authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10,
-  message: {
-    success: false,
-    message: 'Too many authentication attempts. Please wait 15 minutes.'
+function sharedStore(prefix) {
+  if (
+    process.env.NODE_ENV === 'test'
+  ) {
+    return undefined;
   }
-});
+
+  return new RedisRateLimitStore({
+    prefix,
+  });
+}
+
+function createLimiter({
+  windowMs,
+  max,
+  message,
+  prefix,
+  passOnStoreError,
+}) {
+  const options = {
+    windowMs,
+    max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+      success: false,
+      message,
+    },
+    passOnStoreError,
+  };
+
+  const store =
+    sharedStore(prefix);
+
+  if (store) {
+    options.store = store;
+  }
+
+  return rateLimit(options);
+}
+
+exports.apiLimiter =
+  createLimiter({
+    windowMs:
+      parseInt(
+        process.env
+          .RATE_LIMIT_WINDOW_MS,
+        10
+      ) ||
+      60 * 1000,
+
+    max:
+      parseInt(
+        process.env
+          .RATE_LIMIT_MAX_REQUESTS,
+        10
+      ) ||
+      100,
+
+    message:
+      'Too many requests. Please wait a moment and try again.',
+
+    prefix:
+      'agentpro:rate-limit:api:',
+
+    passOnStoreError: true,
+  });
+
+exports.authLimiter =
+  createLimiter({
+    windowMs:
+      15 * 60 * 1000,
+
+    max: 10,
+
+    message:
+      'Too many authentication attempts. Please wait 15 minutes.',
+
+    prefix:
+      'agentpro:rate-limit:auth:',
+
+    passOnStoreError: false,
+  });
+
+exports.refreshLimiter =
+  createLimiter({
+    windowMs:
+      15 * 60 * 1000,
+
+    max: 120,
+
+    message:
+      'Too many session refresh attempts. Please wait and try again.',
+
+    prefix:
+      'agentpro:rate-limit:refresh:',
+
+    passOnStoreError: false,
+  });
+
+exports.aiLimiter =
+  createLimiter({
+    windowMs:
+      60 * 1000,
+
+    max: 30,
+
+    message:
+      'Too many AI requests. Please wait a moment.',
+
+    prefix:
+      'agentpro:rate-limit:ai:',
+
+    passOnStoreError: false,
+  });
