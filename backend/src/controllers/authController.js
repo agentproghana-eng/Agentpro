@@ -7,6 +7,25 @@ const { logger } = require('../utils/logger');
 const { sendPasswordResetEmail, sendWelcomeEmail } = require('../services/emailService');
 const { sendPasswordResetSMS } = require('../services/smsService');
 const { auditLog } = require('../services/auditService');
+const {
+  generateTotpSecret,
+  findMatchingTotpCounter,
+  buildOtpAuthUri,
+} = require('../utils/totp');
+const {
+  assertMfaEncryptionConfigured,
+  encryptTotpSecret,
+  decryptTotpSecret,
+  generateRecoveryCodes,
+  hashRecoveryCodes,
+  findRecoveryCodeIndex,
+} = require('../utils/mfaCrypto');
+const {
+  createMfaChallenge,
+  getMfaChallenge,
+  recordMfaFailure,
+  consumeMfaChallenge,
+} = require('../services/mfaChallengeService');
 
 // ─── Token Helpers ───────────────────────────────────────────
 
@@ -396,6 +415,112 @@ exports.login = async (req, res) => {
       });
     }
 
+    if (user.role === 'superuser') {
+      try {
+        assertMfaEncryptionConfigured();
+      } catch (configurationError) {
+        return res.status(503).json({
+          success: false,
+          code: 'MFA_TEMPORARILY_UNAVAILABLE',
+          message:
+            'Administrator authentication is temporarily unavailable.',
+        });
+      }
+
+      if (
+        user.mfa_enabled &&
+        !user.mfa_totp_secret_enc
+      ) {
+        return res.status(503).json({
+          success: false,
+          code: 'MFA_CONFIGURATION_INVALID',
+          message:
+            'Administrator authentication is temporarily unavailable.',
+        });
+      }
+
+      if (user.mfa_enabled) {
+        const challengeToken =
+          await createMfaChallenge({
+            userId: user.id,
+            purpose: 'verify',
+            deviceInfo:
+              device_info ?? null,
+            fcmToken:
+              fcm_token ?? null,
+          });
+
+        return res.status(202).json({
+          success: true,
+          code: 'MFA_REQUIRED',
+          message:
+            'Authenticator verification is required.',
+          data: {
+            mfa_required: true,
+            mfa_enrollment_required: false,
+            challenge_token: challengeToken,
+          },
+        });
+      }
+
+      const totpSecret =
+        generateTotpSecret();
+
+      const encryptedSecret =
+        encryptTotpSecret(
+          totpSecret,
+        );
+
+      const challengeToken =
+        await createMfaChallenge({
+          userId: user.id,
+          purpose: 'enroll',
+          secret: encryptedSecret,
+          deviceInfo:
+            device_info ?? null,
+          fcmToken:
+            fcm_token ?? null,
+        });
+
+      await auditLog({
+        userId: user.id,
+        companyId:
+          user.company_id,
+        action:
+          'MFA_ENROLLMENT_STARTED',
+        entityType: 'user',
+        entityId: user.id,
+        ipAddress: req.ip,
+        userAgent:
+          req.headers[
+            'user-agent'
+          ],
+        requestId:
+          req.requestId,
+      });
+
+      return res.status(202).json({
+        success: true,
+        code: 'MFA_ENROLLMENT_REQUIRED',
+        message:
+          'Authenticator enrollment is required.',
+        data: {
+          mfa_required: true,
+          mfa_enrollment_required: true,
+          challenge_token: challengeToken,
+          enrollment: {
+            secret: totpSecret,
+            otpauth_uri:
+              buildOtpAuthUri({
+                secret: totpSecret,
+                accountName:
+                  user.email,
+              }),
+          },
+        },
+      });
+    }
+
     // Create the durable refresh session before issuing its access
     // token. Every access token is bound to exactly one session row.
     const refreshToken = generateRefreshToken(user);
@@ -475,6 +600,694 @@ exports.login = async (req, res) => {
   }
 };
 
+// ─── Complete Superuser MFA ──────────────────────────────────
+
+exports.completeMfa = async (req, res) => {
+  const challengeToken =
+    String(
+      req.body.challenge_token || '',
+    ).trim();
+
+  const totpCode =
+    typeof req.body.code === 'string'
+      ? req.body.code.trim()
+      : '';
+
+  const recoveryCode =
+    typeof req.body.recovery_code === 'string'
+      ? req.body.recovery_code.trim()
+      : '';
+
+  const makeMfaError = (
+    code,
+    message,
+    statusCode = 401,
+  ) => {
+    const error =
+      new Error(message);
+
+    error.code = code;
+    error.statusCode =
+      statusCode;
+
+    return error;
+  };
+
+  let challenge = null;
+
+  try {
+    assertMfaEncryptionConfigured();
+
+    challenge =
+      await getMfaChallenge(
+        challengeToken,
+      );
+
+    if (!challenge) {
+      return res.status(401).json({
+        success: false,
+        code: 'MFA_CHALLENGE_EXPIRED',
+        message:
+          'The MFA challenge has expired. Please sign in again.',
+      });
+    }
+
+    if (
+      challenge.purpose === 'enroll' &&
+      !totpCode
+    ) {
+      return res.status(422).json({
+        success: false,
+        code: 'MFA_ENROLLMENT_TOTP_REQUIRED',
+        message:
+          'Enter the six-digit authenticator code to complete enrollment.',
+      });
+    }
+
+    const result =
+      await withTransaction(
+        async (client) => {
+          const userResult =
+            await client.query(
+              `SELECT
+                 id,
+                 company_id,
+                 role,
+                 first_name,
+                 last_name,
+                 email,
+                 phone,
+                 status,
+                 profile_image_url,
+                 telecel_operator_id,
+                 must_change_password,
+                 mfa_enabled,
+                 mfa_enabled_at,
+                 mfa_totp_secret_enc,
+                 mfa_recovery_code_hashes,
+                 mfa_last_totp_counter
+               FROM users
+               WHERE id = $1
+               FOR UPDATE`,
+              [challenge.userId],
+            );
+
+          if (
+            userResult.rows.length !==
+            1
+          ) {
+            throw makeMfaError(
+              'MFA_USER_INVALID',
+              'Administrator account is unavailable.',
+            );
+          }
+
+          const user =
+            userResult.rows[0];
+
+          if (
+            user.role !==
+              'superuser' ||
+            user.status !==
+              'active'
+          ) {
+            throw makeMfaError(
+              'MFA_USER_INVALID',
+              'Administrator account is unavailable.',
+            );
+          }
+
+          let recoveryCodes = null;
+          let recoveryUsed = false;
+
+          if (
+            challenge.purpose ===
+            'enroll'
+          ) {
+            if (user.mfa_enabled) {
+              throw makeMfaError(
+                'MFA_CHALLENGE_STALE',
+                'MFA is already enabled. Please sign in again.',
+                409,
+              );
+            }
+
+            let secret;
+
+            try {
+              secret =
+                decryptTotpSecret(
+                  challenge.secret,
+                );
+            } catch (_) {
+              throw makeMfaError(
+                'MFA_CHALLENGE_INVALID',
+                'The MFA challenge is invalid. Please sign in again.',
+              );
+            }
+
+            const matchedTotpCounter =
+              findMatchingTotpCounter(
+                secret,
+                totpCode,
+              );
+
+            if (
+              matchedTotpCounter ===
+              null
+            ) {
+              throw makeMfaError(
+                'MFA_CODE_INVALID',
+                'Invalid authenticator code.',
+              );
+            }
+
+            const consumed =
+              await consumeMfaChallenge(
+                challengeToken,
+              );
+
+            if (
+              !consumed ||
+              consumed.userId !==
+                challenge.userId ||
+              consumed.purpose !==
+                'enroll'
+            ) {
+              throw makeMfaError(
+                'MFA_CHALLENGE_EXPIRED',
+                'The MFA challenge has expired. Please sign in again.',
+              );
+            }
+
+            recoveryCodes =
+              generateRecoveryCodes();
+
+            const recoveryHashes =
+              hashRecoveryCodes(
+                recoveryCodes,
+              );
+
+            await client.query(
+              `UPDATE users
+               SET mfa_enabled = TRUE,
+                   mfa_enabled_at = NOW(),
+                   mfa_totp_secret_enc = $1,
+                   mfa_recovery_code_hashes = $2::jsonb,
+                   mfa_last_totp_counter = $3,
+                   updated_at = NOW()
+               WHERE id = $4`,
+              [
+                challenge.secret,
+                JSON.stringify(
+                  recoveryHashes,
+                ),
+                matchedTotpCounter
+                  .toString(),
+                user.id,
+              ],
+            );
+
+            // First enrollment invalidates every durable session that
+            // predates MFA. Those sessions have no cryptographic proof that
+            // the second factor was satisfied.
+            await client.query(
+              `UPDATE refresh_tokens
+               SET revoked_at = COALESCE(
+                 revoked_at,
+                 NOW()
+               )
+               WHERE user_id = $1
+                 AND revoked_at IS NULL`,
+              [user.id],
+            );
+
+            user.mfa_enabled = true;
+          } else if (
+            challenge.purpose ===
+            'verify'
+          ) {
+            if (
+              !user.mfa_enabled ||
+              !user.mfa_totp_secret_enc
+            ) {
+              throw makeMfaError(
+                'MFA_NOT_ENROLLED',
+                'Authenticator MFA is not enrolled. Please sign in again.',
+              );
+            }
+
+            let valid = false;
+            let recoveryIndex = -1;
+            let matchedTotpCounter = null;
+
+            if (totpCode) {
+              let secret;
+
+              try {
+                secret =
+                  decryptTotpSecret(
+                    user.mfa_totp_secret_enc,
+                  );
+              } catch (_) {
+                throw makeMfaError(
+                  'MFA_CONFIGURATION_INVALID',
+                  'Administrator authentication is temporarily unavailable.',
+                  503,
+                );
+              }
+
+              matchedTotpCounter =
+                findMatchingTotpCounter(
+                  secret,
+                  totpCode,
+                );
+
+              const lastTotpCounter =
+                user.mfa_last_totp_counter ==
+                null
+                  ? null
+                  : BigInt(
+                      user.mfa_last_totp_counter,
+                    );
+
+              valid =
+                matchedTotpCounter !==
+                  null &&
+                (
+                  lastTotpCounter ===
+                    null ||
+                  matchedTotpCounter >
+                    lastTotpCounter
+                );
+            } else if (
+              recoveryCode
+            ) {
+              recoveryIndex =
+                findRecoveryCodeIndex(
+                  recoveryCode,
+                  user.mfa_recovery_code_hashes,
+                );
+
+              valid =
+                recoveryIndex >= 0;
+            }
+
+            if (!valid) {
+              throw makeMfaError(
+                'MFA_CODE_INVALID',
+                'Invalid MFA credential.',
+              );
+            }
+
+            const consumed =
+              await consumeMfaChallenge(
+                challengeToken,
+              );
+
+            if (
+              !consumed ||
+              consumed.userId !==
+                challenge.userId ||
+              consumed.purpose !==
+                'verify'
+            ) {
+              throw makeMfaError(
+                'MFA_CHALLENGE_EXPIRED',
+                'The MFA challenge has expired. Please sign in again.',
+              );
+            }
+
+            if (
+              matchedTotpCounter !==
+              null
+            ) {
+              await client.query(
+                `UPDATE users
+                 SET mfa_last_totp_counter = $1,
+                     updated_at = NOW()
+                 WHERE id = $2`,
+                [
+                  matchedTotpCounter
+                    .toString(),
+                  user.id,
+                ],
+              );
+            }
+
+            if (
+              recoveryIndex >= 0
+            ) {
+              const remaining =
+                Array.isArray(
+                  user.mfa_recovery_code_hashes,
+                )
+                  ? [
+                      ...user
+                        .mfa_recovery_code_hashes,
+                    ]
+                  : [];
+
+              remaining.splice(
+                recoveryIndex,
+                1,
+              );
+
+              await client.query(
+                `UPDATE users
+                 SET mfa_recovery_code_hashes = $1::jsonb,
+                     updated_at = NOW()
+                 WHERE id = $2`,
+                [
+                  JSON.stringify(
+                    remaining,
+                  ),
+                  user.id,
+                ],
+              );
+
+              recoveryUsed = true;
+            }
+          } else {
+            throw makeMfaError(
+              'MFA_CHALLENGE_INVALID',
+              'The MFA challenge is invalid. Please sign in again.',
+            );
+          }
+
+          const refreshToken =
+            generateRefreshToken(
+              user,
+            );
+
+          const tokenHash =
+            await bcrypt.hash(
+              refreshToken,
+              8,
+            );
+
+          const sessionResult =
+            await client.query(
+              `INSERT INTO refresh_tokens (
+                 user_id,
+                 token_hash,
+                 expires_at,
+                 device_info,
+                 mfa_verified_at
+               )
+               VALUES (
+                 $1,
+                 $2,
+                 $3,
+                 $4,
+                 NOW()
+               )
+               RETURNING id`,
+              [
+                user.id,
+                tokenHash,
+                getRefreshTokenExpiry(),
+                challenge.deviceInfo
+                  ? JSON.stringify(
+                      challenge.deviceInfo,
+                    )
+                  : null,
+              ],
+            );
+
+          await client.query(
+            `UPDATE users
+             SET last_login_at = NOW(),
+                 login_attempts = 0,
+                 locked_until = NULL,
+                 fcm_token = COALESCE(
+                   $1,
+                   fcm_token
+                 )
+             WHERE id = $2`,
+            [
+              challenge.fcmToken ?? null,
+              user.id,
+            ],
+          );
+
+          return {
+            user,
+            refreshToken,
+            sessionId:
+              sessionResult.rows[0]
+                .id,
+            recoveryCodes,
+            recoveryUsed,
+            enrolled:
+              challenge.purpose ===
+              'enroll',
+          };
+        },
+      );
+
+    const accessToken =
+      generateAccessToken(
+        result.user,
+        result.sessionId,
+      );
+
+    await auditLog({
+      userId:
+        result.user.id,
+      companyId:
+        result.user.company_id,
+      action: 'MFA_VERIFIED',
+      entityType: 'user',
+      entityId:
+        result.user.id,
+      ipAddress: req.ip,
+      userAgent:
+        req.headers[
+          'user-agent'
+        ],
+      requestId:
+        req.requestId,
+    });
+
+    if (result.enrolled) {
+      await auditLog({
+        userId:
+          result.user.id,
+        companyId:
+          result.user.company_id,
+        action: 'MFA_ENROLLED',
+        entityType: 'user',
+        entityId:
+          result.user.id,
+        ipAddress: req.ip,
+        userAgent:
+          req.headers[
+            'user-agent'
+          ],
+        requestId:
+          req.requestId,
+      });
+    }
+
+    if (result.recoveryUsed) {
+      await auditLog({
+        userId:
+          result.user.id,
+        companyId:
+          result.user.company_id,
+        action:
+          'MFA_RECOVERY_CODE_USED',
+        entityType: 'user',
+        entityId:
+          result.user.id,
+        ipAddress: req.ip,
+        userAgent:
+          req.headers[
+            'user-agent'
+          ],
+        requestId:
+          req.requestId,
+      });
+    }
+
+    await auditLog({
+      userId:
+        result.user.id,
+      companyId:
+        result.user.company_id,
+      action: 'USER_LOGIN',
+      entityType: 'user',
+      entityId:
+        result.user.id,
+      ipAddress: req.ip,
+      userAgent:
+        req.headers[
+          'user-agent'
+        ],
+      requestId:
+        req.requestId,
+    });
+
+    return res.json({
+      success: true,
+      message:
+        result.enrolled
+          ? 'MFA enrollment complete'
+          : 'Login successful',
+      data: {
+        access_token:
+          accessToken,
+        refresh_token:
+          result.refreshToken,
+        user: {
+          id:
+            result.user.id,
+          role:
+            result.user.role,
+          first_name:
+            result.user
+              .first_name,
+          last_name:
+            result.user
+              .last_name,
+          email:
+            result.user.email,
+          phone:
+            result.user.phone,
+          company_id:
+            result.user
+              .company_id,
+          profile_image_url:
+            result.user
+              .profile_image_url,
+          telecel_operator_id:
+            result.user
+              .telecel_operator_id,
+          must_change_password:
+            result.user
+              .must_change_password,
+          mfa_enabled: true,
+        },
+        ...(result.recoveryCodes
+          ? {
+              recovery_codes:
+                result.recoveryCodes,
+            }
+          : {}),
+      },
+    });
+  } catch (error) {
+    if (
+      error.code ===
+      'MFA_CODE_INVALID'
+    ) {
+      try {
+        const failure =
+          await recordMfaFailure(
+            challengeToken,
+          );
+
+        if (challenge?.userId) {
+          await auditLog({
+            userId:
+              challenge.userId,
+            companyId: null,
+            action:
+              'MFA_VERIFICATION_FAILED',
+            entityType:
+              'user',
+            entityId:
+              challenge.userId,
+            newValues: {
+              locked:
+                failure.locked,
+            },
+            ipAddress:
+              req.ip,
+            userAgent:
+              req.headers[
+                'user-agent'
+              ],
+            requestId:
+              req.requestId,
+          });
+        }
+
+        return res.status(401).json({
+          success: false,
+          code:
+            failure.locked
+              ? 'MFA_CHALLENGE_LOCKED'
+              : 'MFA_CODE_INVALID',
+          message:
+            failure.locked
+              ? 'Too many invalid MFA attempts. Please sign in again.'
+              : 'Invalid MFA credential.',
+          data: {
+            remaining_attempts:
+              failure.remaining,
+          },
+        });
+      } catch (_) {
+        return res.status(503).json({
+          success: false,
+          code:
+            'MFA_TEMPORARILY_UNAVAILABLE',
+          message:
+            'Administrator authentication is temporarily unavailable.',
+        });
+      }
+    }
+
+    if (
+      error.code ===
+      'MFA_TEMPORARILY_UNAVAILABLE' ||
+      error.code ===
+      'MFA_ENCRYPTION_KEY_REQUIRED' ||
+      error.code ===
+      'MFA_CONFIGURATION_INVALID'
+    ) {
+      return res.status(503).json({
+        success: false,
+        code:
+          'MFA_TEMPORARILY_UNAVAILABLE',
+        message:
+          'Administrator authentication is temporarily unavailable.',
+      });
+    }
+
+    if (
+      error.code &&
+      error.code.startsWith(
+        'MFA_',
+      )
+    ) {
+      return res
+        .status(
+          error.statusCode || 401,
+        )
+        .json({
+          success: false,
+          code: error.code,
+          message:
+            error.message,
+        });
+    }
+
+    logger.error(
+      'MFA completion error:',
+      error,
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        'MFA verification failed. Please try again.',
+    });
+  }
+};
+
 // ─── Refresh Access Token ─────────────────────────────────────
 
 exports.refreshToken = async (req, res) => {
@@ -502,7 +1315,10 @@ exports.refreshToken = async (req, res) => {
     // suspension/deactivation, and other server-side revocations remain
     // authoritative even if the signed token has not expired yet.
     const storedTokens = await query(
-      `SELECT id, token_hash
+      `SELECT
+         id,
+         token_hash,
+         mfa_verified_at
        FROM refresh_tokens
        WHERE user_id = $1
          AND revoked_at IS NULL
@@ -561,6 +1377,24 @@ exports.refreshToken = async (req, res) => {
     }
 
     const user = result.rows[0];
+
+    // A durable session created before mandatory MFA cannot be upgraded
+    // merely by presenting its old refresh credential. Superusers must
+    // return through password + MFA authentication.
+    if (
+      user.role === 'superuser' &&
+      (
+        !user.mfa_enabled ||
+        !matchedSession.mfa_verified_at
+      )
+    ) {
+      return res.status(401).json({
+        success: false,
+        code: 'MFA_REAUTH_REQUIRED',
+        message:
+          'Administrator MFA authentication is required. Please sign in again.',
+      });
+    }
 
     const newAccessToken = generateAccessToken(
       user,

@@ -222,8 +222,10 @@ const authenticate = async (req, res, next) => {
          u.company_id,
          u.email,
          u.status,
+         u.mfa_enabled,
          rt.id AS session_id,
-         rt.expires_at AS session_expires_at
+         rt.expires_at AS session_expires_at,
+         rt.mfa_verified_at
        FROM users u
        JOIN refresh_tokens rt
          ON rt.user_id = u.id
@@ -245,6 +247,26 @@ const authenticate = async (req, res, next) => {
     }
 
     const activeSession = sessionResult.rows[0];
+
+    // Superuser authorization requires durable server-side evidence that
+    // this exact session was created only after successful MFA.
+    //
+    // Existing pre-rollout sessions have mfa_verified_at = NULL and fail
+    // closed immediately after the migration is deployed.
+    if (
+      activeSession.role === 'superuser' &&
+      (
+        activeSession.mfa_enabled !== true ||
+        !activeSession.mfa_verified_at
+      )
+    ) {
+      return res.status(401).json({
+        success: false,
+        code: 'MFA_REAUTH_REQUIRED',
+        message:
+          'Administrator MFA authentication is required. Please sign in again.',
+      });
+    }
 
     req.user = {
       id: activeSession.id,
