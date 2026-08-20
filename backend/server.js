@@ -6,7 +6,7 @@ const compression = require('compression');
 const morgan = require('morgan');
 const { v4: uuidv4, validate: uuidValidate } = require('uuid');
 
-const { logger } = require('./src/utils/logger');
+const { logger, sanitizeRequestPath } = require('./src/utils/logger');
 const { connectDB } = require('./src/config/database');
 const { connectRedis } = require('./src/config/redis');
 const { initFirebase } = require('./src/config/firebase');
@@ -127,7 +127,7 @@ app.use((req, res, next) => {
 // Do not emit query strings, authorization headers, cookies,
 // IP addresses, request bodies or user agents into application logs.
 morgan.token('request-id', (req) => req.requestId || '-');
-morgan.token('safe-path', (req) => req.path || '/');
+morgan.token('safe-path', (req) => sanitizeRequestPath(req.path || '/'));
 
 app.use(morgan(
   ':method :safe-path :status :response-time ms request_id=:request-id',

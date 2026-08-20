@@ -13,7 +13,7 @@ const FROM = process.env.EMAIL_FROM || "Agent Pro Ghana <onboarding@resend.dev>"
 async function sendEmail({ to, subject, html, text }) {
   if (!resend) {
     logger.warn(
-      `Email skipped because RESEND_API_KEY is not configured: ${subject} -> ${to}`
+      'Email skipped because RESEND_API_KEY is not configured'
     );
     return { skipped: true };
   }
@@ -27,7 +27,7 @@ async function sendEmail({ to, subject, html, text }) {
       text,
     });
     if (error) throw new Error(error.message || JSON.stringify(error));
-    logger.info(`Email sent to ${to}: ${subject} (id: ${data?.id})`);
+    logger.info('Email sent successfully');
   } catch (error) {
     logger.error("Email send error:", error);
     throw error;

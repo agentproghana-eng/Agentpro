@@ -121,7 +121,7 @@ exports.register = async (req, res) => {
       });
 
       // Send notification to superuser (handled by notification service)
-      logger.info(`New Business Owner registration: ${email} — ${company_name}`);
+      logger.info('New Business Owner registration submitted');
     });
 
     res.status(201).json({

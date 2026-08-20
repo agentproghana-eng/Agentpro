@@ -47,7 +47,7 @@ async function sendToUser(
       // Clear invalid token
       await query('UPDATE users SET fcm_token = NULL WHERE id = $1', [userId]);
     }
-    logger.error(`FCM send error for user ${userId}:`, error);
+    logger.error('FCM send error', { error });
 
     if (throwOnError) {
       throw error;
@@ -227,7 +227,7 @@ async function sendEphemeral(userId, { title, body, data = {} }) {
     };
     await getMessaging().send(message);
   } catch (error) {
-    logger.error(`FCM ephemeral send error for user ${userId}:`, error);
+    logger.error('FCM ephemeral send error', { error });
   }
 }
 module.exports = {

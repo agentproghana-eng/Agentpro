@@ -39,7 +39,20 @@ async function query(text, params) {
     }
     return result;
   } catch (error) {
-    logger.error('Query error:', { text, error: error.message });
+    const duration = Date.now() - start;
+
+    if (process.env.NODE_ENV === 'development') {
+      logger.error('Query error:', {
+        text,
+        error: error.message,
+      });
+    } else {
+      logger.error('Database query failed', {
+        errorCode: error?.code,
+        durationMs: duration,
+      });
+    }
+
     throw error;
   }
 }
