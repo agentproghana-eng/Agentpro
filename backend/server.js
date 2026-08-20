@@ -1,4 +1,4 @@
-require('./instrument');
+require('dotenv').config();
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
@@ -7,11 +7,6 @@ const morgan = require('morgan');
 const { v4: uuidv4, validate: uuidValidate } = require('uuid');
 
 const { logger } = require('./src/utils/logger');
-const {
-  captureException,
-  flushObservability,
-  isObservabilityEnabled,
-} = require('./src/utils/observability');
 const { connectDB } = require('./src/config/database');
 const { connectRedis } = require('./src/config/redis');
 const { initFirebase } = require('./src/config/firebase');
@@ -202,11 +197,7 @@ const PORT = process.env.PORT || 3000;
 
 async function startServer() {
   try {
-    logger.info(
-      `Observability: ${
-        isObservabilityEnabled() ? 'Sentry enabled' : 'local logging only'
-      }`
-    );
+    logger.info('Backend telemetry: privacy-safe local logging enabled');
 
     // Connect to PostgreSQL
     await connectDB();
@@ -267,14 +258,6 @@ if (process.env.NODE_ENV !== 'test') {
     });
     } catch (error) {
     logger.error('Failed to start server:', error);
-
-    captureException(error, {
-      component: 'startup',
-      operation: 'start_server',
-      errorCode: error?.code
-    });
-
-    await flushObservability(2000);
 
     process.exit(1);
   }

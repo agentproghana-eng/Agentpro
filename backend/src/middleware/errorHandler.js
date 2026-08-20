@@ -1,5 +1,4 @@
 const { logger } = require('../utils/logger');
-const { captureException } = require('../utils/observability');
 
 const errorHandler = (err, req, res, next) => {
   logger.error('Unhandled error:', {
@@ -37,15 +36,6 @@ const errorHandler = (err, req, res, next) => {
 
   // Default
   const status = err.status || err.statusCode || 500;
-
-  if (status >= 500) {
-    captureException(err, {
-      requestId: req.requestId,
-      component: 'http',
-      operation: `${req.method} ${req.route?.path || req.path || '/'}`,
-      errorCode: err.code
-    });
-  }
 
   const message = process.env.NODE_ENV === 'production'
     ? 'An internal server error occurred'
