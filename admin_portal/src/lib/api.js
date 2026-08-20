@@ -100,9 +100,17 @@ API.interceptors.response.use(
     const isRefreshRequest =
       requestUrl.includes('/auth/refresh');
 
-    // A rejected login is an ordinary form error, not a session
-    // expiration event.
-    if (status !== 401 || isLoginRequest) {
+    const isMfaRequest =
+      requestUrl.includes('/auth/mfa/complete');
+
+    // Login and MFA verification failures are ordinary authentication
+    // form errors. They must never trigger an unrelated access-token
+    // refresh/retry cycle.
+    if (
+      status !== 401 ||
+      isLoginRequest ||
+      isMfaRequest
+    ) {
       return Promise.reject(error);
     }
 

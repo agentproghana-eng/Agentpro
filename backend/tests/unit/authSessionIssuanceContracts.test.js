@@ -120,7 +120,15 @@ describe('Durable auth session issuance contracts', () => {
       );
 
       expect(refresh).toContain(
-        'SELECT id, token_hash',
+        'FROM refresh_tokens',
+      );
+
+      expect(refresh).toContain(
+        'token_hash',
+      );
+
+      expect(refresh).toContain(
+        'mfa_verified_at',
       );
 
       expect(refresh).toContain(

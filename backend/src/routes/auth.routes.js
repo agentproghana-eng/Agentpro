@@ -57,6 +57,43 @@ router.post('/login', authLimiter, [
   body('password').notEmpty().withMessage('Password is required'),
 ], handleValidation, authController.login);
 
+// POST /api/v1/auth/mfa/complete
+router.post('/mfa/complete', authLimiter, [
+  body('challenge_token')
+    .isString()
+    .isLength({ min: 40, max: 200 })
+    .withMessage('Valid MFA challenge is required')
+    .custom((value, { req }) => {
+      const hasCode =
+        typeof req.body.code === 'string' &&
+        req.body.code.trim() !== '';
+
+      const hasRecovery =
+        typeof req.body.recovery_code === 'string' &&
+        req.body.recovery_code.trim() !== '';
+
+      if (hasCode === hasRecovery) {
+        throw new Error(
+          'Provide exactly one MFA credential'
+        );
+      }
+
+      return true;
+    }),
+  body('code')
+    .optional()
+    .matches(/^\d{6}$/)
+    .withMessage(
+      'Authenticator code must be exactly 6 digits'
+    ),
+  body('recovery_code')
+    .optional()
+    .isString()
+    .trim()
+    .isLength({ min: 16, max: 32 })
+    .withMessage('Invalid recovery code'),
+], handleValidation, authController.completeMfa);
+
 // POST /api/v1/auth/refresh
 router.post('/refresh', refreshLimiter, [
   body('refresh_token').notEmpty().withMessage('Refresh token is required'),

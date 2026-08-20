@@ -166,3 +166,63 @@ assert(
 console.log(
   'ADMIN_PORTAL_BROWSER_SECURITY_CONTRACT=PASS',
 );
+
+assert(
+  app.includes(
+    "'MFA_ENROLLMENT_REQUIRED'",
+  ),
+  'Admin portal must handle mandatory MFA enrollment',
+);
+
+assert(
+  app.includes(
+    "'MFA_REQUIRED'",
+  ),
+  'Admin portal must handle MFA verification challenges',
+);
+
+assert(
+  app.includes(
+    "'/auth/mfa/complete'",
+  ),
+  'Admin portal must complete MFA through the backend challenge endpoint',
+);
+
+assert(
+  app.includes(
+    'recovery_codes',
+  ),
+  'Admin portal must surface one-time recovery codes after enrollment',
+);
+
+assert(
+  app.includes(
+    'Use a recovery code instead',
+  ),
+  'Admin portal must support recovery-code login',
+);
+
+assert(
+  api.includes(
+    "requestUrl.includes('/auth/mfa/complete')",
+  ),
+  'Invalid MFA credentials must not trigger access-token refresh',
+);
+
+assert(
+  !authStorage.includes(
+    'challenge_token',
+  ),
+  'MFA challenges must never be persisted in browser auth storage',
+);
+
+assert(
+  !authStorage.includes(
+    'recovery_codes',
+  ),
+  'Recovery codes must never be persisted in browser auth storage',
+);
+
+console.log(
+  'ADMIN_PORTAL_MFA_SECURITY_CONTRACT=PASS',
+);
