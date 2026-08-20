@@ -1,4 +1,10 @@
-const admin = require('firebase-admin');
+const {
+  initializeApp,
+  cert,
+} = require('firebase-admin/app');
+const {
+  getMessaging: getFirebaseMessaging,
+} = require('firebase-admin/messaging');
 const { logger } = require('../utils/logger');
 
 let firebaseApp;
@@ -22,8 +28,8 @@ function initFirebase() {
   }
 
   try {
-    firebaseApp = admin.initializeApp({
-      credential: admin.credential.cert({
+    firebaseApp = initializeApp({
+      credential: cert({
         projectId,
         privateKey: privateKey.replace(/\\n/g, '\n'),
         clientEmail,
@@ -42,7 +48,7 @@ function initFirebase() {
 
 function getMessaging() {
   if (!firebaseApp) throw new Error('Firebase not initialized');
-  return admin.messaging();
+  return getFirebaseMessaging(firebaseApp);
 }
 
 module.exports = { initFirebase, getMessaging };
