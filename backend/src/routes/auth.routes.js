@@ -3,7 +3,10 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const authController = require('../controllers/authController');
 const { authenticate } = require('../middleware/auth');
-const { authLimiter } = require('../middleware/rateLimit');
+const {
+  authLimiter,
+  refreshLimiter,
+} = require('../middleware/rateLimit');
 
 // Validation middleware
 const handleValidation = (req, res, next) => {
@@ -55,7 +58,7 @@ router.post('/login', authLimiter, [
 ], handleValidation, authController.login);
 
 // POST /api/v1/auth/refresh
-router.post('/refresh', [
+router.post('/refresh', refreshLimiter, [
   body('refresh_token').notEmpty().withMessage('Refresh token is required'),
 ], handleValidation, authController.refreshToken);
 

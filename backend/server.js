@@ -39,6 +39,16 @@ const ussdFlowRoutes = require('./src/routes/ussdFlow.routes');
 
 const app = express();
 
+// Render terminates public HTTP(S) before forwarding requests to this
+// service over its private network. Trust only standard local/private
+// proxy networks so req.ip resolves the nearest untrusted public address.
+// Never use `true` here: blanket proxy trust can make a client-supplied
+// X-Forwarded-For value authoritative.
+app.set(
+  'trust proxy',
+  'loopback, linklocal, uniquelocal'
+);
+
 // ============================================================
 // MIDDLEWARE
 // ============================================================
