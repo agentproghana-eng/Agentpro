@@ -244,7 +244,7 @@ describe('Cash adjustment review locking and idempotency', () => {
     );
   });
 
-  it('scopes owner/manager review to their own company', async () => {
+  it('scopes manager review to their own company and managed branches', async () => {
     mockClientQuery.mockResolvedValueOnce({
       rows: []
     });
@@ -258,14 +258,70 @@ describe('Cash adjustment review locking and idempotency', () => {
 
     const [sql, params] = mockClientQuery.mock.calls[0];
 
-    expect(sql).toContain('u.company_id = $2');
-    expect(sql).toContain('FOR UPDATE');
+    expect(sql).toContain(
+      'u.company_id = $2'
+    );
+
+    expect(sql).toContain(
+      'FROM agent_branches ab'
+    );
+
+    expect(sql).toContain(
+      'INNER JOIN branch_managers bm'
+    );
+
+    expect(sql).toContain(
+      'bm.manager_id = $3'
+    );
+
+    expect(sql).toContain(
+      'FOR UPDATE'
+    );
+
+    expect(params).toEqual([
+      'movement-1',
+      'company-1',
+      'reviewer-1'
+    ]);
+
+    expect(res.status)
+      .toHaveBeenCalledWith(404);
+  });
+
+  it('keeps business-owner review company-wide', async () => {
+    mockClientQuery.mockResolvedValueOnce({
+      rows: []
+    });
+
+    const res = makeRes();
+
+    await balanceController.reviewCashAdjustment(
+      makeReq('approve', 'business_owner'),
+      res
+    );
+
+    const [sql, params] =
+      mockClientQuery.mock.calls[0];
+
+    expect(sql).toContain(
+      'u.company_id = $2'
+    );
+
+    expect(sql).not.toContain(
+      'FROM branch_managers bm'
+    );
+
+    expect(sql).not.toContain(
+      'FROM agent_branches ab'
+    );
+
     expect(params).toEqual([
       'movement-1',
       'company-1'
     ]);
 
-    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.status)
+      .toHaveBeenCalledWith(404);
   });
 
   it('allows superuser review without company restriction', async () => {

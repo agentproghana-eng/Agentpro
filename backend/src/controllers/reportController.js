@@ -26,19 +26,78 @@ function parseMultiValue(value) {
   )];
 }
 
+function buildTransactionScope(
+  userContext,
+  {
+    alias = 't',
+    startIndex = 1,
+  } = {}
+) {
+  const conditions = [];
+  const params = [];
+  let idx = startIndex;
+
+  if (userContext.role === 'agent') {
+    conditions.push(
+      `${alias}.agent_id = $${idx++}`
+    );
+    params.push(userContext.id);
+  } else if (
+    userContext.role === 'manager'
+  ) {
+    conditions.push(
+      `${alias}.company_id = $${idx++}`
+    );
+    params.push(
+      userContext.company_id
+    );
+
+    conditions.push(
+      `EXISTS (
+         SELECT 1
+         FROM branch_managers bm
+         WHERE bm.branch_id = ${alias}.branch_id
+           AND bm.manager_id = $${idx++}
+       )`
+    );
+    params.push(userContext.id);
+  } else if (
+    userContext.role !== 'superuser'
+  ) {
+    conditions.push(
+      `${alias}.company_id = $${idx++}`
+    );
+    params.push(
+      userContext.company_id
+    );
+  }
+
+  return {
+    conditions,
+    params,
+    nextIndex: idx,
+  };
+}
+
 async function fetchTransactions(filters, userContext) {
   const conditions = [];
   const params = [];
-  let idx = 1;
 
-  // Role-based scoping
-  if (userContext.role === 'agent') {
-    conditions.push(`t.agent_id = $${idx++}`);
-    params.push(userContext.id);
-  } else if (userContext.role !== 'superuser') {
-    conditions.push(`t.company_id = $${idx++}`);
-    params.push(userContext.company_id);
-  }
+  const scope =
+    buildTransactionScope(
+      userContext
+    );
+
+  conditions.push(
+    ...scope.conditions
+  );
+
+  params.push(
+    ...scope.params
+  );
+
+  let idx =
+    scope.nextIndex;
 
   if (filters.branch_id) { conditions.push(`t.branch_id = $${idx++}`); params.push(filters.branch_id); }
   if (filters.agent_id) { conditions.push(`t.agent_id = $${idx++}`); params.push(filters.agent_id); }
@@ -177,15 +236,22 @@ function resolvePeriodRange(period, fromDate, toDate) {
 async function fetchTransactionCount(filters, userContext) {
   const conditions = [];
   const params = [];
-  let idx = 1;
 
-  if (userContext.role === 'agent') {
-    conditions.push(`t.agent_id = $${idx++}`);
-    params.push(userContext.id);
-  } else if (userContext.role !== 'superuser') {
-    conditions.push(`t.company_id = $${idx++}`);
-    params.push(userContext.company_id);
-  }
+  const scope =
+    buildTransactionScope(
+      userContext
+    );
+
+  conditions.push(
+    ...scope.conditions
+  );
+
+  params.push(
+    ...scope.params
+  );
+
+  let idx =
+    scope.nextIndex;
 
   if (filters.branch_id) {
     conditions.push(`t.branch_id = $${idx++}`);
@@ -304,13 +370,107 @@ exports.transactionCount = async (req, res) => {
 // ── Resolve a branch's display name for report titles ─────────
 // Returns null if no branch_id was given or it doesn't resolve, so
 // callers can fall back to the existing generic title unchanged.
-async function resolveBranchName(branch_id) {
-  if (!branch_id) return null;
+async function resolveBranchName(
+  branch_id,
+  userContext
+) {
+  if (!branch_id) {
+    return null;
+  }
+
   try {
-    const result = await query('SELECT name FROM branches WHERE id = $1', [branch_id]);
-    return result.rows[0]?.name || null;
+    const conditions = [
+      'b.id = $1',
+    ];
+
+    const params = [
+      branch_id,
+    ];
+
+    let idx = 2;
+
+    if (
+      userContext?.role ===
+      'manager'
+    ) {
+      conditions.push(
+        `b.company_id = $${idx++}`
+      );
+
+      params.push(
+        userContext.company_id
+      );
+
+      conditions.push(
+        `EXISTS (
+           SELECT 1
+           FROM branch_managers bm
+           WHERE bm.branch_id = b.id
+             AND bm.manager_id = $${idx++}
+         )`
+      );
+
+      params.push(
+        userContext.id
+      );
+    } else if (
+      userContext?.role ===
+      'agent'
+    ) {
+      conditions.push(
+        `b.company_id = $${idx++}`
+      );
+
+      params.push(
+        userContext.company_id
+      );
+
+      conditions.push(
+        `EXISTS (
+           SELECT 1
+           FROM agent_branches ab
+           WHERE ab.branch_id = b.id
+             AND ab.agent_id = $${idx++}
+         )`
+      );
+
+      params.push(
+        userContext.id
+      );
+    } else if (
+      userContext &&
+      userContext.role !==
+        'superuser'
+    ) {
+      conditions.push(
+        `b.company_id = $${idx++}`
+      );
+
+      params.push(
+        userContext.company_id
+      );
+    }
+
+    const result =
+      await query(
+        `SELECT b.name
+         FROM branches b
+         WHERE ${conditions.join(
+           ' AND '
+         )}`,
+        params
+      );
+
+    return (
+      result.rows[0]?.name ||
+      null
+    );
   } catch (e) {
-    logger.warn('Failed to resolve branch name for report title:', e.message);
+    logger.warn(
+      'Failed to resolve branch name for report title:',
+      e.message
+    );
+
     return null;
   }
 }
@@ -351,7 +511,7 @@ exports.transactionReport = async (req, res) => {
     );
 
     const periodLabel = period || `${resolvedFrom?.slice(0, 10)} to ${resolvedTo?.slice(0, 10)}`;
-    const branchName = await resolveBranchName(branch_id);
+    const branchName = await resolveBranchName(branch_id, req.user);
     const title = branchName
       ? `Transaction Report — ${branchName} — ${periodLabel}`
       : `Transaction Report — ${periodLabel}`;
@@ -419,7 +579,14 @@ exports.commissionReport = async (req, res) => {
     }
 
     const data = await getCommissionSummary({
-      company_id: req.user.role === 'superuser' ? undefined : req.user.company_id,
+      company_id:
+        req.user.role === 'superuser'
+          ? undefined
+          : req.user.company_id,
+      manager_id:
+        req.user.role === 'manager'
+          ? req.user.id
+          : undefined,
       branch_id,
       agent_id,
       provider,
@@ -435,7 +602,7 @@ exports.commissionReport = async (req, res) => {
       transaction_count: data.reduce((s, r) => s + parseInt(r.transaction_count || 0), 0),
     };
 
-    const branchName = await resolveBranchName(branch_id);
+    const branchName = await resolveBranchName(branch_id, req.user);
     const title = branchName
       ? `Commission Report — ${branchName} — ${period || 'Custom Period'}`
       : `Commission Report — ${period || 'Custom Period'}`;
@@ -474,16 +641,40 @@ exports.commissionReport = async (req, res) => {
 // ── Dashboard Summary (JSON — for app dashboard charts) ───────
 
 exports.dashboardSummary = async (req, res) => {
-  const companyId = req.user.role === 'superuser' ? null : req.user.company_id;
-  const agentId = req.user.role === 'agent' ? req.user.id : null;
-
   try {
     const now = new Date();
     const startOfDay = new Date(now); startOfDay.setHours(0, 0, 0, 0);
     const startOfMonth = new Date(now); startOfMonth.setDate(1); startOfMonth.setHours(0, 0, 0, 0);
 
-    const companyFilter = companyId ? `AND t.company_id = '${companyId}'` : '';
-    const agentFilter = agentId ? `AND t.agent_id = '${agentId}'` : '';
+    const aggregateScope =
+      buildTransactionScope(
+        req.user,
+        {
+          startIndex: 3,
+        }
+      );
+
+    const aggregateScopeSql =
+      aggregateScope.conditions.length
+        ? `AND ${aggregateScope.conditions.join(
+            ' AND '
+          )}`
+        : '';
+
+    const recentScope =
+      buildTransactionScope(
+        req.user,
+        {
+          startIndex: 1,
+        }
+      );
+
+    const recentScopeSql =
+      recentScope.conditions.length
+        ? `AND ${recentScope.conditions.join(
+            ' AND '
+          )}`
+        : '';
 
     let loadFloatSummary;
 
@@ -566,8 +757,12 @@ exports.dashboardSummary = async (req, res) => {
                 COUNT(CASE WHEN t.status = 'success' THEN 1 END) as success_count
          FROM transactions t
          LEFT JOIN commissions cm ON cm.transaction_id = t.id
-         WHERE t.created_at >= $1 ${companyFilter} ${agentFilter}`,
-        [startOfDay, CUSTOMER_VOLUME_TRANSACTION_TYPES]
+         WHERE t.created_at >= $1 ${aggregateScopeSql}`,
+        [
+          startOfDay,
+          CUSTOMER_VOLUME_TRANSACTION_TYPES,
+          ...aggregateScope.params,
+        ]
       ),
       query(
         `SELECT
@@ -592,16 +787,21 @@ exports.dashboardSummary = async (req, res) => {
          LEFT JOIN commissions cm ON cm.transaction_id = t.id
          WHERE t.created_at >= $1
            AND t.status = 'success'
-           ${companyFilter} ${agentFilter}`,
-        [startOfMonth, CUSTOMER_VOLUME_TRANSACTION_TYPES]
+           ${aggregateScopeSql}`,
+        [
+          startOfMonth,
+          CUSTOMER_VOLUME_TRANSACTION_TYPES,
+          ...aggregateScope.params,
+        ]
       ),
       loadFloatSummary(),
       query(
         `SELECT t.id, t.reference, t.transaction_type, t.provider,
                 t.amount, t.status, t.created_at, t.customer_phone
          FROM transactions t
-         WHERE 1=1 ${companyFilter} ${agentFilter}
-         ORDER BY t.created_at DESC LIMIT 5`
+         WHERE 1=1 ${recentScopeSql}
+         ORDER BY t.created_at DESC LIMIT 5`,
+        recentScope.params
       ),
     ]);
 
