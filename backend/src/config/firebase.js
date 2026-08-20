@@ -9,9 +9,39 @@ const { logger } = require('../utils/logger');
 
 let firebaseApp;
 
+function normalizePrivateKey(value) {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  let normalized = value.trim();
+
+  if (
+    normalized.startsWith('"') &&
+    normalized.endsWith('"')
+  ) {
+    try {
+      const parsed = JSON.parse(normalized);
+
+      if (typeof parsed === 'string') {
+        normalized = parsed;
+      }
+    } catch {
+      // Leave malformed quoted values unchanged.
+      // Firebase cert() will reject them normally.
+    }
+  }
+
+  return normalized
+    .replace(/\\n/g, '\n')
+    .trim();
+}
+
 function initFirebase() {
   const projectId = process.env.FIREBASE_PROJECT_ID;
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+  const privateKey = normalizePrivateKey(
+    process.env.FIREBASE_PRIVATE_KEY
+  );
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
 
   const hasValidConfig =
@@ -31,7 +61,7 @@ function initFirebase() {
     firebaseApp = initializeApp({
       credential: cert({
         projectId,
-        privateKey: privateKey.replace(/\\n/g, '\n'),
+        privateKey,
         clientEmail,
       }),
     });
@@ -51,4 +81,8 @@ function getMessaging() {
   return getFirebaseMessaging(firebaseApp);
 }
 
-module.exports = { initFirebase, getMessaging };
+module.exports = {
+  initFirebase,
+  getMessaging,
+  normalizePrivateKey,
+};
