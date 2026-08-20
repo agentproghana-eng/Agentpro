@@ -5,6 +5,7 @@ const multer = require('multer');
 const { authenticate, authorize } = require('../middleware/auth');
 const { query } = require('../config/database');
 const { uploadFile } = require('../config/cloudinary');
+const { logger } = require('../utils/logger');
 
 mpRouter.use(authenticate);
 
@@ -229,7 +230,7 @@ mpRouter.get('/', async (req, res) => {
       },
     });
   } catch (e) {
-    console.error('GET /marketplace error:', e);
+    logger.error('GET /marketplace error:', e);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch ads',
@@ -575,7 +576,7 @@ mpRouter.get('/dashboard', async (req, res) => {
       },
     });
   } catch (e) {
-    console.error('GET /marketplace/dashboard error:', e);
+    logger.error('GET /marketplace/dashboard error:', e);
 
     res.status(500).json({
       success: false,
@@ -684,7 +685,7 @@ mpRouter.get('/reviews/received', async (req, res) => {
       },
     });
   } catch (e) {
-    console.error('GET /marketplace/reviews/received error:', e);
+    logger.error('GET /marketplace/reviews/received error:', e);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch customer reviews',
@@ -764,7 +765,7 @@ mpRouter.post('/:ad_id/enquiries', async (req, res) => {
       },
     });
   } catch (e) {
-    console.error('POST /marketplace/:ad_id/enquiries error:', e);
+    logger.error('POST /marketplace/:ad_id/enquiries error:', e);
     res.status(500).json({
       success: false,
       message: 'Failed to send enquiry',
@@ -837,7 +838,7 @@ mpRouter.get('/enquiries', async (req, res) => {
       data: result.rows,
     });
   } catch (e) {
-    console.error('GET /marketplace/enquiries error:', e);
+    logger.error('GET /marketplace/enquiries error:', e);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch enquiries',
@@ -912,7 +913,7 @@ mpRouter.get('/enquiries/:conversation_id', async (req, res) => {
       },
     });
   } catch (e) {
-    console.error('GET /marketplace/enquiries/:conversation_id error:', e);
+    logger.error('GET /marketplace/enquiries/:conversation_id error:', e);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch conversation',
@@ -974,7 +975,7 @@ mpRouter.post('/enquiries/:conversation_id/messages', async (req, res) => {
       data: result.rows[0],
     });
   } catch (e) {
-    console.error(
+    logger.error(
       'POST /marketplace/enquiries/:conversation_id/messages error:',
       e
     );
@@ -1015,7 +1016,7 @@ mpRouter.get('/saved', async (req, res) => {
       data: result.rows,
     });
   } catch (e) {
-    console.error('GET /marketplace/saved error:', e);
+    logger.error('GET /marketplace/saved error:', e);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch saved advertisements',
@@ -1038,7 +1039,7 @@ mpRouter.get('/saved/ids', async (req, res) => {
       data: result.rows.map((row) => row.ad_id),
     });
   } catch (e) {
-    console.error('GET /marketplace/saved/ids error:', e);
+    logger.error('GET /marketplace/saved/ids error:', e);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch saved advertisement IDs',
@@ -1066,7 +1067,7 @@ mpRouter.get('/:ad_id/saved-status', async (req, res) => {
       },
     });
   } catch (e) {
-    console.error('GET /marketplace/:ad_id/saved-status error:', e);
+    logger.error('GET /marketplace/:ad_id/saved-status error:', e);
     res.status(500).json({
       success: false,
       message: 'Failed to check saved status',
@@ -1111,7 +1112,7 @@ mpRouter.post('/:ad_id/save', async (req, res) => {
       message: 'Advertisement saved',
     });
   } catch (e) {
-    console.error('POST /marketplace/:ad_id/save error:', e);
+    logger.error('POST /marketplace/:ad_id/save error:', e);
     res.status(500).json({
       success: false,
       message: 'Failed to save advertisement',
@@ -1135,7 +1136,7 @@ mpRouter.delete('/:ad_id/save', async (req, res) => {
       message: 'Advertisement removed from saved items',
     });
   } catch (e) {
-    console.error('DELETE /marketplace/:ad_id/save error:', e);
+    logger.error('DELETE /marketplace/:ad_id/save error:', e);
     res.status(500).json({
       success: false,
       message: 'Failed to remove saved advertisement',
@@ -1199,7 +1200,7 @@ mpRouter.get('/recently-viewed', async (req, res) => {
       data: result.rows,
     });
   } catch (e) {
-    console.error('GET /marketplace/recently-viewed error:', e);
+    logger.error('GET /marketplace/recently-viewed error:', e);
 
     res.status(500).json({
       success: false,
@@ -1286,7 +1287,7 @@ mpRouter.get('/recommendations', async (req, res) => {
       data: result.rows,
     });
   } catch (e) {
-    console.error('GET /marketplace/recommendations error:', e);
+    logger.error('GET /marketplace/recommendations error:', e);
 
     res.status(500).json({
       success: false,
@@ -1347,7 +1348,7 @@ mpRouter.get('/featured-sellers', async (req, res) => {
       data: result.rows,
     });
   } catch (e) {
-    console.error('GET /marketplace/featured-sellers error:', e);
+    logger.error('GET /marketplace/featured-sellers error:', e);
 
     res.status(500).json({
       success: false,
@@ -1441,7 +1442,7 @@ mpRouter.get('/sellers/:seller_id', async (req, res) => {
       },
     });
   } catch (e) {
-    console.error('GET /marketplace/sellers/:seller_id error:', e);
+    logger.error('GET /marketplace/sellers/:seller_id error:', e);
 
     res.status(500).json({
       success: false,
@@ -1586,7 +1587,7 @@ mpRouter.post('/', upload.array('images', 3), async (req, res) => {
     );
     res.status(201).json({ success: true, data: result.rows[0], message: 'Ad submitted for review.' });
   } catch (e) {
-    console.error('POST /marketplace error:', e);
+    logger.error('POST /marketplace error:', e);
     res.status(500).json({ success: false, message: 'Failed to submit ad' });
   }
 });

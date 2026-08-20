@@ -1,10 +1,10 @@
-const { logger } = require('../utils/logger');
+const { logger, sanitizeRequestPath } = require('../utils/logger');
 
 const errorHandler = (err, req, res, next) => {
   logger.error('Unhandled error:', {
     message: err.message,
     stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-    path: req.path,
+    path: sanitizeRequestPath(req.path || '/'),
     method: req.method,
     requestId: req.requestId
   });

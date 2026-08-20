@@ -37,7 +37,7 @@ async function sendSMS(to, message) {
       throw new Error("SMS provider rejected request");
     }
 
-    logger.info(`SMS sent to ${to}: ${data.data?.id}`);
+    logger.info("SMS sent successfully");
     return data;
   } catch (error) {
     if (error?.message === "SMS provider rejected request") {
