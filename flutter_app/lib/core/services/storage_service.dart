@@ -64,13 +64,9 @@ String? sessionIdFromAccessToken(String? token) {
       return null;
     }
 
-    final payloadBytes = base64Url.decode(
-      base64Url.normalize(parts[1]),
-    );
+    final payloadBytes = base64Url.decode(base64Url.normalize(parts[1]));
 
-    final decoded = jsonDecode(
-      utf8.decode(payloadBytes),
-    );
+    final decoded = jsonDecode(utf8.decode(payloadBytes));
 
     if (decoded is! Map) {
       return null;
@@ -92,9 +88,7 @@ OfflineServerTrustEvaluation evaluateOfflineServerTrustRecord({
   required DeviceClockSnapshot clock,
   required DateTime wallNow,
 }) {
-  final version = int.tryParse(
-    stored['version']?.toString() ?? '',
-  );
+  final version = int.tryParse(stored['version']?.toString() ?? '');
 
   if (version != 2) {
     return const OfflineServerTrustEvaluation(
@@ -144,9 +138,7 @@ OfflineServerTrustEvaluation evaluateOfflineServerTrustRecord({
     stored['elapsed_realtime_ms']?.toString() ?? '',
   );
 
-  final verifiedBoot = int.tryParse(
-    stored['boot_count']?.toString() ?? '',
-  );
+  final verifiedBoot = int.tryParse(stored['boot_count']?.toString() ?? '');
 
   if (verifiedAt == null ||
       authorizedUntil == null ||
@@ -174,15 +166,11 @@ OfflineServerTrustEvaluation evaluateOfflineServerTrustRecord({
 
   final elapsedMs = clock.elapsedRealtimeMs - verifiedElapsed;
 
-  final trustedNow = verifiedAt.add(
-    Duration(milliseconds: elapsedMs),
-  );
+  final trustedNow = verifiedAt.add(Duration(milliseconds: elapsedMs));
 
   if (wallNow.toUtc().isBefore(
-        trustedNow.subtract(
-          StorageService._clockRollbackTolerance,
-        ),
-      )) {
+    trustedNow.subtract(StorageService._clockRollbackTolerance),
+  )) {
     return OfflineServerTrustEvaluation(
       status: OfflineServerTrustStatus.clockRollbackDetected,
       trustedNow: trustedNow,
@@ -215,7 +203,8 @@ OfflineServerTrustEvaluation evaluateOfflineServerTrustRecord({
         stored['personal_paid_until']?.toString() ?? '',
       )?.toUtc();
 
-      personalPaidEntitled = paidUntil != null &&
+      personalPaidEntitled =
+          paidUntil != null &&
           trustedNow.isBefore(paidUntil) &&
           !paidUntil.isAfter(authorizedUntil);
     }
@@ -237,6 +226,7 @@ class StorageService {
   static const _keyBiometricEnabled = 'biometric_enabled';
   static const _keySessionLocked = 'session_locked';
   static const _keyInstallationId = 'installation_id';
+  static const _keyOfflineQueueEncryptionKey = 'offline_queue_hive_key_v1';
 
   static const _keyLegacyServerTrust = 'offline_server_trust_v1';
   static const _keyBusinessServerTrust = 'offline_server_trust_business_v2';
@@ -271,6 +261,41 @@ class StorageService {
             KeyCipherAlgorithm.RSA_ECB_OAEPwithSHA_256andMGF1Padding,
         storageCipherAlgorithm: StorageCipherAlgorithm.AES_GCM_NoPadding,
       ),
+    );
+  }
+
+  static Future<List<int>?> readOfflineQueueEncryptionKey() async {
+    final encoded = await _storage.read(key: _keyOfflineQueueEncryptionKey);
+
+    if (encoded == null || encoded.trim().isEmpty) {
+      return null;
+    }
+
+    try {
+      final key = base64Url.decode(encoded.trim());
+
+      if (key.length != 32) {
+        throw StateError('Offline queue encryption key has an invalid length.');
+      }
+
+      return key;
+    } on FormatException {
+      throw StateError('Offline queue encryption key is malformed.');
+    }
+  }
+
+  static Future<void> writeOfflineQueueEncryptionKey(List<int> key) async {
+    if (key.length != 32) {
+      throw ArgumentError.value(
+        key.length,
+        'key.length',
+        'Hive AES keys must contain exactly 32 bytes.',
+      );
+    }
+
+    await _storage.write(
+      key: _keyOfflineQueueEncryptionKey,
+      value: base64UrlEncode(key),
     );
   }
 
@@ -364,9 +389,7 @@ class StorageService {
     return value == 'true';
   }
 
-  static String _serverTrustStorageKey(
-    bool isPersonal,
-  ) {
+  static String _serverTrustStorageKey(bool isPersonal) {
     return isPersonal ? _keyPersonalServerTrust : _keyBusinessServerTrust;
   }
 
@@ -424,9 +447,7 @@ class StorageService {
 
       final normalizedAuthorizedUntil = authorizedUntil.toUtc();
 
-      if (!normalizedAuthorizedUntil.isAfter(
-        normalizedServerAt,
-      )) {
+      if (!normalizedAuthorizedUntil.isAfter(normalizedServerAt)) {
         return false;
       }
 
@@ -439,12 +460,8 @@ class StorageService {
 
         normalizedPaidUntil = personalPaidUntil.toUtc();
 
-        if (!normalizedPaidUntil.isAfter(
-              normalizedServerAt,
-            ) ||
-            normalizedPaidUntil.isAfter(
-              normalizedAuthorizedUntil,
-            )) {
+        if (!normalizedPaidUntil.isAfter(normalizedServerAt) ||
+            normalizedPaidUntil.isAfter(normalizedAuthorizedUntil)) {
           return false;
         }
       }
@@ -508,9 +525,7 @@ class StorageService {
   }) async {
     final key = _serverTrustStorageKey(isPersonal);
 
-    final raw = await _storage.read(
-      key: key,
-    );
+    final raw = await _storage.read(key: key);
 
     if (raw == null || raw.trim().isEmpty) {
       return const OfflineServerTrustEvaluation(
@@ -593,9 +608,7 @@ class StorageService {
     await _storage.delete(key: _keyAccessToken);
   }
 
-  static String? _offlineDashboardStorageKey(
-    Map<String, dynamic> user,
-  ) {
+  static String? _offlineDashboardStorageKey(Map<String, dynamic> user) {
     final userId = user['id']?.toString().trim() ?? '';
 
     if (userId.isEmpty) {
@@ -603,13 +616,12 @@ class StorageService {
     }
 
     final rawCompanyId = user['company_id']?.toString().trim();
-    final companyId =
-        rawCompanyId == null || rawCompanyId.isEmpty ? '-' : rawCompanyId;
+    final companyId = rawCompanyId == null || rawCompanyId.isEmpty
+        ? '-'
+        : rawCompanyId;
 
     final encodedScope = base64Url
-        .encode(
-          utf8.encode('$userId|$companyId'),
-        )
+        .encode(utf8.encode('$userId|$companyId'))
         .replaceAll('=', '');
 
     return 'offline_dashboard_v1_$encodedScope';
@@ -683,18 +695,13 @@ class StorageService {
         } catch (_) {}
       }
 
-      final merged = _deepMergeOfflineDashboardMaps(
-        existing,
-        patch,
-      );
+      final merged = _deepMergeOfflineDashboardMaps(existing, patch);
 
-      merged['last_verified_update_at'] =
-          DateTime.now().toUtc().toIso8601String();
+      merged['last_verified_update_at'] = DateTime.now()
+          .toUtc()
+          .toIso8601String();
 
-      await _storage.write(
-        key: key,
-        value: jsonEncode(merged),
-      );
+      await _storage.write(key: key, value: jsonEncode(merged));
     });
 
     _offlineDashboardWrites[key] = current;
