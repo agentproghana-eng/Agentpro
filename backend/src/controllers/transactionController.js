@@ -32,7 +32,9 @@ const {
 const {
   postWorkingFloatTransfer
 } = require('../services/workingFloatPostingService');
-const { sendTransactionNotification } = require('../services/notificationService');
+const {
+  enqueueOutboxEvent
+} = require('../services/outboxService');
 const { generateTransactionReceipt } = require('../services/reportService');
 const {
   resolveAgentFinancialBranch
@@ -735,7 +737,6 @@ exports.completeTransaction = async (req, res) => {
     let idempotentReplay = false;
     let conflictingStatus = null;
     let manualCashOutRequired = false;
-    let completionNotification = null;
 
     await withTransaction(async (client) => {
       // Lock the transaction before checking its status. Without this lock,
@@ -1041,18 +1042,32 @@ exports.completeTransaction = async (req, res) => {
         pending_confirmation: 'transaction_pending_confirmation',
       }[finalStatus];
 
-      // Prepare only. The external notification is sent after PostgreSQL
-      // commits so a later rollback can never leave the user with a false
-      // success/failure notification.
-      completionNotification = {
-        type: notificationType,
-        transaction: {
-          ...tx,
-          status: finalStatus,
-          network_reference,
-          failure_reason: sanitizedFailureReason
-        }
-      };
+      // Persist the completion notification intent on the same PostgreSQL
+      // transaction as the financial posting and strict audit. If this
+      // enqueue fails, withTransaction rolls everything back together.
+      //
+      // Keep the payload deliberately minimal. Never place PINs, resolved
+      // USSD content, session logs, credentials, or raw provider responses
+      // into the durable outbox.
+      await enqueueOutboxEvent({
+        dbClient: client,
+        eventType: 'notification.transaction.completed',
+        aggregateType: 'transaction',
+        aggregateId: transaction_id,
+        dedupeKey:
+          `transaction:${transaction_id}:completion:${finalStatus}`,
+        payload: {
+          agent_id: agentId,
+          type: notificationType,
+          transaction: {
+            id: tx.id,
+            amount: tx.amount,
+            transaction_type: tx.transaction_type,
+            reference: tx.reference,
+            failure_reason: sanitizedFailureReason,
+          },
+        },
+      });
     });
 
     if (transactionNotFound) {
@@ -1088,22 +1103,6 @@ exports.completeTransaction = async (req, res) => {
         message:
           'Telecel and AT Money Cash Out must be recorded through the manual Cash Out flow.'
       });
-    }
-
-    // PostgreSQL has committed at this point. Notification delivery is an
-    // external side effect and must never roll back or falsify money state.
-    if (completionNotification) {
-      try {
-        await sendTransactionNotification(
-          agentId,
-          completionNotification
-        );
-      } catch (notificationError) {
-        logger.error(
-          'Transaction completion notification error:',
-          notificationError
-        );
-      }
     }
 
     // Generate receipt PDF only on confirmed success
