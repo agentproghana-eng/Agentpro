@@ -1,11 +1,17 @@
-require('dotenv').config();
+require('./instrument');
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const compression = require('compression');
 const morgan = require('morgan');
+const { v4: uuidv4, validate: uuidValidate } = require('uuid');
 
 const { logger } = require('./src/utils/logger');
+const {
+  captureException,
+  flushObservability,
+  isObservabilityEnabled,
+} = require('./src/utils/observability');
 const { connectDB } = require('./src/config/database');
 const { connectRedis } = require('./src/config/redis');
 const { initFirebase } = require('./src/config/firebase');
@@ -79,17 +85,33 @@ app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// HTTP request logging
-app.use(morgan('combined', {
-  stream: { write: (message) => logger.info(message.trim()) }
-}));
-
-// Add request ID to each request
+// Assign a correlation ID before request logging.
+// A caller-supplied ID is accepted only when it is a valid UUID;
+// otherwise the API generates a fresh ID.
 app.use((req, res, next) => {
-  req.requestId = require('uuid').v4();
+  const suppliedRequestId = String(req.get('X-Request-ID') || '').trim();
+
+  req.requestId = uuidValidate(suppliedRequestId)
+    ? suppliedRequestId
+    : uuidv4();
+
   res.setHeader('X-Request-ID', req.requestId);
+
   next();
 });
+
+// Keep request logs intentionally minimal.
+// Do not emit query strings, authorization headers, cookies,
+// IP addresses, request bodies or user agents into application logs.
+morgan.token('request-id', (req) => req.requestId || '-');
+morgan.token('safe-path', (req) => req.path || '/');
+
+app.use(morgan(
+  ':method :safe-path :status :response-time ms request_id=:request-id',
+  {
+    stream: { write: (message) => logger.info(message.trim()) }
+  }
+));
 
 // Global rate limiter
 app.use('/api/', apiLimiter);
@@ -180,6 +202,12 @@ const PORT = process.env.PORT || 3000;
 
 async function startServer() {
   try {
+    logger.info(
+      `Observability: ${
+        isObservabilityEnabled() ? 'Sentry enabled' : 'local logging only'
+      }`
+    );
+
     // Connect to PostgreSQL
     await connectDB();
     logger.info('✅ PostgreSQL connected');
@@ -239,6 +267,15 @@ if (process.env.NODE_ENV !== 'test') {
     });
     } catch (error) {
     logger.error('Failed to start server:', error);
+
+    captureException(error, {
+      component: 'startup',
+      operation: 'start_server',
+      errorCode: error?.code
+    });
+
+    await flushObservability(2000);
+
     process.exit(1);
   }
 }
