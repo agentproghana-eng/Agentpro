@@ -8,12 +8,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 void main() {
   group('Custom USSD online cache policy', () {
     test('network failure may fall back to cache', () {
-      expect(
-        shouldFallbackToCachedUssdFlow(
-          hasHttpResponse: false,
-        ),
-        isTrue,
-      );
+      expect(shouldFallbackToCachedUssdFlow(hasHttpResponse: false), isTrue);
     });
 
     test('transient HTTP failures may fall back to cache', () {
@@ -58,8 +53,9 @@ void main() {
 
       Hive.init(hiveDirectory.path);
 
-      await Hive.openBox('offline_transaction_queue');
-      await Hive.openBox('cached_ussd_templates');
+      await OfflineQueueService.initializeWithKeyForTesting(
+        List<int>.generate(32, (index) => index),
+      );
     });
 
     tearDown(() async {
@@ -153,28 +149,15 @@ void main() {
       expect(supplied, greaterThanOrEqualTo(0));
       expect(online, greaterThan(supplied));
 
-      expect(
-        source,
-        contains('if (suppliedCachedFlow is Map)'),
-      );
+      expect(source, contains('if (suppliedCachedFlow is Map)'));
+
+      expect(source, contains('await OfflineQueueService.deleteCachedFlow('));
+
+      expect(source, contains('shouldFallbackToCachedUssdFlow('));
 
       expect(
         source,
-        contains(
-          'await OfflineQueueService.deleteCachedFlow(',
-        ),
-      );
-
-      expect(
-        source,
-        contains('shouldFallbackToCachedUssdFlow('),
-      );
-
-      expect(
-        source,
-        contains(
-          'final flowValidationError = validateUssdFlowDraftSteps(',
-        ),
+        contains('final flowValidationError = validateUssdFlowDraftSteps('),
       );
 
       expect(
@@ -191,11 +174,7 @@ void main() {
 
       expect(
         source,
-        isNot(
-          contains(
-            'unawaited(\n        _refreshCachedFlow(',
-          ),
-        ),
+        isNot(contains('unawaited(\n        _refreshCachedFlow(')),
       );
     });
   });

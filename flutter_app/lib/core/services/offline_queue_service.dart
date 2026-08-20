@@ -1,23 +1,32 @@
 import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
+
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
+
 import '../api/api_client.dart';
+import 'storage_service.dart';
 
 class OfflineQueueIdentity {
   final String userId;
   final String? companyId;
 
-  const OfflineQueueIdentity({
-    required this.userId,
-    this.companyId,
-  });
+  const OfflineQueueIdentity({required this.userId, this.companyId});
 
   String get queueScopeKey => '$userId|${companyId ?? '-'}';
 }
 
 class OfflineQueueService {
-  static const _boxName = 'offline_transaction_queue';
-  static const _templateBoxName = 'cached_ussd_templates';
+  static const _legacyBoxName = 'offline_transaction_queue';
+  static const _legacyTemplateBoxName = 'cached_ussd_templates';
+
+  static const _boxName = 'offline_transaction_queue_v2';
+  static const _templateBoxName = 'cached_ussd_templates_v2';
+
+  static const _metadataBoxName = 'offline_storage_metadata_v2';
+  static const _metadataKeyFingerprint = 'key_fingerprint_sha256';
+
   static const int _maxSyncAttempts = 10;
 
   static final Map<String, Future<Map<String, int>>> _activeSyncs = {};
@@ -50,21 +59,174 @@ class OfflineQueueService {
   static Future<void> _initialize() async {
     await Hive.initFlutter();
 
+    final encryptionKey = await _loadOrCreateEncryptionKey();
+
+    await _openEncryptedBoxesAndMigrate(encryptionKey);
+  }
+
+  static Future<List<int>> _loadOrCreateEncryptionKey() async {
+    final stored = await StorageService.readOfflineQueueEncryptionKey();
+
+    if (stored != null) {
+      return stored;
+    }
+
+    final encryptedQueueExists = await Hive.boxExists(_boxName);
+
+    final encryptedTemplateExists = await Hive.boxExists(_templateBoxName);
+
+    if (encryptedQueueExists || encryptedTemplateExists) {
+      throw StateError(
+        'Encrypted offline data exists but its secure-storage key is missing.',
+      );
+    }
+
+    final generated = Hive.generateSecureKey();
+
+    await StorageService.writeOfflineQueueEncryptionKey(generated);
+
+    return generated;
+  }
+
+  static Future<void> initializeWithKeyForTesting(
+    List<int> encryptionKey,
+  ) async {
+    await _openEncryptedBoxesAndMigrate(encryptionKey);
+  }
+
+  static Future<void> _openEncryptedBoxesAndMigrate(
+    List<int> encryptionKey,
+  ) async {
+    if (encryptionKey.length != 32) {
+      throw ArgumentError.value(
+        encryptionKey.length,
+        'encryptionKey.length',
+        'Hive AES keys must contain exactly 32 bytes.',
+      );
+    }
+
+    await _verifyEncryptionKeyBeforeOpen(
+      encryptionKey,
+    );
+
     if (!Hive.isBoxOpen(_boxName)) {
-      await Hive.openBox(_boxName);
+      await Hive.openBox(
+        _boxName,
+        encryptionCipher: HiveAesCipher(encryptionKey),
+      );
     }
 
     if (!Hive.isBoxOpen(_templateBoxName)) {
-      await Hive.openBox(_templateBoxName);
+      await Hive.openBox(
+        _templateBoxName,
+        encryptionCipher: HiveAesCipher(encryptionKey),
+      );
     }
+
+    await _migrateLegacyBox(legacyName: _legacyBoxName, encryptedTarget: _box);
+
+    await _migrateLegacyBox(
+      legacyName: _legacyTemplateBoxName,
+      encryptedTarget: _templateBox,
+    );
+  }
+
+  static Future<void> _verifyEncryptionKeyBeforeOpen(
+    List<int> encryptionKey,
+  ) async {
+    final queueExists = await Hive.boxExists(_boxName);
+
+    final templateExists = await Hive.boxExists(_templateBoxName);
+
+    final encryptedStorageExists = queueExists || templateExists;
+
+    final fingerprint = sha256.convert(encryptionKey).toString();
+
+    final metadata = Hive.isBoxOpen(_metadataBoxName)
+        ? Hive.box(_metadataBoxName)
+        : await Hive.openBox(
+            _metadataBoxName,
+          );
+
+    try {
+      final stored = metadata.get(_metadataKeyFingerprint)?.toString().trim();
+
+      if (encryptedStorageExists) {
+        if (stored == null || stored.isEmpty) {
+          throw StateError(
+            'Encrypted offline data exists but its key fingerprint is missing.',
+          );
+        }
+
+        if (stored != fingerprint) {
+          throw StateError(
+            'Offline storage encryption key does not match existing encrypted data.',
+          );
+        }
+
+        return;
+      }
+
+      await metadata.put(
+        _metadataKeyFingerprint,
+        fingerprint,
+      );
+
+      await metadata.flush();
+    } finally {
+      if (Hive.isBoxOpen(_metadataBoxName)) {
+        await Hive.box(
+          _metadataBoxName,
+        ).close();
+      }
+    }
+  }
+
+  static Future<void> _migrateLegacyBox({
+    required String legacyName,
+    required Box encryptedTarget,
+  }) async {
+    if (!await Hive.boxExists(legacyName)) {
+      return;
+    }
+
+    final legacy = Hive.isBoxOpen(legacyName)
+        ? Hive.box(legacyName)
+        : await Hive.openBox(legacyName);
+
+    try {
+      final entries = <dynamic, dynamic>{};
+
+      for (final key in legacy.keys) {
+        entries[key] = legacy.get(key);
+      }
+
+      if (entries.isNotEmpty) {
+        await encryptedTarget.putAll(entries);
+
+        await encryptedTarget.flush();
+
+        for (final entry in entries.entries) {
+          if (encryptedTarget.get(entry.key) != entry.value) {
+            throw StateError(
+              'Offline storage migration verification failed for $legacyName.',
+            );
+          }
+        }
+      }
+    } finally {
+      if (Hive.isBoxOpen(legacyName)) {
+        await Hive.box(legacyName).close();
+      }
+    }
+
+    await Hive.deleteBoxFromDisk(legacyName);
   }
 
   static Box get _box => Hive.box(_boxName);
   static Box get _templateBox => Hive.box(_templateBoxName);
 
-  static OfflineQueueIdentity? identityFromUser(
-    Map<String, dynamic>? user,
-  ) {
+  static OfflineQueueIdentity? identityFromUser(Map<String, dynamic>? user) {
     if (user == null) return null;
 
     final userId = user['id']?.toString().trim() ?? '';
@@ -74,10 +236,7 @@ class OfflineQueueService {
     final companyId =
         rawCompanyId == null || rawCompanyId.isEmpty ? null : rawCompanyId;
 
-    return OfflineQueueIdentity(
-      userId: userId,
-      companyId: companyId,
-    );
+    return OfflineQueueIdentity(userId: userId, companyId: companyId);
   }
 
   static String? _cacheOwner(
@@ -104,12 +263,7 @@ class OfflineQueueService {
     final owner = _cacheOwner(identity, isPersonal: false);
     if (owner == null) return null;
 
-    return [
-      'template',
-      owner,
-      provider,
-      type,
-    ].join('_');
+    return ['template', owner, provider, type].join('_');
   }
 
   static Future<void> cacheTemplate(
@@ -121,10 +275,7 @@ class OfflineQueueService {
     final key = _templateKey(identity, provider, transactionType);
     if (key == null) return;
 
-    await _templateBox.put(
-      key,
-      jsonEncode(template),
-    );
+    await _templateBox.put(key, jsonEncode(template));
   }
 
   static Map<String, dynamic>? getCachedTemplate(
@@ -188,10 +339,7 @@ class OfflineQueueService {
 
     if (key == null) return;
 
-    await _templateBox.put(
-      key,
-      jsonEncode(flow),
-    );
+    await _templateBox.put(key, jsonEncode(flow));
   }
 
   static Map<String, dynamic>? getCachedFlow(
@@ -304,8 +452,9 @@ class OfflineQueueService {
     }
 
     final isPersonal = transaction['is_personal'] == true;
-    final ownerCompanyId =
-        _normalizeOwnerValue(transaction['owner_company_id']);
+    final ownerCompanyId = _normalizeOwnerValue(
+      transaction['owner_company_id'],
+    );
 
     if (isPersonal) {
       return ownerCompanyId == null;
@@ -396,9 +545,7 @@ class OfflineQueueService {
     await _box.put(localId, jsonEncode(tx));
   }
 
-  static Future<Map<String, int>> syncNow(
-    OfflineQueueIdentity identity,
-  ) {
+  static Future<Map<String, int>> syncNow(OfflineQueueIdentity identity) {
     final syncKey = identity.queueScopeKey;
     final existingSync = _activeSyncs[syncKey];
 
