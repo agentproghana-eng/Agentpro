@@ -677,18 +677,63 @@ exports.listShifts = async (req, res) => {
   try {
     const threshold = await getVarianceThreshold();
 
-    const conditions = [`status = 'closed'`];
+    const conditions = [
+      `s.status = 'closed'`,
+    ];
     const params = [];
     let idx = 1;
 
-    if (req.user.role !== 'superuser') {
-      conditions.push(`company_id = $${idx++}`);
-      params.push(req.user.company_id);
+    if (
+      req.user.role !==
+      'superuser'
+    ) {
+      conditions.push(
+        `s.company_id = $${idx++}`
+      );
+
+      params.push(
+        req.user.company_id
+      );
     }
-    if (agent_id) { conditions.push(`agent_id = $${idx++}`); params.push(agent_id); }
-    if (branch_id) { conditions.push(`branch_id = $${idx++}`); params.push(branch_id); }
-    if (flagged_only === 'true') {
-      conditions.push(`ABS(variance) >= $${idx++}`);
+
+    if (
+      req.user.role ===
+      'manager'
+    ) {
+      conditions.push(
+        `EXISTS (
+           SELECT 1
+           FROM branch_managers bm
+           WHERE bm.branch_id = s.branch_id
+             AND bm.manager_id = $${idx++}
+         )`
+      );
+
+      params.push(
+        req.user.id
+      );
+    }
+
+    if (agent_id) {
+      conditions.push(
+        `s.agent_id = $${idx++}`
+      );
+      params.push(agent_id);
+    }
+
+    if (branch_id) {
+      conditions.push(
+        `s.branch_id = $${idx++}`
+      );
+      params.push(branch_id);
+    }
+
+    if (
+      flagged_only === 'true'
+    ) {
+      conditions.push(
+        `ABS(s.variance) >= $${idx++}`
+      );
       params.push(threshold);
     }
 

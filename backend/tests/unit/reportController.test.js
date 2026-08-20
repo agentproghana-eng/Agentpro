@@ -633,9 +633,18 @@ describe('reportController monthly dashboard accounting', () => {
       't.transaction_type::text = ANY($2::text[])',
     );
 
-    expect(monthParams).toHaveLength(2);
+    expect(monthParams).toHaveLength(3);
     expect(monthParams[1]).toEqual(
       CUSTOMER_VOLUME_TRANSACTION_TYPES,
+    );
+
+    // Agent scope is now parameterized instead of interpolated into SQL.
+    expect(monthParams[2]).toBe(
+      'agent-1',
+    );
+
+    expect(monthSql).toContain(
+      't.agent_id = $3',
     );
 
     expect(res.json).toHaveBeenCalledWith({

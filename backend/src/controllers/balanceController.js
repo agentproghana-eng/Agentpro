@@ -1428,7 +1428,39 @@ exports.reviewCashAdjustment = async (req, res) => {
   const { action, review_notes } = req.body;
   const reviewerId = req.user.id;
   const reviewerCompanyId = req.user.company_id;
-  const isSuperuser = req.user.role === "superuser";
+  const isSuperuser =
+    req.user.role === "superuser";
+  const isManager =
+    req.user.role === "manager";
+
+  const reviewScopeClause =
+    isSuperuser
+      ? ""
+      : isManager
+        ? `AND u.company_id = $2
+           AND EXISTS (
+             SELECT 1
+             FROM agent_branches ab
+             INNER JOIN branch_managers bm
+               ON bm.branch_id = ab.branch_id
+             WHERE ab.agent_id = abm.agent_id
+               AND bm.manager_id = $3
+           )`
+        : "AND u.company_id = $2";
+
+  const reviewScopeParams =
+    isSuperuser
+      ? [movement_id]
+      : isManager
+        ? [
+            movement_id,
+            reviewerCompanyId,
+            reviewerId
+          ]
+        : [
+            movement_id,
+            reviewerCompanyId
+          ];
 
   if (!["approve", "reject"].includes(action)) {
     return res.status(422).json({
@@ -1449,11 +1481,9 @@ exports.reviewCashAdjustment = async (req, res) => {
          INNER JOIN users u ON u.id = abm.agent_id
          WHERE abm.id = $1
            AND abm.movement_type IN ('cash_injection', 'cash_withdrawal')
-           ${isSuperuser ? "" : "AND u.company_id = $2"}
+           ${reviewScopeClause}
          FOR UPDATE`,
-        isSuperuser
-          ? [movement_id]
-          : [movement_id, reviewerCompanyId]
+        reviewScopeParams
       );
 
       if (movementResult.rows.length === 0) {
@@ -1608,22 +1638,88 @@ exports.reviewCashAdjustment = async (req, res) => {
 };
 
 
-// List pending cash injections/withdrawals awaiting manager/owner review,
-// scoped to the reviewer's own company.
+// List pending cash injections/withdrawals awaiting review.
+// Owners are company-wide, managers are restricted to agents assigned
+// to branches they actually manage, and superusers remain platform-wide.
 exports.listPendingAdjustments = async (req, res) => {
   try {
+    const conditions = [
+      "abm.status = $1"
+    ];
+
+    const params = [
+      "pending"
+    ];
+
+    let idx = 2;
+
+    if (
+      req.user.role !==
+      "superuser"
+    ) {
+      conditions.push(
+        `u.company_id = $${idx++}`
+      );
+
+      params.push(
+        req.user.company_id
+      );
+    }
+
+    if (
+      req.user.role ===
+      "manager"
+    ) {
+      conditions.push(
+        `EXISTS (
+           SELECT 1
+           FROM agent_branches ab
+           INNER JOIN branch_managers bm
+             ON bm.branch_id = ab.branch_id
+           WHERE ab.agent_id = abm.agent_id
+             AND bm.manager_id = $${idx++}
+         )`
+      );
+
+      params.push(
+        req.user.id
+      );
+    }
+
     const result = await query(
-      `SELECT abm.id, abm.agent_id, abm.movement_type, abm.amount,
-              abm.notes, abm.created_at, u.first_name, u.last_name
+      `SELECT
+         abm.id,
+         abm.agent_id,
+         abm.movement_type,
+         abm.amount,
+         abm.notes,
+         abm.created_at,
+         u.first_name,
+         u.last_name
        FROM agent_balance_movements abm
-       JOIN users u ON u.id = abm.agent_id
-       WHERE abm.status = $1 AND u.company_id = $2
+       JOIN users u
+         ON u.id = abm.agent_id
+       WHERE ${conditions.join(
+         " AND "
+       )}
        ORDER BY abm.created_at DESC`,
-      ["pending", req.user.company_id]
+      params
     );
-    res.json({ success: true, data: result.rows });
+
+    res.json({
+      success: true,
+      data: result.rows
+    });
   } catch (error) {
-    logger.error("List pending adjustments error:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch pending adjustments" });
+    logger.error(
+      "List pending adjustments error:",
+      error
+    );
+
+    res.status(500).json({
+      success: false,
+      message:
+        "Failed to fetch pending adjustments"
+    });
   }
 };

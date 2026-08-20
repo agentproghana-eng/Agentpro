@@ -39,16 +39,45 @@ function calculateCommission(amount, ratePercent, threshold, cap, providerShareP
 async function getCommissionSummary(params) {
   const { query } = require('../config/database');
   const {
-    company_id, branch_id, agent_id, provider,
-    from_date, to_date, group_by = 'day'
+    company_id,
+    manager_id,
+    branch_id,
+    agent_id,
+    provider,
+    from_date,
+    to_date,
+    group_by = 'day'
   } = params;
 
   const conditions = [];
   const queryParams = [];
   let idx = 1;
 
-  if (company_id) { conditions.push(`c.company_id = $${idx++}`); queryParams.push(company_id); }
-  if (branch_id) { conditions.push(`c.branch_id = $${idx++}`); queryParams.push(branch_id); }
+  if (company_id) {
+    conditions.push(
+      `c.company_id = $${idx++}`
+    );
+    queryParams.push(company_id);
+  }
+
+  if (manager_id) {
+    conditions.push(
+      `EXISTS (
+         SELECT 1
+         FROM branch_managers bm
+         WHERE bm.branch_id = c.branch_id
+           AND bm.manager_id = $${idx++}
+       )`
+    );
+    queryParams.push(manager_id);
+  }
+
+  if (branch_id) {
+    conditions.push(
+      `c.branch_id = $${idx++}`
+    );
+    queryParams.push(branch_id);
+  }
   if (agent_id) { conditions.push(`c.agent_id = $${idx++}`); queryParams.push(agent_id); }
   if (from_date) { conditions.push(`c.calculated_at >= $${idx++}`); queryParams.push(from_date); }
   if (to_date) { conditions.push(`c.calculated_at <= $${idx++}`); queryParams.push(to_date); }
