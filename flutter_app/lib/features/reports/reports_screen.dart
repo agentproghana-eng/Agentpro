@@ -8,7 +8,7 @@ import '../../core/services/sim_card_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
-import 'package:open_file/open_file.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:async';
 import 'dart:io';
@@ -398,7 +398,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         '${dir.path}/${type}_${DateTime.now().millisecondsSinceEpoch}.$ext',
       );
       await file.writeAsBytes(res.data);
-      await OpenFile.open(file.path);
+      await OpenFilex.open(file.path);
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
