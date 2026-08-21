@@ -53,7 +53,7 @@ describe(
       () => {
         const firebase =
           source.indexOf(
-            'initFirebase();'
+            'firebaseApp = initFirebase();'
           );
 
         const worker =
@@ -66,6 +66,51 @@ describe(
 
         expect(worker)
           .toBeGreaterThan(firebase);
+      }
+    );
+
+    test(
+      'starts the outbox worker only when Firebase is ready',
+      () => {
+        expect(source)
+          .toContain(
+            "process.env.OUTBOX_WORKER_ENABLED !== 'false' &&\n      firebaseApp"
+          );
+      }
+    );
+
+    test(
+      'keeps the API startup path available when Firebase is unavailable',
+      () => {
+        expect(source)
+          .toContain(
+            '!firebaseApp'
+          );
+
+        expect(source)
+          .toContain(
+            'Transactional outbox worker not started because Firebase is unavailable'
+          );
+
+        expect(source)
+          .toContain(
+            'app.listen(PORT'
+          );
+      }
+    );
+
+    test(
+      'keeps the outbox worker kill switch authoritative',
+      () => {
+        expect(source)
+          .toContain(
+            "process.env.OUTBOX_WORKER_ENABLED !== 'false'"
+          );
+
+        expect(source)
+          .not.toContain(
+            "process.env.OUTBOX_WORKER_ENABLED === 'true'"
+          );
       }
     );
 
