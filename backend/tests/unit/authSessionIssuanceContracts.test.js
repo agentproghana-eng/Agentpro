@@ -27,6 +27,10 @@ describe('Durable auth session issuance contracts', () => {
     'src/controllers/authController.js',
   );
 
+  const digestMigration = readSource(
+    'migrations/094_refresh_token_exact_digest.sql',
+  );
+
   test(
     'every access token contains its durable session ID',
     () => {
@@ -111,7 +115,7 @@ describe('Durable auth session issuance contracts', () => {
   );
 
   test(
-    'refresh binds the new access token to the matching persisted session',
+    'refresh binds access to one exact persisted token digest',
     () => {
       const refresh = sliceBetween(
         source,
@@ -120,35 +124,113 @@ describe('Durable auth session issuance contracts', () => {
       );
 
       expect(refresh).toContain(
-        'FROM refresh_tokens',
+        'digestRefreshToken(refresh_token)',
       );
 
       expect(refresh).toContain(
-        'token_hash',
+        'token_digest = $2',
       );
 
       expect(refresh).toContain(
-        'mfa_verified_at',
+        'revoked_at IS NULL',
       );
 
       expect(refresh).toContain(
-        'matchedSessions.push(storedToken)',
+        'expires_at > NOW()',
       );
 
       expect(refresh).toContain(
-        'const matchedSession = matchedSessions[0]',
+        'const matchedSession = storedTokens.rows[0]',
       );
 
-      expect(refresh).toContain(
-        'matchedSession.id',
+      expect(refresh).not.toContain(
+        'bcrypt.compare(',
       );
 
-      expect(refresh).toContain(
-        'matchedSessions.length > 1',
+      expect(refresh).not.toContain(
+        'matchedSessions.push',
+      );
+
+      expect(refresh).not.toContain(
+        'token_hash,',
       );
 
       expect(refresh).toContain(
         "code: 'SESSION_AMBIGUOUS'",
+      );
+    },
+  );
+
+  test(
+    'all session issuance paths persist the exact refresh digest',
+    () => {
+      const registration = sliceBetween(
+        source,
+        'exports.registerPersonal = async',
+        'exports.addPersonalCapability = async',
+      );
+
+      const login = sliceBetween(
+        source,
+        'exports.login = async',
+        'exports.completeMfa = async',
+      );
+
+      const mfa = sliceBetween(
+        source,
+        'exports.completeMfa = async',
+        'exports.refreshToken = async',
+      );
+
+      for (const issuance of [
+        registration,
+        login,
+        mfa,
+      ]) {
+        expect(issuance).toContain(
+          'token_digest',
+        );
+
+        expect(issuance).toContain(
+          'digestRefreshToken(',
+        );
+      }
+    },
+  );
+
+  test(
+    'digest migration revokes legacy sessions and indexes exact digests',
+    () => {
+      expect(digestMigration).toContain(
+        'ADD COLUMN IF NOT EXISTS token_digest VARCHAR(64)',
+      );
+
+      expect(digestMigration).toContain(
+        'WHERE token_digest IS NULL',
+      );
+
+      expect(digestMigration).toContain(
+        'AND revoked_at IS NULL',
+      );
+
+      expect(digestMigration).toContain(
+        'ux_refresh_tokens_token_digest',
+      );
+
+      expect(digestMigration).toContain(
+        'CREATE UNIQUE INDEX IF NOT EXISTS',
+      );
+
+      expect(digestMigration).toContain(
+        'chk_refresh_tokens_active_digest',
+      );
+
+      expect(digestMigration).toContain(
+        'revoked_at IS NOT NULL',
+      );
+
+      expect(digestMigration).toContain(
+        'OR token_digest IS NOT NULL',
       );
     },
   );
