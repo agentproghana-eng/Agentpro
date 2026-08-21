@@ -26,7 +26,7 @@ Agent Pro Ghana is in **pre-public-launch hardening and production validation**.
 - Core Flutter Android app, Node/Express backend, PostgreSQL, Redis, and React admin portal are implemented.
 - GitHub `master` is protected by Backend Tests, Backend Lint, Admin Portal Build, and Flutter Android Build.
 - Production backend is deployed on Render using Node.js **24.19.0**.
-- Current production merge: `15f2c7b6edfb45f23e41b080ed93118365194e7b`.
+- Current production backend-code baseline (PR #47): `15f2c7b6edfb45f23e41b080ed93118365194e7b`.
 - Migration `094_refresh_token_exact_digest.sql` is applied in production.
 - Refresh sessions now use exact SHA-256 digest identity instead of bcrypt matching of full JWT refresh tokens.
 - Production has zero active refresh sessions without a digest.
