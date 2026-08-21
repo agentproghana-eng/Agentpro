@@ -241,8 +241,10 @@ async function startServer() {
     }
 
 // Initialize Firebase (skip during tests)
+let firebaseApp = null;
+
 if (process.env.NODE_ENV !== 'test') {
-  initFirebase();
+  firebaseApp = initFirebase();
 } else {
   logger.info('⏭️ Skipping Firebase initialization in test environment');
 };
@@ -256,7 +258,8 @@ if (process.env.NODE_ENV !== 'test') {
     // accumulate after a normal deployment.
     if (
       process.env.NODE_ENV === 'production' &&
-      process.env.OUTBOX_WORKER_ENABLED !== 'false'
+      process.env.OUTBOX_WORKER_ENABLED !== 'false' &&
+      firebaseApp
     ) {
       const {
         startOutboxWorker
@@ -271,6 +274,14 @@ if (process.env.NODE_ENV !== 'test') {
       });
 
       logger.info('✅ Transactional outbox worker started');
+    } else if (
+      process.env.NODE_ENV === 'production' &&
+      process.env.OUTBOX_WORKER_ENABLED !== 'false' &&
+      !firebaseApp
+    ) {
+      logger.warn(
+        'Transactional outbox worker not started because Firebase is unavailable'
+      );
     }
 
     // Start background job scheduler (production only)
