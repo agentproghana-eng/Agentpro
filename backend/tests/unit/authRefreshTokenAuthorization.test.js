@@ -161,14 +161,24 @@ describe('Refresh token persistence authorization', () => {
 
       const [refreshSql, refreshParams] = refreshRead;
 
+      const expectedDigest = require('crypto')
+        .createHash('sha256')
+        .update(
+          'presented-refresh-token',
+          'utf8',
+        )
+        .digest('hex');
+
+      expect(refreshSql).toContain('token_digest = $2');
       expect(refreshSql).toContain('revoked_at IS NULL');
       expect(refreshSql).toContain('expires_at > NOW()');
-      expect(refreshParams).toEqual(['staff-1']);
+      expect(refreshSql).not.toContain('token_hash');
+      expect(refreshParams).toEqual([
+        'staff-1',
+        expectedDigest,
+      ]);
 
-      expect(bcrypt.compare).toHaveBeenCalledWith(
-        'presented-refresh-token',
-        'stored-refresh-hash'
-      );
+      expect(bcrypt.compare).not.toHaveBeenCalled();
 
       expect(jwt.sign).toHaveBeenCalledWith(
         expect.objectContaining({

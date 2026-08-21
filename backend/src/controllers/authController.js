@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { query, withTransaction } = require('../config/database');
 const { blacklistToken, isTokenBlacklisted } = require('../config/redis');
@@ -62,6 +63,13 @@ function generateRefreshToken(user) {
     process.env.JWT_REFRESH_SECRET,
     { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d' }
   );
+}
+
+function digestRefreshToken(token) {
+  return crypto
+    .createHash('sha256')
+    .update(token, 'utf8')
+    .digest('hex');
 }
 
 function getRefreshTokenExpiry() {
@@ -219,17 +227,24 @@ exports.registerPersonal = async (req, res) => {
     // Auto-login: persist the durable session first, then bind the
     // access token to that exact refresh-session row.
     const refreshToken = generateRefreshToken(user);
-    const tokenHash = await bcrypt.hash(refreshToken, 8);
+    const tokenDigest = digestRefreshToken(refreshToken);
+    const tokenHash = await bcrypt.hash(tokenDigest, 8);
 
     const sessionResult = await query(
       `INSERT INTO refresh_tokens (
          user_id,
          token_hash,
+         token_digest,
          expires_at
        )
-       VALUES ($1, $2, $3)
+       VALUES ($1, $2, $3, $4)
        RETURNING id`,
-      [user.id, tokenHash, getRefreshTokenExpiry()]
+      [
+        user.id,
+        tokenHash,
+        tokenDigest,
+        getRefreshTokenExpiry(),
+      ]
     );
 
     const accessToken = generateAccessToken(
@@ -524,20 +539,23 @@ exports.login = async (req, res) => {
     // Create the durable refresh session before issuing its access
     // token. Every access token is bound to exactly one session row.
     const refreshToken = generateRefreshToken(user);
-    const tokenHash = await bcrypt.hash(refreshToken, 8);
+    const tokenDigest = digestRefreshToken(refreshToken);
+    const tokenHash = await bcrypt.hash(tokenDigest, 8);
 
     const sessionResult = await query(
       `INSERT INTO refresh_tokens (
          user_id,
          token_hash,
+         token_digest,
          expires_at,
          device_info
        )
-       VALUES ($1, $2, $3, $4)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING id`,
       [
         user.id,
         tokenHash,
+        tokenDigest,
         getRefreshTokenExpiry(),
         device_info ? JSON.stringify(device_info) : null,
       ]
@@ -980,9 +998,14 @@ exports.completeMfa = async (req, res) => {
               user,
             );
 
+          const tokenDigest =
+            digestRefreshToken(
+              refreshToken,
+            );
+
           const tokenHash =
             await bcrypt.hash(
-              refreshToken,
+              tokenDigest,
               8,
             );
 
@@ -991,6 +1014,7 @@ exports.completeMfa = async (req, res) => {
               `INSERT INTO refresh_tokens (
                  user_id,
                  token_hash,
+                 token_digest,
                  expires_at,
                  device_info,
                  mfa_verified_at
@@ -1000,12 +1024,14 @@ exports.completeMfa = async (req, res) => {
                  $2,
                  $3,
                  $4,
+                 $5,
                  NOW()
                )
                RETURNING id`,
               [
                 user.id,
                 tokenHash,
+                tokenDigest,
                 getRefreshTokenExpiry(),
                 challenge.deviceInfo
                   ? JSON.stringify(
@@ -1310,48 +1336,38 @@ exports.refreshToken = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Token has been revoked' });
     }
 
-    // A valid JWT signature is not sufficient on its own. Refresh tokens
-    // are persisted as bcrypt hashes so password changes, logout, staff
-    // suspension/deactivation, and other server-side revocations remain
-    // authoritative even if the signed token has not expired yet.
+    // A valid JWT signature is not sufficient on its own. PostgreSQL
+    // remains authoritative for revocation and expiry, while the exact
+    // SHA-256 digest identifies one durable refresh session without
+    // bcrypt's 72-byte input truncation or a user-wide hash scan.
+    const tokenDigest = digestRefreshToken(refresh_token);
+
     const storedTokens = await query(
       `SELECT
          id,
-         token_hash,
          mfa_verified_at
        FROM refresh_tokens
        WHERE user_id = $1
+         AND token_digest = $2
          AND revoked_at IS NULL
-         AND expires_at > NOW()
-       ORDER BY created_at DESC`,
-      [decoded.id]
+         AND expires_at > NOW()`,
+      [
+        decoded.id,
+        tokenDigest,
+      ]
     );
 
-    const matchedSessions = [];
-
-    for (const storedToken of storedTokens.rows) {
-      if (
-        await bcrypt.compare(
-          refresh_token,
-          storedToken.token_hash,
-        )
-      ) {
-        matchedSessions.push(storedToken);
-      }
-    }
-
-    if (matchedSessions.length === 0) {
+    if (storedTokens.rows.length === 0) {
       return res.status(401).json({
         success: false,
         message: 'Refresh token is no longer valid',
       });
     }
 
-    // Legacy refresh tokens were issued before each credential carried a
-    // unique jti. If one presented credential matches more than one active
-    // session row, selecting either session would defeat per-device
-    // revocation. Fail closed and require a fresh login instead.
-    if (matchedSessions.length > 1) {
+    // The database unique index makes this impossible during normal
+    // operation. Preserve a fail-closed integrity guard in case the
+    // persistence contract is ever violated.
+    if (storedTokens.rows.length > 1) {
       return res.status(401).json({
         success: false,
         code: 'SESSION_AMBIGUOUS',
@@ -1360,7 +1376,7 @@ exports.refreshToken = async (req, res) => {
       });
     }
 
-    const matchedSession = matchedSessions[0];
+    const matchedSession = storedTokens.rows[0];
 
     // Fetch user only after the refresh session itself has been validated.
     // Suspended/deactivated users cannot exchange even a still-stored token.
