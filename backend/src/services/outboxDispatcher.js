@@ -40,6 +40,12 @@ function requireString(value, field) {
 }
 
 async function dispatchTransactionCompletion(event) {
+  const deliveryKey =
+    requireString(
+      event.dedupe_key,
+      'dedupe_key'
+    );
+
   const payload =
     requireObject(
       event.payload,
@@ -95,6 +101,7 @@ async function dispatchTransactionCompletion(event) {
     },
     {
       throwOnError: true,
+      deliveryKey,
     }
   );
 }

@@ -4,6 +4,45 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/material.dart';
 
+int notificationIdForDeliveryKey(String deliveryKey) {
+  // Deterministic FNV-1a hash, restricted to a positive 31-bit Android
+  // notification ID. Do not use String.hashCode because delivery identity
+  // must remain stable across processes and app restarts.
+  var hash = 0x811c9dc5;
+
+  for (final codeUnit in deliveryKey.codeUnits) {
+    hash ^= codeUnit;
+    hash = (hash * 0x01000193) & 0xffffffff;
+  }
+
+  return hash & 0x7fffffff;
+}
+
+String notificationRouteForType(String? type) {
+  switch (type) {
+    case 'transaction_success':
+    case 'transaction_failed':
+    case 'transaction_pending_confirmation':
+      return '/transactions';
+    case 'low_float':
+      return '/float';
+    case 'subscription_reminder':
+    case 'subscription_suspended':
+    case 'renewal_approved':
+      return '/subscription';
+    case 'personal_subscription_approved':
+    case 'personal_subscription_rejected':
+      return '/personal-subscription';
+    case 'ad_approved':
+    case 'ad_rejected':
+    case 'ad_expiring':
+    case 'ad_expired':
+      return '/marketplace';
+    default:
+      return '/notifications';
+  }
+}
+
 /// Background message handler — must be top-level function
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -110,22 +149,30 @@ class NotificationService {
     final notification = message.notification;
     if (notification == null) return;
 
-    const androidDetails = AndroidNotificationDetails(
+    final deliveryKey = message.data['delivery_key']?.toString().trim();
+
+    final hasDeliveryKey = deliveryKey != null && deliveryKey.isNotEmpty;
+
+    final androidDetails = AndroidNotificationDetails(
       _channelId,
       _channelName,
       channelDescription: _channelDesc,
       importance: Importance.high,
       priority: Priority.high,
       showWhen: true,
+      onlyAlertOnce: hasDeliveryKey,
+      tag: hasDeliveryKey ? deliveryKey : null,
       icon: '@drawable/ic_notification',
-      color: Color(0xFF006B5E),
+      color: const Color(0xFF006B5E),
     );
 
     await _localNotifications.show(
-      notification.hashCode,
+      hasDeliveryKey
+          ? notificationIdForDeliveryKey(deliveryKey)
+          : notification.hashCode,
       notification.title,
       notification.body,
-      const NotificationDetails(android: androidDetails),
+      NotificationDetails(android: androidDetails),
       payload: message.data['type'],
     );
   }
@@ -151,27 +198,7 @@ class NotificationService {
   }
 
   static String? _routeForType(String? type) {
-    switch (type) {
-      case 'transaction_success':
-      case 'transaction_failed':
-        return '/transactions';
-      case 'low_float':
-        return '/float';
-      case 'subscription_reminder':
-      case 'subscription_suspended':
-      case 'renewal_approved':
-        return '/subscription';
-      case 'personal_subscription_approved':
-      case 'personal_subscription_rejected':
-        return '/personal-subscription';
-      case 'ad_approved':
-      case 'ad_rejected':
-      case 'ad_expiring':
-      case 'ad_expired':
-        return '/marketplace';
-      default:
-        return '/notifications';
-    }
+    return notificationRouteForType(type);
   }
 
   /// Get the FCM token for this device
