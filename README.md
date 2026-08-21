@@ -1,7 +1,7 @@
 # Agent Pro Ghana 🇬🇭
-### One App. Every Mobile Money Business.
+### One App. Every Business.
 
-**Version:** 2.0.0 | **Status:** In Development | **Confidential**
+**Version:** 2.0.0 | **Status:** Launch Hardening & Production Validation | **Confidential**
 
 > **📋 Read [`STATUS.md`](./STATUS.md) first** — it has what's actually solid,
 > what's a placeholder, and what to do next. This README describes the original
@@ -14,6 +14,50 @@
 A production-ready FinTech Super App for Ghana that serves Mobile Money Agents, Business Owners, Aggregators, Branch Managers, Auditors, and Customers.
 
 Supported providers: **MTN Mobile Money · Telecel Cash · AT Money**
+
+---
+
+## Current Launch Status — 21 August 2026
+
+Agent Pro Ghana is in **pre-public-launch hardening and production validation**.
+
+### ✅ Production-critical items completed
+
+- Core Flutter Android app, Node/Express backend, PostgreSQL, Redis, and React admin portal are implemented.
+- GitHub `master` is protected by Backend Tests, Backend Lint, Admin Portal Build, and Flutter Android Build.
+- Production backend is deployed on Render using Node.js **24.19.0**.
+- Current production merge: `15f2c7b6edfb45f23e41b080ed93118365194e7b`.
+- Migration `094_refresh_token_exact_digest.sql` is applied in production.
+- Refresh sessions now use exact SHA-256 digest identity instead of bcrypt matching of full JWT refresh tokens.
+- Production has zero active refresh sessions without a digest.
+- Fresh login after migration 094 succeeded.
+- The 15+ minute access-token expiry smoke passed:
+  - protected request returned `401` after access-token expiry;
+  - `POST /refresh` returned `200`;
+  - protected requests immediately retried successfully with `200`;
+  - the user remained authenticated;
+  - the durable refresh session remained active after a backend cold start.
+- PIN-less MTN Personal Airtime/Data resolver production blocker is closed.
+- CI release APK signing identity has been verified.
+
+### 🔄 Remaining launch gates
+
+- [ ] MoMo manual-PIN boundary smoke
+- [ ] Firebase push routing/idempotency device smoke
+- [ ] Report opening/export smoke using `open_filex`
+- [ ] Non-destructive Business transaction smoke
+- [ ] Non-destructive Personal transaction smoke
+- [ ] Admin Portal live production smoke
+- [ ] Final clean backend install/audit/full regression gate
+- [ ] Final rollback checklist
+- [ ] Close obsolete superseded PR #35
+- [ ] Verify Google Play highest Android `versionCode`
+- [ ] Final signing-key/provenance verification
+- [ ] Move production API and PostgreSQL off free hosting plans before public launch
+
+> `STATUS.md` contains useful historical audit context, but parts of it predate
+> the current production-hardening work. This README section reflects the current
+> high-level launch state.
 
 ---
 
@@ -79,7 +123,7 @@ npm run dev
 
 | Service | Version |
 |---------|---------|
-| Node.js | >= 18.0 |
+| Node.js | 24.19.0 |
 | PostgreSQL | >= 15 |
 | Redis | >= 7 |
 | Flutter | >= 3.22 (stable) |
@@ -125,7 +169,7 @@ PostgreSQL  Redis
 
 ## Build Order (Development Phases)
 
-### ✅ Phase 0 — Foundation (Current)
+### ✅ Phase 0 — Foundation
 - [x] Architecture & database schema
 - [x] Backend scaffolding & server setup
 - [x] Auth system (register, login, JWT, RBAC)
@@ -153,11 +197,12 @@ PostgreSQL  Redis
 - [ ] Multi-branch management
 - [ ] Superuser admin portal
 
-### 🚀 Phase 3 — Production
+### 🚀 Phase 3 — Production / Launch Hardening
 - [ ] Security audit & penetration testing
 - [ ] Google Play Store submission
 - [ ] Performance optimization
-- [ ] Full test suite
+- [x] Full backend regression suite established
+- [ ] Complete remaining production device smoke tests
 
 ---
 
