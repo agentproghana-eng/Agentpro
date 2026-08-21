@@ -3,15 +3,15 @@
 
 **Version:** 2.0.0 | **Status:** Launch Hardening & Production Validation | **Confidential**
 
-> **📋 Read [`STATUS.md`](./STATUS.md) first** — it has what's actually solid,
-> what's a placeholder, and what to do next. This README describes the original
-> intended scope; STATUS.md describes where the build actually stands.
+> **Current status:** This README contains the current high-level launch state.
+> [`STATUS.md`](./STATUS.md) remains useful historical audit context, but parts of
+> it predate the latest production-hardening and live-device validation work.
 
 ---
 
 ## What This Is
 
-A production-ready FinTech Super App for Ghana that serves Mobile Money Agents, Business Owners, Aggregators, Branch Managers, Auditors, and Customers.
+A FinTech Super App for Ghana in pre-public-launch hardening that serves Mobile Money Agents, Business Owners, Aggregators, Branch Managers, Auditors, and Customers.
 
 Supported providers: **MTN Mobile Money · Telecel Cash · AT Money**
 
@@ -141,7 +141,7 @@ Before running, set up accounts and get credentials for:
    - Enable FCM, Analytics, Crashlytics
    - Download `google-services.json` → `flutter_app/android/app/`
 3. **Cloudinary** — [cloudinary.com](https://cloudinary.com)
-4. **Railway or Render** — for backend hosting
+4. **Render** — current production backend hosting
 5. **Domain** — agentproghana.com (for production)
 
 ---
@@ -167,7 +167,12 @@ PostgreSQL  Redis
 
 ---
 
-## Build Order (Development Phases)
+## Historical Development Roadmap
+
+> The checklist below reflects the original development-phase plan. It is retained
+> for historical context and should not be used as the current launch-readiness
+> checklist. Use **Current Launch Status** above for the active launch gates.
+
 
 ### ✅ Phase 0 — Foundation
 - [x] Architecture & database schema
