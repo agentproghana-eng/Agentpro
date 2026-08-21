@@ -36,6 +36,8 @@ describe(
         const event = {
           event_type:
             'notification.transaction.completed',
+          dedupe_key:
+            'transaction:11111111:completion:success',
           payload: {
             agent_id:
               'agent-1',
@@ -77,6 +79,8 @@ describe(
           },
           {
             throwOnError: true,
+            deliveryKey:
+              'transaction:11111111:completion:success',
           }
         );
       }
@@ -105,6 +109,8 @@ describe(
           dispatchOutboxEvent({
             event_type:
               'notification.transaction.completed',
+            dedupe_key:
+              'transaction:11111111:completion:failed',
             payload: {
               agent_id:
                 'agent-1',
@@ -137,6 +143,8 @@ describe(
           dispatchOutboxEvent({
             event_type:
               'notification.transaction.completed',
+            dedupe_key:
+              'transaction:test:invalid-payload',
             payload: {
               agent_id:
                 'agent-1',
@@ -163,6 +171,8 @@ describe(
           dispatchOutboxEvent({
             event_type:
               'notification.transaction.completed',
+            dedupe_key:
+              'transaction:test:invalid-type',
             payload: {
               agent_id:
                 'agent-1',
