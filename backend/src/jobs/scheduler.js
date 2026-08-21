@@ -21,16 +21,67 @@ const { auditLog } = require('../services/auditService');
 const { sendSubscriptionReminder, sendSubscriptionSuspended, sendAdNotification } = require('../services/notificationService');
 const { sendSubscriptionReminderEmail } = require('../services/emailService');
 
-// Simple interval-based scheduler (use node-cron or agenda in production)
+const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+
+function millisecondsUntilNextUtcTime(
+  now,
+  hour,
+  minute = 0
+) {
+  const target = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+    hour,
+    minute,
+    0,
+    0
+  );
+
+  if (target >= now.getTime()) {
+    return target - now.getTime();
+  }
+
+  return target + DAY_MS - now.getTime();
+}
+
+function millisecondsUntilNextUtcHour(now) {
+  const target = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+    now.getUTCHours(),
+    0,
+    0,
+    0
+  );
+
+  if (target >= now.getTime()) {
+    return target - now.getTime();
+  }
+
+  return target + HOUR_MS - now.getTime();
+}
+
+// Wall-clock UTC scheduler. Each job calculates its next UTC boundary
+// after completion so deployments and execution time do not shift the
+// intended production schedule.
 function startScheduler() {
   logger.info('⏰ Starting background job scheduler');
 
   let stopped = false;
   const inFlight = new Map();
+  const timers = new Map();
 
   const runTracked = (name, job) => {
-    if (stopped || inFlight.has(name)) {
-      return;
+    if (stopped) {
+      return Promise.resolve();
+    }
+
+    const existing = inFlight.get(name);
+    if (existing) {
+      return existing;
     }
 
     const promise = Promise.resolve()
@@ -50,34 +101,86 @@ function startScheduler() {
     void promise.finally(() => {
       inFlight.delete(name);
     });
+
+    return promise;
   };
 
-  // Run immediately on startup, then every 24 hours.
-  runTracked('daily', runDailyJobs);
+  const scheduleUtcJob = (
+    name,
+    delayFor,
+    job
+  ) => {
+    if (stopped) {
+      return;
+    }
 
-  const dailyTimer = setInterval(
-    () => runTracked('daily', runDailyJobs),
-    24 * 60 * 60 * 1000
-  );
+    const delay = delayFor(new Date());
 
-  const hourlyTimer = setInterval(
-    () => runTracked('hourly', runHourlyJobs),
-    60 * 60 * 1000
-  );
+    const timer = setTimeout(() => {
+      timers.delete(name);
 
-  for (const timer of [dailyTimer, hourlyTimer]) {
+      if (stopped) {
+        return;
+      }
+
+      void runTracked(name, job)
+        .finally(() => {
+          scheduleUtcJob(
+            name,
+            delayFor,
+            job
+          );
+        });
+    }, delay);
+
+    timers.set(name, timer);
+
     if (typeof timer.unref === 'function') {
       timer.unref();
     }
-  }
+  };
 
-  logger.info('✅ Scheduler started');
+  scheduleUtcJob(
+    'reminders',
+    (now) =>
+      millisecondsUntilNextUtcTime(
+        now,
+        8,
+        0
+      ),
+    sendSubscriptionReminders
+  );
+
+  scheduleUtcJob(
+    'expiry',
+    (now) =>
+      millisecondsUntilNextUtcTime(
+        now,
+        0,
+        0
+      ),
+    runExpiryJobs
+  );
+
+  scheduleUtcJob(
+    'hourly',
+    millisecondsUntilNextUtcHour,
+    runHourlyJobs
+  );
+
+  logger.info(
+    '✅ Scheduler started with UTC wall-clock timing'
+  );
 
   return async () => {
     if (!stopped) {
       stopped = true;
-      clearInterval(dailyTimer);
-      clearInterval(hourlyTimer);
+
+      for (const timer of timers.values()) {
+        clearTimeout(timer);
+      }
+
+      timers.clear();
     }
 
     await Promise.allSettled(
@@ -90,6 +193,8 @@ function startScheduler() {
 
 // ── Daily Jobs ────────────────────────────────────────────────
 
+// Compatibility/manual aggregate. Production scheduling invokes
+// reminders and expiry jobs at their separate UTC wall-clock times.
 async function runDailyJobs() {
   logger.info('Running daily jobs...');
   await Promise.allSettled([
@@ -99,6 +204,16 @@ async function runDailyJobs() {
     expirePersonalSubscriptions(),
   ]);
   logger.info('Daily jobs complete');
+}
+
+async function runExpiryJobs() {
+  logger.info('Running midnight expiry jobs...');
+  await Promise.allSettled([
+    suspendExpiredSubscriptions(),
+    expireOldAds(),
+    expirePersonalSubscriptions(),
+  ]);
+  logger.info('Midnight expiry jobs complete');
 }
 
 // ── Hourly Jobs ───────────────────────────────────────────────
@@ -338,4 +453,11 @@ async function checkLowFloatAlerts() {
   }
 }
 
-module.exports = { startScheduler, runDailyJobs, runHourlyJobs };
+module.exports = {
+  startScheduler,
+  runDailyJobs,
+  runExpiryJobs,
+  runHourlyJobs,
+  millisecondsUntilNextUtcTime,
+  millisecondsUntilNextUtcHour,
+};

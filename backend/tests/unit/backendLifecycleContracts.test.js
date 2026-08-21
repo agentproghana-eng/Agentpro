@@ -21,10 +21,13 @@ describe(
           read('src/jobs/scheduler.js');
 
         expect(source)
-          .toContain('clearInterval(dailyTimer)');
+          .toContain('const timers = new Map()');
 
         expect(source)
-          .toContain('clearInterval(hourlyTimer)');
+          .toContain('clearTimeout(timer)');
+
+        expect(source)
+          .toContain('timers.clear()');
 
         expect(source)
           .toContain('Promise.allSettled(');
