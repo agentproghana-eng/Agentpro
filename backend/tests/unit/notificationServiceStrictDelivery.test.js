@@ -158,6 +158,80 @@ describe(
     );
 
     test(
+      'existing delivery key suppresses a second Firebase send',
+      async () => {
+        mockQuery
+          .mockResolvedValueOnce({
+            rows: [
+              {
+                fcm_message_id:
+                  'fcm-message-existing',
+              },
+            ],
+          });
+
+        await expect(
+          sendTransactionNotification(
+            'agent-1',
+            {
+              type:
+                'transaction_success',
+              transaction:
+                transaction(),
+            },
+            {
+              throwOnError:
+                true,
+              deliveryKey:
+                'transaction:11111111:completion:success',
+            }
+          )
+        ).resolves.toBe(
+          'fcm-message-existing'
+        );
+
+        expect(
+          mockQuery
+        ).toHaveBeenCalledTimes(1);
+
+        expect(
+          mockQuery.mock.calls[0][0]
+        ).toContain(
+          'WHERE delivery_key = $1'
+        );
+
+        expect(
+          mockQuery.mock.calls[0][1]
+        ).toEqual([
+          'transaction:11111111:completion:success',
+          'agent-1',
+        ]);
+
+        expect(
+          mockMessagingSend
+        ).not.toHaveBeenCalled();
+
+        expect(
+          mockQuery.mock.calls.some(
+            ([sql]) =>
+              sql.includes(
+                'SELECT fcm_token FROM users'
+              )
+          )
+        ).toBe(false);
+
+        expect(
+          mockQuery.mock.calls.some(
+            ([sql]) =>
+              sql.includes(
+                'INSERT INTO notifications'
+              )
+          )
+        ).toBe(false);
+      }
+    );
+
+    test(
       'strict successful delivery still persists the notification row',
       async () => {
         mockMessagingSend

@@ -8,9 +8,27 @@ const { logger } = require('../utils/logger');
 async function sendToUser(
   userId,
   { title, body, data = {}, type },
-  { throwOnError = false } = {}
+  {
+    throwOnError = false,
+    deliveryKey = null,
+  } = {}
 ) {
   try {
+    if (deliveryKey) {
+      const existingDelivery = await query(
+        `SELECT fcm_message_id
+         FROM notifications
+         WHERE delivery_key = $1
+           AND user_id = $2
+         LIMIT 1`,
+        [deliveryKey, userId]
+      );
+
+      if (existingDelivery.rows.length > 0) {
+        return existingDelivery.rows[0].fcm_message_id || deliveryKey;
+      }
+    }
+
     const result = await query(
       'SELECT fcm_token FROM users WHERE id = $1 AND fcm_token IS NOT NULL',
       [userId]
@@ -19,26 +37,60 @@ async function sendToUser(
     if (result.rows.length === 0 || !result.rows[0].fcm_token) return;
 
     const fcmToken = result.rows[0].fcm_token;
+    const messageData = {
+      ...data,
+      type: type || 'general',
+      click_action: 'FLUTTER_NOTIFICATION_CLICK',
+      ...(deliveryKey
+        ? { delivery_key: deliveryKey }
+        : {}),
+    };
+
     const message = {
       token: fcmToken,
       notification: { title, body },
-      data: { ...data, type: type || 'general', click_action: 'FLUTTER_NOTIFICATION_CLICK' },
+      data: messageData,
       android: {
         priority: 'high',
         notification: {
           sound: 'default',
           click_action: 'FLUTTER_NOTIFICATION_CLICK',
+          ...(deliveryKey
+            ? { tag: deliveryKey }
+            : {}),
         },
       },
     };
 
     const response = await getMessaging().send(message);
 
-    // Save to notifications table
+    // Persist the logical delivery identity after FCM accepts the send.
+    // A retry that happens after this point can be suppressed before
+    // another FCM send.
     await query(
-      `INSERT INTO notifications (user_id, type, title, body, data, sent_at, fcm_message_id)
-       VALUES ($1, $2, $3, $4, $5, NOW(), $6)`,
-      [userId, type || 'system_update', title, body, JSON.stringify(data), response]
+      `INSERT INTO notifications (
+         user_id,
+         type,
+         title,
+         body,
+         data,
+         sent_at,
+         fcm_message_id,
+         delivery_key
+       )
+       VALUES ($1, $2, $3, $4, $5, NOW(), $6, $7)
+       ON CONFLICT (delivery_key)
+         WHERE delivery_key IS NOT NULL
+       DO NOTHING`,
+      [
+        userId,
+        type || 'system_update',
+        title,
+        body,
+        JSON.stringify(data),
+        response,
+        deliveryKey,
+      ]
     );
 
     return response;
