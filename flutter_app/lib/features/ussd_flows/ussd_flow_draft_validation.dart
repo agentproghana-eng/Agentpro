@@ -106,16 +106,26 @@ const Set<String> kValueRequiredUssdFlowActions = {
   'auto_confirm_once',
 };
 
-/// Returns true only for the one centrally managed Personal flow that
-/// has been verified to be legitimately PIN-less on a real device.
+const Set<String> _trustedPinlessMtnAirtimeDataVariants = {
+  'flexi_airtime',
+  'fixed_page1_airtime',
+  'fixed_page2_airtime',
+};
+
+const Set<String> _trustedPinlessMtnAirtimeDataRecipientModes = {
+  'self',
+  'other',
+};
+
+/// Returns true only for centrally managed Global Personal flows that
+/// have been verified to be legitimately PIN-less.
 ///
-/// MTN Pulse balance:
-///   *567# -> 1 -> 99 -> 7
+/// Trusted MTN shapes:
+///   Pulse balance: *567# -> 1 -> 99 -> 7
+///   Buy Data from Airtime: approved *138# Airtime variants only.
 ///
-/// This is deliberately narrower than transaction type alone. Both the
-/// transaction context and the resolved flow metadata must match, and the
-/// flow must explicitly identify itself as Global rather than Personal-
-/// or company-owned.
+/// Mobile Money variants remain PIN-bound. The backend independently
+/// validates that an Airtime data flow actually selects Airtime payment.
 bool isTrustedPinlessPersonalRuntimeFlow({
   required bool isPersonal,
   required String provider,
@@ -124,22 +134,37 @@ bool isTrustedPinlessPersonalRuntimeFlow({
   required Map<String, dynamic> flowData,
 }) {
   if (!isPersonal ||
-      provider != 'mtn' ||
-      transactionType != 'check_airtime_balance' ||
-      dialCode != '*567#') {
+      !flowData.containsKey('owner_user_id') ||
+      !flowData.containsKey('company_id') ||
+      flowData['owner_user_id'] != null ||
+      flowData['company_id'] != null) {
     return false;
   }
 
-  if (!flowData.containsKey('owner_user_id') ||
-      !flowData.containsKey('company_id')) {
+  if (provider != flowData['provider']?.toString() ||
+      transactionType != flowData['transaction_type']?.toString() ||
+      dialCode != flowData['dial_code']?.toString() ||
+      provider != 'mtn') {
     return false;
   }
 
-  return flowData['owner_user_id'] == null &&
-      flowData['company_id'] == null &&
-      flowData['provider']?.toString() == 'mtn' &&
-      flowData['transaction_type']?.toString() == 'check_airtime_balance' &&
-      flowData['dial_code']?.toString() == '*567#';
+  if (transactionType == 'check_airtime_balance' && dialCode == '*567#') {
+    return true;
+  }
+
+  if (transactionType != 'buy_data' ||
+      dialCode != '*138#' ||
+      !flowData.containsKey('bundle_category') ||
+      !flowData.containsKey('recipient_mode')) {
+    return false;
+  }
+
+  return _trustedPinlessMtnAirtimeDataVariants.contains(
+        flowData['bundle_category']?.toString(),
+      ) &&
+      _trustedPinlessMtnAirtimeDataRecipientModes.contains(
+        flowData['recipient_mode']?.toString(),
+      );
 }
 
 String? validateUssdFlowDraftSteps(

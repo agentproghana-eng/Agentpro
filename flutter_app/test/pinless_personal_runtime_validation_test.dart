@@ -26,6 +26,21 @@ Map<String, dynamic> trustedPulseFlow() {
   };
 }
 
+Map<String, dynamic> trustedAirtimeDataFlow({
+  String bundleCategory = 'flexi_airtime',
+  String recipientMode = 'self',
+}) {
+  return <String, dynamic>{
+    'owner_user_id': null,
+    'company_id': null,
+    'provider': 'mtn',
+    'transaction_type': 'buy_data',
+    'dial_code': '*138#',
+    'bundle_category': bundleCategory,
+    'recipient_mode': recipientMode,
+  };
+}
+
 void main() {
   group('PIN-less Personal runtime safety', () {
     test('ordinary validation still requires PIN Prompt', () {
@@ -217,6 +232,78 @@ void main() {
             provider: 'mtn',
             transactionType: 'check_airtime_balance',
             dialCode: '*567#',
+            flowData: flow,
+          ),
+          isFalse,
+        );
+      }
+    });
+
+    test('verified Global MTN Airtime data variants are trusted', () {
+      const variants = <String>[
+        'flexi_airtime',
+        'fixed_page1_airtime',
+        'fixed_page2_airtime',
+      ];
+
+      const recipients = <String>[
+        'self',
+        'other',
+      ];
+
+      for (final variant in variants) {
+        for (final recipient in recipients) {
+          final flow = trustedAirtimeDataFlow(
+            bundleCategory: variant,
+            recipientMode: recipient,
+          );
+
+          expect(
+            isTrustedPinlessPersonalRuntimeFlow(
+              isPersonal: true,
+              provider: 'mtn',
+              transactionType: 'buy_data',
+              dialCode: '*138#',
+              flowData: flow,
+            ),
+            isTrue,
+          );
+        }
+      }
+    });
+
+    test('Mobile Money data variant remains PIN-bound', () {
+      final flow = trustedAirtimeDataFlow(
+        bundleCategory: 'flexi_momo',
+      );
+
+      expect(
+        isTrustedPinlessPersonalRuntimeFlow(
+          isPersonal: true,
+          provider: 'mtn',
+          transactionType: 'buy_data',
+          dialCode: '*138#',
+          flowData: flow,
+        ),
+        isFalse,
+      );
+    });
+
+    test('Airtime data overrides remain PIN-bound', () {
+      final personal = trustedAirtimeDataFlow()..['owner_user_id'] = 'user-123';
+
+      final company = trustedAirtimeDataFlow()..['company_id'] = 'company-123';
+
+      for (final flow in <Map<String, dynamic>>[
+        personal,
+        company,
+      ]) {
+        expect(
+          isTrustedPinlessPersonalRuntimeFlow(
+            isPersonal: true,
+            provider: 'mtn',
+            transactionType: 'buy_data',
+            dialCode: '*138#',
             flowData: flow,
           ),
           isFalse,

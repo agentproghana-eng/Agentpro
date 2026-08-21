@@ -70,6 +70,55 @@ const globalPulseFlow = (overrides = {}) => ({
   ...overrides,
 });
 
+
+const airtimeDataSteps = [
+  {
+    match_all: ['proceed to buy bundle'],
+    action: 'send_digit',
+    action_value: '1',
+  },
+  {
+    match_all: ['choose payment mode', 'mobile money'],
+    action: 'send_digit',
+    action_value: '1',
+  },
+];
+
+const globalAirtimeDataFlow = (overrides = {}) => ({
+  id: '33333333-3333-4333-8333-333333333333',
+  provider: 'mtn',
+  transaction_type: 'buy_data',
+  dial_code: '*138#',
+  bundle_category: 'flexi_airtime',
+  recipient_mode: 'self',
+  success_markers: [],
+  failure_markers: [],
+  owner_user_id: null,
+  company_id: null,
+  is_active: true,
+  ...overrides,
+});
+
+const makeAirtimeDataRequest = ({
+  bundleCategory = 'flexi_airtime',
+  recipientMode = 'self',
+  plan = 'free',
+} = {}) => ({
+  query: {
+    provider: 'mtn',
+    transaction_type: 'buy_data',
+    bundle_category: bundleCategory,
+    recipient_mode: recipientMode,
+  },
+  user: {
+    id: '22222222-2222-4222-8222-222222222222',
+  },
+  personalSubscription: {
+    plan,
+    expires_at: null,
+  },
+});
+
 beforeEach(() => {
   jest.clearAllMocks();
 });
@@ -118,7 +167,7 @@ describe('PIN-less Personal runtime flow safety', () => {
   );
 
   test(
-    'resolver accepts only the verified Global MTN Pulse balance shape',
+    'resolver accepts the verified Global MTN Pulse balance shape',
     async () => {
       query
         .mockResolvedValueOnce({
@@ -254,4 +303,177 @@ describe('PIN-less Personal runtime flow safety', () => {
       );
     },
   );
+
+  test.each([
+    ['flexi_airtime', 'self'],
+    ['flexi_airtime', 'other'],
+    ['fixed_page1_airtime', 'self'],
+    ['fixed_page1_airtime', 'other'],
+    ['fixed_page2_airtime', 'self'],
+    ['fixed_page2_airtime', 'other'],
+  ])(
+    'resolver accepts verified Global MTN Airtime data %s/%s',
+    async (bundleCategory, recipientMode) => {
+      query
+        .mockResolvedValueOnce({
+          rows: [
+            globalAirtimeDataFlow({
+              bundle_category: bundleCategory,
+              recipient_mode: recipientMode,
+            }),
+          ],
+        })
+        .mockResolvedValueOnce({
+          rows: airtimeDataSteps,
+        });
+
+      const res = makeResponse();
+
+      await resolveFlow(
+        makeAirtimeDataRequest({
+          bundleCategory,
+          recipientMode,
+        }),
+        res,
+      );
+
+      expect(res.status).not.toHaveBeenCalled();
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            provider: 'mtn',
+            transaction_type: 'buy_data',
+            bundle_category: bundleCategory,
+            recipient_mode: recipientMode,
+          }),
+        }),
+      );
+    },
+  );
+
+  test(
+    'resolver rejects Airtime metadata when payment step selects Mobile Money',
+    async () => {
+      query
+        .mockResolvedValueOnce({
+          rows: [globalAirtimeDataFlow()],
+        })
+        .mockResolvedValueOnce({
+          rows: [
+            airtimeDataSteps[0],
+            {
+              match_all: [
+                'choose payment mode',
+                'mobile money',
+              ],
+              action: 'send_digit',
+              action_value: '2',
+            },
+          ],
+        });
+
+      const res = makeResponse();
+
+      await resolveFlow(
+        makeAirtimeDataRequest(),
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(409);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          code: 'USSD_FLOW_INVALID_CONFIGURATION',
+        }),
+      );
+    },
+  );
+
+  test(
+    'resolver keeps Mobile Money data variants PIN-bound',
+    async () => {
+      query
+        .mockResolvedValueOnce({
+          rows: [
+            globalAirtimeDataFlow({
+              bundle_category: 'flexi_momo',
+            }),
+          ],
+        })
+        .mockResolvedValueOnce({
+          rows: airtimeDataSteps,
+        });
+
+      const res = makeResponse();
+
+      await resolveFlow(
+        makeAirtimeDataRequest({
+          bundleCategory: 'flexi_momo',
+        }),
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(409);
+    },
+  );
+
+  test(
+    'resolver never grants Airtime PIN-less exception to Personal override',
+    async () => {
+      query
+        .mockResolvedValueOnce({
+          rows: [
+            globalAirtimeDataFlow({
+              owner_user_id:
+                '22222222-2222-4222-8222-222222222222',
+            }),
+          ],
+        })
+        .mockResolvedValueOnce({
+          rows: airtimeDataSteps,
+        });
+
+      const res = makeResponse();
+
+      await resolveFlow(
+        makeAirtimeDataRequest({
+          plan: 'paid',
+        }),
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(409);
+    },
+  );
+
+  test(
+    'resolver never grants Airtime PIN-less exception to company flow',
+    async () => {
+      query
+        .mockResolvedValueOnce({
+          rows: [
+            globalAirtimeDataFlow({
+              company_id:
+                '44444444-4444-4444-8444-444444444444',
+            }),
+          ],
+        })
+        .mockResolvedValueOnce({
+          rows: airtimeDataSteps,
+        });
+
+      const res = makeResponse();
+
+      await resolveFlow(
+        makeAirtimeDataRequest(),
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(409);
+    },
+  );
+
 });
