@@ -7,20 +7,80 @@ const { validateFlowMetadata } = require('../utils/ussdFlowMetadataValidation');
 //
 // PIN-less runtime execution is intentionally exceptional.
 //
-// The only currently device-verified PIN-less Personal flow is the
-// centrally managed Global MTN Pulse balance flow:
+// Device-verified Global MTN Personal PIN-less shapes are:
 //
-//   *567# -> 1 -> 99 -> 7
+//   Pulse balance:
+//     *567# -> 1 -> 99 -> 7
 //
-// Do not broaden this by transaction type alone. Personal-owned overrides,
-// company flows, different providers, or a different dial code must continue
-// to satisfy the normal PIN-boundary rule.
-const isTrustedPinlessRuntimeFlow = (flow) =>
-  flow?.owner_user_id == null &&
-  flow?.company_id == null &&
-  flow?.provider === 'mtn' &&
-  flow?.transaction_type === 'check_airtime_balance' &&
-  flow?.dial_code === '*567#';
+//   Buy Data paid from Airtime:
+//     *138# with the centrally managed Airtime variants below.
+//
+// Mobile Money variants remain PIN-bound. Personal-owned overrides,
+// company flows, other providers, dial codes, or variants remain
+// subject to the normal PIN boundary.
+const TRUSTED_PINLESS_MTN_AIRTIME_DATA_VARIANTS = new Set([
+  'flexi_airtime',
+  'fixed_page1_airtime',
+  'fixed_page2_airtime',
+]);
+
+const TRUSTED_PINLESS_MTN_AIRTIME_DATA_RECIPIENT_MODES = new Set([
+  'self',
+  'other',
+]);
+
+const hasTrustedAirtimePaymentStep = (steps) => {
+  if (!Array.isArray(steps)) {
+    return false;
+  }
+
+  if (steps.some((step) => step?.action === 'pin_prompt')) {
+    return false;
+  }
+
+  const paymentSteps = steps.filter(
+    (step) =>
+      Array.isArray(step?.match_all) &&
+      step.match_all.includes('choose payment mode') &&
+      step.match_all.includes('mobile money')
+  );
+
+  return (
+    paymentSteps.length === 1 &&
+    paymentSteps[0]?.action === 'send_digit' &&
+    paymentSteps[0]?.action_value === '1'
+  );
+};
+
+const isTrustedPinlessRuntimeFlow = (flow, steps = []) => {
+  if (
+    !flow ||
+    flow.owner_user_id !== null ||
+    flow.company_id !== null ||
+    flow.provider !== 'mtn'
+  ) {
+    return false;
+  }
+
+  if (
+    flow.transaction_type === 'check_airtime_balance' &&
+    flow.dial_code === '*567#'
+  ) {
+    return true;
+  }
+
+  return (
+    flow.transaction_type === 'buy_data' &&
+    flow.dial_code === '*138#' &&
+    TRUSTED_PINLESS_MTN_AIRTIME_DATA_VARIANTS.has(
+      flow.bundle_category
+    ) &&
+    TRUSTED_PINLESS_MTN_AIRTIME_DATA_RECIPIENT_MODES.has(
+      flow.recipient_mode
+    ) &&
+    hasTrustedAirtimePaymentStep(steps)
+  );
+};
 const {
   getFlowBuilderCapabilities,
   getFlowBuilderEligibility,
@@ -165,7 +225,10 @@ exports.resolveFlow = async (req, res) => {
       stepsResult.rows,
       {
         allowPinless:
-          isTrustedPinlessRuntimeFlow(flow),
+          isTrustedPinlessRuntimeFlow(
+            flow,
+            stepsResult.rows
+          ),
       },
     );
 
