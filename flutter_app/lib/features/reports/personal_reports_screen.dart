@@ -5,7 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:open_file/open_file.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../core/api/api_client.dart';
@@ -175,7 +175,7 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
 
       await file.writeAsBytes(response.data);
 
-      await OpenFile.open(file.path);
+      await OpenFilex.open(file.path);
     } catch (_) {
       if (!mounted) {
         return;
