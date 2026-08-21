@@ -243,7 +243,6 @@ async function startServer() {
 // Initialize Firebase (skip during tests)
 if (process.env.NODE_ENV !== 'test') {
   initFirebase();
-  logger.info('✅ Firebase initialized');
 } else {
   logger.info('⏭️ Skipping Firebase initialization in test environment');
 };
