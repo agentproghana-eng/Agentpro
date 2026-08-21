@@ -131,6 +131,27 @@ async function deleteOTP(key) {
   }
 }
 
+async function closeRedis() {
+  const client = redisClient;
+  redisClient = undefined;
+
+  if (!client) {
+    return;
+  }
+
+  if (client.status === "ready") {
+    try {
+      await client.quit();
+      return;
+    } catch (error) {
+      client.disconnect();
+      throw error;
+    }
+  }
+
+  client.disconnect();
+}
+
 module.exports = {
   get redisClient() { return redisClient; },
   connectRedis,
@@ -141,5 +162,6 @@ module.exports = {
   isTokenBlacklisted,
   storeOTP,
   getOTP,
-  deleteOTP
+  deleteOTP,
+  closeRedis
 };
