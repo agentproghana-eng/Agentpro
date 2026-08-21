@@ -75,4 +75,20 @@ async function withTransaction(callback) {
   }
 }
 
-module.exports = { pool, query, withTransaction, connectDB };
+let closePromise = null;
+
+function closeDB() {
+  if (!closePromise) {
+    closePromise = pool.end();
+  }
+
+  return closePromise;
+}
+
+module.exports = {
+  pool,
+  query,
+  withTransaction,
+  connectDB,
+  closeDB,
+};

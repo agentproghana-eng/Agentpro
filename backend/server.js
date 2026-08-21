@@ -7,8 +7,8 @@ const morgan = require('morgan');
 const { v4: uuidv4, validate: uuidValidate } = require('uuid');
 
 const { logger, sanitizeRequestPath } = require('./src/utils/logger');
-const { connectDB } = require('./src/config/database');
-const { connectRedis } = require('./src/config/redis');
+const { connectDB, closeDB } = require('./src/config/database');
+const { connectRedis, closeRedis } = require('./src/config/redis');
 const { initFirebase } = require('./src/config/firebase');
 const errorHandler = require('./src/middleware/errorHandler');
 const { apiLimiter } = require('./src/middleware/rateLimit');
@@ -223,6 +223,166 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 3000;
 
+const SHUTDOWN_TIMEOUT_MS = 25_000;
+
+let httpServer = null;
+let stopOutboxWorker = null;
+let stopScheduler = null;
+let shutdownPromise = null;
+
+function closeHttpServer() {
+  if (!httpServer || !httpServer.listening) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    httpServer.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
+}
+
+async function runShutdownStage(tasks) {
+  const results = await Promise.allSettled(
+    tasks.map(({ run }) =>
+      Promise.resolve().then(run)
+    )
+  );
+
+  let failed = false;
+
+  results.forEach((result, index) => {
+    if (result.status !== 'rejected') {
+      return;
+    }
+
+    failed = true;
+
+    logger.error(
+      'Graceful shutdown stage failed',
+      {
+        component: tasks[index].name,
+        errorCode: result.reason?.code,
+      }
+    );
+  });
+
+  return failed;
+}
+
+function gracefulShutdown(signal) {
+  if (shutdownPromise) {
+    return shutdownPromise;
+  }
+
+  shutdownPromise = (async () => {
+    logger.info(
+      'Graceful shutdown started',
+      { signal }
+    );
+
+    const deadline = setTimeout(() => {
+      logger.error(
+        'Graceful shutdown deadline exceeded',
+        { signal }
+      );
+
+      if (
+        httpServer &&
+        typeof httpServer.closeAllConnections ===
+          'function'
+      ) {
+        httpServer.closeAllConnections();
+      }
+
+      process.exit(1);
+    }, SHUTDOWN_TIMEOUT_MS);
+
+    // Keep the deadline referenced. If shutdown stalls, this timer
+    // must remain capable of forcing process termination.
+    let failed = false;
+
+    try {
+      const schedulerStop = stopScheduler;
+      const outboxStop = stopOutboxWorker;
+
+      stopScheduler = null;
+      stopOutboxWorker = null;
+
+      failed =
+        await runShutdownStage([
+          {
+            name: 'http',
+            run: closeHttpServer,
+          },
+          ...(schedulerStop
+            ? [{
+                name: 'scheduler',
+                run: schedulerStop,
+              }]
+            : []),
+          ...(outboxStop
+            ? [{
+                name: 'outbox',
+                run: outboxStop,
+              }]
+            : []),
+        ]) || failed;
+
+      failed =
+        await runShutdownStage([
+          {
+            name: 'redis',
+            run: closeRedis,
+          },
+          {
+            name: 'postgresql',
+            run: closeDB,
+          },
+        ]) || failed;
+
+      httpServer = null;
+
+      if (failed) {
+        process.exitCode = 1;
+      }
+
+      logger.info(
+        'Graceful shutdown complete',
+        { signal }
+      );
+    } finally {
+      clearTimeout(deadline);
+    }
+  })();
+
+  return shutdownPromise;
+}
+
+function installShutdownHandlers() {
+  for (const signal of ['SIGTERM', 'SIGINT']) {
+    process.once(signal, () => {
+      void gracefulShutdown(signal)
+        .catch((error) => {
+          logger.error(
+            'Graceful shutdown failed',
+            {
+              signal,
+              errorCode: error?.code,
+            }
+          );
+
+          process.exitCode = 1;
+        });
+    });
+  }
+}
+
 async function startServer() {
   try {
     logger.info('Backend telemetry: privacy-safe local logging enabled');
@@ -269,7 +429,7 @@ if (process.env.NODE_ENV !== 'test') {
         dispatchOutboxEvent
       } = require('./src/services/outboxDispatcher');
 
-      startOutboxWorker({
+      stopOutboxWorker = startOutboxWorker({
         dispatchEvent: dispatchOutboxEvent,
       });
 
@@ -287,22 +447,30 @@ if (process.env.NODE_ENV !== 'test') {
     // Start background job scheduler (production only)
     if (process.env.NODE_ENV === 'production') {
       const { startScheduler } = require('./src/jobs/scheduler');
-      startScheduler();
+      stopScheduler = startScheduler();
     }
 
-    app.listen(PORT, '0.0.0.0', () => {
+    httpServer = app.listen(PORT, '0.0.0.0', () => {
       logger.info(`🚀 Agent Pro Ghana API running on port ${PORT}`);
       logger.info(`📊 Environment: ${process.env.NODE_ENV}`);
     });
-    } catch (error) {
-    logger.error('Failed to start server:', error);
+  } catch (error) {
+    logger.error(
+      'Failed to start server:',
+      error
+    );
 
-    process.exit(1);
+    process.exitCode = 1;
+
+    await gracefulShutdown(
+      'startup_failure'
+    );
   }
 }
 
 if (require.main === module) {
-  startServer();
+  installShutdownHandlers();
+  void startServer();
 }
 
 module.exports = app;

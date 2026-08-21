@@ -25,14 +25,67 @@ const { sendSubscriptionReminderEmail } = require('../services/emailService');
 function startScheduler() {
   logger.info('⏰ Starting background job scheduler');
 
-  // Run immediately on startup, then every 24 hours
-  runDailyJobs();
-  setInterval(runDailyJobs, 24 * 60 * 60 * 1000);
+  let stopped = false;
+  const inFlight = new Map();
 
-  // Hourly check
-  setInterval(runHourlyJobs, 60 * 60 * 1000);
+  const runTracked = (name, job) => {
+    if (stopped || inFlight.has(name)) {
+      return;
+    }
+
+    const promise = Promise.resolve()
+      .then(job)
+      .catch((error) => {
+        logger.error(
+          'Scheduled job execution failed',
+          {
+            job: name,
+            errorCode: error?.code,
+          }
+        );
+      });
+
+    inFlight.set(name, promise);
+
+    void promise.finally(() => {
+      inFlight.delete(name);
+    });
+  };
+
+  // Run immediately on startup, then every 24 hours.
+  runTracked('daily', runDailyJobs);
+
+  const dailyTimer = setInterval(
+    () => runTracked('daily', runDailyJobs),
+    24 * 60 * 60 * 1000
+  );
+
+  const hourlyTimer = setInterval(
+    () => runTracked('hourly', runHourlyJobs),
+    60 * 60 * 1000
+  );
+
+  for (const timer of [dailyTimer, hourlyTimer]) {
+    if (typeof timer.unref === 'function') {
+      timer.unref();
+    }
+  }
 
   logger.info('✅ Scheduler started');
+
+  return async () => {
+    if (!stopped) {
+      stopped = true;
+      clearInterval(dailyTimer);
+      clearInterval(hourlyTimer);
+    }
+
+    await Promise.allSettled(
+      [...inFlight.values()]
+    );
+
+    logger.info('Scheduler stopped');
+  };
 }
 
 // ── Daily Jobs ────────────────────────────────────────────────

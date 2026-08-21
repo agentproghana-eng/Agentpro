@@ -133,42 +133,44 @@ function startOutboxWorker({
     );
 
   let stopped = false;
-  let running = false;
+  let currentRun = null;
 
-  const tick = async () => {
-    if (stopped || running) {
-      return;
+  const tick = () => {
+    if (stopped || currentRun) {
+      return currentRun;
     }
 
-    running = true;
-
-    try {
-      await runOutboxBatch({
-        dispatchEvent,
-        workerId,
-        batchSize,
-        staleAfterSeconds,
+    currentRun = runOutboxBatch({
+      dispatchEvent,
+      workerId,
+      batchSize,
+      staleAfterSeconds,
+    })
+      .catch((error) => {
+        logger.error(
+          'Outbox worker batch failed',
+          {
+            errorCode:
+              normalizeOutboxErrorCode(
+                error
+              ),
+          }
+        );
+      })
+      .finally(() => {
+        currentRun = null;
       });
-    } catch (error) {
-      logger.error(
-        'Outbox worker batch failed',
-        {
-          errorCode:
-            normalizeOutboxErrorCode(
-              error
-            ),
-        }
-      );
-    } finally {
-      running = false;
-    }
+
+    return currentRun;
   };
 
   void tick();
 
   const timer =
     setInterval(
-      tick,
+      () => {
+        void tick();
+      },
       interval
     );
 
@@ -178,9 +180,15 @@ function startOutboxWorker({
     timer.unref();
   }
 
-  return () => {
-    stopped = true;
-    clearInterval(timer);
+  return async () => {
+    if (!stopped) {
+      stopped = true;
+      clearInterval(timer);
+    }
+
+    if (currentRun) {
+      await currentRun;
+    }
   };
 }
 
