@@ -143,10 +143,6 @@ class NotificationService {
       unawaited(_syncTokenToBackend(token));
     });
 
-    // Also repairs users who were already signed in before push
-    // registration was introduced.
-    await syncTokenWithBackend();
-
     // Handle a notification that launched the app from a fully
     // terminated state.
     final initialMessage = await _messaging.getInitialMessage();
@@ -217,42 +213,59 @@ class NotificationService {
   }
 
   static Future<void> syncTokenWithBackend() async {
-    final accessToken = await StorageService.getAccessToken();
+    try {
+      final sessionLocked = await StorageService.isSessionLocked();
 
-    if (accessToken == null || accessToken.isEmpty) {
-      return;
+      if (sessionLocked) {
+        return;
+      }
+
+      final accessToken = await StorageService.getAccessToken();
+
+      if (accessToken == null || accessToken.isEmpty) {
+        return;
+      }
+
+      final token = await _messaging.getToken();
+
+      if (token == null || token.trim().isEmpty) {
+        return;
+      }
+
+      await _syncTokenToBackend(token);
+    } catch (_) {
+      // Push registration is best effort and must never break startup,
+      // authentication, or local device unlock.
     }
-
-    final token = await _messaging.getToken();
-
-    if (token == null || token.trim().isEmpty) {
-      return;
-    }
-
-    await _syncTokenToBackend(token);
   }
 
   static Future<void> _syncTokenToBackend(String token) async {
-    final normalized = token.trim();
-
-    if (normalized.isEmpty) {
-      return;
-    }
-
-    final accessToken = await StorageService.getAccessToken();
-
-    if (accessToken == null || accessToken.isEmpty) {
-      return;
-    }
-
     try {
+      final normalized = token.trim();
+
+      if (normalized.isEmpty) {
+        return;
+      }
+
+      final sessionLocked = await StorageService.isSessionLocked();
+
+      if (sessionLocked) {
+        return;
+      }
+
+      final accessToken = await StorageService.getAccessToken();
+
+      if (accessToken == null || accessToken.isEmpty) {
+        return;
+      }
+
       await ApiClient.instance.put(
         '/auth/fcm-token',
         data: {'fcm_token': normalized},
       );
     } catch (_) {
-      // Best effort. Startup, login, or a future Firebase token refresh
-      // will retry without breaking authentication or app startup.
+      // Best effort. Startup, login, unlock, or a future Firebase token
+      // refresh will retry without breaking authentication or app startup.
     }
   }
 

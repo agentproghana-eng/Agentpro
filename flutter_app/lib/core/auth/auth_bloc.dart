@@ -174,6 +174,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
 
     emit(AuthAuthenticated(user));
+
+    unawaited(
+      NotificationService.syncTokenWithBackend(),
+    );
   }
 
   Future<void> _onLogin(AuthLoginEvent event, Emitter<AuthState> emit) async {
@@ -332,6 +336,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
     await StorageService.setSessionLocked(false);
     emit(AuthAuthenticated(user));
+
+    unawaited(
+      NotificationService.syncTokenWithBackend(),
+    );
   }
 
   Future<void> _onSessionInvalidated(

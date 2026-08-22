@@ -185,6 +185,153 @@ void main() {
     );
 
     test(
+      'push registration stays offline while locked and retries after trusted unlock',
+      () {
+        final authSource = _readSource(
+          'lib/core/auth/auth_bloc.dart',
+        );
+
+        final notificationSource = _readSource(
+          'lib/core/services/notification_service.dart',
+        );
+
+        final startup = _slice(
+          authSource,
+          'Future<void> _onCheck(',
+          'Future<void> _onLogin(',
+        );
+
+        final unlock = _slice(
+          authSource,
+          'Future<void> _onUnlock(',
+          'Future<void> _onSessionInvalidated(',
+        );
+
+        final notificationInit = _slice(
+          notificationSource,
+          'static Future<void> _initialize() async',
+          'static Future<void> _onForegroundMessage',
+        );
+
+        final sync = _slice(
+          notificationSource,
+          'static Future<void> syncTokenWithBackend()',
+          '/// Get the FCM token',
+        );
+
+        expect(
+          notificationInit,
+          isNot(
+            contains(
+              'await syncTokenWithBackend()',
+            ),
+          ),
+          reason:
+              'Notification infrastructure startup must not race the auth lifecycle by performing authenticated FCM registration on its own.',
+        );
+
+        expect(
+          startup,
+          contains(
+            'NotificationService.syncTokenWithBackend()',
+          ),
+          reason:
+              'An already-authenticated unlocked startup must get a best-effort opportunity to repair FCM registration.',
+        );
+
+        expect(
+          unlock,
+          contains(
+            'NotificationService.syncTokenWithBackend()',
+          ),
+          reason:
+              'A trusted local unlock must retry FCM registration after a locked startup skipped it.',
+        );
+
+        final unlockClearIndex = unlock.indexOf(
+          'StorageService.setSessionLocked(false)',
+        );
+
+        final unlockSyncIndex = unlock.indexOf(
+          'NotificationService.syncTokenWithBackend()',
+        );
+
+        expect(
+          unlockClearIndex,
+          greaterThanOrEqualTo(0),
+        );
+
+        expect(
+          unlockSyncIndex,
+          greaterThan(unlockClearIndex),
+          reason:
+              'Push synchronization must run only after the durable local lock has been cleared.',
+        );
+
+        expect(
+          sync,
+          contains('StorageService.isSessionLocked()'),
+          reason:
+              'Push registration must consult the durable local lock before attempting authenticated network work.',
+        );
+
+        final firstLockIndex = sync.indexOf(
+          'StorageService.isSessionLocked()',
+        );
+
+        final tokenIndex = sync.indexOf(
+          '_messaging.getToken()',
+        );
+
+        final putIndex = sync.indexOf(
+          'ApiClient.instance.put(',
+        );
+
+        expect(
+          firstLockIndex,
+          greaterThanOrEqualTo(0),
+        );
+
+        expect(
+          tokenIndex,
+          greaterThan(firstLockIndex),
+          reason:
+              'A locked session must be rejected before Firebase token acquisition is used for backend registration.',
+        );
+
+        expect(
+          sync,
+          matches(
+            RegExp(
+              r'final\s+sessionLocked\s*=\s*await\s+'
+              r'StorageService\.isSessionLocked\(\);\s*'
+              r'if\s*\(sessionLocked\)\s*\{\s*return;',
+            ),
+          ),
+          reason:
+              'The FCM synchronization path must fail closed while the local session is locked.',
+        );
+
+        expect(
+          sync,
+          contains(
+            'ApiClient.instance.put(\n'
+            "        '/auth/fcm-token'",
+          ),
+          reason:
+              'The unlocked retry must continue to use the authenticated FCM ownership endpoint.',
+        );
+
+        expect(
+          putIndex,
+          greaterThan(tokenIndex),
+          reason:
+              'The backend registration request must occur only after local lock and token checks.',
+        );
+      },
+    );
+
+    test(
       'successful phone authentication dispatches the unlock event',
       () {
         final loginSource = _readSource(
