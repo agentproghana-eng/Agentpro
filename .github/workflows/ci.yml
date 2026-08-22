@@ -270,26 +270,58 @@ jobs:
 
           data = json.loads(path.read_text())
 
-          project_id = (
-              data.get("project_info", {})
-              .get("project_id")
-          )
+          project_info = data.get("project_info", {})
 
-          packages = {
-              client.get("client_info", {})
-              .get("android_client_info", {})
-              .get("package_name")
+          project_id = project_info.get("project_id")
+          project_number = project_info.get("project_number")
+
+          matching_clients = [
+              client
               for client in data.get("client", [])
-          }
+              if (
+                  client.get("client_info", {})
+                  .get("android_client_info", {})
+                  .get("package_name")
+                  == "com.agentpro.ghana"
+              )
+          ]
 
-          if project_id != "agent-pro-ghana-8f28d":
+          if project_id != "agentpro-a75b4":
               raise SystemExit(
                   "Unexpected Firebase project_id"
               )
 
-          if "com.agentpro.ghana" not in packages:
+          if project_number != "334960010532":
               raise SystemExit(
-                  "Missing AgentPro Android Firebase client"
+                  "Unexpected Firebase project_number"
+              )
+
+          if len(matching_clients) != 1:
+              raise SystemExit(
+                  "Expected exactly one AgentPro Android Firebase client"
+              )
+
+          app_id = (
+              matching_clients[0]
+              .get("client_info", {})
+              .get("mobilesdk_app_id")
+          )
+
+          if (
+              app_id
+              != "1:334960010532:android:75b38caefca5333d75bfb1"
+          ):
+              raise SystemExit(
+                  "Unexpected AgentPro Firebase Android app ID"
+              )
+
+          manual_values = Path(
+              "src/main/res/values/google_services_values.xml"
+          )
+
+          if manual_values.exists():
+              raise SystemExit(
+                  "Manual Firebase values must not shadow Google Services generated resources"
               )
 
           print("FIREBASE_ANDROID_CONFIG=PASS")
@@ -298,6 +330,28 @@ jobs:
       - name: Build debug APK
         working-directory: flutter_app
         run: flutter build apk --debug
+
+      - name: Verify debug Firebase isolation
+        working-directory: flutter_app
+        run: |
+          set -euo pipefail
+
+          VALUES="build/app/generated/res/processDebugGoogleServices/values/values.xml"
+
+          test -f "$VALUES"
+
+          grep -Fq \
+            'ci-test' \
+            "$VALUES"
+
+          if grep -Fq \
+            'agentpro-a75b4' \
+            "$VALUES"; then
+            echo "Debug Firebase resources contain production config"
+            exit 1
+          fi
+
+          echo "FIREBASE_DEBUG_ISOLATION=PASS"
 
       - name: Get full stacktrace if build failed
         if: failure()
@@ -338,11 +392,11 @@ jobs:
           test -f "$VALUES"
 
           grep -Fq \
-            'agent-pro-ghana-8f28d' \
+            'agentpro-a75b4' \
             "$VALUES"
 
           grep -Fq \
-            '1:927596940011:android:a596b76c79ba788389ccae' \
+            '1:334960010532:android:75b38caefca5333d75bfb1' \
             "$VALUES"
 
           if grep -Fq 'ci-test' "$VALUES"; then
