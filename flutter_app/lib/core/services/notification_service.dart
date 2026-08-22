@@ -4,6 +4,9 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/material.dart';
 
+import '../api/api_client.dart';
+import 'storage_service.dart';
+
 int notificationIdForDeliveryKey(String deliveryKey) {
   // Deterministic FNV-1a hash, restricted to a positive 31-bit Android
   // notification ID. Do not use String.hashCode because delivery identity
@@ -56,6 +59,7 @@ class NotificationService {
   static bool _initialized = false;
   static StreamSubscription<RemoteMessage>? _foregroundSubscription;
   static StreamSubscription<RemoteMessage>? _openedAppSubscription;
+  static StreamSubscription<String>? _tokenRefreshSubscription;
 
   static const _channelId = 'agentpro_notifications';
   static const _channelName = 'Agent Pro Ghana';
@@ -132,6 +136,17 @@ class NotificationService {
       _onMessageOpenedApp,
     );
 
+    // Keep the backend bound to the current Firebase installation token.
+    // Token rotation is normal and must not require another password login.
+    await _tokenRefreshSubscription?.cancel();
+    _tokenRefreshSubscription = _messaging.onTokenRefresh.listen((token) {
+      unawaited(_syncTokenToBackend(token));
+    });
+
+    // Also repairs users who were already signed in before push
+    // registration was introduced.
+    await syncTokenWithBackend();
+
     // Handle a notification that launched the app from a fully
     // terminated state.
     final initialMessage = await _messaging.getInitialMessage();
@@ -199,6 +214,46 @@ class NotificationService {
 
   static String? _routeForType(String? type) {
     return notificationRouteForType(type);
+  }
+
+  static Future<void> syncTokenWithBackend() async {
+    final accessToken = await StorageService.getAccessToken();
+
+    if (accessToken == null || accessToken.isEmpty) {
+      return;
+    }
+
+    final token = await _messaging.getToken();
+
+    if (token == null || token.trim().isEmpty) {
+      return;
+    }
+
+    await _syncTokenToBackend(token);
+  }
+
+  static Future<void> _syncTokenToBackend(String token) async {
+    final normalized = token.trim();
+
+    if (normalized.isEmpty) {
+      return;
+    }
+
+    final accessToken = await StorageService.getAccessToken();
+
+    if (accessToken == null || accessToken.isEmpty) {
+      return;
+    }
+
+    try {
+      await ApiClient.instance.put(
+        '/auth/fcm-token',
+        data: {'fcm_token': normalized},
+      );
+    } catch (_) {
+      // Best effort. Startup, login, or a future Firebase token refresh
+      // will retry without breaking authentication or app startup.
+    }
   }
 
   /// Get the FCM token for this device

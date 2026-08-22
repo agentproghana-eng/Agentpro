@@ -6,6 +6,7 @@ import 'package:equatable/equatable.dart';
 import '../services/storage_service.dart';
 import '../api/api_client.dart';
 import '../services/biometric_service.dart';
+import '../services/notification_service.dart';
 
 // ── Events ────────────────────────────────────────────────────
 abstract class AuthEvent {}
@@ -191,6 +192,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
       await StorageService.setSessionLocked(false);
 
+      unawaited(
+        NotificationService.syncTokenWithBackend(),
+      );
+
       emit(AuthAuthenticated(data['user']));
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
@@ -245,6 +250,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await StorageService.saveRefreshToken(data['refresh_token']);
       await StorageService.saveUser(data['user']);
       await StorageService.setSessionLocked(false);
+      unawaited(
+        NotificationService.syncTokenWithBackend(),
+      );
+
       emit(AuthAuthenticated(data['user']));
     } on Exception catch (e) {
       String message = 'Registration failed. Please try again.';
@@ -272,10 +281,19 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       try {
         final refreshToken = await StorageService.getRefreshToken();
 
+        String? fcmToken;
+        try {
+          fcmToken = await NotificationService.getToken();
+        } catch (_) {}
+
         if (refreshToken != null && refreshToken.isNotEmpty) {
           await ApiClient.instance.post(
             '/auth/logout',
-            data: {'refresh_token': refreshToken},
+            data: {
+              'refresh_token': refreshToken,
+              if (fcmToken != null && fcmToken.trim().isNotEmpty)
+                'fcm_token': fcmToken.trim(),
+            },
           );
         }
       } catch (_) {}
@@ -330,10 +348,19 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     try {
       final refreshToken = await StorageService.getRefreshToken();
 
+      String? fcmToken;
+      try {
+        fcmToken = await NotificationService.getToken();
+      } catch (_) {}
+
       if (refreshToken != null && refreshToken.isNotEmpty) {
         await ApiClient.instance.post(
           '/auth/logout',
-          data: {'refresh_token': refreshToken},
+          data: {
+            'refresh_token': refreshToken,
+            if (fcmToken != null && fcmToken.trim().isNotEmpty)
+              'fcm_token': fcmToken.trim(),
+          },
         );
       }
     } catch (_) {}

@@ -94,13 +94,29 @@ router.post('/mfa/complete', authLimiter, [
     .withMessage('Invalid recovery code'),
 ], handleValidation, authController.completeMfa);
 
+// PUT /api/v1/auth/fcm-token
+router.put('/fcm-token', authenticate, [
+  body('fcm_token')
+    .isString()
+    .trim()
+    .isLength({ min: 1, max: 4096 })
+    .withMessage('Valid FCM token is required'),
+], handleValidation, authController.updateFcmToken);
+
 // POST /api/v1/auth/refresh
 router.post('/refresh', refreshLimiter, [
   body('refresh_token').notEmpty().withMessage('Refresh token is required'),
 ], handleValidation, authController.refreshToken);
 
 // POST /api/v1/auth/logout (requires auth)
-router.post('/logout', authenticate, authController.logout);
+router.post('/logout', authenticate, [
+  body('fcm_token')
+    .optional()
+    .isString()
+    .trim()
+    .isLength({ min: 1, max: 4096 })
+    .withMessage('Invalid FCM token'),
+], handleValidation, authController.logout);
 
 // POST /api/v1/auth/forgot-password
 router.post('/forgot-password', authLimiter, [

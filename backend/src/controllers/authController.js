@@ -1316,6 +1316,60 @@ exports.completeMfa = async (req, res) => {
 
 // ─── Refresh Access Token ─────────────────────────────────────
 
+// ─── FCM Device Registration ─────────────────────────────────
+
+exports.updateFcmToken = async (req, res) => {
+  const fcmToken = String(req.body.fcm_token || '').trim();
+
+  try {
+    await withTransaction(async (client) => {
+      // One Firebase registration token represents one app installation.
+      // Serialize assignment of the same token so concurrent account
+      // switches cannot leave one device routed to multiple users.
+      await client.query(
+        'SELECT pg_advisory_xact_lock(hashtext($1))',
+        [fcmToken]
+      );
+
+      // Remove stale ownership first. This prevents notifications for a
+      // previous account on this phone from leaking to the current user.
+      await client.query(
+        `UPDATE users
+         SET fcm_token = NULL
+         WHERE fcm_token = $1
+           AND id <> $2`,
+        [fcmToken, req.user.id]
+      );
+
+      const updated = await client.query(
+        `UPDATE users
+         SET fcm_token = $1
+         WHERE id = $2
+         RETURNING id`,
+        [fcmToken, req.user.id]
+      );
+
+      if (updated.rows.length !== 1) {
+        throw new Error(
+          'Authenticated user unavailable for FCM registration'
+        );
+      }
+    });
+
+    return res.json({
+      success: true,
+      message: 'Notification device registered'
+    });
+  } catch (error) {
+    logger.error('FCM token registration error:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to register notification device'
+    });
+  }
+};
+
 exports.refreshToken = async (req, res) => {
   const { refresh_token } = req.body;
 
@@ -1454,6 +1508,10 @@ exports.refreshToken = async (req, res) => {
 
 exports.logout = async (req, res) => {
   const authHeader = req.headers.authorization;
+  const fcmToken =
+    typeof req.body.fcm_token === 'string'
+      ? req.body.fcm_token.trim()
+      : '';
 
   try {
     const sessionId = req.user.session_id;
@@ -1476,6 +1534,20 @@ exports.logout = async (req, res) => {
          AND revoked_at IS NULL`,
       [sessionId, req.user.id]
     );
+
+    // Stop routing pushes to this phone after explicit/session-ending
+    // logout. Match the token so logging out an older installation
+    // cannot clear a newer installation that has since claimed the
+    // user's single current push destination.
+    if (fcmToken) {
+      await query(
+        `UPDATE users
+         SET fcm_token = NULL
+         WHERE id = $1
+           AND fcm_token = $2`,
+        [req.user.id, fcmToken]
+      );
+    }
 
     // Keep Redis only as a fast cache. A Redis outage cannot undo the
     // durable database revocation above.

@@ -254,18 +254,46 @@ jobs:
         working-directory: flutter_app
         run: flutter test
 
-      - name: Create dummy google-services.json for CI
+      - name: Verify Firebase Android config
         working-directory: flutter_app/android/app
         run: |
-          cat > google-services.json << 'EOF'
-          {
-            "project_info": { "project_id": "ci-test" },
-            "client": [{
-              "client_info": { "android_client_info": { "package_name": "com.agentpro.ghana" } },
-              "api_key": [{ "current_key": "ci-test-key" }]
-            }]
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("google-services.json")
+
+          if not path.is_file():
+              raise SystemExit(
+                  "Missing production google-services.json"
+              )
+
+          data = json.loads(path.read_text())
+
+          project_id = (
+              data.get("project_info", {})
+              .get("project_id")
+          )
+
+          packages = {
+              client.get("client_info", {})
+              .get("android_client_info", {})
+              .get("package_name")
+              for client in data.get("client", [])
           }
-          EOF
+
+          if project_id != "agent-pro-ghana-8f28d":
+              raise SystemExit(
+                  "Unexpected Firebase project_id"
+              )
+
+          if "com.agentpro.ghana" not in packages:
+              raise SystemExit(
+                  "Missing AgentPro Android Firebase client"
+              )
+
+          print("FIREBASE_ANDROID_CONFIG=PASS")
+          PY
 
       - name: Build debug APK
         working-directory: flutter_app
@@ -299,6 +327,30 @@ jobs:
       - name: Build release APK
         working-directory: flutter_app
         run: flutter build apk --release
+
+      - name: Verify release Firebase resources
+        working-directory: flutter_app
+        run: |
+          set -euo pipefail
+
+          VALUES="build/app/generated/res/processReleaseGoogleServices/values/values.xml"
+
+          test -f "$VALUES"
+
+          grep -Fq \
+            'agent-pro-ghana-8f28d' \
+            "$VALUES"
+
+          grep -Fq \
+            '1:927596940011:android:a596b76c79ba788389ccae' \
+            "$VALUES"
+
+          if grep -Fq 'ci-test' "$VALUES"; then
+            echo "Release Firebase resources contain CI dummy config"
+            exit 1
+          fi
+
+          echo "FIREBASE_RELEASE_RESOURCES=PASS"
 
       - name: Upload release APK artifact
         uses: actions/upload-artifact@v4

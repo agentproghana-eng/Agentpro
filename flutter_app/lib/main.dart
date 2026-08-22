@@ -39,18 +39,13 @@ Future<void> main() async {
   runApp(AgentProApp(isJailbroken: isJailbroken));
 
   _runNonBlocking(
-    'Firebase',
-    Firebase.initializeApp(),
+    'Firebase notifications',
+    _initializeFirebaseNotifications(),
   );
 
   _runNonBlocking(
     'Offline queue',
     OfflineQueueService.init(),
-  );
-
-  _runNonBlocking(
-    'Notifications',
-    NotificationService.init(),
   );
 
   // Retained for the current agent workflow: requesting this early
@@ -66,6 +61,11 @@ Future<void> main() async {
     'Mobile ads',
     MobileAds.instance.initialize(),
   );
+}
+
+Future<void> _initializeFirebaseNotifications() async {
+  await Firebase.initializeApp();
+  await NotificationService.init();
 }
 
 void _runNonBlocking(
