@@ -57,6 +57,8 @@ class NotificationService {
   static final _localNotifications = FlutterLocalNotificationsPlugin();
 
   static bool _initialized = false;
+  static bool _ready = false;
+  static bool _backendSyncPending = false;
   static StreamSubscription<RemoteMessage>? _foregroundSubscription;
   static StreamSubscription<RemoteMessage>? _openedAppSubscription;
   static StreamSubscription<String>? _tokenRefreshSubscription;
@@ -73,6 +75,7 @@ class NotificationService {
     try {
       await _initialize();
     } catch (_) {
+      _ready = false;
       _initialized = false;
       rethrow;
     }
@@ -150,6 +153,15 @@ class NotificationService {
     if (initialMessage != null) {
       _onMessageOpenedApp(initialMessage);
     }
+
+    _ready = true;
+
+    if (_backendSyncPending) {
+      _backendSyncPending = false;
+      unawaited(
+        syncTokenWithBackend(),
+      );
+    }
   }
 
   static Future<void> _onForegroundMessage(RemoteMessage message) async {
@@ -217,6 +229,11 @@ class NotificationService {
       final sessionLocked = await StorageService.isSessionLocked();
 
       if (sessionLocked) {
+        return;
+      }
+
+      if (!_ready) {
+        _backendSyncPending = true;
         return;
       }
 

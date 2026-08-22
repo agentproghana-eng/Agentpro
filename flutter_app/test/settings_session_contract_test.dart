@@ -231,6 +231,27 @@ void main() {
         );
 
         expect(
+          notificationInit,
+          contains('_ready = true'),
+          reason:
+              'Notification readiness must become explicit only after notification initialization has completed.',
+        );
+
+        expect(
+          notificationInit,
+          contains('_backendSyncPending'),
+          reason:
+              'Notification initialization must fulfil an authenticated FCM sync request that arrived before readiness.',
+        );
+
+        expect(
+          notificationInit,
+          contains('syncTokenWithBackend()'),
+          reason:
+              'A pending authenticated FCM sync must be retried when notification initialization becomes ready.',
+        );
+
+        expect(
           startup,
           contains(
             'NotificationService.syncTokenWithBackend()',
@@ -279,6 +300,14 @@ void main() {
           'StorageService.isSessionLocked()',
         );
 
+        final readinessIndex = sync.indexOf(
+          'if (!_ready)',
+        );
+
+        final pendingIndex = sync.indexOf(
+          '_backendSyncPending = true',
+        );
+
         final tokenIndex = sync.indexOf(
           '_messaging.getToken()',
         );
@@ -293,10 +322,24 @@ void main() {
         );
 
         expect(
-          tokenIndex,
+          readinessIndex,
           greaterThan(firstLockIndex),
           reason:
-              'A locked session must be rejected before Firebase token acquisition is used for backend registration.',
+              'The durable local lock must be checked before an FCM sync can be deferred.',
+        );
+
+        expect(
+          pendingIndex,
+          greaterThan(readinessIndex),
+          reason:
+              'An authenticated sync requested before notification readiness must be remembered.',
+        );
+
+        expect(
+          tokenIndex,
+          greaterThan(pendingIndex),
+          reason:
+              'Firebase token acquisition must occur only after lock and readiness checks.',
         );
 
         expect(
