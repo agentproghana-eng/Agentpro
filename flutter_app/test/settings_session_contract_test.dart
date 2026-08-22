@@ -348,11 +348,11 @@ void main() {
             RegExp(
               r'final\s+sessionLocked\s*=\s*await\s+'
               r'StorageService\.isSessionLocked\(\);\s*'
-              r'if\s*\(sessionLocked\)\s*\{\s*return;',
+              r'if\s*\(sessionLocked\)\s*\{\s*return\s+false;',
             ),
           ),
           reason:
-              'The FCM synchronization path must fail closed while the local session is locked.',
+              'The retry synchronization helper must fail closed while the local session is locked.',
         );
 
         expect(
@@ -370,6 +370,96 @@ void main() {
           greaterThan(tokenIndex),
           reason:
               'The backend registration request must occur only after local lock and token checks.',
+        );
+      },
+    );
+
+    test(
+      'FCM backend registration retries transient failures without bypassing lock',
+      () {
+        final source = _readSource(
+          'lib/core/services/notification_service.dart',
+        );
+
+        expect(
+          source,
+          contains('_backendSyncRetryDelays'),
+        );
+
+        expect(
+          source,
+          contains('Duration(seconds: 2)'),
+        );
+
+        expect(
+          source,
+          contains('Duration(seconds: 5)'),
+        );
+
+        expect(
+          source,
+          contains('Duration(seconds: 15)'),
+        );
+
+        expect(
+          source,
+          contains('Duration(seconds: 30)'),
+        );
+
+        expect(
+          source,
+          contains('_backendSyncRunning'),
+          reason:
+              'Concurrent auth/token-refresh sync requests must be coalesced.',
+        );
+
+        expect(
+          source,
+          contains('_backendSyncRequested'),
+        );
+
+        final retry = _slice(
+          source,
+          'static Future<bool> _runBackendSyncWithRetry() async',
+          'static Future<bool> _syncTokenToBackend',
+        );
+
+        final lockIndex = retry.indexOf(
+          'StorageService.isSessionLocked()',
+        );
+
+        final tokenIndex = retry.indexOf(
+          '_messaging.getToken()',
+        );
+
+        final delayIndex = retry.indexOf(
+          'Future<void>.delayed(',
+        );
+
+        expect(
+          lockIndex,
+          greaterThanOrEqualTo(0),
+        );
+
+        expect(
+          tokenIndex,
+          greaterThan(lockIndex),
+          reason:
+              'Every retry attempt must reject a locally locked session before Firebase token acquisition.',
+        );
+
+        expect(
+          delayIndex,
+          greaterThan(tokenIndex),
+        );
+
+        expect(
+          retry,
+          contains(
+            'attempt <= _backendSyncRetryDelays.length',
+          ),
+          reason:
+              'FCM retry must be bounded rather than an infinite background loop.',
         );
       },
     );

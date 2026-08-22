@@ -59,7 +59,16 @@ class NotificationService {
   static bool _initialized = false;
   static bool _firebaseReady = false;
   static bool _backendSyncPending = false;
+  static bool _backendSyncRunning = false;
+  static bool _backendSyncRequested = false;
   static StreamSubscription<RemoteMessage>? _foregroundSubscription;
+
+  static const _backendSyncRetryDelays = <Duration>[
+    Duration(seconds: 2),
+    Duration(seconds: 5),
+    Duration(seconds: 15),
+    Duration(seconds: 30),
+  ];
   static StreamSubscription<RemoteMessage>? _openedAppSubscription;
   static StreamSubscription<String>? _tokenRefreshSubscription;
 
@@ -155,7 +164,9 @@ class NotificationService {
     // Token rotation is normal and must not require another password login.
     await _tokenRefreshSubscription?.cancel();
     _tokenRefreshSubscription = _messaging.onTokenRefresh.listen((token) {
-      unawaited(_syncTokenToBackend(token));
+      unawaited(
+        syncTokenWithBackend(),
+      );
     });
 
     // Handle a notification that launched the app from a fully
@@ -228,64 +239,108 @@ class NotificationService {
   }
 
   static Future<void> syncTokenWithBackend() async {
+    _backendSyncRequested = true;
+
+    if (_backendSyncRunning) {
+      return;
+    }
+
+    _backendSyncRunning = true;
+
     try {
+      while (_backendSyncRequested) {
+        _backendSyncRequested = false;
+
+        final completed = await _runBackendSyncWithRetry();
+
+        if (!completed) {
+          return;
+        }
+      }
+    } finally {
+      _backendSyncRunning = false;
+    }
+  }
+
+  static Future<bool> _runBackendSyncWithRetry() async {
+    for (var attempt = 0;
+        attempt <= _backendSyncRetryDelays.length;
+        attempt++) {
       final sessionLocked = await StorageService.isSessionLocked();
 
       if (sessionLocked) {
-        return;
+        return false;
       }
 
       if (!_firebaseReady) {
         _backendSyncPending = true;
-        return;
+        return false;
       }
 
       final accessToken = await StorageService.getAccessToken();
 
       if (accessToken == null || accessToken.isEmpty) {
-        return;
+        return false;
       }
 
-      final token = await _messaging.getToken();
+      try {
+        final token = await _messaging.getToken();
 
-      if (token == null || token.trim().isEmpty) {
-        return;
+        if (token == null || token.trim().isEmpty) {
+          return false;
+        }
+
+        final synced = await _syncTokenToBackend(token);
+
+        if (synced) {
+          return true;
+        }
+      } catch (_) {
+        // Retry below. Push registration remains best effort.
       }
 
-      await _syncTokenToBackend(token);
-    } catch (_) {
-      // Push registration is best effort and must never break startup,
-      // authentication, or local device unlock.
+      if (attempt >= _backendSyncRetryDelays.length) {
+        return false;
+      }
+
+      await Future<void>.delayed(
+        _backendSyncRetryDelays[attempt],
+      );
     }
+
+    return false;
   }
 
-  static Future<void> _syncTokenToBackend(String token) async {
+  static Future<bool> _syncTokenToBackend(String token) async {
     try {
       final normalized = token.trim();
 
       if (normalized.isEmpty) {
-        return;
+        return false;
       }
 
       final sessionLocked = await StorageService.isSessionLocked();
 
       if (sessionLocked) {
-        return;
+        return false;
       }
 
       final accessToken = await StorageService.getAccessToken();
 
       if (accessToken == null || accessToken.isEmpty) {
-        return;
+        return false;
       }
 
       await ApiClient.instance.put(
         '/auth/fcm-token',
         data: {'fcm_token': normalized},
       );
+
+      return true;
     } catch (_) {
-      // Best effort. Startup, login, unlock, or a future Firebase token
-      // refresh will retry without breaking authentication or app startup.
+      // The public synchronization path performs bounded retries.
+      // Token refresh delivery remains best effort.
+      return false;
     }
   }
 
