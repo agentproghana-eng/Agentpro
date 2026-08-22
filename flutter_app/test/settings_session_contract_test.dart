@@ -232,9 +232,9 @@ void main() {
 
         expect(
           notificationInit,
-          contains('_ready = true'),
+          contains('_firebaseReady = true'),
           reason:
-              'Notification readiness must become explicit only after notification initialization has completed.',
+              'Firebase readiness must become explicit before optional notification permission and tap setup can delay token ownership repair.',
         );
 
         expect(
@@ -301,7 +301,7 @@ void main() {
         );
 
         final readinessIndex = sync.indexOf(
-          'if (!_ready)',
+          'if (!_firebaseReady)',
         );
 
         final pendingIndex = sync.indexOf(
@@ -370,6 +370,80 @@ void main() {
           greaterThan(tokenIndex),
           reason:
               'The backend registration request must occur only after local lock and token checks.',
+        );
+      },
+    );
+
+    test(
+      'Firebase Core readiness precedes optional notification setup',
+      () {
+        final mainSource = _readSource(
+          'lib/main.dart',
+        );
+
+        final notificationSource = _readSource(
+          'lib/core/services/notification_service.dart',
+        );
+
+        final firebaseBootstrap = _slice(
+          mainSource,
+          'Future<void> _initializeFirebaseNotifications() async',
+          'void _runNonBlocking',
+        );
+
+        final notificationInit = _slice(
+          notificationSource,
+          'static Future<void> _initialize() async',
+          'static Future<void> _onForegroundMessage',
+        );
+
+        final firebaseInitializeIndex = firebaseBootstrap.indexOf(
+          'await Firebase.initializeApp()',
+        );
+
+        final notificationInitCallIndex = firebaseBootstrap.indexOf(
+          'await NotificationService.init()',
+        );
+
+        expect(
+          firebaseInitializeIndex,
+          greaterThanOrEqualTo(0),
+        );
+
+        expect(
+          notificationInitCallIndex,
+          greaterThan(firebaseInitializeIndex),
+          reason:
+              'Firebase Core must be initialized before NotificationService may advertise token-sync readiness.',
+        );
+
+        final firebaseReadyIndex = notificationInit.indexOf(
+          '_firebaseReady = true',
+        );
+
+        final pendingSyncIndex = notificationInit.indexOf(
+          'if (_backendSyncPending)',
+        );
+
+        final permissionIndex = notificationInit.indexOf(
+          '_messaging.requestPermission(',
+        );
+
+        expect(
+          firebaseReadyIndex,
+          greaterThanOrEqualTo(0),
+        );
+
+        expect(
+          pendingSyncIndex,
+          greaterThan(firebaseReadyIndex),
+        );
+
+        expect(
+          permissionIndex,
+          greaterThan(pendingSyncIndex),
+          reason:
+              'Authenticated FCM ownership repair must not wait for optional notification permission/channel/tap initialization.',
         );
       },
     );

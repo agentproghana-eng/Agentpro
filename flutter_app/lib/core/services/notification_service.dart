@@ -57,7 +57,7 @@ class NotificationService {
   static final _localNotifications = FlutterLocalNotificationsPlugin();
 
   static bool _initialized = false;
-  static bool _ready = false;
+  static bool _firebaseReady = false;
   static bool _backendSyncPending = false;
   static StreamSubscription<RemoteMessage>? _foregroundSubscription;
   static StreamSubscription<RemoteMessage>? _openedAppSubscription;
@@ -75,13 +75,25 @@ class NotificationService {
     try {
       await _initialize();
     } catch (_) {
-      _ready = false;
       _initialized = false;
       rethrow;
     }
   }
 
   static Future<void> _initialize() async {
+    // main.dart invokes NotificationService.init() only after
+    // Firebase.initializeApp() completes. Backend token ownership therefore
+    // depends on Firebase Core readiness, not on the slower optional local
+    // notification permission/channel/tap initialization below.
+    _firebaseReady = true;
+
+    if (_backendSyncPending) {
+      _backendSyncPending = false;
+      unawaited(
+        syncTokenWithBackend(),
+      );
+    }
+
     // Request permission via Firebase's cross-platform API.
     await _messaging.requestPermission(
       alert: true,
@@ -153,15 +165,6 @@ class NotificationService {
     if (initialMessage != null) {
       _onMessageOpenedApp(initialMessage);
     }
-
-    _ready = true;
-
-    if (_backendSyncPending) {
-      _backendSyncPending = false;
-      unawaited(
-        syncTokenWithBackend(),
-      );
-    }
   }
 
   static Future<void> _onForegroundMessage(RemoteMessage message) async {
@@ -232,7 +235,7 @@ class NotificationService {
         return;
       }
 
-      if (!_ready) {
+      if (!_firebaseReady) {
         _backendSyncPending = true;
         return;
       }
