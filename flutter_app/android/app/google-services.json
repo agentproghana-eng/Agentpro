@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "927596940011",
-    "project_id": "agent-pro-ghana-8f28d",
-    "storage_bucket": "agent-pro-ghana-8f28d.firebasestorage.app"
+    "project_number": "334960010532",
+    "project_id": "agentpro-a75b4",
+    "storage_bucket": "agentpro-a75b4.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:927596940011:android:a596b76c79ba788389ccae",
+        "mobilesdk_app_id": "1:334960010532:android:75b38caefca5333d75bfb1",
         "android_client_info": {
           "package_name": "com.agentpro.ghana"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAsMrYsVVTt_yVld48YphyEi-VjXpWEG0k"
+          "current_key": "AIzaSyCuQItA9ErsTCpwKI3tnB6vZ9Gn5J7_04M"
         }
       ],
       "services": {
