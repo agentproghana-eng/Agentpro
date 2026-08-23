@@ -99,6 +99,8 @@ class _AgentProAppState extends State<AgentProApp> {
   AuthBloc? _authBloc;
   AuthRouterRefreshNotifier? _routerRefreshNotifier;
   GoRouter? _router;
+  StreamSubscription<AuthState>? _notificationAuthSubscription;
+  StreamSubscription<String>? _notificationNavigationSubscription;
 
   @override
   void initState() {
@@ -116,11 +118,48 @@ class _AgentProAppState extends State<AgentProApp> {
         authBloc,
         refreshListenable: refreshNotifier,
       );
+
+      _notificationNavigationSubscription =
+          NotificationService.navigationRequests.listen((_) {
+        _consumePendingNotificationNavigation();
+      });
+
+      _notificationAuthSubscription = authBloc.stream.listen((state) {
+        if (state is AuthAuthenticated) {
+          _consumePendingNotificationNavigation();
+        }
+      });
     }
+  }
+
+  void _consumePendingNotificationNavigation() {
+    final authBloc = _authBloc;
+    final router = _router;
+
+    // Never consume the pending route while the local session is locked,
+    // signed out, or still restoring. AuthAuthenticated is emitted after a
+    // successful trusted unlock/login, at which point the same pending tap
+    // can safely continue.
+    if (!mounted ||
+        authBloc == null ||
+        router == null ||
+        authBloc.state is! AuthAuthenticated) {
+      return;
+    }
+
+    final route = NotificationService.consumePendingNavigation();
+
+    if (route == null || route.isEmpty) {
+      return;
+    }
+
+    router.go(route);
   }
 
   @override
   void dispose() {
+    _notificationNavigationSubscription?.cancel();
+    _notificationAuthSubscription?.cancel();
     _router?.dispose();
     _routerRefreshNotifier?.dispose();
     _authBloc?.close();
