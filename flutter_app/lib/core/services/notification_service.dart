@@ -49,12 +49,25 @@ String notificationRouteForType(String? type) {
 /// Background message handler — must be top-level function
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await NotificationService.showLocalNotification(message);
+  // Android/FCM already displays messages that contain a notification
+  // payload while the app is backgrounded. Mirroring those messages with
+  // flutter_local_notifications creates two tray entries with different
+  // tap paths, so the user can tap the synthetic copy instead of Firebase's
+  // canonical onMessageOpenedApp notification.
+  //
+  // Data-only messages intentionally remain silent here. AgentPro's current
+  // production push contract includes a notification payload; inventing
+  // user-visible content for an arbitrary data-only message would be unsafe.
+  if (message.notification != null) {
+    return;
+  }
 }
 
 class NotificationService {
   static final _messaging = FirebaseMessaging.instance;
   static final _localNotifications = FlutterLocalNotificationsPlugin();
+  static final StreamController<String> _navigationRequests =
+      StreamController<String>.broadcast();
 
   static bool _initialized = false;
   static bool _firebaseReady = false;
@@ -123,6 +136,13 @@ class NotificationService {
       onDidReceiveNotificationResponse: _onNotificationTap,
     );
 
+    // flutter_local_notifications uses a separate launch-details path when
+    // one of our locally displayed notifications starts the app from a
+    // fully terminated state. Preserve it until Firebase initial-message
+    // resolution below so the same launch is not routed twice.
+    final localLaunchDetails =
+        await _localNotifications.getNotificationAppLaunchDetails();
+
     // ALSO explicitly request POST_NOTIFICATIONS (Android 13+) via
     // flutter_local_notifications' own Android-specific API. This is
     // deliberately in addition to _messaging.requestPermission() above,
@@ -174,7 +194,15 @@ class NotificationService {
     final initialMessage = await _messaging.getInitialMessage();
 
     if (initialMessage != null) {
+      // Prefer Firebase's canonical launch message when both Firebase and
+      // the local notification plugin can describe the same app launch.
       _onMessageOpenedApp(initialMessage);
+    } else if (localLaunchDetails?.didNotificationLaunchApp ?? false) {
+      final response = localLaunchDetails?.notificationResponse;
+
+      if (response != null) {
+        _onNotificationTap(response);
+      }
     }
   }
 
@@ -218,15 +246,26 @@ class NotificationService {
     // Navigate based on notification type
     final type = response.payload;
     // Navigation is handled by GoRouter — store pending navigation
-    _pendingNavigation = _routeForType(type);
+    _queueNavigation(_routeForType(type));
   }
 
   static void _onMessageOpenedApp(RemoteMessage message) {
     final type = message.data['type'] as String?;
-    _pendingNavigation = _routeForType(type);
+    _queueNavigation(_routeForType(type));
   }
 
   static String? _pendingNavigation;
+
+  static Stream<String> get navigationRequests => _navigationRequests.stream;
+
+  static void _queueNavigation(String route) {
+    // Keep the route pending until the authenticated app router is ready.
+    // The stream wakes a running app immediately; the pending value protects
+    // cold-start and locally locked sessions where auth restoration happens
+    // after the notification tap.
+    _pendingNavigation = route;
+    _navigationRequests.add(route);
+  }
 
   static String? consumePendingNavigation() {
     final nav = _pendingNavigation;
@@ -234,7 +273,7 @@ class NotificationService {
     return nav;
   }
 
-  static String? _routeForType(String? type) {
+  static String _routeForType(String? type) {
     return notificationRouteForType(type);
   }
 
