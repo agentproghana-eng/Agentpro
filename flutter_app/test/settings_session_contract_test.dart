@@ -185,6 +185,360 @@ void main() {
     );
 
     test(
+      'push registration stays offline while locked and retries after trusted unlock',
+      () {
+        final authSource = _readSource(
+          'lib/core/auth/auth_bloc.dart',
+        );
+
+        final notificationSource = _readSource(
+          'lib/core/services/notification_service.dart',
+        );
+
+        final startup = _slice(
+          authSource,
+          'Future<void> _onCheck(',
+          'Future<void> _onLogin(',
+        );
+
+        final unlock = _slice(
+          authSource,
+          'Future<void> _onUnlock(',
+          'Future<void> _onSessionInvalidated(',
+        );
+
+        final notificationInit = _slice(
+          notificationSource,
+          'static Future<void> _initialize() async',
+          'static Future<void> _onForegroundMessage',
+        );
+
+        final sync = _slice(
+          notificationSource,
+          'static Future<void> syncTokenWithBackend()',
+          '/// Get the FCM token',
+        );
+
+        expect(
+          notificationInit,
+          isNot(
+            contains(
+              'await syncTokenWithBackend()',
+            ),
+          ),
+          reason:
+              'Notification infrastructure startup must not race the auth lifecycle by performing authenticated FCM registration on its own.',
+        );
+
+        expect(
+          notificationInit,
+          contains('_firebaseReady = true'),
+          reason:
+              'Firebase readiness must become explicit before optional notification permission and tap setup can delay token ownership repair.',
+        );
+
+        expect(
+          notificationInit,
+          contains('_backendSyncPending'),
+          reason:
+              'Notification initialization must fulfil an authenticated FCM sync request that arrived before readiness.',
+        );
+
+        expect(
+          notificationInit,
+          contains('syncTokenWithBackend()'),
+          reason:
+              'A pending authenticated FCM sync must be retried when notification initialization becomes ready.',
+        );
+
+        expect(
+          startup,
+          contains(
+            'NotificationService.syncTokenWithBackend()',
+          ),
+          reason:
+              'An already-authenticated unlocked startup must get a best-effort opportunity to repair FCM registration.',
+        );
+
+        expect(
+          unlock,
+          contains(
+            'NotificationService.syncTokenWithBackend()',
+          ),
+          reason:
+              'A trusted local unlock must retry FCM registration after a locked startup skipped it.',
+        );
+
+        final unlockClearIndex = unlock.indexOf(
+          'StorageService.setSessionLocked(false)',
+        );
+
+        final unlockSyncIndex = unlock.indexOf(
+          'NotificationService.syncTokenWithBackend()',
+        );
+
+        expect(
+          unlockClearIndex,
+          greaterThanOrEqualTo(0),
+        );
+
+        expect(
+          unlockSyncIndex,
+          greaterThan(unlockClearIndex),
+          reason:
+              'Push synchronization must run only after the durable local lock has been cleared.',
+        );
+
+        expect(
+          sync,
+          contains('StorageService.isSessionLocked()'),
+          reason:
+              'Push registration must consult the durable local lock before attempting authenticated network work.',
+        );
+
+        final firstLockIndex = sync.indexOf(
+          'StorageService.isSessionLocked()',
+        );
+
+        final readinessIndex = sync.indexOf(
+          'if (!_firebaseReady)',
+        );
+
+        final pendingIndex = sync.indexOf(
+          '_backendSyncPending = true',
+        );
+
+        final tokenIndex = sync.indexOf(
+          '_messaging.getToken()',
+        );
+
+        final putIndex = sync.indexOf(
+          'ApiClient.instance.put(',
+        );
+
+        expect(
+          firstLockIndex,
+          greaterThanOrEqualTo(0),
+        );
+
+        expect(
+          readinessIndex,
+          greaterThan(firstLockIndex),
+          reason:
+              'The durable local lock must be checked before an FCM sync can be deferred.',
+        );
+
+        expect(
+          pendingIndex,
+          greaterThan(readinessIndex),
+          reason:
+              'An authenticated sync requested before notification readiness must be remembered.',
+        );
+
+        expect(
+          tokenIndex,
+          greaterThan(pendingIndex),
+          reason:
+              'Firebase token acquisition must occur only after lock and readiness checks.',
+        );
+
+        expect(
+          sync,
+          matches(
+            RegExp(
+              r'final\s+sessionLocked\s*=\s*await\s+'
+              r'StorageService\.isSessionLocked\(\);\s*'
+              r'if\s*\(sessionLocked\)\s*\{\s*return\s+false;',
+            ),
+          ),
+          reason:
+              'The retry synchronization helper must fail closed while the local session is locked.',
+        );
+
+        expect(
+          sync,
+          contains(
+            'ApiClient.instance.put(\n'
+            "        '/auth/fcm-token'",
+          ),
+          reason:
+              'The unlocked retry must continue to use the authenticated FCM ownership endpoint.',
+        );
+
+        expect(
+          putIndex,
+          greaterThan(tokenIndex),
+          reason:
+              'The backend registration request must occur only after local lock and token checks.',
+        );
+      },
+    );
+
+    test(
+      'FCM backend registration retries transient failures without bypassing lock',
+      () {
+        final source = _readSource(
+          'lib/core/services/notification_service.dart',
+        );
+
+        expect(
+          source,
+          contains('_backendSyncRetryDelays'),
+        );
+
+        expect(
+          source,
+          contains('Duration(seconds: 2)'),
+        );
+
+        expect(
+          source,
+          contains('Duration(seconds: 5)'),
+        );
+
+        expect(
+          source,
+          contains('Duration(seconds: 15)'),
+        );
+
+        expect(
+          source,
+          contains('Duration(seconds: 30)'),
+        );
+
+        expect(
+          source,
+          contains('_backendSyncRunning'),
+          reason:
+              'Concurrent auth/token-refresh sync requests must be coalesced.',
+        );
+
+        expect(
+          source,
+          contains('_backendSyncRequested'),
+        );
+
+        final retry = _slice(
+          source,
+          'static Future<bool> _runBackendSyncWithRetry() async',
+          'static Future<bool> _syncTokenToBackend',
+        );
+
+        final lockIndex = retry.indexOf(
+          'StorageService.isSessionLocked()',
+        );
+
+        final tokenIndex = retry.indexOf(
+          '_messaging.getToken()',
+        );
+
+        final delayIndex = retry.indexOf(
+          'Future<void>.delayed(',
+        );
+
+        expect(
+          lockIndex,
+          greaterThanOrEqualTo(0),
+        );
+
+        expect(
+          tokenIndex,
+          greaterThan(lockIndex),
+          reason:
+              'Every retry attempt must reject a locally locked session before Firebase token acquisition.',
+        );
+
+        expect(
+          delayIndex,
+          greaterThan(tokenIndex),
+        );
+
+        expect(
+          retry,
+          contains(
+            'attempt <= _backendSyncRetryDelays.length',
+          ),
+          reason:
+              'FCM retry must be bounded rather than an infinite background loop.',
+        );
+      },
+    );
+
+    test(
+      'Firebase Core readiness precedes optional notification setup',
+      () {
+        final mainSource = _readSource(
+          'lib/main.dart',
+        );
+
+        final notificationSource = _readSource(
+          'lib/core/services/notification_service.dart',
+        );
+
+        final firebaseBootstrap = _slice(
+          mainSource,
+          'Future<void> _initializeFirebaseNotifications() async',
+          'void _runNonBlocking',
+        );
+
+        final notificationInit = _slice(
+          notificationSource,
+          'static Future<void> _initialize() async',
+          'static Future<void> _onForegroundMessage',
+        );
+
+        final firebaseInitializeIndex = firebaseBootstrap.indexOf(
+          'await Firebase.initializeApp()',
+        );
+
+        final notificationInitCallIndex = firebaseBootstrap.indexOf(
+          'await NotificationService.init()',
+        );
+
+        expect(
+          firebaseInitializeIndex,
+          greaterThanOrEqualTo(0),
+        );
+
+        expect(
+          notificationInitCallIndex,
+          greaterThan(firebaseInitializeIndex),
+          reason:
+              'Firebase Core must be initialized before NotificationService may advertise token-sync readiness.',
+        );
+
+        final firebaseReadyIndex = notificationInit.indexOf(
+          '_firebaseReady = true',
+        );
+
+        final pendingSyncIndex = notificationInit.indexOf(
+          'if (_backendSyncPending)',
+        );
+
+        final permissionIndex = notificationInit.indexOf(
+          '_messaging.requestPermission(',
+        );
+
+        expect(
+          firebaseReadyIndex,
+          greaterThanOrEqualTo(0),
+        );
+
+        expect(
+          pendingSyncIndex,
+          greaterThan(firebaseReadyIndex),
+        );
+
+        expect(
+          permissionIndex,
+          greaterThan(pendingSyncIndex),
+          reason:
+              'Authenticated FCM ownership repair must not wait for optional notification permission/channel/tap initialization.',
+        );
+      },
+    );
+
+    test(
       'successful phone authentication dispatches the unlock event',
       () {
         final loginSource = _readSource(

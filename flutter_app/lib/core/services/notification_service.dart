@@ -57,7 +57,18 @@ class NotificationService {
   static final _localNotifications = FlutterLocalNotificationsPlugin();
 
   static bool _initialized = false;
+  static bool _firebaseReady = false;
+  static bool _backendSyncPending = false;
+  static bool _backendSyncRunning = false;
+  static bool _backendSyncRequested = false;
   static StreamSubscription<RemoteMessage>? _foregroundSubscription;
+
+  static const _backendSyncRetryDelays = <Duration>[
+    Duration(seconds: 2),
+    Duration(seconds: 5),
+    Duration(seconds: 15),
+    Duration(seconds: 30),
+  ];
   static StreamSubscription<RemoteMessage>? _openedAppSubscription;
   static StreamSubscription<String>? _tokenRefreshSubscription;
 
@@ -79,6 +90,19 @@ class NotificationService {
   }
 
   static Future<void> _initialize() async {
+    // main.dart invokes NotificationService.init() only after
+    // Firebase.initializeApp() completes. Backend token ownership therefore
+    // depends on Firebase Core readiness, not on the slower optional local
+    // notification permission/channel/tap initialization below.
+    _firebaseReady = true;
+
+    if (_backendSyncPending) {
+      _backendSyncPending = false;
+      unawaited(
+        syncTokenWithBackend(),
+      );
+    }
+
     // Request permission via Firebase's cross-platform API.
     await _messaging.requestPermission(
       alert: true,
@@ -140,12 +164,10 @@ class NotificationService {
     // Token rotation is normal and must not require another password login.
     await _tokenRefreshSubscription?.cancel();
     _tokenRefreshSubscription = _messaging.onTokenRefresh.listen((token) {
-      unawaited(_syncTokenToBackend(token));
+      unawaited(
+        syncTokenWithBackend(),
+      );
     });
-
-    // Also repairs users who were already signed in before push
-    // registration was introduced.
-    await syncTokenWithBackend();
 
     // Handle a notification that launched the app from a fully
     // terminated state.
@@ -217,42 +239,108 @@ class NotificationService {
   }
 
   static Future<void> syncTokenWithBackend() async {
-    final accessToken = await StorageService.getAccessToken();
+    _backendSyncRequested = true;
 
-    if (accessToken == null || accessToken.isEmpty) {
+    if (_backendSyncRunning) {
       return;
     }
 
-    final token = await _messaging.getToken();
-
-    if (token == null || token.trim().isEmpty) {
-      return;
-    }
-
-    await _syncTokenToBackend(token);
-  }
-
-  static Future<void> _syncTokenToBackend(String token) async {
-    final normalized = token.trim();
-
-    if (normalized.isEmpty) {
-      return;
-    }
-
-    final accessToken = await StorageService.getAccessToken();
-
-    if (accessToken == null || accessToken.isEmpty) {
-      return;
-    }
+    _backendSyncRunning = true;
 
     try {
+      while (_backendSyncRequested) {
+        _backendSyncRequested = false;
+
+        final completed = await _runBackendSyncWithRetry();
+
+        if (!completed) {
+          return;
+        }
+      }
+    } finally {
+      _backendSyncRunning = false;
+    }
+  }
+
+  static Future<bool> _runBackendSyncWithRetry() async {
+    for (var attempt = 0;
+        attempt <= _backendSyncRetryDelays.length;
+        attempt++) {
+      final sessionLocked = await StorageService.isSessionLocked();
+
+      if (sessionLocked) {
+        return false;
+      }
+
+      if (!_firebaseReady) {
+        _backendSyncPending = true;
+        return false;
+      }
+
+      final accessToken = await StorageService.getAccessToken();
+
+      if (accessToken == null || accessToken.isEmpty) {
+        return false;
+      }
+
+      try {
+        final token = await _messaging.getToken();
+
+        if (token == null || token.trim().isEmpty) {
+          return false;
+        }
+
+        final synced = await _syncTokenToBackend(token);
+
+        if (synced) {
+          return true;
+        }
+      } catch (_) {
+        // Retry below. Push registration remains best effort.
+      }
+
+      if (attempt >= _backendSyncRetryDelays.length) {
+        return false;
+      }
+
+      await Future<void>.delayed(
+        _backendSyncRetryDelays[attempt],
+      );
+    }
+
+    return false;
+  }
+
+  static Future<bool> _syncTokenToBackend(String token) async {
+    try {
+      final normalized = token.trim();
+
+      if (normalized.isEmpty) {
+        return false;
+      }
+
+      final sessionLocked = await StorageService.isSessionLocked();
+
+      if (sessionLocked) {
+        return false;
+      }
+
+      final accessToken = await StorageService.getAccessToken();
+
+      if (accessToken == null || accessToken.isEmpty) {
+        return false;
+      }
+
       await ApiClient.instance.put(
         '/auth/fcm-token',
         data: {'fcm_token': normalized},
       );
+
+      return true;
     } catch (_) {
-      // Best effort. Startup, login, or a future Firebase token refresh
-      // will retry without breaking authentication or app startup.
+      // The public synchronization path performs bounded retries.
+      // Token refresh delivery remains best effort.
+      return false;
     }
   }
 
