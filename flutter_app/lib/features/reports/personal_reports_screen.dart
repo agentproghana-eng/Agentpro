@@ -140,6 +140,52 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
     return params;
   }
 
+  String _reportOpenFailureMessage(ResultType type) {
+    switch (type) {
+      case ResultType.noAppToOpen:
+        return 'Report generated, but no compatible app is installed '
+            'to open it.';
+      case ResultType.fileNotFound:
+        return 'Report generated, but the saved file could not be found.';
+      case ResultType.permissionDenied:
+        return 'Report generated, but Android denied access to open it.';
+      case ResultType.error:
+        return 'Report generated, but it could not be opened.';
+      case ResultType.done:
+        return 'Report opened.';
+    }
+  }
+
+  Future<void> _openGeneratedReport(File file) async {
+    try {
+      final result = await OpenFilex.open(file.path);
+
+      if (result.type == ResultType.done || !mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_reportOpenFailureMessage(result.type)),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Report generated, but it could not be opened.',
+          ),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    }
+  }
+
   Future<void> _download() async {
     if (_loading) {
       return;
@@ -175,7 +221,7 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
 
       await file.writeAsBytes(response.data);
 
-      await OpenFilex.open(file.path);
+      await _openGeneratedReport(file);
     } catch (_) {
       if (!mounted) {
         return;
