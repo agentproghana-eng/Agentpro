@@ -156,7 +156,7 @@ void main() {
         () {
       expect(
         dashboardActions,
-        contains("path: '/transactions'"),
+        contains("'/transactions'"),
       );
 
       expect(
@@ -181,7 +181,7 @@ void main() {
 
       expect(
         dashboardActions,
-        contains("path: '/personal-transactions/new'"),
+        contains("'/personal-transactions/new'"),
       );
     });
 
@@ -206,7 +206,16 @@ void main() {
 
       expect(
         dashboardActions,
-        contains('saved != null && saved.isNotEmpty'),
+        contains(
+          'final saved = _profileForRole(role)[provider]',
+        ),
+      );
+
+      expect(
+        dashboardActions,
+        contains(
+          'if (saved == null || saved.isEmpty)',
+        ),
       );
 
       expect(
@@ -242,7 +251,12 @@ void main() {
 
       expect(
         customizer,
-        contains('QuickActionCatalog.load(mode: mode)'),
+        allOf(
+          contains('QuickActionCatalog.load('),
+          contains('mode: mode'),
+          contains('_isAgentRole || _isSubscriberRole'),
+          contains('Do not expose Agent templates'),
+        ),
       );
     });
 

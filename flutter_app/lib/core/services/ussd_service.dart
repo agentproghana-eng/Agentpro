@@ -514,11 +514,13 @@ class UssdAccessibilityEngine {
         _postPinTimeout = null;
         final args = call.arguments as Map;
         final outcome = args['outcome'] as String? ?? 'failure';
+        final nativeMessage = args['message']?.toString().trim() ?? '';
 
         final mappedOutcome = switch (outcome) {
           'success' => USSDStatus.success,
           'pending_confirmation' => USSDStatus.pendingConfirmation,
           'flow_mismatch' => USSDStatus.pendingConfirmation,
+          'role_mismatch' => USSDStatus.failed,
           _ => USSDStatus.failed,
         };
 
@@ -531,7 +533,9 @@ class UssdAccessibilityEngine {
               : 'The USSD session ended without a confirmed provider '
                   'result. Please verify the transaction before trying '
                   'again.',
-          _ => 'The network reported that the transaction failed.',
+          _ => outcome == 'role_mismatch' && nativeMessage.isNotEmpty
+              ? nativeMessage
+              : 'The network reported that the transaction failed.',
         };
 
         final completer = _resultCompleter;
@@ -600,6 +604,7 @@ class UssdAccessibilityEngine {
     String? amount,
     required String transactionType,
     required String provider,
+    String? businessSimRole,
     String? operatorId,
     String? reference,
     String? merchantId,
@@ -629,6 +634,7 @@ class UssdAccessibilityEngine {
         if (amount != null && amount.isNotEmpty) 'amount': amount,
         'transaction_type': transactionType,
         'provider': provider,
+        if (businessSimRole?.isNotEmpty == true) 'sim_role': businessSimRole,
         if (operatorId != null) 'operator_id': operatorId,
         if (reference != null) 'reference': reference,
         if (merchantId != null) 'merchant_id': merchantId,

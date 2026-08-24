@@ -7,11 +7,23 @@ import 'quick_action_catalog.dart';
 
 class QuickActionCustomizationScreen extends StatefulWidget {
   final bool isPersonal;
+  final String quickActionRole;
 
   const QuickActionCustomizationScreen({
     super.key,
     required this.isPersonal,
+    this.quickActionRole = '',
   });
+
+  String get effectiveQuickActionRole {
+    final explicit = quickActionRole.trim().toLowerCase();
+
+    if (explicit.isNotEmpty) {
+      return explicit;
+    }
+
+    return isPersonal ? 'subscriber' : 'agent';
+  }
 
   @override
   State<QuickActionCustomizationScreen> createState() =>
@@ -22,10 +34,7 @@ class _QuickActionChoice {
   final QuickActionCatalogDefinition definition;
   final QuickActionCatalogVariant? variant;
 
-  const _QuickActionChoice({
-    required this.definition,
-    this.variant,
-  });
+  const _QuickActionChoice({required this.definition, this.variant});
 
   String? get bundleCategory => variant?.bundleCategory;
   String? get recipientMode => variant?.recipientMode;
@@ -41,9 +50,8 @@ class _QuickActionChoice {
 
   String get identityKey => preferenceAt(0).identityKey;
 
-  String get displayLabel => preferenceAt(0).resolvedDisplayLabel(
-        definition.displayLabel,
-      );
+  String get displayLabel =>
+      preferenceAt(0).resolvedDisplayLabel(definition.displayLabel);
 
   String get technicalLabel {
     final fields = <String>[
@@ -60,6 +68,24 @@ class _QuickActionChoice {
 
 class _QuickActionCustomizationScreenState
     extends State<QuickActionCustomizationScreen> {
+  String get _role => widget.effectiveQuickActionRole;
+
+  bool get _isSubscriberRole => _role == 'subscriber';
+  bool get _isAgentRole => _role == 'agent';
+
+  String get _roleLabel => switch (_role) {
+        'subscriber' => 'Subscriber',
+        'evd' => 'EVD',
+        'merchant' => 'Merchant',
+        _ => 'Agent',
+      };
+
+  String get _preferenceField => switch (_role) {
+        'subscriber' => 'subscriber_quick_actions',
+        'evd' => 'evd_quick_actions',
+        'merchant' => 'merchant_quick_actions',
+        _ => 'agent_quick_actions',
+      };
   String _provider = '';
   bool _loading = true;
   bool _saving = false;
@@ -70,10 +96,7 @@ class _QuickActionCustomizationScreenState
   Map<String, List<QuickActionPreference>> _preferences = {};
 
   List<String> get _providers {
-    return <String>{
-      ...?_catalog?.providers,
-      ..._preferences.keys,
-    }.toList();
+    return <String>{...?_catalog?.providers, ..._preferences.keys}.toList();
   }
 
   List<QuickActionCatalogDefinition> get _availableDefinitions =>
@@ -86,11 +109,7 @@ class _QuickActionCustomizationScreenState
     for (final definition in _availableDefinitions) {
       // Keep the normal generic entry so existing behaviour remains
       // available even when a transaction also has detailed flow variants.
-      choices.add(
-        _QuickActionChoice(
-          definition: definition,
-        ),
-      );
+      choices.add(_QuickActionChoice(definition: definition));
 
       for (final variant in definition.variants) {
         final canonicalBundle =
@@ -114,10 +133,7 @@ class _QuickActionCustomizationScreenState
         }
 
         choices.add(
-          _QuickActionChoice(
-            definition: definition,
-            variant: variant,
-          ),
+          _QuickActionChoice(definition: definition, variant: variant),
         );
       }
     }
@@ -134,15 +150,11 @@ class _QuickActionCustomizationScreenState
     _load();
   }
 
-  QuickActionCatalogDefinition? _definitionFor(
-    String type,
-  ) {
+  QuickActionCatalogDefinition? _definitionFor(String type) {
     return _catalog?.definitionFor(_provider, type);
   }
 
-  List<QuickActionPreference> _defaultPreferencesFor(
-    String provider,
-  ) {
+  List<QuickActionPreference> _defaultPreferencesFor(String provider) {
     final definitions = _catalog?.definitionsFor(provider) ??
         const <QuickActionCatalogDefinition>[];
 
@@ -166,16 +178,28 @@ class _QuickActionCustomizationScreenState
       _error = null;
     });
 
-    final mode = widget.isPersonal ? 'personal' : 'business';
+    final mode = _isSubscriberRole ? 'personal' : 'business';
 
     QuickActionCatalog? catalog;
     var catalogLoaded = false;
 
-    try {
-      catalog = await QuickActionCatalog.load(mode: mode);
-      catalogLoaded = true;
-    } catch (_) {
+    if (_isAgentRole || _isSubscriberRole) {
+      try {
+        catalog = await QuickActionCatalog.load(
+          mode: mode,
+        );
+        catalogLoaded = true;
+      } catch (_) {
+        catalog = null;
+      }
+    } else {
+      // EVD and Merchant are Business Mode roles, but their provider
+      // menu trees are not interchangeable with Agent flows.
+      //
+      // Do not expose Agent templates until role-aware Flow Builder
+      // definitions exist for the selected Business SIM role.
       catalog = null;
+      catalogLoaded = true;
     }
 
     Map<String, dynamic> saved = <String, dynamic>{};
@@ -194,8 +218,12 @@ class _QuickActionCustomizationScreenState
             )
           : <String, dynamic>{};
 
-      final modeKey = widget.isPersonal ? 'personal' : 'agent';
-      final savedValue = data[modeKey];
+      final savedValue = switch (_role) {
+        'subscriber' => data['subscriber'] ?? data['personal'],
+        'evd' => data['evd'],
+        'merchant' => data['merchant'],
+        _ => data['agent'],
+      };
 
       saved = savedValue is Map
           ? Map<String, dynamic>.from(savedValue)
@@ -208,10 +236,7 @@ class _QuickActionCustomizationScreenState
 
     final parsed = <String, List<QuickActionPreference>>{};
 
-    final providers = <String>{
-      ...?catalog?.providers,
-      ...saved.keys,
-    }.toList();
+    final providers = <String>{...?catalog?.providers, ...saved.keys}.toList();
 
     for (final provider in providers) {
       final providerValue = saved[provider];
@@ -238,9 +263,7 @@ class _QuickActionCustomizationScreenState
           }
         }
 
-        items.sort(
-          (a, b) => a.position.compareTo(b.position),
-        );
+        items.sort((a, b) => a.position.compareTo(b.position));
 
         final normalizedItems = widget.isPersonal
             ? items
@@ -254,11 +277,7 @@ class _QuickActionCustomizationScreenState
             .toList()
             .asMap()
             .entries
-            .map(
-              (entry) => entry.value.copyWith(
-                position: entry.key,
-              ),
-            )
+            .map((entry) => entry.value.copyWith(position: entry.key))
             .toList();
       } else {
         parsed[provider] = definitions
@@ -317,49 +336,33 @@ class _QuickActionCustomizationScreenState
         if (selected.length >= 9) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text(
-                'A 3×3 grid can contain at most 9 actions.',
-              ),
+              content: Text('A 3×3 grid can contain at most 9 actions.'),
             ),
           );
           return;
         }
 
-        selected.add(
-          choice.preferenceAt(selected.length),
-        );
+        selected.add(choice.preferenceAt(selected.length));
       }
 
       _preferences[_provider] = selected
           .asMap()
           .entries
-          .map(
-            (entry) => entry.value.copyWith(
-              position: entry.key,
-            ),
-          )
+          .map((entry) => entry.value.copyWith(position: entry.key))
           .toList();
     });
   }
 
-  void _removePreference(
-    QuickActionPreference preference,
-  ) {
+  void _removePreference(QuickActionPreference preference) {
     final selected = List<QuickActionPreference>.from(_selected);
 
-    selected.removeWhere(
-      (item) => item.identityKey == preference.identityKey,
-    );
+    selected.removeWhere((item) => item.identityKey == preference.identityKey);
 
     setState(() {
       _preferences[_provider] = selected
           .asMap()
           .entries
-          .map(
-            (entry) => entry.value.copyWith(
-              position: entry.key,
-            ),
-          )
+          .map((entry) => entry.value.copyWith(position: entry.key))
           .toList();
     });
   }
@@ -377,7 +380,7 @@ class _QuickActionCustomizationScreenState
         title: const Text('Restore all providers?'),
         content: Text(
           'This will restore the first available '
-          '${widget.isPersonal ? 'Personal' : 'Agent'} templates '
+          '$_roleLabel templates '
           'for every provider in the current catalog.',
         ),
         actions: [
@@ -396,8 +399,9 @@ class _QuickActionCustomizationScreenState
     if (confirmed != true || !mounted) return;
 
     setState(() {
-      final restored =
-          Map<String, List<QuickActionPreference>>.from(_preferences);
+      final restored = Map<String, List<QuickActionPreference>>.from(
+        _preferences,
+      );
 
       for (final provider in _catalog?.providers ?? const <String>[]) {
         restored[provider] = _defaultPreferencesFor(provider);
@@ -411,8 +415,7 @@ class _QuickActionCustomizationScreenState
     setState(() => _saving = true);
 
     try {
-      final field =
-          widget.isPersonal ? 'personal_quick_actions' : 'agent_quick_actions';
+      final field = _preferenceField;
 
       final payload = {
         for (final entry in _preferences.entries)
@@ -421,9 +424,7 @@ class _QuickActionCustomizationScreenState
 
       await ApiClient.instance.patch(
         '/users/me/quick-actions',
-        data: {
-          field: payload,
-        },
+        data: {field: payload},
       );
 
       if (!mounted) return;
@@ -431,7 +432,7 @@ class _QuickActionCustomizationScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${widget.isPersonal ? 'Personal' : 'Agent'} Quick Actions saved',
+            '$_roleLabel Quick Actions saved',
           ),
         ),
       );
@@ -451,9 +452,7 @@ class _QuickActionCustomizationScreenState
 
   void _updatePreference(
     QuickActionPreference preference,
-    QuickActionPreference Function(
-      QuickActionPreference current,
-    ) update,
+    QuickActionPreference Function(QuickActionPreference current) update,
   ) {
     final selected = List<QuickActionPreference>.from(_selected);
 
@@ -470,9 +469,7 @@ class _QuickActionCustomizationScreenState
     });
   }
 
-  Future<void> _renameAction(
-    QuickActionPreference preference,
-  ) async {
+  Future<void> _renameAction(QuickActionPreference preference) async {
     final definition = _definitionFor(preference.actionKey);
     final defaultLabel = definition?.displayLabel ??
         quickActionTransactionLabel(preference.actionKey);
@@ -533,18 +530,14 @@ class _QuickActionCustomizationScreenState
     if (result.isEmpty) {
       _updatePreference(
         preference,
-        (current) => current.copyWith(
-          clearCustomName: true,
-        ),
+        (current) => current.copyWith(clearCustomName: true),
       );
       return;
     }
 
     _updatePreference(
       preference,
-      (current) => current.copyWith(
-        customName: result,
-      ),
+      (current) => current.copyWith(customName: result),
     );
   }
 
@@ -562,10 +555,7 @@ class _QuickActionCustomizationScreenState
                   padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
                   child: Text(
                     'Choose an icon',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 17,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
                   ),
                 ),
                 TextButton.icon(
@@ -599,18 +589,16 @@ class _QuickActionCustomizationScreenState
                             border: Border.all(
                               color: selected
                                   ? AppTheme.primaryColor
-                                  : context.appSecondaryText
-                                      .withValues(alpha: 0.12),
+                                  : context.appSecondaryText.withValues(
+                                      alpha: 0.12,
+                                    ),
                             ),
                           ),
                           padding: const EdgeInsets.all(8),
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(
-                                option.icon,
-                                color: AppTheme.primaryColor,
-                              ),
+                              Icon(option.icon, color: AppTheme.primaryColor),
                               const SizedBox(height: 6),
                               Text(
                                 option.label,
@@ -649,9 +637,7 @@ class _QuickActionCustomizationScreenState
     );
   }
 
-  Future<void> _chooseIconColor(
-    QuickActionPreference preference,
-  ) async {
+  Future<void> _chooseIconColor(QuickActionPreference preference) async {
     final selectedHex = preference.iconColorHex;
 
     final result = await showModalBottomSheet<String?>(
@@ -685,10 +671,7 @@ class _QuickActionCustomizationScreenState
                 const SizedBox(height: 16),
                 const Text(
                   'Change Icon Colour',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 20),
                 GridView.builder(
@@ -731,18 +714,16 @@ class _QuickActionCustomizationScreenState
                               boxShadow: selected
                                   ? [
                                       BoxShadow(
-                                        color: AppTheme.primaryColor
-                                            .withValues(alpha: 0.22),
+                                        color: AppTheme.primaryColor.withValues(
+                                          alpha: 0.22,
+                                        ),
                                         blurRadius: 6,
                                       ),
                                     ]
                                   : null,
                             ),
                             child: selected
-                                ? Icon(
-                                    Icons.check_rounded,
-                                    color: checkColor,
-                                  )
+                                ? Icon(Icons.check_rounded, color: checkColor)
                                 : null,
                           ),
                           const SizedBox(height: 6),
@@ -787,19 +768,88 @@ class _QuickActionCustomizationScreenState
     if (result.isEmpty) {
       _updatePreference(
         preference,
-        (current) => current.copyWith(
-          clearIconColor: true,
-        ),
+        (current) => current.copyWith(clearIconColor: true),
       );
       return;
     }
 
     _updatePreference(
       preference,
-      (current) => current.copyWith(
-        iconColorHex: result,
-      ),
+      (current) => current.copyWith(iconColorHex: result),
     );
+  }
+
+  String _titleCaseWords(String value) {
+    return value
+        .split(RegExp(r'\s+'))
+        .where((part) => part.trim().isNotEmpty)
+        .map((part) {
+      final trimmed = part.trim();
+      if (trimmed.isEmpty) return trimmed;
+      return trimmed[0].toUpperCase() + trimmed.substring(1).toLowerCase();
+    }).join(' ');
+  }
+
+  String _friendlyVariantLabel({
+    String? recipientMode,
+    String? bundleCategory,
+    String empty = 'Available shortcut',
+  }) {
+    final parts = <String>[];
+
+    final normalizedRecipient = (recipientMode ?? '').trim();
+    final normalizedBundle = (bundleCategory ?? '').trim();
+
+    if (normalizedRecipient.isNotEmpty) {
+      switch (normalizedRecipient.toLowerCase()) {
+        case 'self':
+          parts.add('Self');
+          break;
+        case 'other':
+          parts.add('Other number');
+          break;
+        case 'same_network':
+          parts.add('Same network');
+          break;
+        case 'cross_network':
+          parts.add('Other network');
+          break;
+        default:
+          parts.add(_titleCaseWords(normalizedRecipient.replaceAll('_', ' ')));
+      }
+    }
+
+    if (normalizedBundle.isNotEmpty) {
+      parts.add(_titleCaseWords(normalizedBundle.replaceAll('_', ' ')));
+    }
+
+    return parts.isEmpty ? empty : parts.join(' · ');
+  }
+
+  String _choiceSubtitle(_QuickActionChoice choice) {
+    return _friendlyVariantLabel(
+      recipientMode: choice.recipientMode,
+      bundleCategory: choice.bundleCategory,
+    );
+  }
+
+  String _selectedActionSubtitle(
+    QuickActionPreference preference,
+    String defaultLabel,
+  ) {
+    final modeLabel = _roleLabel;
+
+    final meta = _friendlyVariantLabel(
+      recipientMode: preference.recipientMode,
+      bundleCategory: preference.bundleCategory,
+      empty: 'Shortcut on your $modeLabel dashboard',
+    );
+
+    if (preference.customName != null) {
+      return 'Original: $defaultLabel · $meta';
+    }
+
+    return meta;
   }
 
   Future<void> _chooseIconBackgroundColor(
@@ -838,10 +888,7 @@ class _QuickActionCustomizationScreenState
                 const SizedBox(height: 16),
                 const Text(
                   'Change Icon Background Colour',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 20),
                 GridView.builder(
@@ -884,18 +931,16 @@ class _QuickActionCustomizationScreenState
                               boxShadow: selected
                                   ? [
                                       BoxShadow(
-                                        color: AppTheme.primaryColor
-                                            .withValues(alpha: 0.22),
+                                        color: AppTheme.primaryColor.withValues(
+                                          alpha: 0.22,
+                                        ),
                                         blurRadius: 6,
                                       ),
                                     ]
                                   : null,
                             ),
                             child: selected
-                                ? Icon(
-                                    Icons.check_rounded,
-                                    color: checkColor,
-                                  )
+                                ? Icon(Icons.check_rounded, color: checkColor)
                                 : null,
                           ),
                           const SizedBox(height: 6),
@@ -940,18 +985,14 @@ class _QuickActionCustomizationScreenState
     if (result.isEmpty) {
       _updatePreference(
         preference,
-        (current) => current.copyWith(
-          clearIconBackgroundColor: true,
-        ),
+        (current) => current.copyWith(clearIconBackgroundColor: true),
       );
       return;
     }
 
     _updatePreference(
       preference,
-      (current) => current.copyWith(
-        iconBackgroundColorHex: result,
-      ),
+      (current) => current.copyWith(iconBackgroundColorHex: result),
     );
   }
 
@@ -969,28 +1010,24 @@ class _QuickActionCustomizationScreenState
       _preferences[_provider] = items
           .asMap()
           .entries
-          .map(
-            (entry) => entry.value.copyWith(position: entry.key),
-          )
+          .map((entry) => entry.value.copyWith(position: entry.key))
           .toList();
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final modeLabel = widget.isPersonal ? 'Personal' : 'Agent';
+    final modeLabel = _roleLabel;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('$modeLabel Quick Actions'),
-      ),
+      appBar: AppBar(title: Text('$modeLabel Quick Actions')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
                 Text(
-                  'Customize $modeLabel Dashboard',
+                  '$modeLabel Quick Actions',
                   style: const TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.bold,
@@ -1009,10 +1046,7 @@ class _QuickActionCustomizationScreenState
                   const SizedBox(height: 10),
                   Text(
                     _error!,
-                    style: const TextStyle(
-                      color: Colors.orange,
-                      fontSize: 11,
-                    ),
+                    style: const TextStyle(color: Colors.orange, fontSize: 11),
                   ),
                 ],
                 const SizedBox(height: 16),
@@ -1038,9 +1072,7 @@ class _QuickActionCustomizationScreenState
                             index < _providers.length;
                             index++) ...[
                           _ProviderButton(
-                            label: quickActionProviderLabel(
-                              _providers[index],
-                            ),
+                            label: quickActionProviderLabel(_providers[index]),
                             value: _providers[index],
                             selected: _provider == _providers[index],
                             onTap: _selectProvider,
@@ -1083,11 +1115,8 @@ class _QuickActionCustomizationScreenState
                 ),
                 const SizedBox(height: 20),
                 const Text(
-                  'Selected Actions — drag to reorder',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
+                  'Selected Quick Actions — drag to reorder',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                 ),
                 const SizedBox(height: 8),
                 if (_selected.isEmpty)
@@ -1116,14 +1145,13 @@ class _QuickActionCustomizationScreenState
                       final defaultLabel = definition?.displayLabel ??
                           quickActionTransactionLabel(preference.actionKey);
 
-                      final icon = quickActionIconFromKey(
-                            preference.iconKey,
-                          ) ??
+                      final icon = quickActionIconFromKey(preference.iconKey) ??
                           definition?.icon ??
                           quickActionCatalogIcon(preference.actionKey);
 
-                      final label =
-                          preference.resolvedDisplayLabel(defaultLabel);
+                      final label = preference.resolvedDisplayLabel(
+                        defaultLabel,
+                      );
 
                       return Card(
                         key: ValueKey(preference.identityKey),
@@ -1136,9 +1164,7 @@ class _QuickActionCustomizationScreenState
                               height: 42,
                               decoration: BoxDecoration(
                                 color: preference.resolvedIconBackgroundColor(
-                                  context.appTileColor(
-                                    const Color(0xFFE6F4F1),
-                                  ),
+                                  context.appTileColor(const Color(0xFFE6F4F1)),
                                 ),
                                 borderRadius: BorderRadius.circular(11),
                               ),
@@ -1150,36 +1176,38 @@ class _QuickActionCustomizationScreenState
                               ),
                             ),
                           ),
-                          title: Text(label),
+                          title: Text(
+                            label,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                           subtitle: Text(
-                            preference.customName != null
-                                ? 'Original: $defaultLabel'
-                                : preference.actionKey,
+                            _selectedActionSubtitle(preference, defaultLabel),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
                           onTap: () => _renameAction(preference),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Switch(
-                                value: preference.isVisible,
-                                onChanged: (value) {
-                                  _updatePreference(
-                                    preference,
-                                    (current) => current.copyWith(
-                                      isVisible: value,
-                                    ),
-                                  );
-                                },
+                              Transform.scale(
+                                scale: 0.88,
+                                child: Switch(
+                                  value: preference.isVisible,
+                                  onChanged: (value) {
+                                    _updatePreference(
+                                      preference,
+                                      (current) =>
+                                          current.copyWith(isVisible: value),
+                                    );
+                                  },
+                                ),
                               ),
                               ReorderableDragStartListener(
                                 index: index,
                                 child: const Padding(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                  ),
-                                  child: Icon(
-                                    Icons.drag_handle_rounded,
-                                  ),
+                                  padding: EdgeInsets.symmetric(horizontal: 6),
+                                  child: Icon(Icons.drag_handle_rounded),
                                 ),
                               ),
                               PopupMenuButton<String>(
@@ -1240,10 +1268,7 @@ class _QuickActionCustomizationScreenState
                 const SizedBox(height: 20),
                 const Text(
                   'Available Templates',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -1262,9 +1287,7 @@ class _QuickActionCustomizationScreenState
                       ? const SizedBox(
                           width: 17,
                           height: 17,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                          ),
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.save_outlined),
                   label: Text(
@@ -1277,9 +1300,7 @@ class _QuickActionCustomizationScreenState
     );
   }
 
-  List<Widget> _buildGroupedAvailableActions(
-    BuildContext context,
-  ) {
+  List<Widget> _buildGroupedAvailableActions(BuildContext context) {
     final grouped = <String, List<_QuickActionChoice>>{};
 
     for (final choice in _availableChoices) {
@@ -1287,12 +1308,7 @@ class _QuickActionCustomizationScreenState
           ? 'Other Services'
           : choice.definition.quickActionGroup;
 
-      grouped
-          .putIfAbsent(
-            group,
-            () => <_QuickActionChoice>[],
-          )
-          .add(choice);
+      grouped.putIfAbsent(group, () => <_QuickActionChoice>[]).add(choice);
     }
 
     final widgets = <Widget>[];
@@ -1300,10 +1316,7 @@ class _QuickActionCustomizationScreenState
     for (final entry in grouped.entries) {
       widgets.add(
         Padding(
-          padding: const EdgeInsets.only(
-            top: 6,
-            bottom: 2,
-          ),
+          padding: const EdgeInsets.only(top: 6, bottom: 2),
           child: Text(
             entry.key,
             style: TextStyle(
@@ -1329,7 +1342,11 @@ class _QuickActionCustomizationScreenState
               color: checked ? AppTheme.primaryColor : context.appSecondaryText,
             ),
             title: Text(choice.displayLabel),
-            subtitle: Text(choice.technicalLabel),
+            subtitle: Text(
+              _choiceSubtitle(choice),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
             controlAffinity: ListTileControlAffinity.trailing,
             contentPadding: EdgeInsets.zero,
           ),
@@ -1340,15 +1357,11 @@ class _QuickActionCustomizationScreenState
     if (widgets.isEmpty && _providers.isNotEmpty) {
       widgets.add(
         Padding(
-          padding: const EdgeInsets.symmetric(
-            vertical: 12,
-          ),
+          padding: const EdgeInsets.symmetric(vertical: 12),
           child: Text(
             'No active Global templates are available for '
             '${quickActionProviderLabel(_provider)}.',
-            style: TextStyle(
-              color: context.appSecondaryText,
-            ),
+            style: TextStyle(color: context.appSecondaryText),
           ),
         ),
       );
@@ -1383,14 +1396,9 @@ class _ProviderButton extends StatelessWidget {
       onTap: () => onTap(value),
       borderRadius: BorderRadius.circular(9),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(
-          minWidth: 104,
-        ),
+        constraints: const BoxConstraints(minWidth: 104),
         child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 10,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
             color: selected ? color : context.appSurface,
             borderRadius: BorderRadius.circular(9),
@@ -1463,17 +1471,13 @@ class _QuickActionPreview extends StatelessWidget {
                   height: 38,
                   decoration: BoxDecoration(
                     color: preference.resolvedIconBackgroundColor(
-                      context.appTileColor(
-                        const Color(0xFFE6F4F1),
-                      ),
+                      context.appTileColor(const Color(0xFFE6F4F1)),
                     ),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
                     icon,
-                    color: preference.resolvedIconColor(
-                      AppTheme.primaryColor,
-                    ),
+                    color: preference.resolvedIconColor(AppTheme.primaryColor),
                     size: 23,
                   ),
                 ),

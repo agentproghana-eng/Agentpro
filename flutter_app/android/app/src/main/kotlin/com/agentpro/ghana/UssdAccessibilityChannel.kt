@@ -198,6 +198,7 @@ class UssdAccessibilityChannel(
         val amount = call.argument<String>("amount")
         val transactionType = call.argument<String>("transaction_type")
         val provider = call.argument<String>("provider")
+        val businessSimRole = call.argument<String>("sim_role")
         val operatorId = call.argument<String>("operator_id")
         val reference = call.argument<String>("reference")
         val merchantId = call.argument<String>("merchant_id")
@@ -224,6 +225,22 @@ class UssdAccessibilityChannel(
                 null
             )
             return
+        }
+
+        val normalizedBusinessSimRole =
+            businessSimRole?.trim()?.lowercase()
+
+        when (normalizedBusinessSimRole) {
+            null, "agent", "evd", "merchant" -> Unit
+
+            else -> {
+                result.error(
+                    "INVALID_SIM_ROLE",
+                    "sim_role must be agent, evd, or merchant",
+                    null
+                )
+                return
+            }
         }
 
         // Data-driven flows declare which transaction values they actually
@@ -361,8 +378,18 @@ class UssdAccessibilityChannel(
         }
 
         UssdAccessibilityService.startSession(
-            customerPhone, amount, transactionType, provider, operatorId, reference, merchantId,
-            steps, selections, successMarkers, failureMarkers
+            customerPhone,
+            amount,
+            transactionType,
+            provider,
+            normalizedBusinessSimRole,
+            operatorId,
+            reference,
+            merchantId,
+            steps,
+            selections,
+            successMarkers,
+            failureMarkers
         )
         UssdForegroundService.start(context)
 

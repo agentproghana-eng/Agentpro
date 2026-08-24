@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/services/sim_card_service.dart';
+import '../../core/services/sim_role_assignment_service.dart';
 import '../../core/services/dashboard_refresh_service.dart';
 import '../../core/services/app_cache_service.dart';
 import '../../core/services/storage_service.dart';
@@ -27,12 +28,16 @@ class HomeTab extends StatefulWidget {
 class _HomeTabState extends State<HomeTab> with RouteAware {
   String _provider = 'mtn';
   Map<String, SimCard?>? _simMap;
+  Map<String, List<SimCard>> _providerSims = {};
+  Map<String, int> _selectedSimSlots = {};
   bool _simDetectionComplete = false;
   bool _simPermissionDenied = false;
   Set<String> _disabledTypes = {};
   Map<int, String> _simPurposes = {};
   Map<String, List<QuickActionPreference>> _agentQuickActions = {};
   Map<String, List<QuickActionPreference>> _personalQuickActions = {};
+  Map<String, List<QuickActionPreference>> _evdQuickActions = {};
+  Map<String, List<QuickActionPreference>> _merchantQuickActions = {};
   QuickActionCatalog? _agentQuickActionCatalog;
   QuickActionCatalog? _personalQuickActionCatalog;
 
@@ -155,12 +160,21 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
 
     if (memoryCached is Map && mounted) {
       final agent = parseProfile(memoryCached['agent']);
-      final personal = parseProfile(memoryCached['personal']);
+      final subscriber = parseProfile(
+        memoryCached['subscriber'] ?? memoryCached['personal'],
+      );
+      final evd = parseProfile(memoryCached['evd']);
+      final merchant = parseProfile(memoryCached['merchant']);
 
-      if (agent.isNotEmpty || personal.isNotEmpty) {
+      if (agent.isNotEmpty ||
+          subscriber.isNotEmpty ||
+          evd.isNotEmpty ||
+          merchant.isNotEmpty) {
         setState(() {
           _agentQuickActions = agent;
-          _personalQuickActions = personal;
+          _personalQuickActions = subscriber;
+          _evdQuickActions = evd;
+          _merchantQuickActions = merchant;
         });
       }
     }
@@ -173,11 +187,17 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
 
       if (quickActions is Map) {
         final agent = parseProfile(quickActions['agent']);
-        final personal = parseProfile(quickActions['personal']);
+        final subscriber = parseProfile(
+          quickActions['subscriber'] ?? quickActions['personal'],
+        );
+        final evd = parseProfile(quickActions['evd']);
+        final merchant = parseProfile(quickActions['merchant']);
 
         setState(() {
           _agentQuickActions = agent;
-          _personalQuickActions = personal;
+          _personalQuickActions = subscriber;
+          _evdQuickActions = evd;
+          _merchantQuickActions = merchant;
         });
       }
 
@@ -213,11 +233,17 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
           response.data['data'] as Map<String, dynamic>? ?? <String, dynamic>{};
 
       final agent = parseProfile(data['agent']);
-      final personal = parseProfile(data['personal']);
+      final subscriber = parseProfile(
+        data['subscriber'] ?? data['personal'],
+      );
+      final evd = parseProfile(data['evd']);
+      final merchant = parseProfile(data['merchant']);
 
       final serialized = {
         'agent': serializeProfile(agent),
-        'personal': serializeProfile(personal),
+        'subscriber': serializeProfile(subscriber),
+        'evd': serializeProfile(evd),
+        'merchant': serializeProfile(merchant),
       };
 
       AppCacheService.set(cacheKey, serialized);
@@ -225,7 +251,9 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
       if (mounted) {
         setState(() {
           _agentQuickActions = agent;
-          _personalQuickActions = personal;
+          _personalQuickActions = subscriber;
+          _evdQuickActions = evd;
+          _merchantQuickActions = merchant;
         });
       }
 
@@ -283,79 +311,44 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   }
 
   Future<void> _loadSimPurposes() async {
-    const cacheKey = 'dashboard_sim_purposes';
-
-    Map<int, String> parsePurposes(dynamic raw) {
-      final parsed = <int, String>{};
-
-      if (raw is! Map) return parsed;
-
-      for (final entry in raw.entries) {
-        final slot = entry.key is int
-            ? entry.key as int
-            : int.tryParse(entry.key.toString());
-
-        final purpose = entry.value?.toString().trim();
-
-        if (slot != null && purpose != null && purpose.isNotEmpty) {
-          parsed[slot] = purpose;
-        }
-      }
-
-      return parsed;
-    }
-
-    final memoryCached = AppCacheService.get(cacheKey);
-
-    if (memoryCached is Map && mounted) {
+    if (mounted) {
       setState(() {
-        _simPurposes = parsePurposes(memoryCached);
-        _simPurposesResolved = true;
-      });
-    }
-
-    final durable =
-        await StorageService.getOfflineDashboardSnapshot(widget.user);
-
-    final durablePurposes = durable?['sim_purposes'];
-
-    if (durablePurposes is Map && mounted) {
-      setState(() {
-        _simPurposes = parsePurposes(durablePurposes);
-        _simPurposesResolved = true;
+        _simPurposesResolved = false;
       });
     }
 
     try {
-      final res = await ApiClient.instance.get('/user-sim-purposes');
+      final sims = await SimCardService.getSimCards();
+      final trustedRoles = <int, String>{};
 
-      final saved = (res.data['data'] as List?) ?? [];
-      final map = <int, String>{};
+      for (final sim in sims) {
+        final role = await SimRoleAssignmentService.roleForSlot(
+          sim.slot,
+          refreshFromServer: true,
+          simIccid: sim.iccid,
+          simSubscriptionId: sim.subscriptionId,
+          provider: sim.network,
+        );
 
-      for (final p in saved) {
-        map[p['sim_slot'] as int] = p['purpose'] as String;
+        if (role == null) {
+          continue;
+        }
+
+        trustedRoles[sim.slot] = role;
       }
-
-      AppCacheService.set(cacheKey, map);
 
       if (mounted) {
         setState(() {
-          _simPurposes = map;
+          _simPurposes = trustedRoles;
           _simPurposesResolved = true;
         });
       }
-
-      await StorageService.mergeOfflineDashboardSnapshot(
-        widget.user,
-        {
-          'sim_purposes': {
-            for (final entry in map.entries) entry.key.toString(): entry.value,
-          },
-        },
-      );
     } catch (_) {
-      if (mounted && !_simPurposesResolved) {
-        setState(() => _simPurposesResolved = true);
+      if (mounted) {
+        setState(() {
+          _simPurposes = {};
+          _simPurposesResolved = true;
+        });
       }
     }
   }
@@ -415,39 +408,114 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
       });
     }
 
-    try {
-      var map = await SimCardService.getNetworkSimMap();
+    Map<String, List<SimCard>> groupSims(
+      List<SimCard> sims,
+    ) {
+      final groups = <String, List<SimCard>>{
+        'mtn': <SimCard>[],
+        'telecel': <SimCard>[],
+        'at_money': <SimCard>[],
+      };
 
-      // Android telephony can briefly report no subscriptions directly
-      // after launch or a permission change. Retry once before treating
-      // the empty result as final.
-      if (map.values.every((sim) => sim == null)) {
-        await Future.delayed(const Duration(milliseconds: 1200));
+      for (final sim in sims) {
+        final bucket = groups[sim.network];
 
-        if (!mounted) return;
+        if (bucket == null) {
+          continue;
+        }
 
-        map = await SimCardService.getNetworkSimMap();
+        bucket.add(sim);
       }
 
-      if (!mounted) return;
+      for (final items in groups.values) {
+        items.sort(
+          (a, b) => a.slot.compareTo(b.slot),
+        );
+      }
 
-      final availableProviders = map.entries
-          .where((entry) => entry.value != null)
+      return groups;
+    }
+
+    try {
+      var sims = await SimCardService.getSimCards();
+      var groups = groupSims(sims);
+
+      if (groups.values.every((items) => items.isEmpty)) {
+        await Future.delayed(
+          const Duration(milliseconds: 1200),
+        );
+
+        if (mounted == false) {
+          return;
+        }
+
+        sims = await SimCardService.getSimCards();
+        groups = groupSims(sims);
+      }
+
+      if (mounted == false) {
+        return;
+      }
+
+      SimCard? firstFor(String provider) {
+        final items = groups[provider];
+
+        if (items == null || items.isEmpty) {
+          return null;
+        }
+
+        return items.first;
+      }
+
+      final map = <String, SimCard?>{
+        'mtn': firstFor('mtn'),
+        'telecel': firstFor('telecel'),
+        'at_money': firstFor('at_money'),
+      };
+
+      final availableProviders = groups.entries
+          .where((entry) => entry.value.isNotEmpty)
           .map((entry) => entry.key)
           .toList();
 
+      final selectedSlots = Map<String, int>.from(
+        _selectedSimSlots,
+      );
+
+      for (final entry in groups.entries) {
+        final current = selectedSlots[entry.key];
+
+        final currentExists = current == null
+            ? false
+            : entry.value.any(
+                (sim) => sim.slot == current,
+              );
+
+        if (currentExists == false && entry.value.isNotEmpty) {
+          selectedSlots[entry.key] = entry.value.first.slot;
+        }
+
+        if (entry.value.isEmpty) {
+          selectedSlots.remove(entry.key);
+        }
+      }
+
       setState(() {
         _simMap = map;
+        _providerSims = groups;
+        _selectedSimSlots = selectedSlots;
         _simDetectionComplete = true;
         _simPermissionDenied = false;
 
         if (availableProviders.isNotEmpty &&
-            !availableProviders.contains(_provider)) {
+            availableProviders.contains(_provider) == false) {
           _provider = availableProviders.first;
         }
       });
     } on SimPermissionException {
-      if (!mounted) return;
+      if (mounted == false) {
+        return;
+      }
 
       setState(() {
         _simMap = const {
@@ -455,19 +523,32 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
           'telecel': null,
           'at_money': null,
         };
+        _providerSims = {
+          'mtn': <SimCard>[],
+          'telecel': <SimCard>[],
+          'at_money': <SimCard>[],
+        };
+        _selectedSimSlots = {};
         _simDetectionComplete = true;
         _simPermissionDenied = true;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (mounted == false) {
+        return;
+      }
 
-      // Never invent providers when SIM detection fails.
       setState(() {
         _simMap = const {
           'mtn': null,
           'telecel': null,
           'at_money': null,
         };
+        _providerSims = {
+          'mtn': <SimCard>[],
+          'telecel': <SimCard>[],
+          'at_money': <SimCard>[],
+        };
+        _selectedSimSlots = {};
         _simDetectionComplete = true;
         _simPermissionDenied = false;
       });
@@ -512,16 +593,25 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
                   child: DashboardQuickActionsSection(
                     provider: _provider,
                     simMap: _simMap,
+                    providerSims: _providerSims,
+                    selectedSimSlot: _selectedSimSlots[_provider],
+                    onSimSlotChanged: (slot) {
+                      setState(() {
+                        _selectedSimSlots[_provider] = slot;
+                      });
+                    },
                     disabledTypes: _disabledTypes,
                     simPurposes: _simPurposes,
                     agentQuickActions: _agentQuickActions,
-                    personalQuickActions: _personalQuickActions,
+                    subscriberQuickActions: _personalQuickActions,
+                    evdQuickActions: _evdQuickActions,
+                    merchantQuickActions: _merchantQuickActions,
                     agentCatalog: _agentQuickActionCatalog,
-                    personalCatalog: _personalQuickActionCatalog,
+                    subscriberCatalog: _personalQuickActionCatalog,
                     simDetectionComplete: _simDetectionComplete,
                     simPurposesResolved: _simPurposesResolved,
                     agentCatalogResolved: _agentQuickActionCatalogResolved,
-                    personalCatalogResolved:
+                    subscriberCatalogResolved:
                         _personalQuickActionCatalogResolved,
                     onReloadQuickActions: () {
                       unawaited(_loadQuickActions());

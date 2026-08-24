@@ -615,7 +615,12 @@ void main() {
         );
 
         final patchIndex = submit.indexOf(
-          "patch('/users/me/password'",
+          "'/users/me/password'",
+        );
+
+        expect(
+          submit,
+          contains('ApiClient.instance.patch('),
         );
 
         final logoutIndex = submit.indexOf(

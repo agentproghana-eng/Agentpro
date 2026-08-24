@@ -54,52 +54,120 @@ void main() {
       expect(load, contains("'quick_actions'"));
     });
 
-    test('business restores purposes and disabled actions offline', () {
-      final source = _read('lib/features/dashboard/home_tab.dart');
+    test(
+      'business restores identity-bound SIM roles and disabled actions offline',
+      () {
+        final source = _read(
+          'lib/features/dashboard/home_tab.dart',
+        );
 
-      final purposes = _slice(
-        source,
-        'Future<void> _loadSimPurposes() async',
-        'Future<void> _loadFeatureFlags() async',
-      );
+        final purposes = _slice(
+          source,
+          'Future<void> _loadSimPurposes() async',
+          'Future<void> _loadFeatureFlags() async',
+        );
 
-      final flags = _slice(
-        source,
-        'Future<void> _loadFeatureFlags() async',
-        'Future<void> _loadSimMap() async',
-      );
+        final flags = _slice(
+          source,
+          'Future<void> _loadFeatureFlags() async',
+          'Future<void> _loadSimMap() async',
+        );
 
-      expect(purposes, contains('getOfflineDashboardSnapshot'));
-      expect(purposes, contains("'sim_purposes'"));
+        expect(
+          purposes,
+          contains(
+            'SimRoleAssignmentService.roleForSlot',
+          ),
+        );
 
-      expect(flags, contains('getOfflineDashboardSnapshot'));
-      expect(flags, contains("'disabled_transaction_types'"));
-    });
+        expect(
+          purposes,
+          contains('simIccid: sim.iccid'),
+        );
 
-    test('Personal restores actions and does not guess SIM purpose', () {
-      final source = _read(
-        'lib/features/dashboard/personal_home_screen.dart',
-      );
+        expect(
+          purposes,
+          contains(
+            'simSubscriptionId: sim.subscriptionId',
+          ),
+        );
 
-      final actions = _slice(
-        source,
-        'Future<void> _loadQuickActions() async',
-        'QuickActionCatalogDefinition? _quickActionDefinition',
-      );
+        expect(
+          purposes,
+          contains('provider: sim.network'),
+        );
 
-      expect(actions, contains('getOfflineDashboardSnapshot'));
-      expect(actions, contains('QuickActionCatalog.fromCacheJson'));
+        expect(
+          flags,
+          contains('getOfflineDashboardSnapshot'),
+        );
 
-      final simLoad = _slice(
-        source,
-        'Future<void> _loadSimMap() async',
-        'void _startTransaction(String type)',
-      );
+        expect(
+          flags,
+          contains("'disabled_transaction_types'"),
+        );
+      },
+    );
 
-      expect(simLoad, contains("'sim_purposes'"));
-      expect(simLoad, contains('purposesKnown'));
-      expect(simLoad, contains('if (!purposesKnown)'));
-    });
+    test(
+      'Personal restores actions and requires trusted Subscriber SIM role',
+      () {
+        final source = _read(
+          'lib/features/dashboard/personal_home_screen.dart',
+        );
+
+        final actions = _slice(
+          source,
+          'Future<void> _loadQuickActions() async',
+          'QuickActionCatalogDefinition? _quickActionDefinition',
+        );
+
+        expect(
+          actions,
+          contains('getOfflineDashboardSnapshot'),
+        );
+
+        expect(
+          actions,
+          contains('QuickActionCatalog.fromCacheJson'),
+        );
+
+        final simLoad = _slice(
+          source,
+          'Future<void> _loadSimMap() async',
+          'void _startTransaction(String type)',
+        );
+
+        expect(
+          simLoad,
+          contains(
+            'SimRoleAssignmentService.roleForSlot',
+          ),
+        );
+
+        expect(
+          simLoad,
+          contains("purpose == 'subscriber'"),
+        );
+
+        expect(
+          simLoad,
+          contains('simIccid: sim.iccid'),
+        );
+
+        expect(
+          simLoad,
+          contains(
+            'simSubscriptionId: sim.subscriptionId',
+          ),
+        );
+
+        expect(
+          simLoad,
+          contains('provider: sim.network'),
+        );
+      },
+    );
 
     test('catalog supports durable round trip', () {
       final source = _read(

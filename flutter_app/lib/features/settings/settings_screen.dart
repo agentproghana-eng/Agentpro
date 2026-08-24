@@ -14,10 +14,7 @@ import '../../shared/widgets/app_widgets.dart';
 class SettingsScreen extends StatefulWidget {
   final bool isPersonal;
 
-  const SettingsScreen({
-    super.key,
-    this.isPersonal = false,
-  });
+  const SettingsScreen({super.key, this.isPersonal = false});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -26,7 +23,6 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _deviceAuthEnabled = false;
   bool _canDeviceAuth = false;
-  String _deviceAuthLabel = 'Biometrics';
   String _appVersion = '';
 
   @override
@@ -38,14 +34,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _init() async {
     final availability = await BiometricService.checkDeviceAuthAvailability();
     final enabled = await BiometricService.isDeviceAuthEnabled();
-    final label = await BiometricService.getDeviceAuthLabel();
     final packageInfo = await PackageInfo.fromPlatform();
 
     if (mounted) {
       setState(() {
         _canDeviceAuth = availability == BiometricAvailability.available;
         _deviceAuthEnabled = enabled;
-        _deviceAuthLabel = label;
         _appVersion = 'v${packageInfo.version}+${packageInfo.buildNumber}';
       });
     }
@@ -78,11 +72,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           BiometricResult.success => '',
         };
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
-          ),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
 
         return;
       }
@@ -104,24 +96,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // used for self-service settings changes elsewhere in the app.
   Future<void> _addPersonalCapability(BuildContext context) async {
     try {
-      final res =
-          await ApiClient.instance.post('/auth/add-personal-capability');
+      final res = await ApiClient.instance.post(
+        '/auth/add-personal-capability',
+      );
       final data = res.data['data'];
       if (context.mounted) {
-        context.read<AuthBloc>().add(AuthUpdateUserEvent({
-              'personal_subscription_plan': data['personal_subscription_plan'],
-              'personal_subscription_expires_at':
-                  data['personal_subscription_expires_at'],
-            }));
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        context.read<AuthBloc>().add(
+              AuthUpdateUserEvent({
+                'personal_subscription_plan':
+                    data['personal_subscription_plan'],
+                'personal_subscription_expires_at':
+                    data['personal_subscription_expires_at'],
+              }),
+            );
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
             content: Text(
-                'Personal account added! Find it under Switch to Personal Mode.')));
+              'Personal account added! Find it under Switch to Personal Mode.',
+            ),
+          ),
+        );
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
             content: Text('Failed to add Personal account'),
-            backgroundColor: AppTheme.errorColor));
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
       }
     }
   }
@@ -132,214 +135,424 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final Map<String, dynamic> user =
         authState is AuthAuthenticated ? authState.user : <String, dynamic>{};
 
+    final pendingCount = OfflineQueueService.pendingCountForUser(user);
+
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
-      body: ListView(children: [
-        // Profile section
-        ListTile(
-          leading: CircleAvatar(
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+        children: [
+          _ProfileSummaryCard(user: user),
+          const SizedBox(height: 20),
+          const _SettingsSectionHeader(title: 'Security'),
+          _SettingsGroupCard(
+            children: [
+              if (_canDeviceAuth)
+                _SettingsTile(
+                  icon: Icons.security,
+                  title: 'Offline sign-in',
+                  subtitle:
+                      'Use your phone PIN, pattern, password or biometrics '
+                      'to unlock a saved AgentPro session without internet.',
+                  trailing: Switch(
+                    value: _deviceAuthEnabled,
+                    onChanged: _toggleDeviceAuth,
+                    activeThumbColor: AppTheme.primaryColor,
+                  ),
+                ),
+              if (_canDeviceAuth) const _SettingsDivider(),
+              _SettingsTile(
+                icon: Icons.lock_reset,
+                title: 'Change Password',
+                subtitle: 'Update your account password securely',
+                onTap: () => showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(20),
+                    ),
+                  ),
+                  builder: (_) => const _ChangePasswordSheet(),
+                ),
+              ),
+              const _SettingsDivider(),
+              _SettingsTile(
+                icon: Icons.sync,
+                title: 'Offline Sync',
+                subtitle: pendingCount > 0
+                    ? '$pendingCount transaction${pendingCount == 1 ? '' : 's'} pending sync'
+                    : 'All synced',
+                onTap: () => context.push('/sync'),
+              ),
+              if (user['personal_subscription_plan'] == null) ...[
+                const _SettingsDivider(),
+                _SettingsTile(
+                  icon: Icons.person_add_outlined,
+                  title: 'Add Personal Account',
+                  subtitle: 'Use Agent Pro Ghana for your own transactions too',
+                  onTap: () => _addPersonalCapability(context),
+                ),
+              ],
+              if (user['company_id'] != null &&
+                  user['personal_subscription_plan'] != null) ...[
+                const _SettingsDivider(),
+                _SettingsTile(
+                  icon: Icons.sim_card_outlined,
+                  title: 'SIM Purpose',
+                  subtitle:
+                      'Assign Agent, Subscriber, EVD or Merchant roles to each SIM',
+                  onTap: () => context.push('/settings/sim-purpose'),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 20),
+          const _SettingsSectionHeader(title: 'Quick Actions'),
+          _SettingsGroupCard(
+            children: [
+              if (user['company_id'] != null) ...[
+                _SettingsTile(
+                  icon: Icons.grid_view_rounded,
+                  title: 'Agent Quick Actions',
+                  subtitle: 'Customize Agent SIM dashboard shortcuts',
+                  onTap: () => context.push('/agent-quick-actions'),
+                ),
+                const _SettingsDivider(),
+                _SettingsTile(
+                  icon: Icons.confirmation_number_outlined,
+                  title: 'EVD Quick Actions',
+                  subtitle: 'Customize EVD SIM dashboard shortcuts',
+                  onTap: () => context.push('/evd-quick-actions'),
+                ),
+                const _SettingsDivider(),
+                _SettingsTile(
+                  icon: Icons.point_of_sale_outlined,
+                  title: 'Merchant Quick Actions',
+                  subtitle: 'Customize Merchant SIM dashboard shortcuts',
+                  onTap: () => context.push('/merchant-quick-actions'),
+                ),
+              ],
+              if (user['company_id'] != null &&
+                  user['personal_subscription_plan'] != null)
+                const _SettingsDivider(),
+              if (user['personal_subscription_plan'] != null)
+                _SettingsTile(
+                  icon: Icons.person_outline_rounded,
+                  title: 'Subscriber Quick Actions',
+                  subtitle: 'Customize your Subscriber dashboard shortcuts',
+                  onTap: () => context.push('/personal-quick-actions'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          const _SettingsSectionHeader(title: 'About'),
+          _SettingsGroupCard(
+            children: [
+              _SettingsTile(
+                icon: Icons.info_outline,
+                title: 'Version',
+                subtitle: _appVersion.isEmpty ? '—' : _appVersion,
+              ),
+              const _SettingsDivider(),
+              _SettingsTile(
+                icon: Icons.support_agent,
+                title: 'Contact Support',
+                subtitle: 'Help, guides and contact options',
+                onTap: () => context.push(
+                  widget.isPersonal
+                      ? '/support?mode=personal'
+                      : '/support?mode=business',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          const _SettingsSectionHeader(title: 'Session'),
+          _SettingsGroupCard(
+            children: [
+              _SettingsTile(
+                icon: Icons.logout,
+                iconColor: AppTheme.errorColor,
+                title: 'Sign Out',
+                titleColor: AppTheme.errorColor,
+                subtitle: 'End the current AgentPro session on this device',
+                onTap: () => showDialog(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: const Text('Sign Out'),
+                    content: const Text('Are you sure you want to sign out?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cancel'),
+                      ),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.errorColor,
+                        ),
+                        onPressed: () {
+                          Navigator.pop(context);
+                          context.read<AuthBloc>().add(AuthLogoutEvent());
+                        },
+                        child: const Text('Sign Out'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsSectionHeader extends StatelessWidget {
+  final String title;
+
+  const _SettingsSectionHeader({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 2, right: 2, bottom: 8),
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(
+          fontSize: 11,
+          color: context.appSecondaryText,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1,
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsGroupCard extends StatelessWidget {
+  final List<Widget> children;
+
+  const _SettingsGroupCard({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: context.appSurface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: context.appSecondaryText.withValues(alpha: 0.10),
+        ),
+      ),
+      child: Column(children: children),
+    );
+  }
+}
+
+class _SettingsDivider extends StatelessWidget {
+  const _SettingsDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Divider(
+      height: 1,
+      thickness: 1,
+      color: context.appSecondaryText.withValues(alpha: 0.10),
+    );
+  }
+}
+
+class _ProfileSummaryCard extends StatelessWidget {
+  final Map<String, dynamic> user;
+
+  const _ProfileSummaryCard({required this.user});
+
+  @override
+  Widget build(BuildContext context) {
+    final firstName = (user['first_name'] as String?)?.trim() ?? '';
+    final lastName = (user['last_name'] as String?)?.trim() ?? '';
+    final fullName = '$firstName $lastName'.trim();
+    final email = (user['email'] as String?)?.trim() ?? '';
+    final role =
+        (user['role'] ?? '').toString().replaceAll('_', ' ').toUpperCase();
+
+    final fallbackInitial = fullName.isNotEmpty
+        ? fullName[0].toUpperCase()
+        : (email.isNotEmpty ? email[0].toUpperCase() : 'U');
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.appSurface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: context.appSecondaryText.withValues(alpha: 0.10),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 26,
             backgroundColor: AppTheme.primaryColor,
             child: Text(
-                ((user['first_name'] as String?) ?? 'U')[0].toUpperCase(),
-                style: const TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-          title: Text('${user['first_name'] ?? ''} ${user['last_name'] ?? ''}',
-              style: const TextStyle(fontWeight: FontWeight.bold)),
-          subtitle: Text(user['email'] ?? ''),
-          trailing: Chip(
-            label: Text(
-                (user['role'] ?? '')
-                    .toString()
-                    .replaceAll('_', ' ')
-                    .toUpperCase(),
-                style: const TextStyle(fontSize: 10)),
-            backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
-          ),
-        ),
-        const Divider(),
-
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-          child: Text('SECURITY',
-              style: TextStyle(
-                  fontSize: 11,
-                  color: context.appSecondaryText,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1)),
-        ),
-
-        if (_canDeviceAuth)
-          SwitchListTile(
-            secondary: const Icon(
-              Icons.security,
-              color: AppTheme.primaryColor,
-            ),
-            title: const Text('Offline sign-in'),
-            subtitle: Text(
-              'Use $_deviceAuthLabel to unlock a saved AgentPro session '
-              'without internet. Available by default after a successful '
-              'online sign-in.',
-            ),
-            value: _deviceAuthEnabled,
-            onChanged: _toggleDeviceAuth,
-            activeThumbColor: AppTheme.primaryColor,
-          ),
-
-        ListTile(
-          leading: const Icon(Icons.lock_reset, color: AppTheme.primaryColor),
-          title: const Text('Change Password'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-            builder: (_) => const _ChangePasswordSheet(),
-          ),
-        ),
-
-        ListTile(
-          leading: const Icon(Icons.sync, color: AppTheme.primaryColor),
-          title: const Text('Offline Sync'),
-          subtitle: Text(
-            OfflineQueueService.pendingCountForUser(user) > 0
-                ? '${OfflineQueueService.pendingCountForUser(user)} pending'
-                : 'All synced',
-          ),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => context.push('/sync'),
-        ),
-
-        // The missing piece that made the Mode Switcher/SIM Purpose
-        // tiles below invisible for every existing Business account:
-        // there was no way to actually add Personal capability in the
-        // first place. Idempotent on the backend, but only shown here
-        // when not already present, to avoid a pointless duplicate tap.
-        if (user['personal_subscription_plan'] == null)
-          ListTile(
-            leading: const Icon(Icons.person_add_outlined,
-                color: AppTheme.primaryColor),
-            title: const Text('Add Personal Account'),
-            subtitle:
-                const Text('Use Agent Pro Ghana for your own transactions too'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _addPersonalCapability(context),
-          ),
-
-        // Only relevant for someone holding both Business and Personal
-        // capability at once - a one-sided user has nothing to
-        // distinguish between SIMs for.
-        if (user['company_id'] != null &&
-            user['personal_subscription_plan'] != null)
-          ListTile(
-            leading: const Icon(Icons.sim_card_outlined,
-                color: AppTheme.primaryColor),
-            title: const Text('SIM Purpose'),
-            subtitle: const Text('Which SIM is for Business vs Personal use'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => context.push('/settings/sim-purpose'),
-          ),
-
-        const Divider(),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-          child: Text(
-            'QUICK ACTIONS',
-            style: TextStyle(
-              fontSize: 11,
-              color: context.appSecondaryText,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1,
+              fallbackInitial,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 20,
+              ),
             ),
           ),
-        ),
-
-        if (user['company_id'] != null)
-          ListTile(
-            leading: const Icon(
-              Icons.grid_view_rounded,
-              color: AppTheme.primaryColor,
-            ),
-            title: const Text('Agent Quick Actions'),
-            subtitle: const Text(
-              'Choose, reorder, rename and change dashboard icons',
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => context.push('/agent-quick-actions'),
-          ),
-
-        if (user['personal_subscription_plan'] != null)
-          ListTile(
-            leading: const Icon(
-              Icons.person_outline_rounded,
-              color: AppTheme.primaryColor,
-            ),
-            title: const Text('Personal Quick Actions'),
-            subtitle: const Text(
-              'Customize your Personal dashboard shortcuts',
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => context.push('/personal-quick-actions'),
-          ),
-
-        const Divider(),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-          child: Text('ABOUT',
-              style: TextStyle(
-                  fontSize: 11,
-                  color: context.appSecondaryText,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1)),
-        ),
-        ListTile(
-          leading: const Icon(Icons.info_outline),
-          title: const Text('Version'),
-          trailing: Text(
-            _appVersion.isEmpty ? '—' : _appVersion,
-          ),
-        ),
-        ListTile(
-          leading: const Icon(Icons.support_agent),
-          title: const Text('Contact Support'),
-          subtitle: const Text('Help, guides and contact options'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => context.push(
-            widget.isPersonal
-                ? '/support?mode=personal'
-                : '/support?mode=business',
-          ),
-        ),
-
-        const Divider(),
-        ListTile(
-          leading: const Icon(Icons.logout, color: AppTheme.errorColor),
-          title: const Text('Sign Out',
-              style: TextStyle(color: AppTheme.errorColor)),
-          onTap: () => showDialog(
-            context: context,
-            builder: (_) => AlertDialog(
-              title: const Text('Sign Out'),
-              content: const Text('Are you sure you want to sign out?'),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel')),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.errorColor),
-                  onPressed: () {
-                    Navigator.pop(context);
-                    context.read<AuthBloc>().add(AuthLogoutEvent());
-                  },
-                  child: const Text('Sign Out'),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  fullName.isEmpty ? 'User' : fullName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 17,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  email.isEmpty ? '—' : email,
+                  style: TextStyle(
+                    color: context.appSecondaryText,
+                    fontSize: 13.5,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                      child: Text(
+                        role.isEmpty ? 'ACCOUNT' : role,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    if (user['company_id'] != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: context.appTileColor(const Color(0xFFEAF5F2)),
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                        child: Text(
+                          'Business Mode',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: context.appSecondaryText,
+                          ),
+                        ),
+                      ),
+                    if (user['personal_subscription_plan'] != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: context.appTileColor(const Color(0xFFFFF6E5)),
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                        child: const Text(
+                          'Subscriber Ready',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final Color? iconColor;
+  final Color? titleColor;
+  final Widget? trailing;
+  final VoidCallback? onTap;
+
+  const _SettingsTile({
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    this.iconColor,
+    this.titleColor,
+    this.trailing,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tile = ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      leading: Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          color: context.appTileColor(const Color(0xFFEAF5F2)),
+          borderRadius: BorderRadius.circular(12),
         ),
-      ]),
+        child: Icon(icon, color: iconColor ?? AppTheme.primaryColor),
+      ),
+      title: Text(
+        title,
+        style: TextStyle(fontWeight: FontWeight.w600, color: titleColor),
+      ),
+      subtitle: subtitle == null
+          ? null
+          : Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                subtitle!,
+                style: TextStyle(color: context.appSecondaryText, height: 1.35),
+              ),
+            ),
+      trailing: trailing ??
+          (onTap != null ? const Icon(Icons.chevron_right_rounded) : null),
+    );
+
+    if (onTap == null) {
+      return tile;
+    }
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: IgnorePointer(ignoring: trailing is Switch, child: tile),
     );
   }
 }
@@ -368,18 +581,19 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
       // The backend verifies the current password, updates the hash,
       // and revokes all refresh sessions. End this local session
       // immediately as well so the user re-authenticates cleanly.
-      await ApiClient.instance.patch('/users/me/password', data: {
-        'current_password': _currentCtrl.text,
-        'new_password': _newCtrl.text,
-      });
+      await ApiClient.instance.patch(
+        '/users/me/password',
+        data: {
+          'current_password': _currentCtrl.text,
+          'new_password': _newCtrl.text,
+        },
+      );
       if (mounted) {
         final authBloc = context.read<AuthBloc>();
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              'Password changed. Please sign in again.',
-            ),
+            content: Text('Password changed. Please sign in again.'),
           ),
         );
 
@@ -390,7 +604,8 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
       final msg = e.response?.data?['message'] ?? 'Failed to change password.';
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor));
+          SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor),
+        );
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -401,15 +616,21 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.fromLTRB(
-          16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+        16,
+        16,
+        16,
+        MediaQuery.of(context).viewInsets.bottom + 16,
+      ),
       child: Form(
         key: _formKey,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('Change Password',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text(
+              'Change Password',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 16),
             _PasswordField(
               controller: _currentCtrl,
@@ -449,9 +670,10 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
             ),
             const SizedBox(height: 20),
             AppButton(
-                label: 'Change Password',
-                onPressed: _submit,
-                isLoading: _loading),
+              label: 'Change Password',
+              onPressed: _submit,
+              isLoading: _loading,
+            ),
           ],
         ),
       ),
@@ -493,9 +715,9 @@ class _PasswordField extends StatelessWidget {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         prefixIcon: const Icon(Icons.lock_outline),
         suffixIcon: IconButton(
-          icon: Icon(obscure
-              ? Icons.visibility_outlined
-              : Icons.visibility_off_outlined),
+          icon: Icon(
+            obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+          ),
           onPressed: onToggle,
         ),
       ),

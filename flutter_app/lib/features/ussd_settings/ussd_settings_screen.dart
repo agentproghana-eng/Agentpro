@@ -442,7 +442,7 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  "${widget.isPersonal ? "Personal" : "Business"} Quick Actions",
+                  "${widget.isPersonal ? "Subscriber" : "Agent"} Quick Actions",
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,

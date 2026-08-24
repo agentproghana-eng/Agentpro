@@ -170,7 +170,7 @@ void main() {
     );
 
     test(
-      'Personal transaction form uses durable SIM purpose before network refresh',
+      'Personal transaction form uses identity-bound Subscriber role trust',
       () {
         final load = _slice(
           transactionSource,
@@ -178,23 +178,58 @@ void main() {
           '@override\n  void dispose()',
         );
 
-        final durable = load.indexOf(
-          'getOfflineDashboardSnapshot',
+        expect(
+          load,
+          contains(
+            'SimRoleAssignmentService.roleForSlot',
+          ),
         );
 
-        final network = load.indexOf(
-          'ApiClient.instance.get(\n'
-          "          '/user-sim-purposes'",
+        expect(
+          load,
+          contains(
+            'refreshFromServer: true',
+          ),
         );
 
-        expect(durable, greaterThanOrEqualTo(0));
-        expect(network, greaterThan(durable));
+        expect(
+          load,
+          contains(
+            'simIccid: sim.iccid',
+          ),
+        );
 
-        expect(load, contains('purposesKnown'));
-        expect(load, contains('if (!purposesKnown)'));
+        expect(
+          load,
+          contains(
+            'simSubscriptionId: sim.subscriptionId',
+          ),
+        );
+
+        expect(
+          load,
+          contains(
+            'provider: sim.network',
+          ),
+        );
+
+        expect(
+          load,
+          contains(
+            "purpose == 'subscriber'",
+          ),
+        );
+
+        expect(
+          load,
+          isNot(
+            contains(
+              "purposes[sim.slot] != 'agent'",
+            ),
+          ),
+        );
       },
     );
-
     test(
       'Personal Home preloads scoped flow variants for offline Quick Actions',
       () {

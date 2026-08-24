@@ -195,7 +195,39 @@ void main() {
 
     expect(
       transactionSource,
-      contains("purposes[sim.slot] != 'agent'"),
+      contains(
+        'SimRoleAssignmentService.roleForSlot',
+      ),
+    );
+
+    expect(
+      transactionSource,
+      contains(
+        "purpose == 'subscriber'",
+      ),
+    );
+
+    expect(
+      transactionSource,
+      contains(
+        'simIccid: sim.iccid',
+      ),
+    );
+
+    expect(
+      transactionSource,
+      contains(
+        'simSubscriptionId: sim.subscriptionId',
+      ),
+    );
+
+    expect(
+      transactionSource,
+      isNot(
+        contains(
+          "purposes[sim.slot] != 'agent'",
+        ),
+      ),
     );
   });
 

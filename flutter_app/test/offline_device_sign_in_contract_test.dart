@@ -198,7 +198,10 @@ void main() {
 
         expect(
           source,
-          contains("Text('Offline sign-in')"),
+          anyOf(
+            contains("Text('Offline sign-in')"),
+            contains("title: 'Offline sign-in'"),
+          ),
         );
 
         expect(
