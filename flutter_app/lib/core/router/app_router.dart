@@ -365,12 +365,28 @@ class AppRouter {
           path: '/agent-quick-actions',
           builder: (_, __) => const QuickActionCustomizationScreen(
             isPersonal: false,
+            quickActionRole: 'agent',
           ),
         ),
         GoRoute(
           path: '/personal-quick-actions',
           builder: (_, __) => const QuickActionCustomizationScreen(
             isPersonal: true,
+            quickActionRole: 'subscriber',
+          ),
+        ),
+        GoRoute(
+          path: '/evd-quick-actions',
+          builder: (_, __) => const QuickActionCustomizationScreen(
+            isPersonal: false,
+            quickActionRole: 'evd',
+          ),
+        ),
+        GoRoute(
+          path: '/merchant-quick-actions',
+          builder: (_, __) => const QuickActionCustomizationScreen(
+            isPersonal: false,
+            quickActionRole: 'merchant',
           ),
         ),
         GoRoute(

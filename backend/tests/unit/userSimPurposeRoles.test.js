@@ -1,0 +1,61 @@
+const { _test } = require("../../src/controllers/userSimPurposeController");
+
+describe("SIM purpose roles", () => {
+  test("normalizes historical personal to subscriber", () => {
+    expect(_test.normalizePurpose("personal")).toBe("subscriber");
+
+    expect(_test.normalizePurpose("agent")).toBe("agent");
+  });
+
+  test("accepts all supported MTN roles", () => {
+    for (const purpose of ["agent", "subscriber", "evd", "merchant"]) {
+      expect(
+        _test.validateAssignment({
+          sim_slot: 0,
+          provider: "mtn",
+          purpose,
+        }),
+      ).toBeNull();
+    }
+  });
+
+  test("rejects EVD for Telecel", () => {
+    expect(
+      _test.validateAssignment({
+        sim_slot: 0,
+        provider: "telecel",
+        purpose: "evd",
+      }),
+    ).toMatch(/not supported/);
+  });
+
+  test("rejects EVD for AT Money", () => {
+    expect(
+      _test.validateAssignment({
+        sim_slot: 1,
+        provider: "at_money",
+        purpose: "evd",
+      }),
+    ).toMatch(/not supported/);
+  });
+
+  test("accepts legacy personal during rollout", () => {
+    expect(
+      _test.validateAssignment({
+        sim_slot: 0,
+        provider: "mtn",
+        purpose: "personal",
+      }),
+    ).toBeNull();
+  });
+
+  test("rejects invalid SIM slots", () => {
+    expect(
+      _test.validateAssignment({
+        sim_slot: -1,
+        provider: "mtn",
+        purpose: "agent",
+      }),
+    ).toMatch(/sim_slot/);
+  });
+});

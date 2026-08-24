@@ -72,7 +72,7 @@ void main() {
       expect(
         dashboard,
         contains(
-          '..sort((a, b) => a.position.compareTo(b.position))',
+          'a.position.compareTo(b.position)',
         ),
       );
     });

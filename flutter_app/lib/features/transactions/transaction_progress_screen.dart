@@ -11,6 +11,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 import '../../shared/widgets/ussd_accessibility_disclosure.dart';
 import '../../core/services/offline_queue_service.dart';
+import '../../core/services/sim_role_assignment_service.dart';
 import '../../core/services/dashboard_refresh_service.dart';
 import '../../core/services/storage_service.dart';
 import '../ussd_flows/ussd_flow_runtime_policy.dart';
@@ -276,6 +277,40 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       widget.data['sim_subscription_id']?.toString() ?? '',
     );
 
+    String? expectedBusinessRole;
+
+    if (widget.isPersonal == false) {
+      final suppliedRole =
+          widget.data['sim_role']?.toString().trim().toLowerCase();
+
+      final suppliedRoleIsValid = suppliedRole == 'agent' ||
+          suppliedRole == 'evd' ||
+          suppliedRole == 'merchant';
+
+      if (suppliedRoleIsValid) {
+        expectedBusinessRole = suppliedRole;
+      } else if (requestedSimSlot == null) {
+        // Compatibility for an older Business navigation payload
+        // which did not carry either a role or physical SIM slot.
+        expectedBusinessRole = 'agent';
+      } else {
+        try {
+          expectedBusinessRole =
+              await SimRoleAssignmentService.businessRoleForSlot(
+            requestedSimSlot,
+            refreshFromServer: true,
+            allowLegacyAgentFallback: false,
+            simIccid: requestedSimIccid,
+            simSubscriptionId: requestedSimSubscriptionId,
+            provider: provider,
+          );
+        } on StateError catch (error) {
+          _showStartupFailure(error.message);
+          return;
+        }
+      }
+    }
+
     final transactionFuture = _resolveTransactionData();
     final deviceFuture = TransactionDevicePreparationService.prepare(
       provider: provider,
@@ -353,6 +388,64 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     }
 
     final simSlot = devicePreparation.simSlot!;
+
+    if (widget.isPersonal == false) {
+      String actualBusinessRole;
+
+      try {
+        actualBusinessRole = await SimRoleAssignmentService.businessRoleForSlot(
+          simSlot,
+          refreshFromServer: false,
+          allowLegacyAgentFallback: false,
+          simIccid: devicePreparation.simIccid,
+          simSubscriptionId: devicePreparation.simSubscriptionId,
+          provider: provider,
+        );
+      } on StateError catch (error) {
+        final reason = error.message;
+
+        if (mounted) {
+          setState(() => _simWarning = reason);
+        }
+
+        await _reportResult(
+          transactionId,
+          USSDResult(
+            outcome: USSDStatus.failed,
+            failureReason: reason,
+            sessionLog: const [],
+          ),
+        );
+
+        return;
+      }
+
+      if (actualBusinessRole == expectedBusinessRole) {
+        // The role used for automation resolution still belongs
+        // to the physical SIM Android prepared.
+      } else {
+        final reason =
+            'The prepared SIM does not match the selected Business role. '
+            'Expected ${expectedBusinessRole ?? 'Business'}, '
+            'but found $actualBusinessRole. '
+            'Select the correct SIM and try again.';
+
+        if (mounted) {
+          setState(() => _simWarning = reason);
+        }
+
+        await _reportResult(
+          transactionId,
+          USSDResult(
+            outcome: USSDStatus.failed,
+            failureReason: reason,
+            sessionLog: const [],
+          ),
+        );
+
+        return;
+      }
+    }
     final rawTemplate = transaction['ussd_template'];
     final template =
         rawTemplate is Map ? Map<String, dynamic>.from(rawTemplate) : null;
@@ -474,12 +567,15 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     final selectionsInOrder =
         (widget.data['selections_in_order'] as List?)?.cast<String>() ??
             const [];
-    final isMtnAccessibilityFlow = provider == 'mtn' &&
+    final isMtnAccessibilityFlow = expectedBusinessRole == 'agent' &&
+        provider == 'mtn' &&
         (transactionType == 'cash_in' ||
             transactionType == 'cash_out' ||
             transactionType == 'send_money');
-    final isTelecelDepositFlow =
-        provider == 'telecel' && transactionType == 'cash_in';
+
+    final isTelecelDepositFlow = expectedBusinessRole == 'agent' &&
+        provider == 'telecel' &&
+        transactionType == 'cash_in';
 
     // Telecel Operator ID is only actually needed by flows whose steps
     // include a send_operator_id action (Telecel Airtime, and the
@@ -511,6 +607,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         provider,
         telecelOperatorId,
         simSlot: simSlot,
+        businessSimRole: expectedBusinessRole,
       );
       return;
     }
@@ -532,6 +629,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         provider: provider,
         telecelOperatorId: telecelOperatorId,
         simSlot: simSlot,
+        businessSimRole: expectedBusinessRole,
         flowData: Map<String, dynamic>.from(suppliedCachedFlow),
         selectionsInOrder: selectionsInOrder,
       );
@@ -552,6 +650,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             transactionType,
             identity: _offlineIdentity,
             isPersonal: widget.isPersonal,
+            businessSimRole: expectedBusinessRole ?? 'agent',
             bundleCategory: bundleCategory,
             recipientMode: recipientMode,
           );
@@ -564,6 +663,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         queryParameters: {
           'provider': provider,
           'transaction_type': transactionType,
+          if (widget.isPersonal == false)
+            'sim_role': expectedBusinessRole ?? 'agent',
           if (bundleCategory != null) 'bundle_category': bundleCategory,
           if (recipientMode != null) 'recipient_mode': recipientMode,
         },
@@ -585,6 +686,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         flowData,
         identity: _offlineIdentity,
         isPersonal: widget.isPersonal,
+        businessSimRole: expectedBusinessRole ?? 'agent',
         bundleCategory: bundleCategory,
         recipientMode: recipientMode,
       );
@@ -596,6 +698,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         provider: provider,
         telecelOperatorId: telecelOperatorId,
         simSlot: simSlot,
+        businessSimRole: expectedBusinessRole,
         flowData: flowData,
         selectionsInOrder: selectionsInOrder,
       );
@@ -612,6 +715,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
           transactionType,
           identity: _offlineIdentity,
           isPersonal: widget.isPersonal,
+          businessSimRole: expectedBusinessRole ?? 'agent',
           bundleCategory: bundleCategory,
           recipientMode: recipientMode,
         );
@@ -645,6 +749,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
           transactionType,
           identity: _offlineIdentity,
           isPersonal: widget.isPersonal,
+          businessSimRole: expectedBusinessRole ?? 'agent',
           bundleCategory: bundleCategory,
           recipientMode: recipientMode,
         );
@@ -660,6 +765,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
           provider: provider,
           telecelOperatorId: telecelOperatorId,
           simSlot: simSlot,
+          businessSimRole: expectedBusinessRole,
           flowData: fallbackCachedFlow,
           selectionsInOrder: selectionsInOrder,
         );
@@ -787,6 +893,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     required String provider,
     required String? telecelOperatorId,
     required int simSlot,
+    String? businessSimRole,
     required Map<String, dynamic> flowData,
     required List<String> selectionsInOrder,
   }) async {
@@ -895,6 +1002,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       provider,
       telecelOperatorId,
       simSlot: simSlot,
+      businessSimRole: businessSimRole,
       dialCode: dialCode,
       steps: steps,
       successMarkers: successMarkers,
@@ -910,6 +1018,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     String provider,
     String? operatorId, {
     required int simSlot,
+    String? businessSimRole,
     String? dialCode,
     List<Map<String, dynamic>>? steps,
     List<String>? successMarkers,
@@ -1019,6 +1128,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       amount: automationParams['amount'],
       transactionType: nativeTransactionType,
       provider: provider,
+      businessSimRole: businessSimRole,
       operatorId: operatorId,
       reference: automationParams['payment_reference'],
       merchantId: automationParams['merchant_id'],

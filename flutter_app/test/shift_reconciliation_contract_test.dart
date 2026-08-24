@@ -69,7 +69,44 @@ void main() {
 
       expect(
         source,
-        contains("ApiClient.instance.get('/user-sim-purposes')"),
+        contains(
+          'SimRoleAssignmentService.roleForSlot',
+        ),
+      );
+
+      expect(
+        source,
+        contains(
+          'refreshFromServer: true',
+        ),
+      );
+
+      expect(
+        source,
+        contains(
+          'simIccid: card.iccid',
+        ),
+      );
+
+      expect(
+        source,
+        contains(
+          'simSubscriptionId: card.subscriptionId',
+        ),
+      );
+
+      expect(
+        source,
+        contains(
+          'provider: card.network',
+        ),
+      );
+
+      expect(
+        source,
+        contains(
+          "purpose == 'agent'",
+        ),
       );
 
       expect(

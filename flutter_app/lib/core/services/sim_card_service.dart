@@ -49,6 +49,42 @@ class SimCardService {
     return sims.any((s) => s.network == provider);
   }
 
+  /// Return every detected SIM for one provider.
+  ///
+  /// A device may contain more than one SIM from the same network,
+  /// and those SIMs can have different AgentPro roles such as
+  /// Agent, EVD, Merchant or Subscriber.
+  static Future<List<SimCard>> getSimsForProvider(
+    String provider,
+  ) async {
+    final normalized = provider.trim().toLowerCase();
+    final sims = await getSimCards();
+
+    return sims.where((sim) => sim.network == normalized).toList()
+      ..sort((a, b) => a.slot.compareTo(b.slot));
+  }
+
+  /// Return all supported SIMs grouped by provider.
+  static Future<Map<String, List<SimCard>>> getProviderSimGroups() async {
+    final sims = await getSimCards();
+
+    final result = <String, List<SimCard>>{
+      'mtn': <SimCard>[],
+      'telecel': <SimCard>[],
+      'at_money': <SimCard>[],
+    };
+
+    for (final sim in sims) {
+      result[sim.network]?.add(sim);
+    }
+
+    for (final group in result.values) {
+      group.sort((a, b) => a.slot.compareTo(b.slot));
+    }
+
+    return result;
+  }
+
   /// Get a summary of available networks for UI display
   static Future<Map<String, SimCard?>> getNetworkSimMap() async {
     final sims = await getSimCards();

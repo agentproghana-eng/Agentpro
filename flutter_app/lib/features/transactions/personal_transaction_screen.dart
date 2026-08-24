@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/api/api_client.dart';
 import '../../core/services/offline_queue_service.dart';
 import '../../core/services/sim_card_service.dart';
+import '../../core/services/sim_role_assignment_service.dart';
 import '../../core/services/storage_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
@@ -579,90 +580,33 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         detected = await SimCardService.getSimCards();
       }
 
-      final purposes = <int, String>{};
-      var purposesKnown = false;
+      final supported = <SimCard>[];
 
-      final cachedUser = await StorageService.getUser();
-
-      if (cachedUser != null) {
-        final durable =
-            await StorageService.getOfflineDashboardSnapshot(cachedUser);
-
-        final rawPurposes = durable?['sim_purposes'];
-
-        if (rawPurposes is Map) {
-          purposesKnown = true;
-
-          for (final entry in rawPurposes.entries) {
-            final slot = int.tryParse(entry.key.toString());
-            final purpose = entry.value?.toString().trim();
-
-            if (slot != null && purpose != null && purpose.isNotEmpty) {
-              purposes[slot] = purpose;
-            }
-          }
+      for (final sim in detected) {
+        if (sim.isMoMoSupported == false) {
+          continue;
         }
-      }
 
-      try {
-        final response = await ApiClient.instance.get(
-          '/user-sim-purposes',
+        final purpose = await SimRoleAssignmentService.roleForSlot(
+          sim.slot,
+          refreshFromServer: true,
+          simIccid: sim.iccid,
+          simSubscriptionId: sim.subscriptionId,
+          provider: sim.network,
         );
 
-        final saved = (response.data['data'] as List?) ?? const [];
-
-        purposes.clear();
-
-        for (final value in saved) {
-          if (value is! Map) continue;
-
-          final slot = value['sim_slot'];
-          final purpose = value['purpose'];
-
-          if (slot is int && purpose is String) {
-            purposes[slot] = purpose;
-          }
+        if (purpose == 'subscriber') {
+          supported.add(sim);
         }
-
-        purposesKnown = true;
-
-        if (cachedUser != null) {
-          await StorageService.mergeOfflineDashboardSnapshot(
-            cachedUser,
-            {
-              'sim_purposes': {
-                for (final entry in purposes.entries)
-                  entry.key.toString(): entry.value,
-              },
-            },
-          );
-        }
-      } catch (_) {
-        // Keep the encrypted last-known server assignments.
       }
 
-      if (!purposesKnown) {
-        // Financial actions must not guess SIM purpose simply because
-        // the server is unavailable.
-        if (!mounted) return;
+      supported.sort(
+        (a, b) => a.slot.compareTo(b.slot),
+      );
 
-        setState(() {
-          _simCards = const [];
-          _selectedSimSlot = null;
-          _simDetectionComplete = true;
-          _simPermissionDenied = false;
-          _initialSimIdentityUnavailable = true;
-        });
-
+      if (mounted == false) {
         return;
       }
-
-      final supported = detected
-          .where(
-            (sim) => sim.isMoMoSupported && purposes[sim.slot] != 'agent',
-          )
-          .toList()
-        ..sort((a, b) => a.slot.compareTo(b.slot));
 
       final providerSims = supported
           .where((sim) => sim.network == widget.provider)

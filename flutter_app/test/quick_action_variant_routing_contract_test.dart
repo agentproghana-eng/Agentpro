@@ -27,7 +27,6 @@ void main() {
       expect(
         dashboard,
         contains(
-          "'bundle_category': "
           'preference.bundleCategory',
         ),
       );
@@ -35,8 +34,21 @@ void main() {
       expect(
         dashboard,
         contains(
-          "'recipient_mode': "
+          "'bundle_category': bundleCategory",
+        ),
+      );
+
+      expect(
+        dashboard,
+        contains(
           'preference.recipientMode',
+        ),
+      );
+
+      expect(
+        dashboard,
+        contains(
+          "'recipient_mode': recipientMode",
         ),
       );
 

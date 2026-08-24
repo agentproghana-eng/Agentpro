@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/services/sim_card_service.dart';
+import '../../../shared/models/sim_role.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/dashboard_empty_state.dart';
@@ -14,102 +15,222 @@ class DashboardQuickActionsSection extends StatelessWidget {
     super.key,
     required this.provider,
     required this.simMap,
+    required this.providerSims,
+    required this.selectedSimSlot,
+    required this.onSimSlotChanged,
     required this.disabledTypes,
     required this.simPurposes,
     required this.agentQuickActions,
-    required this.personalQuickActions,
+    required this.subscriberQuickActions,
+    required this.evdQuickActions,
+    required this.merchantQuickActions,
     required this.agentCatalog,
-    required this.personalCatalog,
+    required this.subscriberCatalog,
     required this.simDetectionComplete,
     required this.simPurposesResolved,
     required this.agentCatalogResolved,
-    required this.personalCatalogResolved,
+    required this.subscriberCatalogResolved,
     required this.onReloadQuickActions,
   });
 
   final String provider;
   final Map<String, SimCard?>? simMap;
+  final Map<String, List<SimCard>> providerSims;
+  final int? selectedSimSlot;
+  final ValueChanged<int> onSimSlotChanged;
+
   final Set<String> disabledTypes;
   final Map<int, String> simPurposes;
+
   final Map<String, List<QuickActionPreference>> agentQuickActions;
-  final Map<String, List<QuickActionPreference>> personalQuickActions;
+
+  final Map<String, List<QuickActionPreference>> subscriberQuickActions;
+
+  final Map<String, List<QuickActionPreference>> evdQuickActions;
+
+  final Map<String, List<QuickActionPreference>> merchantQuickActions;
+
   final QuickActionCatalog? agentCatalog;
-  final QuickActionCatalog? personalCatalog;
+  final QuickActionCatalog? subscriberCatalog;
 
   final bool simDetectionComplete;
   final bool simPurposesResolved;
   final bool agentCatalogResolved;
-  final bool personalCatalogResolved;
+  final bool subscriberCatalogResolved;
+
   final VoidCallback onReloadQuickActions;
 
-  QuickActionCatalog? _catalog({
-    required bool personal,
-  }) {
-    return personal ? personalCatalog : agentCatalog;
-  }
+  List<SimCard> _simsForProvider() {
+    final sims = providerSims[provider];
 
-  List<QuickActionPreference> _quickActions({
-    required bool personal,
-  }) {
-    final saved =
-        personal ? personalQuickActions[provider] : agentQuickActions[provider];
+    if (sims == null || sims.isEmpty) {
+      final fallback = simMap?[provider];
 
-    if (saved != null && saved.isNotEmpty) {
-      final orderedSaved = List<QuickActionPreference>.from(saved)
-        ..sort((a, b) => a.position.compareTo(b.position));
+      if (fallback == null) {
+        return const <SimCard>[];
+      }
 
-      final normalizedSaved = personal
-          ? normalizePersonalQuickActionPreferences(
-              preferences: orderedSaved,
-            )
-          : normalizeBusinessQuickActionPreferences(
-              provider: provider,
-              preferences: orderedSaved,
-            );
-
-      return normalizedSaved.where((item) => item.isVisible).take(9).toList();
+      return <SimCard>[fallback];
     }
 
-    final definitions =
-        _catalog(personal: personal)?.definitionsFor(provider) ??
-            const <QuickActionCatalogDefinition>[];
+    return sims;
+  }
 
-    final fallback = definitions
-        .take(9)
-        .toList()
-        .asMap()
-        .entries
-        .map(
-          (entry) => QuickActionPreference(
-            actionKey: entry.value.type,
-            position: entry.key,
-          ),
-        )
-        .toList();
+  SimCard? _selectedSim(
+    List<SimCard> sims,
+  ) {
+    if (sims.isEmpty) {
+      return null;
+    }
 
-    return personal
-        ? normalizePersonalQuickActionPreferences(
-            preferences: fallback,
+    for (final sim in sims) {
+      if (sim.slot == selectedSimSlot) {
+        return sim;
+      }
+    }
+
+    return sims.first;
+  }
+
+  String _roleForSim(
+    SimCard sim,
+  ) {
+    return canonicalSimPurpose(
+      simPurposes[sim.slot],
+    );
+  }
+
+  String _roleLabel(
+    String role,
+  ) {
+    return switch (role) {
+      'subscriber' => 'Subscriber',
+      'evd' => 'EVD',
+      'merchant' => 'Merchant',
+      'agent' => 'Agent',
+      _ => 'Role not set',
+    };
+  }
+
+  String _customizeRoute(
+    String role,
+  ) {
+    return switch (role) {
+      'subscriber' => '/personal-quick-actions',
+      'evd' => '/evd-quick-actions',
+      'merchant' => '/merchant-quick-actions',
+      _ => '/agent-quick-actions',
+    };
+  }
+
+  Map<String, List<QuickActionPreference>> _profileForRole(
+    String role,
+  ) {
+    return switch (role) {
+      'subscriber' => subscriberQuickActions,
+      'evd' => evdQuickActions,
+      'merchant' => merchantQuickActions,
+      _ => agentQuickActions,
+    };
+  }
+
+  QuickActionCatalog? _catalogForRole(
+    String role,
+  ) {
+    return switch (role) {
+      'subscriber' => subscriberCatalog,
+      'agent' => agentCatalog,
+      _ => null,
+    };
+  }
+
+  bool _catalogResolvedForRole(
+    String role,
+  ) {
+    return switch (role) {
+      'subscriber' => subscriberCatalogResolved,
+      'agent' => agentCatalogResolved,
+      _ => true,
+    };
+  }
+
+  List<QuickActionPreference> _quickActions(
+    String role,
+  ) {
+    final saved = _profileForRole(role)[provider];
+
+    if (saved == null || saved.isEmpty) {
+      final definitions = _catalogForRole(role)?.definitionsFor(provider) ??
+          const <QuickActionCatalogDefinition>[];
+
+      final fallback = definitions
+          .take(9)
+          .toList()
+          .asMap()
+          .entries
+          .map(
+            (entry) => QuickActionPreference(
+              actionKey: entry.value.type,
+              position: entry.key,
+            ),
           )
-        : fallback;
+          .toList();
+
+      if (role == 'subscriber') {
+        return normalizePersonalQuickActionPreferences(
+          preferences: fallback,
+        ).where((item) => item.isVisible).take(9).toList();
+      }
+
+      if (role == 'agent') {
+        return fallback.where((item) => item.isVisible).take(9).toList();
+      }
+
+      // EVD and Merchant deliberately have no Agent fallback
+      // catalog. They appear only when role-specific preferences
+      // have actually been configured.
+      return const <QuickActionPreference>[];
+    }
+
+    final ordered = List<QuickActionPreference>.from(saved)
+      ..sort(
+        (a, b) => a.position.compareTo(b.position),
+      );
+
+    if (role == 'subscriber') {
+      return normalizePersonalQuickActionPreferences(
+        preferences: ordered,
+      ).where((item) => item.isVisible).take(9).toList();
+    }
+
+    if (role == 'agent') {
+      return normalizeBusinessQuickActionPreferences(
+        provider: provider,
+        preferences: ordered,
+      ).where((item) => item.isVisible).take(9).toList();
+    }
+
+    return ordered.where((item) => item.isVisible).take(9).toList();
   }
 
   QuickActionCatalogDefinition? _definition(
-    String type, {
-    required bool personal,
-  }) {
-    return _catalog(
-      personal: personal,
-    )?.definitionFor(provider, type);
+    String type,
+    String role,
+  ) {
+    return _catalogForRole(role)?.definitionFor(
+      provider,
+      type,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!simDetectionComplete) {
+    if (simDetectionComplete == false) {
       return _loadingState();
     }
 
-    final sim = simMap?[provider];
+    final sims = _simsForProvider();
+    final sim = _selectedSim(sims);
 
     if (sim == null) {
       return DashboardEmptyState(
@@ -120,78 +241,195 @@ class DashboardQuickActionsSection extends StatelessWidget {
       );
     }
 
-    if (!simPurposesResolved) {
+    if (simPurposesResolved == false) {
       return _loadingState();
     }
 
-    final purpose = simPurposes[sim.slot];
+    final role = _roleForSim(sim);
 
-    if (purpose != 'personal' && purpose != 'agent') {
-      return const DashboardEmptyState(
-        icon: Icons.sim_card_alert_rounded,
-        title: 'SIM purpose required',
-        message: 'AgentPro could not determine whether this SIM is '
-            'Personal or Agent. Set its SIM Purpose before using '
-            'Quick Actions.',
+    final roleSupported = const {
+      'agent',
+      'subscriber',
+      'evd',
+      'merchant',
+    }.contains(role);
+
+    if (roleSupported == false) {
+      return _withSimSelector(
+        sims: sims,
+        selected: sim,
+        child: const DashboardEmptyState(
+          icon: Icons.sim_card_alert_rounded,
+          title: 'SIM role required',
+          message: 'AgentPro could not verify this SIM as '
+              'Agent, Subscriber, EVD or Merchant. '
+              'Open Settings > SIM Purpose and save '
+              'the correct role for this SIM.',
+        ),
       );
     }
 
-    final personal = purpose == 'personal';
+    final profile = _profileForRole(role);
+    final saved = profile[provider];
+    final catalog = _catalogForRole(role);
 
-    final saved =
-        personal ? personalQuickActions[provider] : agentQuickActions[provider];
-
-    final catalog = personal ? personalCatalog : agentCatalog;
-
-    final catalogResolved =
-        personal ? personalCatalogResolved : agentCatalogResolved;
+    final catalogResolved = _catalogResolvedForRole(role);
 
     final hasVisibleSavedActions =
         saved?.any((item) => item.isVisible) ?? false;
 
-    if (!catalogResolved && catalog == null && !hasVisibleSavedActions) {
+    final roleUsesDedicatedCatalog = role == 'agent' || role == 'subscriber';
+
+    if (roleUsesDedicatedCatalog &&
+        catalogResolved == false &&
+        catalog == null &&
+        hasVisibleSavedActions == false) {
       return _loadingState();
     }
 
-    if (catalogResolved && catalog == null && !hasVisibleSavedActions) {
-      return DashboardEmptyState(
-        icon: Icons.cloud_off_rounded,
-        title: 'Quick actions unavailable',
-        message: 'AgentPro could not load Quick Actions. '
-            'Check your connection and try again.',
-        actionLabel: 'Retry',
-        actionIcon: Icons.refresh_rounded,
-        onAction: onReloadQuickActions,
+    if (roleUsesDedicatedCatalog &&
+        catalogResolved &&
+        catalog == null &&
+        hasVisibleSavedActions == false) {
+      return _withSimSelector(
+        sims: sims,
+        selected: sim,
+        child: DashboardEmptyState(
+          icon: Icons.cloud_off_rounded,
+          title: '${_roleLabel(role)} Quick Actions unavailable',
+          message: 'AgentPro could not load ${_roleLabel(role)} '
+              'Quick Actions. Check your connection and try again.',
+          actionLabel: 'Retry',
+          actionIcon: Icons.refresh_rounded,
+          onAction: onReloadQuickActions,
+        ),
       );
     }
 
-    final actions = personal ? _personalTiles(context) : _agentTiles(context);
+    if ((role == 'evd' || role == 'merchant') &&
+        hasVisibleSavedActions == false) {
+      return _withSimSelector(
+        sims: sims,
+        selected: sim,
+        child: DashboardEmptyState(
+          icon: Icons.grid_view_rounded,
+          title: 'No ${_roleLabel(role)} Quick Actions configured',
+          message: '${_roleLabel(role)} uses its own transaction '
+              'menus. Agent Quick Actions are not reused for '
+              'this SIM role.',
+          actionLabel: 'Customize ${_roleLabel(role)} Quick Actions',
+          actionIcon: Icons.tune_rounded,
+          onAction: () => context.push(
+            _customizeRoute(role),
+          ),
+        ),
+      );
+    }
+
+    final actions = _roleTiles(
+      context: context,
+      role: role,
+      sim: sim,
+    );
 
     if (actions.isEmpty) {
-      return DashboardEmptyState(
-        icon: Icons.grid_view_rounded,
-        title: 'No quick actions available',
-        message: 'No transaction actions are currently available for '
-            '${_providerLabel(provider)}. '
-            'You can choose different actions in Templates.',
-        actionLabel: 'Customize Quick Actions',
-        actionIcon: Icons.tune_rounded,
-        onAction: () => context.push(
-          personal ? '/personal-quick-actions' : '/agent-quick-actions',
+      return _withSimSelector(
+        sims: sims,
+        selected: sim,
+        child: DashboardEmptyState(
+          icon: Icons.grid_view_rounded,
+          title: 'No ${_roleLabel(role)} Quick Actions available',
+          message: 'No transaction actions are currently available '
+              'for ${_providerLabel(provider)} '
+              '${_roleLabel(role)}.',
+          actionLabel: 'Customize ${_roleLabel(role)} Quick Actions',
+          actionIcon: Icons.tune_rounded,
+          onAction: () => context.push(
+            _customizeRoute(role),
+          ),
         ),
       );
     }
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-      child: GridView.count(
-        crossAxisCount: 3,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        mainAxisSpacing: 6,
-        crossAxisSpacing: 6,
-        childAspectRatio: 0.9,
-        children: actions,
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (sims.length > 1) ...[
+            _buildSimSelector(
+              sims,
+              sim,
+            ),
+            const SizedBox(height: 10),
+          ],
+          GridView.count(
+            crossAxisCount: 3,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 6,
+            crossAxisSpacing: 6,
+            childAspectRatio: 0.9,
+            children: actions,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _withSimSelector({
+    required List<SimCard> sims,
+    required SimCard selected,
+    required Widget child,
+  }) {
+    if (sims.length < 2) {
+      return child;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            16,
+            10,
+            16,
+            0,
+          ),
+          child: _buildSimSelector(
+            sims,
+            selected,
+          ),
+        ),
+        child,
+      ],
+    );
+  }
+
+  Widget _buildSimSelector(
+    List<SimCard> sims,
+    SimCard selected,
+  ) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (final sim in sims) ...[
+            ChoiceChip(
+              label: Text(
+                '${_roleLabel(_roleForSim(sim))} '
+                '· SIM ${sim.slot + 1}',
+              ),
+              selected: sim.slot == selected.slot,
+              onSelected: (value) {
+                if (value) {
+                  onSimSlotChanged(sim.slot);
+                }
+              },
+            ),
+            const SizedBox(width: 8),
+          ],
+        ],
       ),
     );
   }
@@ -211,9 +449,12 @@ class DashboardQuickActionsSection extends StatelessWidget {
     );
   }
 
-  List<Widget> _agentTiles(BuildContext context) {
-    final sim = simMap?[provider];
-    final actions = _quickActions(personal: false);
+  List<Widget> _roleTiles({
+    required BuildContext context,
+    required String role,
+    required SimCard sim,
+  }) {
+    final actions = _quickActions(role);
     final tiles = <Widget>[];
 
     const backgrounds = <Color>[
@@ -243,7 +484,11 @@ class DashboardQuickActionsSection extends StatelessWidget {
     for (var index = 0; index < actions.length; index++) {
       final preference = actions[index];
       final type = preference.actionKey;
-      final definition = _definition(type, personal: false);
+
+      final definition = _definition(
+        type,
+        role,
+      );
 
       final defaultLabel = quickActionDisplayLabel(
         provider: provider,
@@ -251,96 +496,19 @@ class DashboardQuickActionsSection extends StatelessWidget {
         catalogLabel: definition?.displayLabel,
       );
 
-      final label = preference.resolvedDisplayLabel(defaultLabel);
-      final icon = quickActionIconFromKey(preference.iconKey) ??
-          definition?.icon ??
-          quickActionCatalogIcon(type);
-
-      tiles.add(
-        _buildTile(
-          context: context,
-          icon: icon,
-          label: label,
-          bgColor: preference.resolvedIconBackgroundColor(
-            backgrounds[index % backgrounds.length],
-          ),
-          iconColor: preference.resolvedIconColor(
-            iconColors[index % iconColors.length],
-          ),
-          type: type,
-          onTap: () {
-            final query = <String, String>{
-              'type': type,
-              'provider': provider,
-              if ((preference.bundleCategory ?? '').trim().isNotEmpty)
-                'bundle_category': preference.bundleCategory!.trim(),
-              if ((preference.recipientMode ?? '').trim().isNotEmpty)
-                'recipient_mode': preference.recipientMode!.trim(),
-              if (sim != null) 'sim_slot': sim.slot.toString(),
-              if (sim != null && sim.iccid.isNotEmpty) 'sim_iccid': sim.iccid,
-              if (sim != null)
-                'sim_subscription_id': sim.subscriptionId.toString(),
-            };
-
-            context.push(
-              Uri(
-                path: '/transactions',
-                queryParameters: query,
-              ).toString(),
-            );
-          },
-        ),
-      );
-    }
-
-    return tiles;
-  }
-
-  List<Widget> _personalTiles(BuildContext context) {
-    final sim = simMap?[provider];
-    final actions = _quickActions(personal: true);
-    final tiles = <Widget>[];
-
-    const backgrounds = <Color>[
-      Color(0xFFE6F4F1),
-      Color(0xFFE3EEFC),
-      Color(0xFFFDF3DC),
-      Color(0xFFFFF7D6),
-      Color(0xFFE0F7F5),
-      Color(0xFFF0E6FA),
-      Color(0xFFDFF3EE),
-      Color(0xFFFCE8E3),
-      Color(0xFFFBE6EC),
-    ];
-
-    const iconColors = <Color>[
-      AppTheme.primaryColor,
-      Color(0xFF2E6FD9),
-      Color(0xFFB87E00),
-      Color(0xFFA6821A),
-      Color(0xFF14847A),
-      Color(0xFF8B5FBF),
-      Color(0xFF1F8A6F),
-      Color(0xFFC1503D),
-      Color(0xFFB33F6B),
-    ];
-
-    for (var index = 0; index < actions.length; index++) {
-      final preference = actions[index];
-      final type = preference.actionKey;
-      final definition = _definition(type, personal: true);
-
-      final icon = quickActionIconFromKey(preference.iconKey) ??
-          definition?.icon ??
-          quickActionCatalogIcon(type);
-
       final label = preference.resolvedDisplayLabel(
-        quickActionDisplayLabel(
-          provider: provider,
-          type: type,
-          catalogLabel: definition?.displayLabel,
-        ),
+        defaultLabel,
       );
+
+      final icon = quickActionIconFromKey(
+            preference.iconKey,
+          ) ??
+          definition?.icon ??
+          quickActionCatalogIcon(type);
+
+      final bundleCategory = (preference.bundleCategory ?? '').trim();
+
+      final recipientMode = (preference.recipientMode ?? '').trim();
 
       tiles.add(
         _buildTile(
@@ -358,19 +526,20 @@ class DashboardQuickActionsSection extends StatelessWidget {
             final query = <String, String>{
               'type': type,
               'provider': provider,
-              if ((preference.bundleCategory ?? '').trim().isNotEmpty)
-                'bundle_category': preference.bundleCategory!.trim(),
-              if ((preference.recipientMode ?? '').trim().isNotEmpty)
-                'recipient_mode': preference.recipientMode!.trim(),
-              if (sim != null) 'sim_slot': sim.slot.toString(),
-              if (sim != null && sim.iccid.isNotEmpty) 'sim_iccid': sim.iccid,
-              if (sim != null)
-                'sim_subscription_id': sim.subscriptionId.toString(),
+              if (bundleCategory.isNotEmpty) 'bundle_category': bundleCategory,
+              if (recipientMode.isNotEmpty) 'recipient_mode': recipientMode,
+              'sim_slot': sim.slot.toString(),
+              if (sim.iccid.isNotEmpty) 'sim_iccid': sim.iccid,
+              'sim_subscription_id': sim.subscriptionId.toString(),
             };
+
+            final path = role == 'subscriber'
+                ? '/personal-transactions/new'
+                : '/transactions';
 
             context.push(
               Uri(
-                path: '/personal-transactions/new',
+                path: path,
                 queryParameters: query,
               ).toString(),
             );
@@ -391,7 +560,9 @@ class DashboardQuickActionsSection extends StatelessWidget {
     required String type,
     required VoidCallback onTap,
   }) {
-    final disabled = disabledTypes.contains('$provider:$type');
+    final disabled = disabledTypes.contains(
+      '$provider:$type',
+    );
 
     return _QuickAction(
       icon: icon,
@@ -409,8 +580,9 @@ class DashboardQuickActionsSection extends StatelessWidget {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text(
-                    'This feature has been temporarily disabled '
-                    'by your administrator.',
+                    'This feature has been '
+                    'temporarily disabled by '
+                    'your administrator.',
                   ),
                 ),
               );
@@ -419,7 +591,9 @@ class DashboardQuickActionsSection extends StatelessWidget {
     );
   }
 
-  String _providerLabel(String value) {
+  String _providerLabel(
+    String value,
+  ) {
     return quickActionProviderLabel(value);
   }
 }

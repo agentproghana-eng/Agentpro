@@ -258,12 +258,21 @@ class OfflineQueueService {
   static String? _templateKey(
     OfflineQueueIdentity identity,
     String provider,
-    String type,
-  ) {
+    String type, {
+    String businessSimRole = 'agent',
+  }) {
     final owner = _cacheOwner(identity, isPersonal: false);
     if (owner == null) return null;
 
-    return ['template', owner, provider, type].join('_');
+    final normalizedBusinessRole = businessSimRole.trim().toLowerCase();
+
+    return [
+      'template',
+      owner,
+      normalizedBusinessRole.isEmpty ? 'agent' : normalizedBusinessRole,
+      provider,
+      type,
+    ].join('_');
   }
 
   static Future<void> cacheTemplate(
@@ -271,8 +280,14 @@ class OfflineQueueService {
     String transactionType,
     Map<String, dynamic> template, {
     required OfflineQueueIdentity identity,
+    String businessSimRole = 'agent',
   }) async {
-    final key = _templateKey(identity, provider, transactionType);
+    final key = _templateKey(
+      identity,
+      provider,
+      transactionType,
+      businessSimRole: businessSimRole,
+    );
     if (key == null) return;
 
     await _templateBox.put(key, jsonEncode(template));
@@ -282,8 +297,14 @@ class OfflineQueueService {
     String provider,
     String transactionType, {
     required OfflineQueueIdentity identity,
+    String businessSimRole = 'agent',
   }) {
-    final key = _templateKey(identity, provider, transactionType);
+    final key = _templateKey(
+      identity,
+      provider,
+      transactionType,
+      businessSimRole: businessSimRole,
+    );
     if (key == null) return null;
 
     final raw = _templateBox.get(key);
@@ -296,11 +317,13 @@ class OfflineQueueService {
     String provider,
     String type, {
     required bool isPersonal,
+    String businessSimRole = 'agent',
     String? bundleCategory,
     String? recipientMode,
   }) {
     final bundle = (bundleCategory ?? '').trim();
     final recipient = (recipientMode ?? '').trim();
+    final normalizedBusinessRole = businessSimRole.trim().toLowerCase();
     final owner = _cacheOwner(identity, isPersonal: isPersonal);
 
     if (owner == null) return null;
@@ -309,6 +332,8 @@ class OfflineQueueService {
       'flow',
       owner,
       isPersonal ? 'personal' : 'business',
+      if (!isPersonal)
+        normalizedBusinessRole.isEmpty ? 'agent' : normalizedBusinessRole,
       provider,
       type,
       bundle.isEmpty ? '-' : bundle,
@@ -325,6 +350,7 @@ class OfflineQueueService {
     Map<String, dynamic> flow, {
     required OfflineQueueIdentity identity,
     bool isPersonal = false,
+    String businessSimRole = 'agent',
     String? bundleCategory,
     String? recipientMode,
   }) async {
@@ -333,6 +359,7 @@ class OfflineQueueService {
       provider,
       transactionType,
       isPersonal: isPersonal,
+      businessSimRole: businessSimRole,
       bundleCategory: bundleCategory,
       recipientMode: recipientMode,
     );
@@ -347,6 +374,7 @@ class OfflineQueueService {
     String transactionType, {
     required OfflineQueueIdentity identity,
     bool isPersonal = false,
+    String businessSimRole = 'agent',
     String? bundleCategory,
     String? recipientMode,
   }) {
@@ -355,6 +383,7 @@ class OfflineQueueService {
       provider,
       transactionType,
       isPersonal: isPersonal,
+      businessSimRole: businessSimRole,
       bundleCategory: bundleCategory,
       recipientMode: recipientMode,
     );
@@ -373,6 +402,7 @@ class OfflineQueueService {
     String transactionType, {
     required OfflineQueueIdentity identity,
     bool isPersonal = false,
+    String businessSimRole = 'agent',
     String? bundleCategory,
     String? recipientMode,
   }) async {
@@ -381,6 +411,7 @@ class OfflineQueueService {
       provider,
       transactionType,
       isPersonal: isPersonal,
+      businessSimRole: businessSimRole,
       bundleCategory: bundleCategory,
       recipientMode: recipientMode,
     );

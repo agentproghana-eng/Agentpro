@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/services/sim_card_service.dart';
+import '../../core/services/sim_role_assignment_service.dart';
 import '../../core/services/storage_service.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_theme.dart';
@@ -62,33 +63,32 @@ class _OpenShiftScreenState extends State<OpenShiftScreen> {
         cards = await SimCardService.getSimCards();
       }
 
-      final purposeResponse =
-          await ApiClient.instance.get('/user-sim-purposes');
+      final businessCards = <SimCard>[];
 
-      final rawPurposes = purposeResponse.data['data'];
-      final purposes = <int, String>{};
+      for (final card in cards) {
+        if (card.isMoMoSupported == false) {
+          continue;
+        }
 
-      if (rawPurposes is List) {
-        for (final raw in rawPurposes) {
-          if (raw is Map) {
-            final item = Map<String, dynamic>.from(raw);
-            final slot = item['sim_slot'];
+        final purpose = await SimRoleAssignmentService.roleForSlot(
+          card.slot,
+          refreshFromServer: true,
+          simIccid: card.iccid,
+          simSubscriptionId: card.subscriptionId,
+          provider: card.network,
+        );
 
-            if (slot is int) {
-              purposes[slot] = item['purpose']?.toString() ?? 'agent';
-            }
-          }
+        // Opening-shift balance semantics currently belong to
+        // Agent SIM wallets only. EVD and Merchant are not silently
+        // treated as Agent until their own balance semantics exist.
+        if (purpose == 'agent') {
+          businessCards.add(card);
         }
       }
 
-      final businessCards = cards
-          .where(
-            (card) =>
-                card.isMoMoSupported &&
-                (purposes[card.slot] ?? 'agent') == 'agent',
-          )
-          .toList()
-        ..sort((a, b) => a.slot.compareTo(b.slot));
+      businessCards.sort(
+        (a, b) => a.slot.compareTo(b.slot),
+      );
 
       String? installationId;
 

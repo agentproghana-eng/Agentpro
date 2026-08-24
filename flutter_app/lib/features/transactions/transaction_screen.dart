@@ -15,6 +15,7 @@ import '../../shared/widgets/app_widgets.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../core/services/offline_queue_service.dart';
 import '../../core/services/sim_card_service.dart';
+import '../../core/services/sim_role_assignment_service.dart';
 import '../../core/services/storage_service.dart';
 import '../../core/services/transaction_device_preparation_service.dart';
 
@@ -437,6 +438,27 @@ class _TransactionScreenState extends State<TransactionScreen> {
   }
 
   Future<void> _preloadSelectedFlow() async {
+    final selectedSim = _selectedSim;
+
+    if (selectedSim == null) {
+      return;
+    }
+
+    String businessSimRole;
+
+    try {
+      businessSimRole = await SimRoleAssignmentService.businessRoleForSlot(
+        selectedSim.slot,
+        refreshFromServer: true,
+        allowLegacyAgentFallback: false,
+        simIccid: selectedSim.iccid,
+        simSubscriptionId: selectedSim.subscriptionId,
+        provider: selectedSim.network,
+      );
+    } on StateError {
+      return;
+    }
+
     final provider = _selectedProvider;
     final transactionType = widget.transactionType;
     final bundleCategory = _initialBundleCategory;
@@ -444,6 +466,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
     final cacheKey = <String>[
       provider,
+      businessSimRole,
       transactionType,
       bundleCategory ?? '',
       recipientMode ?? '',
@@ -458,6 +481,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
           transactionType,
           identity: identity,
           isPersonal: false,
+          businessSimRole: businessSimRole,
           bundleCategory: bundleCategory,
           recipientMode: recipientMode,
         ) !=
@@ -476,6 +500,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
           'provider': provider,
           'transaction_type': transactionType,
           'mode': 'business',
+          'sim_role': businessSimRole,
           if (bundleCategory != null) 'bundle_category': bundleCategory,
           if (recipientMode != null) 'recipient_mode': recipientMode,
         },
@@ -491,6 +516,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         Map<String, dynamic>.from(rawFlow),
         identity: identity,
         isPersonal: false,
+        businessSimRole: businessSimRole,
         bundleCategory: bundleCategory,
         recipientMode: recipientMode,
       );
@@ -557,6 +583,33 @@ class _TransactionScreenState extends State<TransactionScreen> {
       );
       return;
     }
+
+    final selectedBusinessSim = _selectedSim!;
+
+    String businessSimRole;
+
+    try {
+      businessSimRole = await SimRoleAssignmentService.businessRoleForSlot(
+        selectedBusinessSim.slot,
+        refreshFromServer: true,
+        allowLegacyAgentFallback: false,
+        simIccid: selectedBusinessSim.iccid,
+        simSubscriptionId: selectedBusinessSim.subscriptionId,
+        provider: selectedBusinessSim.network,
+      );
+    } on StateError catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.message),
+        ),
+      );
+
+      return;
+    }
+
+    if (!mounted) return;
 
     if (_isTelecelDataBundle && _selectedTelecelBundle == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -635,6 +688,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
             _selectedProvider,
             widget.transactionType,
             identity: identity,
+            businessSimRole: businessSimRole,
           );
 
     final cachedFlow = identity == null
@@ -644,6 +698,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
             widget.transactionType,
             identity: identity,
             isPersonal: false,
+            businessSimRole: businessSimRole,
             bundleCategory: _initialBundleCategory,
             recipientMode: _initialRecipientMode,
           );
@@ -655,11 +710,13 @@ class _TransactionScreenState extends State<TransactionScreen> {
     // run. Gating these on cachedTemplate != null would mean they can
     // never go offline at all. Only the custom Flow Builder path
     // genuinely needs a prior online run to learn its dial code.
-    final isAccessibilityHardcodedFlow = (_selectedProvider == 'mtn' &&
-            (widget.transactionType == 'cash_in' ||
-                widget.transactionType == 'cash_out' ||
-                widget.transactionType == 'send_money')) ||
-        (_selectedProvider == 'telecel' && widget.transactionType == 'cash_in');
+    final isAccessibilityHardcodedFlow = businessSimRole == 'agent' &&
+        ((_selectedProvider == 'mtn' &&
+                (widget.transactionType == 'cash_in' ||
+                    widget.transactionType == 'cash_out' ||
+                    widget.transactionType == 'send_money')) ||
+            (_selectedProvider == 'telecel' &&
+                widget.transactionType == 'cash_in'));
 
     if (isOffline &&
         (isAccessibilityHardcodedFlow ||
@@ -669,6 +726,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
       final requestFields = {
         'provider': _selectedProvider,
         'transaction_type': widget.transactionType,
+        'sim_role': businessSimRole,
         'amount': double.tryParse(_amountCtrl.text.replaceAll(',', '')) ?? 0,
         'customer_phone': _customerPhoneCtrl.text.trim(),
         'customer_name': '',
@@ -702,6 +760,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
           },
           'provider': _selectedProvider,
           'transaction_type': widget.transactionType,
+          'sim_role': businessSimRole,
           if (_initialBundleCategory != null)
             'bundle_category': _initialBundleCategory,
           if (_initialRecipientMode != null)
@@ -730,6 +789,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
     final requestFields = <String, dynamic>{
       'provider': _selectedProvider,
       'transaction_type': widget.transactionType,
+      'sim_role': businessSimRole,
       'amount': double.tryParse(_amountCtrl.text.replaceAll(',', '')) ?? 0,
       'customer_phone': _customerPhoneCtrl.text.trim(),
       'customer_name': '',
@@ -757,6 +817,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
       requestFields: requestFields,
       provider: _selectedProvider,
       transactionType: widget.transactionType,
+      businessSimRole: businessSimRole,
     );
 
     if (!mounted) return;
@@ -767,6 +828,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'transaction_future': transactionFuture,
         'provider': _selectedProvider,
         'transaction_type': widget.transactionType,
+        'sim_role': businessSimRole,
         if (_initialBundleCategory != null)
           'bundle_category': _initialBundleCategory,
         if (_initialRecipientMode != null)
@@ -798,6 +860,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
     required Map<String, dynamic> requestFields,
     required String provider,
     required String transactionType,
+    required String businessSimRole,
   }) async {
     final response = await ApiClient.instance.post(
       '/transactions',
@@ -819,6 +882,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
       _cacheTransactionAutomationData(
         provider: provider,
         transactionType: transactionType,
+        businessSimRole: businessSimRole,
         template: template,
         bundleCategory: _initialBundleCategory,
         recipientMode: _initialRecipientMode,
@@ -831,6 +895,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
   Future<void> _cacheTransactionAutomationData({
     required String provider,
     required String transactionType,
+    required String businessSimRole,
     Map<String, dynamic>? template,
     String? bundleCategory,
     String? recipientMode,
@@ -845,6 +910,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
           transactionType,
           template,
           identity: identity,
+          businessSimRole: businessSimRole,
         );
       } catch (_) {
         // Caching must never delay or fail the live transaction.
@@ -858,6 +924,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
           'provider': provider,
           'transaction_type': transactionType,
           'mode': 'business',
+          'sim_role': businessSimRole,
           if (bundleCategory != null) 'bundle_category': bundleCategory,
           if (recipientMode != null) 'recipient_mode': recipientMode,
         },
@@ -872,6 +939,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         Map<String, dynamic>.from(rawData),
         identity: identity,
         isPersonal: false,
+        businessSimRole: businessSimRole,
         bundleCategory: bundleCategory,
         recipientMode: recipientMode,
       );

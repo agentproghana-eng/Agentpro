@@ -78,6 +78,7 @@ class UssdAccessibilityService : AccessibilityService() {
         @Volatile var pendingAmount: String? = null
         @Volatile var pendingTransactionType: String? = null
         @Volatile var pendingProvider: String? = null
+        @Volatile var pendingBusinessSimRole: String? = null
         @Volatile var pendingOperatorId: String? = null
         @Volatile var pendingReference: String? = null
         @Volatile var pendingMerchantId: String? = null
@@ -121,6 +122,7 @@ class UssdAccessibilityService : AccessibilityService() {
             amount: String?,
             transactionType: String,
             provider: String,
+            businessSimRole: String? = null,
             operatorId: String? = null,
             reference: String? = null,
             merchantId: String? = null,
@@ -133,6 +135,7 @@ class UssdAccessibilityService : AccessibilityService() {
             pendingAmount = amount
             pendingTransactionType = transactionType
             pendingProvider = provider
+            pendingBusinessSimRole = businessSimRole
             pendingOperatorId = operatorId
             pendingReference = reference
             pendingMerchantId = merchantId
@@ -165,6 +168,7 @@ class UssdAccessibilityService : AccessibilityService() {
             pendingAmount = null
             pendingTransactionType = null
             pendingProvider = null
+            pendingBusinessSimRole = null
             pendingOperatorId = null
             pendingReference = null
             pendingMerchantId = null
@@ -330,6 +334,34 @@ class UssdAccessibilityService : AccessibilityService() {
 
         lastScreenText = screenText
         lastScreenHandledAt = now
+
+        val isBusinessRoleMismatch =
+            pendingProvider == "mtn" &&
+                screenText.contains(
+                    "not allowed to access this code"
+                )
+
+        if (isBusinessRoleMismatch) {
+            val roleLabel = when (pendingBusinessSimRole) {
+                "evd" -> "EVD"
+                "merchant" -> "Merchant"
+                else -> "Agent"
+            }
+
+            val message =
+                "This MTN SIM is not authorized for the selected " +
+                    "$roleLabel transaction. Select an MTN " +
+                    "$roleLabel SIM and try again."
+
+            listener?.onResult(
+                "role_mismatch",
+                message
+            )
+
+            endSession()
+            UssdForegroundService.stop(this)
+            return
+        }
 
         when {
             reachedPinPrompt -> handleAfterPinPrompt(screenText)
