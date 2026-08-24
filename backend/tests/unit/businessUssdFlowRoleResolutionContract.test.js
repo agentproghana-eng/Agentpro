@@ -7,8 +7,16 @@ describe("Business USSD role resolution contract", () => {
     "utf8",
   );
 
-  const migration = fs.readFileSync(
+  const rolloutMigration = fs.readFileSync(
     path.join(__dirname, "../../migrations/091_business_ussd_flow_roles.sql"),
+    "utf8",
+  );
+
+  const hardeningMigration = fs.readFileSync(
+    path.join(
+      __dirname,
+      "../../migrations/095_sim_role_server_trust_and_flow_isolation.sql",
+    ),
     "utf8",
   );
 
@@ -18,31 +26,32 @@ describe("Business USSD role resolution contract", () => {
     expect(controller).toContain("INVALID_BUSINESS_SIM_ROLE");
   });
 
-  test("missing role falls back to Agent for old app builds", () => {
+  test("missing client role still maps to Agent for old app builds", () => {
     expect(controller).toContain('String(sim_role || "agent")');
   });
 
-  test("company and global flow lookup include role", () => {
-    const occurrences = (
-      controller.match(/COALESCE\(business_sim_role, 'agent'\)/g) || []
-    ).length;
+  test("Business database lookup requires explicit role", () => {
+    const occurrences = (controller.match(/business_sim_role = \$/g) || [])
+      .length;
 
     expect(occurrences).toBeGreaterThanOrEqual(2);
 
-    expect(controller).toContain("businessSimRole");
+    expect(controller).not.toContain("COALESCE(business_sim_role, 'agent') =");
   });
 
-  test("Business unique indexes include the role discriminator", () => {
-    expect(migration).toContain("COALESCE(business_sim_role, 'agent')");
-
-    expect(migration).toContain("idx_ussd_flows_global_unique");
-
-    expect(migration).toContain("idx_ussd_flows_company_unique");
+  test("historical migration backfilled legacy Business rows", () => {
+    expect(rolloutMigration).toContain("SET business_sim_role = 'agent'");
   });
 
-  test("migration does not rebuild Personal uniqueness", () => {
-    expect(migration).not.toContain(
-      "DROP INDEX IF EXISTS idx_ussd_flows_personal_unique",
+  test("Global uniqueness distinguishes Personal from Agent", () => {
+    expect(hardeningMigration).toContain(
+      "COALESCE(business_sim_role, 'personal')",
     );
+
+    expect(hardeningMigration).toContain("idx_ussd_flows_global_unique");
+  });
+
+  test("Personal uniqueness remains untouched", () => {
+    expect(hardeningMigration).not.toContain("idx_ussd_flows_personal_unique");
   });
 });

@@ -25,6 +25,9 @@ const { generateTransactionReceipt } = require("../services/reportService");
 const {
   resolveAgentFinancialBranch,
 } = require("../services/financialBranchService");
+const {
+  verifyBusinessSimRoleAssignment,
+} = require("../services/simRoleTrustService");
 
 async function recordAgentSimUsage({
   agentId,
@@ -124,17 +127,9 @@ exports.initiateTransaction = async (req, res) => {
   const agentId = req.user.id;
   const companyId = req.user.company_id;
 
-  const businessSimRole = String(sim_role || "agent")
+  const businessSimRole = String(sim_role || "")
     .trim()
     .toLowerCase();
-
-  if (["agent", "evd", "merchant"].includes(businessSimRole) == false) {
-    return res.status(422).json({
-      success: false,
-      code: "INVALID_BUSINESS_SIM_ROLE",
-      message: "sim_role must be agent, evd, or merchant",
-    });
-  }
 
   const isTransferChargeTransaction =
     (provider === "mtn" && transaction_type === "send_money") ||
@@ -377,6 +372,31 @@ exports.initiateTransaction = async (req, res) => {
       });
     }
 
+    if (["agent", "evd", "merchant"].includes(businessSimRole) == false) {
+      return res.status(422).json({
+        success: false,
+        code: "INVALID_BUSINESS_SIM_ROLE",
+        message: "sim_role must be agent, evd, or merchant",
+      });
+    }
+    const roleVerification = await verifyBusinessSimRoleAssignment({
+      userId: agentId,
+      provider,
+      claimedRole: businessSimRole,
+      simSlot: sim_slot,
+      simIccid: sim_iccid,
+      installationId: installation_id,
+      simSubscriptionId: sim_subscription_id,
+    });
+
+    if (roleVerification.ok === false) {
+      return res.status(roleVerification.status).json({
+        success: false,
+        code: roleVerification.code,
+        message: roleVerification.message,
+      });
+    }
+
     // Run independent transaction preflight queries concurrently.
     // These checks do not depend on one another, so awaiting them
     // sequentially only delays the USSD startup response.
@@ -425,7 +445,7 @@ exports.initiateTransaction = async (req, res) => {
          WHERE provider = $1
            AND transaction_type = $2
            AND is_active = TRUE
-           AND COALESCE(business_sim_role, 'agent') = $4
+           AND business_sim_role = $4
            AND (
              (company_id = $3 AND owner_user_id IS NULL)
              OR

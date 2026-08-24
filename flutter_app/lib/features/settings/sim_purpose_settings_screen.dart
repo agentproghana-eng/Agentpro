@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/services/sim_card_service.dart';
 import '../../core/services/sim_role_assignment_service.dart';
+import '../../core/services/storage_service.dart';
 import '../../shared/models/sim_role.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_theme.dart';
@@ -146,12 +147,17 @@ class _SimPurposeSettingsScreenState extends State<SimPurposeSettingsScreen> {
     setState(() => _saving = true);
 
     try {
+      final installationId =
+          await StorageService.getOrCreateInstallationId();
+
       final assignments = _simCards.map((card) {
         final role = _roles[card.slot] ?? SimRole.agent;
 
         return {
           'sim_slot': card.slot,
           'sim_iccid': card.iccid.isNotEmpty ? card.iccid : null,
+          'installation_id': installationId,
+          'sim_subscription_id': card.subscriptionId,
           'provider': card.network == 'unknown' ? null : card.network,
           'purpose': _roleValue(role),
         };

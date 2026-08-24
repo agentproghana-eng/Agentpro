@@ -23,15 +23,31 @@ describe("Business transaction role execution contract", () => {
     expect(controller).toContain("INVALID_BUSINESS_SIM_ROLE");
   });
 
+  test("server verifies persisted physical SIM role", () => {
+    expect(controller).toContain("verifyBusinessSimRoleAssignment");
+
+    expect(controller).toContain("roleVerification.ok === false");
+  });
+
   test("legacy USSD templates are Agent-only", () => {
     expect(controller).toContain("AND $4 = 'agent'");
   });
 
-  test("Flow Builder existence check is role scoped", () => {
-    expect(controller).toContain("COALESCE(business_sim_role, 'agent') = $4");
+  test("Flow Builder existence check uses exact role", () => {
+    expect(controller).toContain("AND business_sim_role = $4");
+
+    expect(controller).not.toContain(
+      "COALESCE(business_sim_role, 'agent') = $4",
+    );
   });
 
   test("transaction response reports role used for automation", () => {
     expect(controller).toContain("sim_role: businessSimRole");
+  });
+
+  test("financial runtime never defaults a missing role to Agent", () => {
+    expect(controller).toContain('String(sim_role || "")');
+
+    expect(controller).not.toContain('String(sim_role || "agent")');
   });
 });

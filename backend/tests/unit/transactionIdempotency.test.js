@@ -21,6 +21,7 @@ const mockPostDataBundle = jest.fn();
 const mockPostMerchantPayment = jest.fn();
 const mockPostPayToAgent = jest.fn();
 const mockPostWorkingFloatTransfer = jest.fn();
+const mockVerifyBusinessSimRoleAssignment = jest.fn();
 
 jest.mock('../../src/config/database', () => ({
   query: (...args) => mockQuery(...args),
@@ -99,6 +100,11 @@ jest.mock('../../src/services/workingFloatPostingService', () => ({
 }));
 
 
+jest.mock('../../src/services/simRoleTrustService', () => ({
+  verifyBusinessSimRoleAssignment: (...args) =>
+    mockVerifyBusinessSimRoleAssignment(...args),
+}));
+
 jest.mock('../../src/utils/logger', () => ({
   logger: {
     error: jest.fn(),
@@ -139,6 +145,7 @@ function makeReq(body = {}) {
       installation_id:
         '11111111-1111-4111-8111-111111111111',
       sim_subscription_id: 10,
+      sim_role: 'agent',
       client_operation_id: operationId,
       ...body,
     },
@@ -197,6 +204,12 @@ beforeEach(() => {
   // Prevent a transaction-client implementation from leaking between
   // initiation and completion tests.
   mockClientQuery.mockReset();
+
+  mockVerifyBusinessSimRoleAssignment.mockResolvedValue({
+    ok: true,
+    role: 'agent',
+    sim_slot: 0,
+  });
 
   mockAuditLog.mockResolvedValue(undefined);
   mockSendTransactionNotification.mockResolvedValue(undefined);
