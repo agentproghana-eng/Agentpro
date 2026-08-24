@@ -250,8 +250,9 @@ void main() {
 
         expect(
           consumer,
-          contains('router.go(route)'),
-          reason: 'A consumed notification route must be handed to GoRouter.',
+          contains('_navigateNotificationRoute('),
+          reason:
+              'A consumed notification route must enter the notification navigation policy.',
         );
 
         final authGuard = consumer.indexOf(
@@ -266,6 +267,79 @@ void main() {
           lessThan(consume),
           reason:
               'Authentication must be checked before the pending notification route is consumed.',
+        );
+      },
+    );
+
+    test(
+      'transaction notification detail establishes History back stack',
+      () {
+        final source = _readSource('lib/main.dart');
+
+        final navigation = _slice(
+          source,
+          'Future<void> _navigateNotificationRoute(',
+          'void _consumePendingNotificationNavigation()',
+        );
+
+        expect(
+          navigation,
+          contains(
+            "router.go('/transactions/history')",
+          ),
+          reason:
+              'Transaction notification detail must establish History first.',
+        );
+
+        expect(
+          navigation,
+          contains(
+            'await WidgetsBinding.instance.endOfFrame',
+          ),
+          reason:
+              'History must be committed before Transaction Details is pushed.',
+        );
+
+        expect(
+          navigation,
+          contains(
+            'router.push<void>(route)',
+          ),
+          reason:
+              'Transaction Details must be pushed above History so Back returns to History.',
+        );
+
+        expect(
+          navigation,
+          contains('router.go(route)'),
+          reason:
+              'Non-transaction notification destinations should retain direct navigation.',
+        );
+
+        final history = navigation.indexOf(
+          "router.go('/transactions/history')",
+        );
+
+        final frame = navigation.indexOf(
+          'await WidgetsBinding.instance.endOfFrame',
+        );
+
+        final detail = navigation.indexOf(
+          'router.push<void>(route)',
+        );
+
+        expect(
+          history,
+          lessThan(frame),
+          reason:
+              'History navigation must happen before waiting for the frame.',
+        );
+
+        expect(
+          frame,
+          lessThan(detail),
+          reason:
+              'Transaction Details must be pushed only after History is committed.',
         );
       },
     );
