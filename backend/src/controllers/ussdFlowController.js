@@ -143,6 +143,7 @@ exports.createFlow = async (req, res) => {
     bundle_category,
     recipient_mode,
     business_sim_role,
+    account_mode,
     steps,
   } = req.body;
 
@@ -224,6 +225,41 @@ exports.createFlow = async (req, res) => {
       });
     }
 
+    let resolvedGlobalAccountMode = "business";
+
+    if (isGlobalTarget) {
+      const businessEnabled = eligibility.business_enabled === true;
+
+      const personalEnabled = eligibility.personal_enabled === true;
+
+      if (businessEnabled && personalEnabled) {
+        const requestedGlobalAccountMode = String(account_mode || "")
+          .trim()
+          .toLowerCase();
+
+        if (
+          ["business", "personal"].includes(requestedGlobalAccountMode) ===
+          false
+        ) {
+          return res.status(422).json({
+            success: false,
+            code: "GLOBAL_ACCOUNT_MODE_REQUIRED",
+            message:
+              "account_mode must be business or personal when a Global transaction type is enabled in both modes.",
+          });
+        }
+
+        resolvedGlobalAccountMode = requestedGlobalAccountMode;
+      } else if (personalEnabled) {
+        resolvedGlobalAccountMode = "personal";
+      }
+    }
+
+    const persistedBusinessSimRole =
+      isGlobalTarget && resolvedGlobalAccountMode === "personal"
+        ? null
+        : businessSimRole;
+
     const flow = await withTransaction(async (client) => {
       const flowResult = await client.query(
         `INSERT INTO ussd_flows (
@@ -249,7 +285,7 @@ exports.createFlow = async (req, res) => {
           failure_markers || [],
           bundle_category || null,
           recipient_mode || null,
-          businessSimRole,
+          persistedBusinessSimRole,
           req.user.id,
         ],
       );
@@ -284,7 +320,8 @@ exports.createFlow = async (req, res) => {
         transaction_type,
         bundle_category: bundle_category || null,
         recipient_mode: recipient_mode || null,
-        business_sim_role: businessSimRole,
+        business_sim_role: persistedBusinessSimRole,
+        account_mode: isGlobalTarget ? resolvedGlobalAccountMode : "business",
         company_id: companyId,
         step_count: steps.length,
       },
@@ -673,7 +710,7 @@ exports.resolveFlow = async (req, res) => {
            AND owner_user_id IS NULL
            AND provider = $2
            AND transaction_type = $3
-           AND COALESCE(business_sim_role, 'agent') = $4
+           AND business_sim_role = $4
            AND is_active = TRUE
            AND COALESCE(bundle_category,'') = COALESCE($5,'')
            AND COALESCE(recipient_mode,'') = COALESCE($6,'')`,
@@ -700,7 +737,7 @@ exports.resolveFlow = async (req, res) => {
            AND owner_user_id IS NULL
            AND provider = $1
            AND transaction_type = $2
-           AND COALESCE(business_sim_role, 'agent') = $3
+           AND business_sim_role = $3
            AND is_active = TRUE
            AND COALESCE(bundle_category,'') = COALESCE($4,'')
            AND COALESCE(recipient_mode,'') = COALESCE($5,'')`,

@@ -12,6 +12,7 @@ describe("SIM purpose roles", () => {
       expect(
         _test.validateAssignment({
           sim_slot: 0,
+          sim_iccid: "SIM-MTN-0",
           provider: "mtn",
           purpose,
         }),
@@ -43,6 +44,7 @@ describe("SIM purpose roles", () => {
     expect(
       _test.validateAssignment({
         sim_slot: 0,
+        sim_iccid: "SIM-MTN-LEGACY",
         provider: "mtn",
         purpose: "personal",
       }),
@@ -57,5 +59,40 @@ describe("SIM purpose roles", () => {
         purpose: "agent",
       }),
     ).toMatch(/sim_slot/);
+  });
+
+  test("accepts strong unresolved SIM identity", () => {
+    expect(
+      _test.validateAssignment({
+        sim_slot: 0,
+        provider: "mtn",
+        purpose: "merchant",
+        installation_id: "11111111-1111-4111-8111-111111111111",
+        sim_subscription_id: 7,
+      }),
+    ).toBeNull();
+  });
+
+  test("rejects incomplete unresolved SIM identity", () => {
+    expect(
+      _test.validateAssignment({
+        sim_slot: 0,
+        provider: "mtn",
+        purpose: "agent",
+        installation_id: "11111111-1111-4111-8111-111111111111",
+      }),
+    ).toMatch(/sim_subscription_id/);
+  });
+
+  test("rejects malformed installation identity", () => {
+    expect(
+      _test.validateAssignment({
+        sim_slot: 0,
+        provider: "mtn",
+        purpose: "agent",
+        installation_id: "not-a-uuid",
+        sim_subscription_id: 7,
+      }),
+    ).toMatch(/installation_id/);
   });
 });

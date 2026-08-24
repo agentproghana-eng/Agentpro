@@ -117,11 +117,12 @@ describe('USSD Flow Builder capabilities', () => {
     expect(queryFn).not.toHaveBeenCalled();
   });
 
-  test('Global Flow Builder eligibility accepts a type active in any account mode', async () => {
+  test('Global Flow Builder eligibility reports the enabled account modes', async () => {
     const queryFn = jest.fn().mockResolvedValue({
       rows: [{
         provider_registered: true,
-        transaction_type_builder_enabled: true,
+        business_enabled: false,
+        personal_enabled: true,
       }],
     });
 
@@ -134,14 +135,28 @@ describe('USSD Flow Builder capabilities', () => {
     ).resolves.toEqual({
       provider_registered: true,
       transaction_type_builder_enabled: true,
+      business_enabled: false,
+      personal_enabled: true,
     });
 
     const [sql, params] = queryFn.mock.calls[0];
 
-    expect(sql).toContain("t.typname = 'provider'");
-    expect(sql).toContain('is_active = TRUE');
-    expect(sql).not.toContain('account_mode =');
-    expect(sql).not.toContain('can_initiate = TRUE');
+    expect(sql).toContain(
+      "account_mode = 'business'"
+    );
+
+    expect(sql).toContain(
+      "account_mode = 'personal'"
+    );
+
+    expect(sql).toContain(
+      'is_active = TRUE'
+    );
+
+    expect(sql).not.toContain(
+      'can_initiate = TRUE'
+    );
+
     expect(params).toEqual([
       'future_provider',
       'personal_only_type',

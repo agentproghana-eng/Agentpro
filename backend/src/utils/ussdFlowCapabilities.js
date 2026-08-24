@@ -99,17 +99,34 @@ async function getGlobalFlowBuilderEligibility(
          SELECT 1
          FROM ussd_flow_capabilities
          WHERE transaction_type::text = $2
+           AND account_mode = 'business'
            AND is_active = TRUE
-       ) AS transaction_type_builder_enabled`,
+       ) AS business_enabled,
+       EXISTS (
+         SELECT 1
+         FROM ussd_flow_capabilities
+         WHERE transaction_type::text = $2
+           AND account_mode = 'personal'
+           AND is_active = TRUE
+       ) AS personal_enabled`,
     [provider, transactionType]
   );
 
   const row = result.rows[0] || {};
 
+  const businessEnabled =
+    row.business_enabled === true;
+
+  const personalEnabled =
+    row.personal_enabled === true;
+
   return {
-    provider_registered: row.provider_registered === true,
+    provider_registered:
+      row.provider_registered === true,
     transaction_type_builder_enabled:
-      row.transaction_type_builder_enabled === true,
+      businessEnabled || personalEnabled,
+    business_enabled: businessEnabled,
+    personal_enabled: personalEnabled,
   };
 }
 

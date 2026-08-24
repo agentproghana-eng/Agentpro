@@ -163,6 +163,7 @@ exports.resolveFlow = async (req, res) => {
         `SELECT * FROM ussd_flows
          WHERE company_id IS NULL
            AND owner_user_id IS NULL
+           AND business_sim_role IS NULL
            AND provider = $1
            AND transaction_type = $2
            AND is_active = TRUE

@@ -100,6 +100,7 @@ describe('Personal Global USSD runtime access', () => {
     const [globalSql, globalParams] = mockQuery.mock.calls[0];
 
     expect(globalSql).toContain('owner_user_id IS NULL');
+    expect(globalSql).toContain('business_sim_role IS NULL');
     expect(globalSql).not.toContain('owner_user_id = $1');
 
     expect(globalParams).toEqual([
@@ -234,4 +235,19 @@ describe('Personal Global USSD runtime access', () => {
     expect(paidGate).toBeGreaterThan(resolveRoute);
     expect(capabilities).toBeGreaterThan(paidGate);
   });
+
+  test('Personal transaction Global fallback excludes Business role rows', () => {
+    const source = fs.readFileSync(
+      path.join(
+        __dirname,
+        '../../src/controllers/personalTransactionController.js'
+      ),
+      'utf8'
+    );
+
+    expect(source).toContain(
+      'AND business_sim_role IS NULL'
+    );
+  });
+
 });

@@ -17,9 +17,17 @@ describe("Business USSD Flow Builder role contract", () => {
     expect(source).toContain('String(business_sim_role || "agent")');
   });
 
-  test("create INSERT persists the role", () => {
+  test("Personal-only Global rows persist no Business role", () => {
+    expect(source).toContain("resolvedGlobalAccountMode");
+
+    expect(source).toContain("persistedBusinessSimRole");
+
+    expect(source).toContain("GLOBAL_ACCOUNT_MODE_REQUIRED");
+  });
+
+  test("create INSERT persists the resolved role", () => {
     expect(source).toContain("business_sim_role,");
 
-    expect(source).toContain("businessSimRole");
+    expect(source).toContain("persistedBusinessSimRole");
   });
 });

@@ -5,6 +5,9 @@ const CANONICAL_PURPOSES = ["agent", "subscriber", "evd", "merchant"];
 
 const VALID_PROVIDERS = ["mtn", "telecel", "at_money"];
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 const PURPOSES_BY_PROVIDER = {
   mtn: new Set(["agent", "subscriber", "evd", "merchant"]),
   telecel: new Set(["agent", "subscriber", "merchant"]),
@@ -48,6 +51,52 @@ const validateAssignment = (assignment) => {
     if (!PURPOSES_BY_PROVIDER[provider].has(purpose)) {
       return `${purpose} is not supported for provider ${provider}.`;
     }
+  }
+
+  const rawIccid = assignment.sim_iccid;
+
+  if (
+    [undefined, null, ""].includes(rawIccid) === false &&
+    (typeof rawIccid === "string") === false
+  ) {
+    return "sim_iccid must be a string when provided.";
+  }
+
+  const simIccid = String(rawIccid || "").trim();
+
+  if (simIccid.length > 100) {
+    return "sim_iccid must not exceed 100 characters.";
+  }
+
+  const installationId = String(assignment.installation_id || "").trim();
+
+  if (
+    installationId.length > 0 &&
+    UUID_PATTERN.test(installationId) === false
+  ) {
+    return "installation_id must be a valid UUID.";
+  }
+
+  const rawSubscriptionId = assignment.sim_subscription_id;
+
+  const hasSubscriptionId =
+    [undefined, null, ""].includes(rawSubscriptionId) === false;
+
+  if (
+    hasSubscriptionId &&
+    (Number.isInteger(rawSubscriptionId) === false || rawSubscriptionId < 0)
+  ) {
+    return "sim_subscription_id must be a " + "non-negative integer.";
+  }
+
+  if (
+    simIccid.length === 0 &&
+    (installationId.length === 0 || hasSubscriptionId === false)
+  ) {
+    return (
+      "Each SIM assignment without sim_iccid " +
+      "needs installation_id and sim_subscription_id."
+    );
   }
 
   return null;
@@ -138,14 +187,19 @@ exports.setPurposes = async (req, res) => {
              sim_slot,
              sim_iccid,
              provider,
-             purpose
+             purpose,
+             installation_id,
+             sim_subscription_id
            )
-           VALUES ($1, $2, $3, $4, $5)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
            ON CONFLICT (user_id, sim_slot)
            DO UPDATE SET
              sim_iccid = EXCLUDED.sim_iccid,
              provider = EXCLUDED.provider,
              purpose = EXCLUDED.purpose,
+             installation_id = EXCLUDED.installation_id,
+             sim_subscription_id =
+               EXCLUDED.sim_subscription_id,
              updated_at = NOW()`,
           [
             req.user.id,
@@ -153,6 +207,8 @@ exports.setPurposes = async (req, res) => {
             assignment.sim_iccid || null,
             provider,
             purpose,
+            assignment.installation_id || null,
+            assignment.sim_subscription_id ?? null,
           ],
         );
       }
