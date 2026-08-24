@@ -21,26 +21,44 @@ int notificationIdForDeliveryKey(String deliveryKey) {
   return hash & 0x7fffffff;
 }
 
-String notificationRouteForType(String? type) {
+String notificationRouteForType(
+  String? type, {
+  String? transactionId,
+}) {
   switch (type) {
     case 'transaction_success':
     case 'transaction_failed':
     case 'transaction_pending_confirmation':
-      return '/transactions';
+      final normalizedTransactionId = transactionId?.trim();
+
+      if (normalizedTransactionId != null &&
+          normalizedTransactionId.isNotEmpty) {
+        return '/transactions/${Uri.encodeComponent(normalizedTransactionId)}';
+      }
+
+      // Never route a transaction-result notification to a transaction
+      // creation form. If identity is unavailable, history is the safe
+      // non-destructive fallback.
+      return '/transactions/history';
+
     case 'low_float':
       return '/float';
+
     case 'subscription_reminder':
     case 'subscription_suspended':
     case 'renewal_approved':
       return '/subscription';
+
     case 'personal_subscription_approved':
     case 'personal_subscription_rejected':
       return '/personal-subscription';
+
     case 'ad_approved':
     case 'ad_rejected':
     case 'ad_expiring':
     case 'ad_expired':
       return '/marketplace';
+
     default:
       return '/notifications';
   }
@@ -238,20 +256,40 @@ class NotificationService {
       notification.title,
       notification.body,
       NotificationDetails(android: androidDetails),
-      payload: message.data['type'],
+      payload: notificationRouteForType(
+        message.data['type']?.toString(),
+        transactionId: message.data['transaction_id']?.toString(),
+      ),
     );
   }
 
   static void _onNotificationTap(NotificationResponse response) {
-    // Navigate based on notification type
-    final type = response.payload;
-    // Navigation is handled by GoRouter — store pending navigation
-    _queueNavigation(_routeForType(type));
+    final payload = response.payload?.trim();
+
+    if (payload == null || payload.isEmpty) {
+      _queueNavigation('/notifications');
+      return;
+    }
+
+    // New local notifications persist the resolved route directly so
+    // transaction identity survives foreground delivery. Older installed
+    // notifications stored only the notification type; retain a safe
+    // compatibility fallback for those entries.
+    _queueNavigation(
+      payload.startsWith('/') ? payload : _routeForType(payload),
+    );
   }
 
   static void _onMessageOpenedApp(RemoteMessage message) {
-    final type = message.data['type'] as String?;
-    _queueNavigation(_routeForType(type));
+    final type = message.data['type']?.toString();
+    final transactionId = message.data['transaction_id']?.toString();
+
+    _queueNavigation(
+      _routeForType(
+        type,
+        transactionId: transactionId,
+      ),
+    );
   }
 
   static String? _pendingNavigation;
@@ -273,8 +311,14 @@ class NotificationService {
     return nav;
   }
 
-  static String _routeForType(String? type) {
-    return notificationRouteForType(type);
+  static String _routeForType(
+    String? type, {
+    String? transactionId,
+  }) {
+    return notificationRouteForType(
+      type,
+      transactionId: transactionId,
+    );
   }
 
   static Future<void> syncTokenWithBackend() async {

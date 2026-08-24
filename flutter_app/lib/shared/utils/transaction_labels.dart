@@ -1,3 +1,25 @@
+String? canonicalBusinessTransactionType(
+  String? type,
+  String? provider,
+) {
+  final normalizedType = type?.trim();
+
+  if (normalizedType == null || normalizedType.isEmpty) {
+    return null;
+  }
+
+  final normalizedProvider = provider?.trim().toLowerCase();
+
+  // MTN Agent Cash In is the canonical send_money flow. The legacy
+  // cash_in identifier must never resurrect the retired MTN Cash In path.
+  if (normalizedProvider == 'mtn' &&
+      normalizedType.toLowerCase() == 'cash_in') {
+    return 'send_money';
+  }
+
+  return normalizedType;
+}
+
 // Maps a transaction_type + provider combo to its user-facing label.
 //
 // Agent provider terminology:

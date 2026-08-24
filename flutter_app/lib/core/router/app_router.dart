@@ -16,6 +16,7 @@ import '../../features/transactions/transaction_screen.dart';
 import '../../features/transactions/transaction_progress_screen.dart';
 import '../../features/transactions/transaction_detail_screen.dart';
 import '../../features/transactions/transaction_history_screen.dart';
+import '../../shared/utils/transaction_labels.dart';
 import '../../features/sync/sync_queue_screen.dart';
 import '../../features/float/float_screen.dart';
 import '../../features/float/float_history_screen.dart';
@@ -165,8 +166,18 @@ class AppRouter {
         GoRoute(
           path: '/transactions',
           builder: (_, state) {
-            final type = state.uri.queryParameters['type'] ?? 'cash_in';
             final provider = state.uri.queryParameters['provider'];
+            final type = canonicalBusinessTransactionType(
+              state.uri.queryParameters['type'],
+              provider,
+            );
+
+            // /transactions by itself is navigation, not permission to
+            // initiate money movement. Send a bare route to history instead
+            // of silently defaulting to the retired legacy Cash In flow.
+            if (type == null) {
+              return const TransactionHistoryScreen();
+            }
             final simSlotStr = state.uri.queryParameters['sim_slot'];
             final simIccid = state.uri.queryParameters['sim_iccid'];
             final simSubscriptionIdStr =

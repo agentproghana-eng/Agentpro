@@ -96,14 +96,44 @@ void main() {
 
         expect(
           localTap,
-          contains('_queueNavigation(_routeForType(type))'),
+          contains('response.payload?.trim()'),
+          reason:
+              'A local notification tap must recover its persisted routing payload.',
+        );
+
+        expect(
+          localTap,
+          contains(
+            "payload.startsWith('/') ? payload : _routeForType(payload)",
+          ),
+          reason:
+              'A local notification tap must preserve resolved routes while remaining compatible with older type-only payloads.',
+        );
+
+        expect(
+          localTap,
+          contains('_queueNavigation('),
           reason:
               'A local notification tap must create a router navigation request.',
         );
 
         expect(
           firebaseTap,
-          contains('_queueNavigation(_routeForType(type))'),
+          contains("message.data['transaction_id']?.toString()"),
+          reason:
+              'An FCM transaction tap must preserve the transaction identity supplied by the backend.',
+        );
+
+        expect(
+          firebaseTap,
+          contains('transactionId: transactionId'),
+          reason:
+              'The transaction identity must participate in route resolution.',
+        );
+
+        expect(
+          firebaseTap,
+          contains('_queueNavigation('),
           reason:
               'An FCM background/terminated notification tap must create a router navigation request.',
         );
