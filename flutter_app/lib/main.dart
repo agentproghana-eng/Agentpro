@@ -132,6 +132,44 @@ class _AgentProAppState extends State<AgentProApp> {
     }
   }
 
+  Future<void> _navigateNotificationRoute(
+    GoRouter router,
+    String route,
+  ) async {
+    final segments = Uri.tryParse(route)?.pathSegments ?? const <String>[];
+
+    final isTransactionRoute =
+        segments.length == 2 && segments[0] == 'transactions';
+
+    final isHistoryOrProgress = isTransactionRoute &&
+        (segments[1] == 'history' || segments[1] == 'progress');
+
+    final isTransactionDetailRoute =
+        isTransactionRoute && isHistoryOrProgress == false;
+
+    if (isTransactionDetailRoute == false) {
+      router.go(route);
+      return;
+    }
+
+    // A transaction notification must not make Transaction Details the
+    // navigation root. Establish History first so one Back action has a
+    // deterministic, non-destructive destination.
+    router.go('/transactions/history');
+
+    // Let GoRouter commit the History configuration before pushing the
+    // detail route on top of it.
+    await WidgetsBinding.instance.endOfFrame;
+
+    if (mounted == false) {
+      return;
+    }
+
+    unawaited(
+      router.push<void>(route),
+    );
+  }
+
   void _consumePendingNotificationNavigation() {
     final authBloc = _authBloc;
     final router = _router;
@@ -153,7 +191,12 @@ class _AgentProAppState extends State<AgentProApp> {
       return;
     }
 
-    router.go(route);
+    unawaited(
+      _navigateNotificationRoute(
+        router,
+        route,
+      ),
+    );
   }
 
   @override
