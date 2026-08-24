@@ -135,17 +135,27 @@ async function sendTransactionNotification(
   { type, transaction },
   options = {}
 ) {
-  const amountStr = `GH₵${parseFloat(transaction.amount).toFixed(2)}`;
-  const typeLabel = (transaction.transaction_type || '').replace('_', ' ');
+  const transactionType = transaction.transaction_type || '';
+  const isBalanceEnquiry = transactionType === 'balance_enquiry';
+  const typeLabel = transactionType.replace('_', ' ');
+  const amountStr = isBalanceEnquiry
+    ? null
+    : `GH₵${parseFloat(transaction.amount).toFixed(2)}`;
+  const transactionLabel = isBalanceEnquiry
+    ? 'Balance enquiry'
+    : `${amountStr} ${typeLabel}`;
+  const pendingConfirmationAdvice = isBalanceEnquiry
+    ? 'Check your transaction history.'
+    : 'Check your transaction history or ask the customer before retrying.';
 
   const content = {
     transaction_success: {
       title: 'Transaction Successful ✅',
-      body: `${amountStr} ${typeLabel} completed. Ref: ${transaction.reference}`,
+      body: `${transactionLabel} completed. Ref: ${transaction.reference}`,
     },
     transaction_failed: {
       title: 'Transaction Failed ❌',
-      body: `${amountStr} ${typeLabel} failed. ${transaction.failure_reason || ''}`.trim(),
+      body: `${transactionLabel} failed. ${transaction.failure_reason || ''}`.trim(),
     },
     // Deliberately distinct from "failed": the network never confirmed
     // an outcome (typically after a PIN prompt with no further
@@ -154,8 +164,8 @@ async function sendTransactionNotification(
     // that already went through, double-charging or double-paying.
     transaction_pending_confirmation: {
       title: '⚠️ Please Verify This Transaction',
-      body: `${amountStr} ${typeLabel} — outcome unconfirmed. ` +
-        `Check your transaction history or ask the customer before retrying. ` +
+      body: `${transactionLabel} — outcome unconfirmed. ` +
+        `${pendingConfirmationAdvice} ` +
         `Ref: ${transaction.reference}`,
     },
   }[type];

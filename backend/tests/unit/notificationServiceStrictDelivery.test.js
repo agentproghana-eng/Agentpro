@@ -286,5 +286,101 @@ describe(
         );
       }
     );
+
+    test.each([
+      [
+        'transaction_success',
+        'Balance enquiry completed. Ref: APG-BALANCE-001',
+      ],
+      [
+        'transaction_failed',
+        'Balance enquiry failed.',
+      ],
+      [
+        'transaction_pending_confirmation',
+        'Balance enquiry — outcome unconfirmed. ' +
+          'Check your transaction history. ' +
+          'Ref: APG-BALANCE-001',
+      ],
+    ])(
+      'balance enquiry %s notification omits fake zero amount',
+      async (type, expectedBody) => {
+        mockMessagingSend.mockResolvedValueOnce(
+          'fcm-message-balance-enquiry'
+        );
+
+        await sendTransactionNotification(
+          'agent-1',
+          {
+            type,
+            transaction: {
+              ...transaction(),
+              amount: '0.00',
+              transaction_type: 'balance_enquiry',
+              reference: 'APG-BALANCE-001',
+            },
+          }
+        );
+
+        expect(mockMessagingSend).toHaveBeenCalledTimes(1);
+
+        const message =
+          mockMessagingSend.mock.calls[0][0];
+
+        expect(message.notification.body).toBe(
+          expectedBody
+        );
+
+        expect(message.notification.body).not.toContain(
+          'GH₵0.00'
+        );
+
+        expect(message.data.amount).toBe(
+          '0.00'
+        );
+
+        if (
+          type ===
+          'transaction_pending_confirmation'
+        ) {
+          expect(message.notification.body).not.toContain(
+            'ask the customer'
+          );
+        }
+      }
+    );
+
+    test(
+      'monetary pending notification retains amount and customer verification advice',
+      async () => {
+        mockMessagingSend.mockResolvedValueOnce(
+          'fcm-message-cash-in'
+        );
+
+        await sendTransactionNotification(
+          'agent-1',
+          {
+            type:
+              'transaction_pending_confirmation',
+            transaction:
+              transaction(),
+          }
+        );
+
+        expect(mockMessagingSend).toHaveBeenCalledTimes(1);
+
+        const message =
+          mockMessagingSend.mock.calls[0][0];
+
+        expect(message.notification.body).toContain(
+          'GH₵25.00 cash in'
+        );
+
+        expect(message.notification.body).toContain(
+          'ask the customer before retrying'
+        );
+      }
+    );
+
   }
 );
