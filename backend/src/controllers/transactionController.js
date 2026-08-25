@@ -168,6 +168,18 @@ exports.initiateTransaction = async (req, res) => {
     );
   };
 
+  const isSameBusinessSimRole = (existing) => {
+    const existingRole = String(existing.sim_role || "")
+      .trim()
+      .toLowerCase();
+
+    if (existingRole.length === 0) {
+      return businessSimRole === "agent";
+    }
+
+    return existingRole === businessSimRole;
+  };
+
   const isSameClientOperation = (existing) =>
     existing.provider === provider &&
     existing.transaction_type === transaction_type &&
@@ -184,6 +196,7 @@ exports.initiateTransaction = async (req, res) => {
     String(existing.payment_reference || "") ===
       String(payment_reference || "") &&
     String(existing.merchant_id || "") === String(merchant_id || "") &&
+    isSameBusinessSimRole(existing) &&
     isSameSimIdentity(existing);
 
   try {
@@ -197,6 +210,7 @@ exports.initiateTransaction = async (req, res) => {
                 notes, fee, payment_reference, merchant_id,
                 sim_iccid, sim_slot,
                 installation_id, sim_subscription_id,
+                sim_role,
                 (
                   SELECT json_build_object(
                     'id', ut.id,
@@ -247,6 +261,7 @@ exports.initiateTransaction = async (req, res) => {
             transaction_id: existing.id,
             reference: existing.reference,
             status: existing.status,
+            sim_role: existing.sim_role || "agent",
             created_at: existing.created_at,
             ussd_template: existing.ussd_template || null,
             automation_params: {
@@ -397,6 +412,22 @@ exports.initiateTransaction = async (req, res) => {
       });
     }
 
+    // AgentPro recognizes EVD and Merchant as Business SIM roles,
+    // but their financial balance semantics are intentionally not inferred
+    // from the proven Agent ledger.
+    //
+    // Until dedicated role-specific accounting is validated, fail before
+    // USSD execution so provider money cannot move without a matching
+    // AgentPro financial model.
+    if (["evd", "merchant"].includes(businessSimRole)) {
+      return res.status(422).json({
+        success: false,
+        code: "SIM_ROLE_ACCOUNTING_NOT_CONFIGURED",
+        message:
+          "This SIM role is recognized, but its financial accounting has not yet been validated and enabled.",
+      });
+    }
+
     // Run independent transaction preflight queries concurrently.
     // These checks do not depend on one another, so awaiting them
     // sequentially only delays the USSD startup response.
@@ -522,13 +553,13 @@ exports.initiateTransaction = async (req, res) => {
           recipient_phone, recipient_name, biller_code, biller_name,
           account_number, notes, fee, payment_reference, merchant_id,
           sim_iccid, sim_slot, installation_id,
-          sim_subscription_id, client_operation_id
+          sim_subscription_id, sim_role, client_operation_id
         ) VALUES (
           $1, $2, $3, $4, $5, $6, 'initiated',
           $7, $8, $9, $10, $11, $12, $13, $14, $15,
-          $16, $17, $18, $19, $20, $21, $22, $23
+          $16, $17, $18, $19, $20, $21, $22, $23, $24
         )
-        RETURNING id, reference, status, created_at`,
+        RETURNING id, reference, status, sim_role, created_at`,
           [
             reference,
             agentId,
@@ -552,6 +583,7 @@ exports.initiateTransaction = async (req, res) => {
             sim_slot ?? null,
             installation_id || null,
             normalizeSlot(sim_subscription_id),
+            businessSimRole,
             client_operation_id || null,
           ],
         );
@@ -568,6 +600,7 @@ exports.initiateTransaction = async (req, res) => {
             reference,
             provider,
             transaction_type,
+            sim_role: businessSimRole,
             amount,
             customer_phone,
           },
@@ -594,6 +627,7 @@ exports.initiateTransaction = async (req, res) => {
                   notes, fee, payment_reference, merchant_id,
                   sim_iccid, sim_slot,
                 installation_id, sim_subscription_id,
+                  sim_role,
                   (
                     SELECT json_build_object(
                       'id', ut.id,
@@ -644,6 +678,7 @@ exports.initiateTransaction = async (req, res) => {
               transaction_id: existing.id,
               reference: existing.reference,
               status: existing.status,
+              sim_role: existing.sim_role || "agent",
               created_at: existing.created_at,
               ussd_template: existing.ussd_template || null,
               automation_params: {

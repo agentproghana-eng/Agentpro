@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const {
+  resolveSimRoleAssignment,
   verifyBusinessSimRoleAssignment,
 } = require("../../src/services/simRoleTrustService");
 
@@ -199,4 +200,84 @@ describe("Business SIM role server trust", () => {
 
     expect(queryFn).not.toHaveBeenCalled();
   });
+  test("resolves a trusted Subscriber role for balance reads", async () => {
+    const queryFn =
+      jest.fn().mockResolvedValue({
+        rows: [
+          assignment({
+            purpose: "subscriber",
+          }),
+        ],
+      });
+
+    const result =
+      await resolveSimRoleAssignment({
+        queryFn,
+        userId: "user-1",
+        provider: "mtn",
+        simSlot: 0,
+        simIccid: "SIM-A",
+        installationId:
+          fallbackInstallation,
+        simSubscriptionId: 9,
+      });
+
+    expect(result.ok).toBe(true);
+    expect(result.role).toBe(
+      "subscriber"
+    );
+  });
+
+  test("rejects EVD assignment outside MTN", async () => {
+    const queryFn =
+      jest.fn().mockResolvedValue({
+        rows: [
+          assignment({
+            provider: "telecel",
+            purpose: "evd",
+          }),
+        ],
+      });
+
+    const result =
+      await resolveSimRoleAssignment({
+        queryFn,
+        userId: "user-1",
+        provider: "telecel",
+        simSlot: 0,
+        simIccid: "SIM-A",
+        installationId:
+          fallbackInstallation,
+        simSubscriptionId: 9,
+      });
+
+    expect(result.ok).toBe(false);
+
+    expect(result.code).toBe(
+      "SIM_ROLE_ASSIGNMENT_INVALID"
+    );
+  });
+
+  test("role resolver rejects a different physical ICCID", async () => {
+    const queryFn =
+      jest.fn().mockResolvedValue({
+        rows: [assignment()],
+      });
+
+    const result =
+      await resolveSimRoleAssignment({
+        queryFn,
+        userId: "user-1",
+        provider: "mtn",
+        simSlot: 0,
+        simIccid: "SIM-B",
+      });
+
+    expect(result.ok).toBe(false);
+
+    expect(result.code).toBe(
+      "SIM_ROLE_IDENTITY_MISMATCH"
+    );
+  });
+
 });

@@ -34,7 +34,7 @@ function normalizeOptionalNonNegativeInteger(value, fieldName) {
   if (!Number.isInteger(normalized) || normalized < 0) {
     throw financialIdentityError(
       `${fieldName} must be a non-negative integer`,
-      "SIM_IDENTITY_INVALID"
+      "SIM_IDENTITY_INVALID",
     );
   }
 
@@ -48,7 +48,7 @@ async function getOrCreateAgentCashBalance(client, agentId) {
      )
      VALUES ($1)
      ON CONFLICT (agent_id) DO NOTHING`,
-    [agentId]
+    [agentId],
   );
 
   const result = await client.query(
@@ -56,7 +56,7 @@ async function getOrCreateAgentCashBalance(client, agentId) {
      FROM agent_cash_balances
      WHERE agent_id = $1
      FOR UPDATE`,
-    [agentId]
+    [agentId],
   );
 
   if (result.rows.length !== 1) {
@@ -68,14 +68,7 @@ async function getOrCreateAgentCashBalance(client, agentId) {
 
 async function getOrCreateAgentSimWallet(
   client,
-  {
-    agentId,
-    provider,
-    simIccid,
-    installationId,
-    simSubscriptionId,
-    simSlot
-  }
+  { agentId, provider, simIccid, installationId, simSubscriptionId, simSlot },
 ) {
   if (!agentId) {
     throw new Error("agentId is required to resolve a SIM wallet");
@@ -88,17 +81,15 @@ async function getOrCreateAgentSimWallet(
   const normalizedIccid = normalizeOptionalText(simIccid);
   const normalizedInstallationId = normalizeOptionalText(installationId);
 
-  const normalizedSubscriptionId =
-    normalizeOptionalNonNegativeInteger(
-      simSubscriptionId,
-      "sim_subscription_id"
-    );
+  const normalizedSubscriptionId = normalizeOptionalNonNegativeInteger(
+    simSubscriptionId,
+    "sim_subscription_id",
+  );
 
-  const normalizedSlot =
-    normalizeOptionalNonNegativeInteger(
-      simSlot,
-      "sim_slot"
-    );
+  const normalizedSlot = normalizeOptionalNonNegativeInteger(
+    simSlot,
+    "sim_slot",
+  );
 
   // ----------------------------------------------------------
   // IDENTIFIED PHYSICAL SIM
@@ -112,6 +103,7 @@ async function getOrCreateAgentSimWallet(
       `INSERT INTO agent_sim_wallets (
          agent_id,
          provider,
+         sim_role,
          identity_status,
          sim_iccid,
          installation_id,
@@ -121,6 +113,7 @@ async function getOrCreateAgentSimWallet(
        VALUES (
          $1,
          $2,
+         'agent',
          'identified',
          $3,
          $4,
@@ -134,8 +127,8 @@ async function getOrCreateAgentSimWallet(
         normalizedIccid,
         normalizedInstallationId,
         normalizedSubscriptionId,
-        normalizedSlot
-      ]
+        normalizedSlot,
+      ],
     );
 
     const result = await client.query(
@@ -143,14 +136,11 @@ async function getOrCreateAgentSimWallet(
        FROM agent_sim_wallets
        WHERE agent_id = $1
          AND provider = $2
+         AND sim_role = 'agent'
          AND identity_status = 'identified'
          AND sim_iccid = $3
        FOR UPDATE`,
-      [
-        agentId,
-        provider,
-        normalizedIccid
-      ]
+      [agentId, provider, normalizedIccid],
     );
 
     if (result.rows.length !== 1) {
@@ -169,13 +159,14 @@ async function getOrCreateAgentSimWallet(
            last_known_sim_slot =
              COALESCE($3, last_known_sim_slot)
        WHERE id = $4
+         AND sim_role = 'agent'
        RETURNING *`,
       [
         normalizedInstallationId,
         normalizedSubscriptionId,
         normalizedSlot,
-        wallet.id
-      ]
+        wallet.id,
+      ],
     );
 
     if (updated.rows.length !== 1) {
@@ -203,7 +194,7 @@ async function getOrCreateAgentSimWallet(
     throw financialIdentityError(
       "A physical SIM ICCID or complete unresolved SIM identity " +
         "(installation_id, sim_subscription_id, sim_slot) is required " +
-        "for electronic balance accounting"
+        "for electronic balance accounting",
     );
   }
 
@@ -211,6 +202,7 @@ async function getOrCreateAgentSimWallet(
     `INSERT INTO agent_sim_wallets (
        agent_id,
        provider,
+       sim_role,
        identity_status,
        installation_id,
        sim_subscription_id,
@@ -219,6 +211,7 @@ async function getOrCreateAgentSimWallet(
      VALUES (
        $1,
        $2,
+       'agent',
        'unresolved',
        $3,
        $4,
@@ -230,8 +223,8 @@ async function getOrCreateAgentSimWallet(
       provider,
       normalizedInstallationId,
       normalizedSubscriptionId,
-      normalizedSlot
-    ]
+      normalizedSlot,
+    ],
   );
 
   const result = await client.query(
@@ -239,6 +232,7 @@ async function getOrCreateAgentSimWallet(
      FROM agent_sim_wallets
      WHERE agent_id = $1
        AND provider = $2
+       AND sim_role = 'agent'
        AND identity_status = 'unresolved'
        AND installation_id = $3
        AND sim_subscription_id = $4
@@ -249,8 +243,8 @@ async function getOrCreateAgentSimWallet(
       provider,
       normalizedInstallationId,
       normalizedSubscriptionId,
-      normalizedSlot
-    ]
+      normalizedSlot,
+    ],
   );
 
   if (result.rows.length !== 1) {
@@ -262,5 +256,5 @@ async function getOrCreateAgentSimWallet(
 
 module.exports = {
   getOrCreateAgentCashBalance,
-  getOrCreateAgentSimWallet
+  getOrCreateAgentSimWallet,
 };

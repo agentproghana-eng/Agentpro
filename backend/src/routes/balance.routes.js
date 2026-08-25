@@ -174,7 +174,7 @@ router.post(
       .withMessage("notes is too long")
   ],
   handleValidation,
-  authorize("agent"),
+  authorize("agent", "business_owner", "manager"),
   balanceController.recordFloatReceived
 );
 // Retired legacy write endpoint.
@@ -194,7 +194,11 @@ router.post(
     });
   }
 );
-router.post("/cash-adjustment", authorize("agent"), balanceController.submitCashAdjustment);
+router.post(
+  "/cash-adjustment",
+  authorize("agent", "business_owner", "manager"),
+  balanceController.submitCashAdjustment
+);
 router.patch("/cash-adjustment/:movement_id/review", authorize("superuser", "business_owner", "manager"), balanceController.reviewCashAdjustment);
 
 module.exports = router;
