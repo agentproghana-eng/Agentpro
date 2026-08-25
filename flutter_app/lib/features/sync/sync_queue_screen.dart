@@ -5,6 +5,7 @@ import '../../core/auth/auth_bloc.dart';
 import '../../core/services/offline_queue_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/utils/transaction_labels.dart';
 
 class SyncQueueScreen extends StatefulWidget {
   const SyncQueueScreen({super.key});
@@ -100,10 +101,13 @@ class _SyncQueueScreenState extends State<SyncQueueScreen> {
                           )
                         : <String, dynamic>{};
 
-                    final type = requestFields['transaction_type']
-                            ?.toString()
-                            .replaceAll('_', ' ') ??
-                        'Transaction';
+                    final rawType =
+                        requestFields['transaction_type']?.toString() ?? '';
+                    final provider =
+                        requestFields['provider']?.toString() ?? '';
+                    final type = rawType.isEmpty
+                        ? 'Transaction'
+                        : transactionTypeLabel(rawType, provider);
 
                     final simLabel = OfflineQueueService.simLabel(transaction);
 

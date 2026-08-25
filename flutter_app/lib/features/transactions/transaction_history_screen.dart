@@ -67,11 +67,11 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     {'value': 'send_money', 'label': 'Send'},
     {'value': 'airtime', 'label': 'Airtime'},
     {'value': 'data_bundle', 'label': 'Data'},
-    {'value': 'merchant_payment', 'label': 'Merchant'},
+    {'value': 'merchant_payment', 'label': 'Pay to Merchant'},
     {'value': 'pay_to_agent', 'label': 'Pay to Agent'},
-    {'value': 'balance_enquiry', 'label': 'Balance'},
-    {'value': 'business_deposit', 'label': 'Business In'},
-    {'value': 'business_withdrawal', 'label': 'Business Out'},
+    {'value': 'balance_enquiry', 'label': 'Check Balance'},
+    {'value': 'business_deposit', 'label': 'Business Deposit'},
+    {'value': 'business_withdrawal', 'label': 'Business Withdrawal'},
   ];
 
   final _statuses = const [

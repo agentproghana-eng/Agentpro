@@ -4,6 +4,37 @@ import '../../core/services/storage_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_colors.dart';
 
+Future<bool> confirmSignOut(BuildContext context) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Sign Out'),
+      content: const Text(
+        'Are you sure you want to sign out?',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            Navigator.of(dialogContext).pop(false);
+          },
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.errorColor,
+          ),
+          onPressed: () {
+            Navigator.of(dialogContext).pop(true);
+          },
+          child: const Text('Sign Out'),
+        ),
+      ],
+    ),
+  );
+
+  return confirmed ?? false;
+}
+
 /// Section header for a More/Settings-style grouped list.
 class MoreGroupLabel extends StatelessWidget {
   final String label;

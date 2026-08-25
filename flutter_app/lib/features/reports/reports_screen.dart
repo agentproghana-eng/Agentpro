@@ -64,16 +64,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
     {'value': 'cash_in', 'label': 'Cash In'},
     {'value': 'cash_out', 'label': 'Cash Out'},
     {'value': 'send_money', 'label': 'Send Money'},
-    {'value': 'merchant_payment', 'label': 'Merchant Payment'},
+    {'value': 'merchant_payment', 'label': 'Pay to Merchant'},
     {'value': 'pay_to_agent', 'label': 'Pay to Agent'},
     {'value': 'airtime', 'label': 'Airtime'},
     {'value': 'data_bundle', 'label': 'Data Bundle'},
-    {'value': 'balance_enquiry', 'label': 'Balance Enquiry'},
+    {'value': 'balance_enquiry', 'label': 'Check Balance'},
     {'value': 'mini_statement', 'label': 'Mini Statement'},
     {'value': 'reversal', 'label': 'Reversal'},
     {'value': 'commission_balance', 'label': 'Commission Balance'},
     {'value': 'cash_in_commission', 'label': 'Cash In Commission'},
-    {'value': 'commission_transfer', 'label': 'Commission Transfer'},
+    {'value': 'commission_transfer', 'label': 'Commission to Float'},
   ];
 
   final _statuses = const [

@@ -311,32 +311,72 @@ void main() {
 
         expect(
           navigation,
-          contains('router.go(route)'),
+          contains("router.go('/')"),
           reason:
-              'Non-transaction notification destinations should retain direct navigation.',
+              'Non-transaction notification destinations must establish authenticated home first.',
+        );
+
+        expect(
+          navigation,
+          contains('router.push<void>(route)'),
+          reason:
+              'Notification destinations must be pushed above a safe parent route.',
+        );
+
+        final home = navigation.indexOf(
+          "router.go('/')",
+        );
+
+        final firstFrame = navigation.indexOf(
+          'await WidgetsBinding.instance.endOfFrame',
+        );
+
+        final firstPush = navigation.indexOf(
+          'router.push<void>(route)',
+        );
+
+        expect(
+          home,
+          greaterThanOrEqualTo(0),
+          reason:
+              'Non-transaction notification navigation must establish authenticated home.',
+        );
+
+        expect(
+          home,
+          lessThan(firstFrame),
+          reason:
+              'Authenticated home must be established before the notification frame wait.',
+        );
+
+        expect(
+          firstFrame,
+          lessThan(firstPush),
+          reason:
+              'A non-transaction notification destination must be pushed only after home is committed.',
         );
 
         final history = navigation.indexOf(
           "router.go('/transactions/history')",
         );
 
-        final frame = navigation.indexOf(
+        final transactionFrame = navigation.lastIndexOf(
           'await WidgetsBinding.instance.endOfFrame',
         );
 
-        final detail = navigation.indexOf(
+        final detail = navigation.lastIndexOf(
           'router.push<void>(route)',
         );
 
         expect(
           history,
-          lessThan(frame),
+          lessThan(transactionFrame),
           reason:
-              'History navigation must happen before waiting for the frame.',
+              'History navigation must happen before its transaction-detail frame wait.',
         );
 
         expect(
-          frame,
+          transactionFrame,
           lessThan(detail),
           reason:
               'Transaction Details must be pushed only after History is committed.',

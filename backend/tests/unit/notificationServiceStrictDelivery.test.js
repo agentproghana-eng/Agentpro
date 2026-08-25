@@ -373,7 +373,7 @@ describe(
           mockMessagingSend.mock.calls[0][0];
 
         expect(message.notification.body).toContain(
-          'GH₵25.00 cash in'
+          'GH₵25.00 Cash In'
         );
 
         expect(message.notification.body).toContain(

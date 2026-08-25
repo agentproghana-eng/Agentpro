@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../core/api/api_client.dart';
 import 'transaction_reference_display.dart';
+import '../../shared/utils/transaction_labels.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
 import '../../shared/theme/app_colors.dart';
@@ -67,14 +68,16 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                               fontSize: 32),
                           const SizedBox(height: 4),
                           Text(
-                              (_tx!['transaction_type'] ?? '')
-                                  .toString()
-                                  .replaceAll('_', ' ')
-                                  .toUpperCase(),
-                              style: TextStyle(
-                                  color: context.appSecondaryText,
-                                  letterSpacing: 1,
-                                  fontSize: 12)),
+                            transactionTypeLabel(
+                              (_tx!['transaction_type'] ?? '').toString(),
+                              (_tx!['provider'] ?? '').toString(),
+                            ),
+                            style: TextStyle(
+                              color: context.appSecondaryText,
+                              letterSpacing: 1,
+                              fontSize: 12,
+                            ),
+                          ),
                           const SizedBox(height: 8),
                           ProviderBadge(provider: _tx!['provider'] ?? ''),
                         ]),

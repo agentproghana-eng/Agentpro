@@ -148,7 +148,15 @@ class _ManagerMoreTab extends StatelessWidget {
           MoreTile(
             Icons.logout,
             'Sign Out',
-            () => context.read<AuthBloc>().add(AuthLogoutEvent()),
+            () async {
+              final confirmed = await confirmSignOut(context);
+
+              if (!context.mounted || !confirmed) {
+                return;
+              }
+
+              context.read<AuthBloc>().add(AuthLogoutEvent());
+            },
             color: AppTheme.errorColor,
           ),
         ],
