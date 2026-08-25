@@ -589,6 +589,19 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     return '${labels[_sortBy] ?? 'Date'} $arrow';
   }
 
+  void _leaveHistory() {
+    if (Navigator.of(context).canPop()) {
+      context.pop();
+      return;
+    }
+
+    // Transaction History can intentionally become the navigation root
+    // when a transaction notification is opened. In that case Android
+    // system Back must return to the authenticated app home instead of
+    // closing/collapsing AgentPro.
+    context.go('/');
+  }
+
   @override
   void dispose() {
     _searchDebounce?.cancel();
@@ -678,253 +691,269 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Transaction History')),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-            child: TextField(
-              controller: _searchController,
-              onChanged: _onSearchChanged,
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                hintText: 'Search phone, customer or reference',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchController.text.isEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: 'Clear search',
-                        onPressed: () {
-                          _searchDebounce?.cancel();
-                          _searchController.clear();
-                          setState(() {});
-                          _load();
-                        },
-                        icon: const Icon(Icons.close),
-                      ),
-                filled: true,
-                fillColor: context.appSurface,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(13),
-                  borderSide: BorderSide.none,
+    return PopScope(
+      canPop: Navigator.of(context).canPop(),
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          context.go('/');
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            tooltip: 'Back',
+            onPressed: _leaveHistory,
+            icon: const Icon(Icons.arrow_back),
+          ),
+          title: const Text('Transaction History'),
+        ),
+        body: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+              child: TextField(
+                controller: _searchController,
+                onChanged: _onSearchChanged,
+                textInputAction: TextInputAction.search,
+                decoration: InputDecoration(
+                  hintText: 'Search phone, customer or reference',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _searchController.text.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: 'Clear search',
+                          onPressed: () {
+                            _searchDebounce?.cancel();
+                            _searchController.clear();
+                            setState(() {});
+                            _load();
+                          },
+                          icon: const Icon(Icons.close),
+                        ),
+                  filled: true,
+                  fillColor: context.appSurface,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(13),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _showAdvancedFilters,
-                    icon: const Icon(Icons.tune, size: 18),
-                    label: Text(
-                      _activeFilterCount == 0
-                          ? 'Status & Date'
-                          : 'Filters ($_activeFilterCount)',
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _showAdvancedFilters,
+                      icon: const Icon(Icons.tune, size: 18),
+                      label: Text(
+                        _activeFilterCount == 0
+                            ? 'Status & Date'
+                            : 'Filters ($_activeFilterCount)',
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _showSortSheet,
-                    icon: const Icon(Icons.swap_vert, size: 18),
-                    label: Text(_sortLabel()),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _showSortSheet,
+                      icon: const Icon(Icons.swap_vert, size: 18),
+                      label: Text(_sortLabel()),
+                    ),
                   ),
-                ),
-                if (_activeFilterCount > 0 ||
-                    _searchController.text.isNotEmpty) ...[
-                  const SizedBox(width: 4),
-                  IconButton(
-                    tooltip: 'Clear all filters',
-                    onPressed: _clearAllFilters,
-                    icon: const Icon(Icons.filter_alt_off_outlined),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (_statusFilter != 'all' || _dateRange != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 2, 12, 4),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  children: [
-                    if (_statusFilter != 'all')
-                      InputChip(
-                        label: Text(
-                          _statuses.firstWhere(
-                            (item) => item['value'] == _statusFilter,
-                          )['label']!,
-                        ),
-                        onDeleted: () {
-                          setState(() => _statusFilter = 'all');
-                          _load();
-                        },
-                      ),
-                    if (_dateRange != null)
-                      InputChip(
-                        label: Text(_dateRangeLabel),
-                        onDeleted: () {
-                          setState(() => _dateRange = null);
-                          _load();
-                        },
-                      ),
+                  if (_activeFilterCount > 0 ||
+                      _searchController.text.isNotEmpty) ...[
+                    const SizedBox(width: 4),
+                    IconButton(
+                      tooltip: 'Clear all filters',
+                      onPressed: _clearAllFilters,
+                      icon: const Icon(Icons.filter_alt_off_outlined),
+                    ),
                   ],
-                ),
+                ],
               ),
             ),
-          _filterSectionLabel('TYPE'),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: _filterPillRow(
-              _types,
-              _typeFilter,
-              (v) {
-                setState(() => _typeFilter = v);
-                _load();
-              },
-              scrollable: true,
-            ),
-          ),
-          _filterSectionLabel('PROVIDER'),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: _filterPillRow(
-              _providers,
-              _providerFilter,
-              (v) {
-                setState(() => _providerFilter = v);
-                _load();
-              },
-              colorFor: AppTheme.providerColor,
-            ),
-          ),
-          if (_isAgent && _simCards.length >= 2) ...[
-            _filterSectionLabel('SIM'),
+            if (_statusFilter != 'all' || _dateRange != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 2, 12, 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      if (_statusFilter != 'all')
+                        InputChip(
+                          label: Text(
+                            _statuses.firstWhere(
+                              (item) => item['value'] == _statusFilter,
+                            )['label']!,
+                          ),
+                          onDeleted: () {
+                            setState(() => _statusFilter = 'all');
+                            _load();
+                          },
+                        ),
+                      if (_dateRange != null)
+                        InputChip(
+                          label: Text(_dateRangeLabel),
+                          onDeleted: () {
+                            setState(() => _dateRange = null);
+                            _load();
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            _filterSectionLabel('TYPE'),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: _filterPillRow(
-                [
-                  {'value': 'all', 'label': 'All'},
-                  for (final c in _simCards)
-                    {
-                      'value': c.iccid,
-                      'label':
-                          'SIM ${c.slot + 1} · ${_simNetworkLabel(c.network)}',
-                    },
-                ],
-                _simIccidFilter ?? 'all',
+                _types,
+                _typeFilter,
                 (v) {
-                  setState(() => _simIccidFilter = v == 'all' ? null : v);
+                  setState(() => _typeFilter = v);
                   _load();
                 },
                 scrollable: true,
               ),
             ),
-          ],
-          if (_showBranchFilter && _branches.isNotEmpty) ...[
-            _filterSectionLabel('BRANCH'),
+            _filterSectionLabel('PROVIDER'),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: _filterPillRow(
+                _providers,
+                _providerFilter,
+                (v) {
+                  setState(() => _providerFilter = v);
+                  _load();
+                },
+                colorFor: AppTheme.providerColor,
+              ),
+            ),
+            if (_isAgent && _simCards.length >= 2) ...[
+              _filterSectionLabel('SIM'),
+              Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: context.appSurface,
-                  borderRadius: BorderRadius.circular(8),
+                child: _filterPillRow(
+                  [
+                    {'value': 'all', 'label': 'All'},
+                    for (final c in _simCards)
+                      {
+                        'value': c.iccid,
+                        'label':
+                            'SIM ${c.slot + 1} · ${_simNetworkLabel(c.network)}',
+                      },
+                  ],
+                  _simIccidFilter ?? 'all',
+                  (v) {
+                    setState(() => _simIccidFilter = v == 'all' ? null : v);
+                    _load();
+                  },
+                  scrollable: true,
                 ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String?>(
-                    value: _branchFilter,
-                    isExpanded: true,
-                    hint: const Text(
-                      'All Branches',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                    items: [
-                      const DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text(
-                          'All Branches',
-                          style: TextStyle(fontSize: 12),
-                        ),
+              ),
+            ],
+            if (_showBranchFilter && _branches.isNotEmpty) ...[
+              _filterSectionLabel('BRANCH'),
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: context.appSurface,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String?>(
+                      value: _branchFilter,
+                      isExpanded: true,
+                      hint: const Text(
+                        'All Branches',
+                        style: TextStyle(fontSize: 12),
                       ),
-                      for (final b in _branches)
-                        DropdownMenuItem<String?>(
-                          value: b['id'] as String,
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
                           child: Text(
-                            b['name'] ?? '',
-                            style: const TextStyle(fontSize: 12),
+                            'All Branches',
+                            style: TextStyle(fontSize: 12),
                           ),
                         ),
-                    ],
-                    onChanged: (v) {
-                      setState(() => _branchFilter = v);
-                      _load();
-                    },
+                        for (final b in _branches)
+                          DropdownMenuItem<String?>(
+                            value: b['id'] as String,
+                            child: Text(
+                              b['name'] ?? '',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                      ],
+                      onChanged: (v) {
+                        setState(() => _branchFilter = v);
+                        _load();
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ],
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  _loading
+                      ? 'Loading transactions…'
+                      : '$_total ${_total == 1 ? 'transaction' : 'transactions'}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: context.appSecondaryText,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
             ),
-          ],
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                _loading
-                    ? 'Loading transactions…'
-                    : '$_total ${_total == 1 ? 'transaction' : 'transactions'}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: context.appSecondaryText,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _error != null && _transactions.isEmpty
-                    ? _BusinessHistoryErrorState(onRetry: _load)
-                    : _transactions.isEmpty
-                        ? _BusinessHistoryEmptyState(
-                            filtered: _hasAnyFiltering,
-                            onClear: _clearAllFilters,
-                          )
-                        : RefreshIndicator(
-                            onRefresh: _load,
-                            child: ListView.builder(
-                              controller: _scrollController,
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              padding: const EdgeInsets.all(12),
-                              itemCount:
-                                  _transactions.length + (_hasMore ? 1 : 0),
-                              itemBuilder: (_, i) {
-                                if (i >= _transactions.length) {
-                                  return const Padding(
-                                    padding: EdgeInsets.all(16),
-                                    child: Center(
-                                      child: CircularProgressIndicator(),
-                                    ),
-                                  );
-                                }
-                                final tx =
-                                    _transactions[i] as Map<String, dynamic>;
-                                return _TransactionRow(tx: tx);
-                              },
+            const Divider(height: 1),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _error != null && _transactions.isEmpty
+                      ? _BusinessHistoryErrorState(onRetry: _load)
+                      : _transactions.isEmpty
+                          ? _BusinessHistoryEmptyState(
+                              filtered: _hasAnyFiltering,
+                              onClear: _clearAllFilters,
+                            )
+                          : RefreshIndicator(
+                              onRefresh: _load,
+                              child: ListView.builder(
+                                controller: _scrollController,
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                padding: const EdgeInsets.all(12),
+                                itemCount:
+                                    _transactions.length + (_hasMore ? 1 : 0),
+                                itemBuilder: (_, i) {
+                                  if (i >= _transactions.length) {
+                                    return const Padding(
+                                      padding: EdgeInsets.all(16),
+                                      child: Center(
+                                        child: CircularProgressIndicator(),
+                                      ),
+                                    );
+                                  }
+                                  final tx =
+                                      _transactions[i] as Map<String, dynamic>;
+                                  return _TransactionRow(tx: tx);
+                                },
+                              ),
                             ),
-                          ),
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }

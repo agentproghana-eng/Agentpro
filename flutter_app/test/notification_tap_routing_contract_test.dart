@@ -345,6 +345,62 @@ void main() {
     );
 
     test(
+      'transaction History root has a safe dashboard back fallback',
+      () {
+        final source = _readSource(
+          'lib/features/transactions/transaction_history_screen.dart',
+        );
+
+        expect(
+          source,
+          contains('void _leaveHistory()'),
+          reason:
+              'Transaction History must define one consistent visible-back policy.',
+        );
+
+        expect(
+          source,
+          contains('Navigator.of(context).canPop()'),
+          reason:
+              'History must preserve normal stack popping when a parent page exists.',
+        );
+
+        expect(
+          source,
+          contains('context.pop()'),
+          reason:
+              'Normal in-app History navigation must still return to its caller.',
+        );
+
+        expect(
+          source,
+          contains("context.go('/')"),
+          reason:
+              'Root History must fall back through the authenticated home redirect.',
+        );
+
+        expect(
+          source,
+          contains('PopScope('),
+          reason: 'Android system Back must use the same safe root fallback.',
+        );
+
+        expect(
+          source,
+          contains('onPopInvokedWithResult:'),
+          reason:
+              'A blocked root pop must be converted into authenticated home navigation.',
+        );
+
+        expect(
+          source,
+          contains('onPressed: _leaveHistory'),
+          reason: 'The visible AppBar back control must use the same policy.',
+        );
+      },
+    );
+
+    test(
       'notification navigation subscriptions are disposed with the app',
       () {
         final source = _readSource('lib/main.dart');
