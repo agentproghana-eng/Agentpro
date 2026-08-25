@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -73,10 +74,12 @@ void _runNonBlocking(
   Future<dynamic> future,
 ) {
   unawaited(
-    future.catchError((Object error, StackTrace stackTrace) {
-      debugPrint(
-        '$serviceName initialization failed: $error\n$stackTrace',
-      );
+    future.catchError((Object _, StackTrace __) {
+      if (kDebugMode) {
+        debugPrint(
+          '$serviceName initialization failed',
+        );
+      }
 
       return null;
     }),
