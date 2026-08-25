@@ -422,7 +422,13 @@ class _PersonalPostCard extends StatelessWidget {
             ]),
             const SizedBox(width: 18),
             InkWell(
-              onTap: () => Share.share('${post['content'] ?? 'Voice note'}'),
+              onTap: () async {
+                await SharePlus.instance.share(
+                  ShareParams(
+                    text: '${post['content'] ?? 'Voice note'}',
+                  ),
+                );
+              },
               child: Icon(Icons.share_outlined,
                   size: 20, color: context.appSecondaryText),
             ),
