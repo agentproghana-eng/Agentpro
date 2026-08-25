@@ -639,7 +639,7 @@ it.each([
 it('still replays a historical Telecel Agent Pay to Agent before enforcing the MTN-only guard', async () => {
   const existing = existingTransaction({
     provider: 'telecel',
-    transaction_type: 'bill_payment',
+    transaction_type: 'pay_to_agent',
   });
 
   mockQuery.mockResolvedValueOnce({
@@ -648,7 +648,7 @@ it('still replays a historical Telecel Agent Pay to Agent before enforcing the M
 
   const req = makeReq({
     provider: 'telecel',
-    transaction_type: 'bill_payment',
+    transaction_type: 'pay_to_agent',
   });
 
   const res = makeRes();
@@ -682,7 +682,7 @@ it.each([
   async (provider) => {
     const req = makeReq({
       provider,
-      transaction_type: 'bill_payment',
+      transaction_type: 'pay_to_agent',
       client_operation_id: null,
     });
 
@@ -1941,7 +1941,7 @@ it(
     const initiated = existingTransaction({
       status: 'initiated',
       provider: 'mtn',
-      transaction_type: 'bill_payment',
+      transaction_type: 'pay_to_agent',
       amount: '100.00',
       customer_phone: '0240000000',
       payment_reference: 'FLOAT EXCHANGE',

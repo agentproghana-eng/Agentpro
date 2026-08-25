@@ -17,7 +17,7 @@ const CUSTOMER_VOLUME_TRANSACTION_TYPES = Object.freeze([
   'send_money',
   'airtime',
   'data_bundle',
-  'bill_payment',
+  'pay_to_agent',
 ]);
 
 // Successful principal amounts that represent money spent by the

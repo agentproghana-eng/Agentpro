@@ -183,7 +183,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // number - this fully replaces what used to be a biller-code-style
   // Bill Payment form. MTN-only for both.
   bool get _needsReference =>
-      ['bill_payment', 'merchant_payment'].contains(widget.transactionType);
+      ['pay_to_agent', 'merchant_payment'].contains(widget.transactionType);
   bool get _needsMerchantId => widget.transactionType == 'merchant_payment';
 
   bool get _isTelecelDataBundle =>

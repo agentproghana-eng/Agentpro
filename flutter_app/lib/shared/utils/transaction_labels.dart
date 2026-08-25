@@ -52,8 +52,10 @@ String transactionTypeLabel(String type, String provider) {
       return 'Send Money';
     case 'merchant_payment':
       return 'Pay to Merchant';
-    case 'bill_payment':
+    case 'pay_to_agent':
       return 'Pay to Agent';
+    case 'bill_payment':
+      return 'Bill Payment';
     case 'airtime':
       return 'Airtime';
     case 'data_bundle':

@@ -384,7 +384,7 @@ describe("Quick Action catalog controller behavior", () => {
         },
         {
           provider: "mtn",
-          transaction_type: "bill_payment",
+          transaction_type: "pay_to_agent",
           display_label: "Bill Payment",
           bundle_category: null,
           recipient_mode: null,
@@ -419,7 +419,7 @@ describe("Quick Action catalog controller behavior", () => {
         label: "Cash In",
       },
       {
-        type: "bill_payment",
+        type: "pay_to_agent",
         label: "Pay to Agent",
       },
     ]);

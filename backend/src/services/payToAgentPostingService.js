@@ -16,7 +16,7 @@ function money(value) {
 // Posts the agent-side accounting effect of a confirmed MTN Pay to Agent.
 //
 // Internal transaction type:
-//   bill_payment
+//   pay_to_agent
 //
 // User-facing name:
 //   Pay to Agent
@@ -53,9 +53,9 @@ async function postPayToAgent(
     );
   }
 
-  if (transaction.transaction_type !== "bill_payment") {
+  if (transaction.transaction_type !== "pay_to_agent") {
     throw new Error(
-      "postPayToAgent can only post bill_payment transactions"
+      "postPayToAgent can only post pay_to_agent transactions"
     );
   }
 
@@ -244,7 +244,7 @@ async function postPayToAgent(
      ) VALUES (
        $1,
        $2,
-       'bill_payment',
+       'pay_to_agent',
        'e_float',
        $3,
        $4,
@@ -301,7 +301,7 @@ async function postPayToAgent(
      ) VALUES (
        $1,
        $2,
-       'bill_payment',
+       'pay_to_agent',
        'cash_at_hand',
        $3,
        $4,

@@ -289,7 +289,7 @@ String quickActionDisplayLabel({
   // Provider/accounting terminology wins over a stale or generic
   // catalog label. Examples:
   // - MTN send_money -> Cash In
-  // - bill_payment -> Pay to Agent
+  // - pay_to_agent -> Pay to Agent
   // - Telecel/AT Money cash_in -> Deposit
   if (semanticLabel != genericLabel) {
     return semanticLabel;

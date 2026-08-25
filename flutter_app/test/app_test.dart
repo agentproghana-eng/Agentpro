@@ -394,7 +394,7 @@ void main() {
         'cash_out',
         'send_money',
         'merchant_payment',
-        'bill_payment',
+        'pay_to_agent',
         'airtime',
         'data_bundle',
         'balance_enquiry',

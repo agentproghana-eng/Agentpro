@@ -320,7 +320,7 @@ exports.initiateTransaction = async (req, res) => {
     //
     // This intentionally runs AFTER idempotent replay resolution so an
     // already-existing historical canonical operation can still replay safely.
-    if (transaction_type === "bill_payment" && provider !== "mtn") {
+    if (transaction_type === "pay_to_agent" && provider !== "mtn") {
       return res.status(422).json({
         success: false,
         code: "PAY_TO_AGENT_MTN_ONLY",
@@ -961,7 +961,7 @@ exports.completeTransaction = async (req, res) => {
           const posting = await postWorkingFloatTransfer(client, tx, agentId);
 
           tx.sim_wallet_id = posting.simWalletId;
-        } else if (tx.transaction_type === "bill_payment") {
+        } else if (tx.transaction_type === "pay_to_agent") {
           // MTN Pay to Agent converts e-cash into physical cash:
           //
           //   exact SIM e-Float  - amount

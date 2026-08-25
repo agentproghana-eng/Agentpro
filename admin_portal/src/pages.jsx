@@ -2412,7 +2412,7 @@ export function CommissionsPage() {
                     <option value="cash_out">Cash Out</option>
                     <option value="send_money">Send Money</option>
                     <option value="merchant_payment">Merchant Payment</option>
-                    <option value="bill_payment">Bill Payment</option>
+                    <option value="pay_to_agent">Pay to Agent</option>
                     <option value="airtime">Airtime</option>
                     <option value="data_bundle">Data Bundle</option>
                   </select>

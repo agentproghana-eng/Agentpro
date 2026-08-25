@@ -44,7 +44,7 @@ const NO_AMOUNT_BUSINESS_TYPES = new Set([
 const CUSTOMER_PHONE_BUSINESS_TYPES = new Set([
   "cash_in",
   "cash_out",
-  "bill_payment",
+  "pay_to_agent",
   "airtime",
   "data_bundle",
   "business_deposit",
@@ -173,7 +173,7 @@ router.post(
     body("payment_reference").custom(
       requireNonBlankStringWhen(
         (payload) =>
-          payload?.transaction_type === "bill_payment" ||
+          payload?.transaction_type === "pay_to_agent" ||
           payload?.transaction_type === "merchant_payment",
         "Reference is required for this transaction type",
       ),
