@@ -211,7 +211,7 @@ describe('Subscription controller contracts', () => {
       'personal_subscription_payments',
     );
     expect(pendingSql).toContain(
-      "status = 'pending'",
+      "status IN ('pending', 'submitted')",
     );
     expect(pendingParams).toEqual([
       'personal-user-1',
@@ -493,6 +493,7 @@ describe('Subscription controller contracts', () => {
         'personal-user-1',
         'EXPIRED-RENEWAL-REF',
         '0240000000',
+        null,
       ]);
 
       expect(
@@ -603,7 +604,7 @@ describe('Subscription controller contracts', () => {
           .find(
             ([sql]) =>
               String(sql).includes(
-                "UPDATE personal_subscriptions SET plan = 'paid'"
+                "UPDATE personal_subscriptions"
               ),
           );
 

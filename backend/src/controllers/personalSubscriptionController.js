@@ -2,6 +2,7 @@ const { query, withTransaction } = require('../config/database');
 const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
 const { sendToUser } = require('../services/notificationService');
+const { activatePersonalSubscription } = require('../services/subscriptionActivationService');
 
 // ─── Get Own Personal Subscription Status ─────────────────────
 
@@ -57,16 +58,28 @@ exports.submitPayment = async (req, res) => {
     // route. Lock it so concurrent submissions for the same Personal
     // account cannot both pass the pending-payment check.
     await withTransaction(async (client) => {
-      await client.query(
-        'SELECT user_id FROM personal_subscriptions WHERE user_id = $1 FOR UPDATE',
+      const lockedSubscription = await client.query(
+        `SELECT user_id, plan, expires_at
+         FROM personal_subscriptions
+         WHERE user_id = $1
+         FOR UPDATE`,
         [req.user.id]
       );
+
+      const lockedSub = lockedSubscription.rows[0];
+
+      const entitlementBase =
+        lockedSub.plan === 'paid' &&
+        lockedSub.expires_at &&
+        new Date(lockedSub.expires_at) > new Date()
+          ? lockedSub.expires_at
+          : null;
 
       const pending = await client.query(
         `SELECT id
          FROM personal_subscription_payments
          WHERE user_id = $1
-           AND status = 'pending'
+           AND status IN ('pending', 'submitted')
          LIMIT 1`,
         [req.user.id]
       );
@@ -77,9 +90,31 @@ exports.submitPayment = async (req, res) => {
       }
 
       result = await client.query(
-        `INSERT INTO personal_subscription_payments (user_id, amount, momo_reference, payment_phone)
-         VALUES ($1, 5.00, $2, $3) RETURNING *`,
-        [req.user.id, momo_reference, payment_phone]
+        `INSERT INTO personal_subscription_payments (
+           user_id,
+           amount,
+           momo_reference,
+           payment_phone,
+           payment_provider,
+           entitlement_base_expires_at,
+           entitlement_base_captured
+         )
+         VALUES (
+           $1,
+           5.00,
+           $2,
+           $3,
+           'manual_momo',
+           $4,
+           TRUE
+         )
+         RETURNING *`,
+        [
+          req.user.id,
+          momo_reference,
+          payment_phone,
+          entitlementBase,
+        ]
       );
 
       await auditLog({
@@ -152,6 +187,15 @@ exports.verifyPayment = async (req, res) => {
 
       payment = paymentResult.rows[0];
 
+      if (payment.payment_provider === 'paystack') {
+        verificationError = {
+          status: 409,
+          message:
+            'Paystack payments are verified automatically and cannot be manually approved or rejected.',
+        };
+        return;
+      }
+
       if (payment.status !== 'pending') {
         verificationError = {
           status: 400,
@@ -161,37 +205,72 @@ exports.verifyPayment = async (req, res) => {
       }
 
       if (action === 'approve') {
-        const now = new Date();
-        const expiresAt = new Date(now);
-        expiresAt.setMonth(expiresAt.getMonth() + 1);
+        const activation =
+          await activatePersonalSubscription({
+            client,
+            payment,
+            verifiedBy: req.user.id,
+            providerStatus: 'manual_verified',
+          });
 
-        const sub = await client.query(
-          'SELECT * FROM personal_subscriptions WHERE user_id = $1',
-          [payment.user_id]
-        );
+        if (activation.outcome !== 'activated') {
+          await client.query(
+            `UPDATE personal_subscription_payments
+             SET status = 'rejected',
+                 provider_status = 'superseded',
+                 verified_at = NOW(),
+                 verified_by = $1,
+                 rejection_reason =
+                   'This subscription cycle was already fulfilled by another payment.'
+             WHERE id = $2`,
+            [
+              req.user.id,
+              payment_id,
+            ]
+          );
 
-        // If already paid and not yet expired, extend from current
-        // expiry rather than from now - same convention already used
-        // for Business subscriptions.
-        if (sub.rows[0]?.plan === 'paid' && sub.rows[0].expires_at > now) {
-          expiresAt.setTime(new Date(sub.rows[0].expires_at).getTime());
-          expiresAt.setMonth(expiresAt.getMonth() + 1);
+          await auditLog({
+            userId: req.user.id,
+            companyId: null,
+            action:
+              'PERSONAL_SUBSCRIPTION_PAYMENT_SUPERSEDED',
+            entityType:
+              'personal_subscription_payment',
+            entityId: payment_id,
+            newValues: {
+              payment_provider:
+                payment.payment_provider ||
+                'manual_momo',
+            },
+            ipAddress: req.ip,
+            userAgent:
+              req.headers['user-agent'],
+            requestId: req.requestId,
+            dbClient: client,
+            strict: true,
+          });
+
+          verificationError = {
+            status: 409,
+            message:
+              'This subscription cycle was already fulfilled by another payment.',
+          };
+
+          return;
         }
 
-        approvedExpiresAt = expiresAt;
+        approvedExpiresAt =
+          activation.expiresAt;
 
-        await client.query(
-          `UPDATE personal_subscriptions SET plan = 'paid', expires_at = $1, updated_at = NOW() WHERE user_id = $2`,
-          [expiresAt, payment.user_id]
-        );
-
-        await client.query(
-          `UPDATE personal_subscription_payments SET status = 'verified', verified_at = NOW(), verified_by = $1 WHERE id = $2`,
-          [req.user.id, payment_id]
-        );
       } else {
         await client.query(
-          `UPDATE personal_subscription_payments SET status = 'rejected', verified_at = NOW(), verified_by = $1, rejection_reason = $2 WHERE id = $3`,
+          `UPDATE personal_subscription_payments
+         SET status = 'rejected',
+             provider_status = 'manual_rejected',
+             verified_at = NOW(),
+             verified_by = $1,
+             rejection_reason = $2
+         WHERE id = $3`,
           [req.user.id, rejection_reason || null, payment_id]
         );
       }
@@ -276,11 +355,51 @@ exports.listPendingPayments = async (req, res) => {
        FROM personal_subscription_payments p
        JOIN users u ON u.id = p.user_id
        WHERE p.status = 'pending'
+         AND p.payment_provider = 'manual_momo'
        ORDER BY p.submitted_at ASC`
     );
     res.json({ success: true, data: result.rows });
   } catch (error) {
     logger.error('List pending personal subscription payments error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch pending payments' });
+  }
+};
+
+// ─── List Paystack Reconciliation Payments (Superuser) ────────
+
+exports.listReconciliationPayments = async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT p.*,
+              'personal' AS account_mode,
+              u.first_name,
+              u.last_name,
+              u.email
+       FROM personal_subscription_payments p
+       INNER JOIN users u
+         ON u.id = p.user_id
+       WHERE p.payment_provider = 'paystack'
+         AND p.reconciliation_required = TRUE
+       ORDER BY COALESCE(
+         p.verified_at,
+         p.submitted_at
+       ) ASC`
+    );
+
+    res.json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (error) {
+    logger.error(
+      'List Personal Paystack reconciliation payments error:',
+      error
+    );
+
+    res.status(500).json({
+      success: false,
+      message:
+        'Failed to fetch Personal Paystack reconciliation payments',
+    });
   }
 };

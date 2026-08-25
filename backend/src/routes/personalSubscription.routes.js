@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body, param, validationResult } = require('express-validator');
 const personalSubController = require('../controllers/personalSubscriptionController');
+const paystackSubscriptionController = require('../controllers/paystackSubscriptionController');
 const { authenticate, authorize, requirePersonalAccount } = require('../middleware/auth');
 
 const handleValidation = (req, res, next) => {
@@ -30,7 +31,33 @@ router.post('/payment', requirePersonalAccount, [
   body('payment_phone').trim().notEmpty().withMessage('Payment phone is required'),
 ], handleValidation, personalSubController.submitPayment);
 
+
+router.post(
+  '/paystack/initialize',
+  requirePersonalAccount,
+  paystackSubscriptionController.initializePersonal
+);
+
+router.get(
+  '/paystack/verify/:reference',
+  requirePersonalAccount,
+  [
+    param('reference')
+      .trim()
+      .matches(/^[A-Za-z0-9.=-]+$/)
+      .withMessage('Invalid Paystack reference'),
+  ],
+  handleValidation,
+  paystackSubscriptionController.verifyPersonal
+);
+
 router.get('/pending-payments', authorize('superuser'), personalSubController.listPendingPayments);
+router.get(
+  '/reconciliation-payments',
+  authorize('superuser'),
+  personalSubController.listReconciliationPayments
+);
+
 router.patch(
   '/payment/:payment_id/verify',
   authorize('superuser'),

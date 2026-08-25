@@ -5,6 +5,7 @@ import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
+import 'subscription_payment_service.dart';
 
 class SubscriptionScreen extends StatefulWidget {
   const SubscriptionScreen({super.key});
@@ -12,25 +13,241 @@ class SubscriptionScreen extends StatefulWidget {
   State<SubscriptionScreen> createState() => _SubscriptionScreenState();
 }
 
-class _SubscriptionScreenState extends State<SubscriptionScreen> {
+class _SubscriptionScreenState extends State<SubscriptionScreen>
+    with WidgetsBindingObserver {
   Map<String, dynamic>? _data;
   bool _loading = true;
   String? _loadError;
   final _refCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   bool _submitting = false;
+  bool _paystackBusy = false;
+  bool _checkoutLaunched = false;
+  String? _paystackReference;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _restorePaystackReference();
     _load();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _refCtrl.dispose();
     _phoneCtrl.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(
+    AppLifecycleState state,
+  ) {
+    if (state == AppLifecycleState.resumed &&
+        _checkoutLaunched &&
+        !_paystackBusy) {
+      _checkoutLaunched = false;
+      _verifyPaystack(
+        showPendingMessage: false,
+      );
+    }
+  }
+
+  Future<void> _restorePaystackReference() async {
+    final reference = await SubscriptionPaymentService.restorePendingReference(
+      SubscriptionAccountKind.business,
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      _paystackReference = reference;
+    });
+  }
+
+  Future<void> _startPaystack() async {
+    if (_paystackBusy) return;
+
+    setState(() {
+      _paystackBusy = true;
+    });
+
+    try {
+      final session = await SubscriptionPaymentService.initializePaystack(
+        SubscriptionAccountKind.business,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _paystackReference = session.reference;
+        _checkoutLaunched = true;
+      });
+
+      final launched = await SubscriptionPaymentService.launchCheckout(
+        session.authorizationUrl,
+      );
+
+      if (!launched && mounted) {
+        setState(() {
+          _checkoutLaunched = false;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'The secure payment page could not be opened.',
+            ),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            SubscriptionPaymentService.errorMessage(
+              error,
+              fallback: 'Paystack payment could not be started.',
+            ),
+          ),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _paystackBusy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _verifyPaystack({
+    bool showPendingMessage = true,
+  }) async {
+    if (_paystackBusy) return;
+
+    var reference = _paystackReference;
+
+    reference ??= await SubscriptionPaymentService.restorePendingReference(
+      SubscriptionAccountKind.business,
+    );
+
+    if (reference == null || reference.trim().isEmpty) {
+      if (showPendingMessage && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'There is no Paystack payment waiting to be checked.',
+            ),
+          ),
+        );
+      }
+
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _paystackBusy = true;
+      });
+    }
+
+    try {
+      final result = await SubscriptionPaymentService.verifyPaystack(
+        SubscriptionAccountKind.business,
+        reference,
+      );
+
+      if (!mounted) return;
+
+      if (result.activated) {
+        await SubscriptionPaymentService.clearPendingReference(
+          SubscriptionAccountKind.business,
+        );
+
+        if (!mounted) return;
+
+        setState(() {
+          _paystackReference = null;
+        });
+
+        await _load();
+
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Payment confirmed. Your subscription is active.',
+            ),
+          ),
+        );
+
+        return;
+      }
+
+      if (result.outcome == 'reconciliation_required') {
+        await SubscriptionPaymentService.clearPendingReference(
+          SubscriptionAccountKind.business,
+        );
+
+        if (!mounted) return;
+
+        setState(() {
+          _paystackReference = null;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Your payment was received, but this subscription cycle was already fulfilled. No extra subscription period was added. Please contact support so the payment can be reconciled or refunded.',
+            ),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+
+        return;
+      }
+
+      if (showPendingMessage) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result.message ??
+                  'Payment has not been confirmed yet. You can check again.',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+
+      if (showPendingMessage) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              SubscriptionPaymentService.errorMessage(
+                error,
+                fallback: 'Payment status could not be checked.',
+              ),
+            ),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _paystackBusy = false;
+        });
+      }
+    }
   }
 
   Future<void> _load() async {
@@ -95,9 +312,17 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Submission failed'),
-            backgroundColor: AppTheme.errorColor));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              SubscriptionPaymentService.errorMessage(
+                e,
+                fallback: 'Manual payment submission failed.',
+              ),
+            ),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -219,6 +444,69 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                           ))),
                   const SizedBox(height: 16),
 
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(
+                                Icons.verified_user_outlined,
+                              ),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Pay with Paystack — Instant Activation',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Complete payment on the secure hosted checkout. '
+                            'AgentPro activates access only after the backend confirms the payment.',
+                            style: TextStyle(
+                              color: context.appSecondaryText,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          AppButton(
+                            label: status == 'active'
+                                ? 'Renew with Paystack'
+                                : 'Pay with Paystack',
+                            icon: Icons.open_in_new,
+                            onPressed: _startPaystack,
+                            isLoading: _paystackBusy,
+                          ),
+                          if (_paystackReference != null) ...[
+                            const SizedBox(height: 8),
+                            Center(
+                              child: TextButton.icon(
+                                onPressed: _paystackBusy
+                                    ? null
+                                    : () => _verifyPaystack(),
+                                icon: const Icon(
+                                  Icons.refresh,
+                                ),
+                                label: const Text(
+                                  'Check payment status',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
                   // Payment Instructions
                   if (instructions != null)
                     Builder(
@@ -237,7 +525,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        const Text('How to Pay',
+                                        const Text(
+                                            'Pay Manually — Requires Verification',
                                             style: TextStyle(
                                                 fontWeight: FontWeight.bold)),
                                         const SizedBox(height: 8),
@@ -257,8 +546,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
                   AppButton(
                     label: status == 'active'
-                        ? 'Submit Renewal Payment'
-                        : 'Submit Payment to Activate',
+                        ? 'Submit Manual Renewal'
+                        : 'Submit Manual Payment',
                     icon: Icons.payment,
                     onPressed: () => showModalBottomSheet(
                       context: context,
@@ -273,7 +562,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              const Text('Submit Payment Reference',
+                              const Text('Submit Manual Payment Reference',
                                   style: TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold)),
@@ -294,7 +583,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                                       prefixIcon: Icon(Icons.phone))),
                               const SizedBox(height: 20),
                               AppButton(
-                                  label: 'Submit Reference',
+                                  label: 'Submit Reference for Verification',
                                   onPressed: _submitPayment,
                                   isLoading: _submitting),
                             ]),

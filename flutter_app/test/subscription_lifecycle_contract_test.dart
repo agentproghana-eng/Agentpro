@@ -48,12 +48,12 @@ void main() {
 
         expect(
           source,
-          contains("'Submit Renewal Payment'"),
+          contains("'Submit Manual Renewal'"),
         );
 
         expect(
           source,
-          contains("'Upgrade to Paid'"),
+          contains("'Submit Manual Payment'"),
         );
       },
     );
