@@ -2,6 +2,8 @@ const mockQuery = jest.fn();
 const mockClientQuery = jest.fn();
 const mockWithTransaction = jest.fn();
 const mockResolveBranch = jest.fn();
+const mockVerifyBusinessSimRoleAssignment =
+  jest.fn();
 
 jest.mock('../../src/config/database', () => ({
   query: (...args) => mockQuery(...args),
@@ -10,6 +12,11 @@ jest.mock('../../src/config/database', () => ({
 
 jest.mock('../../src/services/financialBranchService', () => ({
   resolveAgentFinancialBranch: (...args) => mockResolveBranch(...args)
+}));
+
+jest.mock('../../src/services/simRoleTrustService', () => ({
+  verifyBusinessSimRoleAssignment: (...args) =>
+    mockVerifyBusinessSimRoleAssignment(...args)
 }));
 
 jest.mock('../../src/services/auditService', () => ({
@@ -91,6 +98,12 @@ beforeEach(() => {
   mockResolveBranch.mockResolvedValue({
     ok: true,
     branchId: 'branch-1'
+  });
+
+  mockVerifyBusinessSimRoleAssignment.mockResolvedValue({
+    ok: true,
+    role: 'agent',
+    sim_slot: 1
   });
 });
 
@@ -838,6 +851,43 @@ describe('Manual Cash Out ledger posting', () => {
         sql.includes('agent_balances')
       )
     ).toBe(false);
+  });
+
+  it('rejects a non-Agent physical SIM before branch or balance posting', async () => {
+    mockClientQuery.mockResolvedValueOnce({
+      rows: []
+    });
+
+    mockVerifyBusinessSimRoleAssignment.mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      code: 'SIM_ROLE_MISMATCH',
+      message: 'The physical SIM is not assigned as Agent.'
+    });
+
+    const res = makeRes();
+
+    await balanceController.recordCashOutManual(
+      makeReq(),
+      res
+    );
+
+    expect(
+      mockVerifyBusinessSimRoleAssignment
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'agent-1',
+        provider: 'telecel',
+        claimedRole: 'agent',
+        simSlot: 1,
+        simIccid: 'ICCID-001'
+      })
+    );
+
+    expect(res.status).toHaveBeenCalledWith(409);
+
+    expect(mockResolveBranch)
+      .toHaveBeenCalledTimes(0);
   });
 
 });

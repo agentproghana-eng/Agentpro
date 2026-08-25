@@ -1,6 +1,6 @@
 const {
   getOrCreateAgentCashBalance,
-  getOrCreateAgentSimWallet
+  getOrCreateAgentSimWallet,
 } = require("../../src/services/agentWalletService");
 
 function makeClient(...responses) {
@@ -18,27 +18,21 @@ describe("agentWalletService", () => {
     const cashBalance = {
       id: "cash-1",
       agent_id: "agent-1",
-      cash_at_hand: "500.00"
+      cash_at_hand: "500.00",
     };
 
-    const client = makeClient(
-      { rows: [] },
-      { rows: [cashBalance] }
-    );
+    const client = makeClient({ rows: [] }, { rows: [cashBalance] });
 
-    const result = await getOrCreateAgentCashBalance(
-      client,
-      "agent-1"
-    );
+    const result = await getOrCreateAgentCashBalance(client, "agent-1");
 
     expect(result).toEqual(cashBalance);
     expect(client.query).toHaveBeenCalledTimes(2);
 
-    expect(client.query.mock.calls[0][0])
-      .toContain("ON CONFLICT (agent_id) DO NOTHING");
+    expect(client.query.mock.calls[0][0]).toContain(
+      "ON CONFLICT (agent_id) DO NOTHING",
+    );
 
-    expect(client.query.mock.calls[1][0])
-      .toContain("FOR UPDATE");
+    expect(client.query.mock.calls[1][0]).toContain("FOR UPDATE");
   });
 
   test("resolves an ICCID-backed wallet as identified", async () => {
@@ -49,20 +43,20 @@ describe("agentWalletService", () => {
       identity_status: "identified",
       sim_iccid: "ICCID-A",
       e_float_balance: "0.00",
-      commission_balance: "0.00"
+      commission_balance: "0.00",
     };
 
     const refreshedWallet = {
       ...lockedWallet,
       installation_id: "11111111-1111-4111-8111-111111111111",
       sim_subscription_id: 10,
-      last_known_sim_slot: 0
+      last_known_sim_slot: 0,
     };
 
     const client = makeClient(
       { rows: [] },
       { rows: [lockedWallet] },
-      { rows: [refreshedWallet] }
+      { rows: [refreshedWallet] },
     );
 
     const result = await getOrCreateAgentSimWallet(client, {
@@ -71,7 +65,7 @@ describe("agentWalletService", () => {
       simIccid: " ICCID-A ",
       installationId: "11111111-1111-4111-8111-111111111111",
       simSubscriptionId: 10,
-      simSlot: 0
+      simSlot: 0,
     });
 
     expect(result).toEqual(refreshedWallet);
@@ -79,15 +73,13 @@ describe("agentWalletService", () => {
 
     const selectSql = client.query.mock.calls[1][0];
 
-    expect(selectSql).toContain(
-      "identity_status = 'identified'"
-    );
+    expect(selectSql).toContain("identity_status = 'identified'");
     expect(selectSql).toContain("sim_iccid = $3");
+
+    expect(selectSql).toContain("sim_role = 'agent'");
     expect(selectSql).toContain("FOR UPDATE");
 
-    const allSql = client.query.mock.calls
-      .map((call) => call[0])
-      .join("\n");
+    const allSql = client.query.mock.calls.map((call) => call[0]).join("\n");
 
     expect(allSql).not.toContain("legacy_unassigned");
   });
@@ -98,20 +90,20 @@ describe("agentWalletService", () => {
       agent_id: "agent-1",
       provider: "mtn",
       identity_status: "identified",
-      sim_iccid: "ICCID-A"
+      sim_iccid: "ICCID-A",
     };
 
     const refreshed = {
       ...wallet,
       installation_id: "22222222-2222-4222-8222-222222222222",
       sim_subscription_id: 88,
-      last_known_sim_slot: 1
+      last_known_sim_slot: 1,
     };
 
     const client = makeClient(
       { rows: [] },
       { rows: [wallet] },
-      { rows: [refreshed] }
+      { rows: [refreshed] },
     );
 
     const result = await getOrCreateAgentSimWallet(client, {
@@ -120,7 +112,7 @@ describe("agentWalletService", () => {
       simIccid: "ICCID-A",
       installationId: "22222222-2222-4222-8222-222222222222",
       simSubscriptionId: 88,
-      simSlot: 1
+      simSlot: 1,
     });
 
     expect(result.id).toBe("wallet-identified");
@@ -130,7 +122,7 @@ describe("agentWalletService", () => {
     expect(client.query.mock.calls[1][1]).toEqual([
       "agent-1",
       "mtn",
-      "ICCID-A"
+      "ICCID-A",
     ]);
   });
 
@@ -143,13 +135,10 @@ describe("agentWalletService", () => {
       sim_iccid: null,
       installation_id: "11111111-1111-4111-8111-111111111111",
       sim_subscription_id: 20,
-      last_known_sim_slot: 1
+      last_known_sim_slot: 1,
     };
 
-    const client = makeClient(
-      { rows: [] },
-      { rows: [wallet] }
-    );
+    const client = makeClient({ rows: [] }, { rows: [wallet] });
 
     const result = await getOrCreateAgentSimWallet(client, {
       agentId: "agent-1",
@@ -157,7 +146,7 @@ describe("agentWalletService", () => {
       simIccid: "",
       installationId: "11111111-1111-4111-8111-111111111111",
       simSubscriptionId: 20,
-      simSlot: 1
+      simSlot: 1,
     });
 
     expect(result).toEqual(wallet);
@@ -165,17 +154,15 @@ describe("agentWalletService", () => {
 
     const selectSql = client.query.mock.calls[1][0];
 
-    expect(selectSql).toContain(
-      "identity_status = 'unresolved'"
-    );
+    expect(selectSql).toContain("identity_status = 'unresolved'");
     expect(selectSql).toContain("installation_id = $3");
+
+    expect(selectSql).toContain("sim_role = 'agent'");
     expect(selectSql).toContain("sim_subscription_id = $4");
     expect(selectSql).toContain("last_known_sim_slot = $5");
     expect(selectSql).toContain("FOR UPDATE");
 
-    const allSql = client.query.mock.calls
-      .map((call) => call[0])
-      .join("\n");
+    const allSql = client.query.mock.calls.map((call) => call[0]).join("\n");
 
     expect(allSql).not.toContain("legacy_unassigned");
   });
@@ -190,11 +177,11 @@ describe("agentWalletService", () => {
         simIccid: null,
         installationId: null,
         simSubscriptionId: null,
-        simSlot: null
-      })
+        simSlot: null,
+      }),
     ).rejects.toMatchObject({
       statusCode: 422,
-      code: "SIM_IDENTITY_REQUIRED"
+      code: "SIM_IDENTITY_REQUIRED",
     });
 
     expect(client.query).not.toHaveBeenCalled();
@@ -210,11 +197,11 @@ describe("agentWalletService", () => {
         simIccid: "",
         installationId: null,
         simSubscriptionId: null,
-        simSlot: 0
-      })
+        simSlot: 0,
+      }),
     ).rejects.toMatchObject({
       statusCode: 422,
-      code: "SIM_IDENTITY_REQUIRED"
+      code: "SIM_IDENTITY_REQUIRED",
     });
 
     expect(client.query).not.toHaveBeenCalled();
@@ -230,13 +217,44 @@ describe("agentWalletService", () => {
         simIccid: "",
         installationId: "11111111-1111-4111-8111-111111111111",
         simSubscriptionId: -1,
-        simSlot: 0
-      })
+        simSlot: 0,
+      }),
     ).rejects.toMatchObject({
       statusCode: 422,
-      code: "SIM_IDENTITY_INVALID"
+      code: "SIM_IDENTITY_INVALID",
     });
 
     expect(client.query).not.toHaveBeenCalled();
+  });
+  test("identified lookup is explicitly Agent role", async () => {
+    const wallet = {
+      id: "wallet-agent-role",
+      agent_id: "operator-1",
+      provider: "mtn",
+      sim_role: "agent",
+      identity_status: "identified",
+      sim_iccid: "ICCID-ROLE",
+    };
+
+    const client = makeClient(
+      { rows: [] },
+      { rows: [wallet] },
+      { rows: [wallet] },
+    );
+
+    await getOrCreateAgentSimWallet(client, {
+      agentId: "operator-1",
+      provider: "mtn",
+      simIccid: "ICCID-ROLE",
+      installationId: null,
+      simSubscriptionId: 5,
+      simSlot: 0,
+    });
+
+    const sql = client.query.mock.calls.map((call) => call[0]).join("\n");
+
+    expect(sql).toContain("sim_role");
+
+    expect(sql).toContain("sim_role = 'agent'");
   });
 });

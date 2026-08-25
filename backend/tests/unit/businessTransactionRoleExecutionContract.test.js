@@ -50,4 +50,29 @@ describe("Business transaction role execution contract", () => {
 
     expect(controller).not.toContain('String(sim_role || "agent")');
   });
+  test("persists verified role on the transaction row", () => {
+    expect(controller).toMatch(
+      /sim_subscription_id,\s*sim_role,\s*client_operation_id/,
+    );
+
+    expect(controller).toContain("businessSimRole,");
+
+    expect(controller).toContain(
+      "RETURNING id, reference, status, sim_role, created_at",
+    );
+  });
+
+  test("idempotency includes Business SIM role", () => {
+    expect(controller).toContain("isSameBusinessSimRole");
+
+    expect(controller).toContain('sim_role: existing.sim_role || "agent"');
+  });
+
+  test("unvalidated EVD and Merchant accounting fails before USSD", () => {
+    expect(controller).toContain("SIM_ROLE_ACCOUNTING_NOT_CONFIGURED");
+
+    expect(controller).toContain(
+      '["evd", "merchant"].includes(businessSimRole)',
+    );
+  });
 });

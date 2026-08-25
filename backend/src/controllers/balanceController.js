@@ -8,7 +8,45 @@ const {
   getOrCreateAgentCashBalance,
   getOrCreateAgentSimWallet
 } = require("../services/agentWalletService");
+const {
+  resolveSimRoleAssignment,
+  verifyBusinessSimRoleAssignment
+} = require("../services/simRoleTrustService");
 const { logger } = require("../utils/logger");
+
+const isAgentTransactionRole = (transaction) => {
+  const storedRole = String(
+    transaction?.sim_role || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  return (
+    storedRole.length === 0 ||
+    storedRole === "agent"
+  );
+};
+
+const verifyAgentFinancialSimRole = async ({
+  queryFn,
+  userId,
+  provider,
+  simSlot,
+  simIccid,
+  installationId,
+  simSubscriptionId
+}) =>
+  verifyBusinessSimRoleAssignment({
+    queryFn,
+    userId,
+    provider,
+    claimedRole: "agent",
+    simSlot,
+    simIccid,
+    installationId,
+    simSubscriptionId
+  });
+
 
 // Read the agent's one physical cash drawer.
 //
@@ -71,33 +109,47 @@ exports.getOwnSimWalletBalance = async (req, res) => {
     String(req.query.sim_iccid || "").trim();
 
   const normalizedInstallationId =
-    String(req.query.installation_id || "").trim();
+    String(
+      req.query.installation_id || ""
+    ).trim();
 
-  const parseOptionalNonNegativeInteger = (value) => {
-    if (
-      value === null ||
-      value === undefined ||
-      value === ""
-    ) {
-      return null;
-    }
+  const parseOptionalNonNegativeInteger =
+    (value) => {
+      if (
+        value === null ||
+        value === undefined ||
+        value === ""
+      ) {
+        return null;
+      }
 
-    const parsed = Number(value);
+      const parsed = Number(value);
 
-    return Number.isInteger(parsed) && parsed >= 0
-      ? parsed
-      : null;
-  };
+      return (
+        Number.isInteger(parsed) &&
+        parsed >= 0
+      )
+        ? parsed
+        : null;
+    };
 
   const normalizedSlot =
-    parseOptionalNonNegativeInteger(req.query.sim_slot);
+    parseOptionalNonNegativeInteger(
+      req.query.sim_slot
+    );
 
   const normalizedSubscriptionId =
     parseOptionalNonNegativeInteger(
       req.query.sim_subscription_id
     );
 
-  if (!["mtn", "telecel", "at_money"].includes(provider)) {
+  if (
+    [
+      "mtn",
+      "telecel",
+      "at_money"
+    ].includes(provider) === false
+  ) {
     return res.status(422).json({
       success: false,
       message: "Invalid provider"
@@ -107,16 +159,15 @@ exports.getOwnSimWalletBalance = async (req, res) => {
   if (normalizedSlot === null) {
     return res.status(422).json({
       success: false,
-      message: "A valid SIM slot is required"
+      message:
+        "A valid SIM slot is required"
     });
   }
 
-  // Without ICCID, provider + slot is not enough to identify an
-  // electronic wallet. Require the complete conservative fallback.
   if (
-    !normalizedIccid &&
+    normalizedIccid.length === 0 &&
     (
-      !normalizedInstallationId ||
+      normalizedInstallationId.length === 0 ||
       normalizedSubscriptionId === null
     )
   ) {
@@ -130,13 +181,39 @@ exports.getOwnSimWalletBalance = async (req, res) => {
   }
 
   try {
+    const roleResolution =
+      await resolveSimRoleAssignment({
+        queryFn: query,
+        userId: agentId,
+        provider,
+        simSlot: normalizedSlot,
+        simIccid: normalizedIccid,
+        installationId:
+          normalizedInstallationId,
+        simSubscriptionId:
+          normalizedSubscriptionId
+      });
+
+    if (roleResolution.ok === false) {
+      return res
+        .status(roleResolution.status)
+        .json({
+          success: false,
+          code: roleResolution.code,
+          message:
+            roleResolution.message
+        });
+    }
+
+    const simRole =
+      roleResolution.role;
+
     let exactResult;
 
-    if (normalizedIccid) {
-      // ICCID is the durable identity. Slot/device fields are observation
-      // metadata and must not split an ICCID-backed wallet.
+    if (normalizedIccid.length > 0) {
       exactResult = await query(
         `SELECT id,
+                sim_role,
                 identity_status,
                 sim_iccid,
                 installation_id,
@@ -149,18 +226,21 @@ exports.getOwnSimWalletBalance = async (req, res) => {
          FROM agent_sim_wallets
          WHERE agent_id = $1
            AND provider = $2
+           AND sim_role = $3
            AND identity_status = 'identified'
-           AND sim_iccid = $3
+           AND sim_iccid = $4
          LIMIT 1`,
         [
           agentId,
           provider,
+          simRole,
           normalizedIccid
         ]
       );
     } else {
       exactResult = await query(
         `SELECT id,
+                sim_role,
                 identity_status,
                 sim_iccid,
                 installation_id,
@@ -173,14 +253,16 @@ exports.getOwnSimWalletBalance = async (req, res) => {
          FROM agent_sim_wallets
          WHERE agent_id = $1
            AND provider = $2
+           AND sim_role = $3
            AND identity_status = 'unresolved'
-           AND installation_id = $3
-           AND sim_subscription_id = $4
-           AND last_known_sim_slot = $5
+           AND installation_id = $4
+           AND sim_subscription_id = $5
+           AND last_known_sim_slot = $6
          LIMIT 1`,
         [
           agentId,
           provider,
+          simRole,
           normalizedInstallationId,
           normalizedSubscriptionId,
           normalizedSlot
@@ -188,115 +270,254 @@ exports.getOwnSimWalletBalance = async (req, res) => {
       );
     }
 
-    // Historical provider-level balances remain deliberately separate.
-    const legacyResult = await query(
-      `SELECT id,
-              working_balance,
-              e_float_balance,
-              commission_balance,
-              last_updated_at
-       FROM agent_sim_wallets
-       WHERE agent_id = $1
-         AND provider = $2
-         AND identity_status = 'legacy_unassigned'
-       LIMIT 1`,
-      [
-        agentId,
-        provider
-      ]
-    );
-
     const exact =
       exactResult.rows[0] || null;
 
-    const legacy =
-      legacyResult.rows[0] || null;
+    if (simRole === "agent") {
+      const legacyResult = await query(
+        `SELECT id,
+                working_balance,
+                e_float_balance,
+                commission_balance,
+                last_updated_at
+         FROM agent_sim_wallets
+         WHERE agent_id = $1
+           AND provider = $2
+           AND sim_role = 'agent'
+           AND identity_status = 'legacy_unassigned'
+         LIMIT 1`,
+        [
+          agentId,
+          provider
+        ]
+      );
 
-    const legacyWorking =
-      legacy
-        ? Number(legacy.working_balance || 0)
-        : 0;
+      const legacy =
+        legacyResult.rows[0] || null;
 
-    const legacyEFloat =
-      legacy
-        ? Number(legacy.e_float_balance || 0)
-        : 0;
+      const legacyWorking =
+        legacy
+          ? Number(
+              legacy.working_balance || 0
+            )
+          : 0;
 
-    const legacyCommission =
-      legacy
-        ? Number(legacy.commission_balance || 0)
-        : 0;
+      const legacyEFloat =
+        legacy
+          ? Number(
+              legacy.e_float_balance || 0
+            )
+          : 0;
 
-    const reconciliationRequired =
-      legacy !== null &&
-      (
-        legacyWorking !== 0 ||
-        legacyEFloat !== 0 ||
-        legacyCommission !== 0
+      const legacyCommission =
+        legacy
+          ? Number(
+              legacy.commission_balance || 0
+            )
+          : 0;
+
+      const reconciliationRequired =
+        legacy !== null &&
+        (
+          legacyWorking !== 0 ||
+          legacyEFloat !== 0 ||
+          legacyCommission !== 0
+        );
+
+      const agentBalances = [];
+
+      if (provider === "telecel") {
+        agentBalances.push({
+          balance_code:
+            "working_balance",
+          display_label:
+            "Working Account",
+          current_balance:
+            exact?.working_balance ||
+            "0.00",
+          last_updated_at:
+            exact?.last_updated_at ||
+            null
+        });
+      }
+
+      agentBalances.push(
+        {
+          balance_code:
+            "e_float_balance",
+          display_label:
+            provider === "telecel"
+              ? "Float"
+              : "e-Float",
+          current_balance:
+            exact?.e_float_balance ||
+            "0.00",
+          last_updated_at:
+            exact?.last_updated_at ||
+            null
+        },
+        {
+          balance_code:
+            "commission_balance",
+          display_label:
+            "Commission",
+          current_balance:
+            exact?.commission_balance ||
+            "0.00",
+          last_updated_at:
+            exact?.last_updated_at ||
+            null
+        }
+      );
+
+      return res.json({
+        success: true,
+        data: {
+          provider,
+          sim_role: simRole,
+          balance_domain: "agent",
+
+          requested_identity_status:
+            normalizedIccid.length > 0
+              ? "identified"
+              : "unresolved",
+
+          sim_slot: normalizedSlot,
+
+          exact_wallet_exists:
+            exact !== null,
+
+          sim_wallet_id:
+            exact?.id || null,
+
+          identity_status:
+            exact?.identity_status ||
+            (
+              normalizedIccid.length > 0
+                ? "identified"
+                : "unresolved"
+            ),
+
+          working_balance:
+            exact?.working_balance ||
+            "0.00",
+
+          e_float_balance:
+            exact?.e_float_balance ||
+            "0.00",
+
+          commission_balance:
+            exact?.commission_balance ||
+            "0.00",
+
+          balances:
+            agentBalances,
+
+          last_updated_at:
+            exact?.last_updated_at ||
+            null,
+
+          legacy_unassigned:
+            legacy
+              ? {
+                  sim_wallet_id:
+                    legacy.id,
+                  working_balance:
+                    legacy.working_balance,
+                  e_float_balance:
+                    legacy.e_float_balance,
+                  commission_balance:
+                    legacy.commission_balance,
+                  last_updated_at:
+                    legacy.last_updated_at
+                }
+              : null,
+
+          reconciliation_required:
+            reconciliationRequired
+        }
+      });
+    }
+
+    const definitionResult =
+      await query(
+        `SELECT
+           d.balance_code,
+           d.display_label,
+           COALESCE(
+             a.current_balance,
+             0.00
+           )::text AS current_balance,
+           a.last_updated_at
+         FROM sim_wallet_balance_definitions d
+         LEFT JOIN sim_wallet_balance_accounts a
+           ON a.sim_wallet_id = $1::uuid
+          AND a.balance_code = d.balance_code
+         WHERE d.provider = $2
+           AND d.sim_role = $3
+           AND d.is_validated = TRUE
+           AND d.is_active = TRUE
+         ORDER BY d.balance_code`,
+        [
+          exact?.id || null,
+          provider,
+          simRole
+        ]
       );
 
     return res.json({
       success: true,
       data: {
         provider,
+        sim_role: simRole,
+        balance_domain: simRole,
 
         requested_identity_status:
-          normalizedIccid
+          normalizedIccid.length > 0
             ? "identified"
             : "unresolved",
 
         sim_slot: normalizedSlot,
 
-        exact_wallet_exists: exact !== null,
-        sim_wallet_id: exact?.id || null,
+        exact_wallet_exists:
+          exact !== null,
+
+        sim_wallet_id:
+          exact?.id || null,
 
         identity_status:
           exact?.identity_status ||
           (
-            normalizedIccid
+            normalizedIccid.length > 0
               ? "identified"
               : "unresolved"
           ),
 
-        working_balance:
-          exact?.working_balance || "0.00",
+        balances:
+          definitionResult.rows,
 
-        e_float_balance:
-          exact?.e_float_balance || "0.00",
-
-        commission_balance:
-          exact?.commission_balance || "0.00",
+        balance_semantics_validated:
+          definitionResult.rows.length > 0,
 
         last_updated_at:
-          exact?.last_updated_at || null,
+          exact?.last_updated_at ||
+          null,
 
-        legacy_unassigned: legacy
-          ? {
-              sim_wallet_id: legacy.id,
-              working_balance:
-                legacy.working_balance,
-              e_float_balance:
-                legacy.e_float_balance,
-              commission_balance:
-                legacy.commission_balance,
-              last_updated_at:
-                legacy.last_updated_at
-            }
-          : null,
+        legacy_unassigned: null,
 
-        reconciliation_required:
-          reconciliationRequired
+        reconciliation_required: false
       }
     });
   } catch (error) {
     logger.error(
-      "Get exact SIM wallet balance error:",
+      "Get role-aware SIM wallet balance error:",
       error
     );
 
     return res.status(500).json({
       success: false,
-      message: "Failed to fetch SIM wallet balance"
+      message:
+        "Failed to fetch SIM wallet balance"
     });
   }
 };
@@ -373,6 +594,7 @@ exports.recordCashOutManual = async (req, res) => {
     String(existing.customer_phone || "") === customerPhone &&
     String(existing.notes || "") === normalizedNotes &&
     isSameSimIdentity(existing) &&
+    isAgentTransactionRole(existing) &&
     existing.status === "success";
 
   try {
@@ -382,7 +604,7 @@ exports.recordCashOutManual = async (req, res) => {
       const existingResult = await client.query(
         `SELECT id, reference, status, amount, provider, transaction_type,
                 customer_phone, notes, sim_iccid, sim_slot,
-                installation_id, sim_subscription_id,
+                installation_id, sim_subscription_id, sim_role,
                 branch_id, company_id, created_at, completed_at
          FROM transactions
          WHERE agent_id = $1
@@ -406,6 +628,25 @@ exports.recordCashOutManual = async (req, res) => {
         return {
           transaction: existing,
           idempotentReplay: true
+        };
+      }
+
+      const roleVerification =
+        await verifyAgentFinancialSimRole({
+          queryFn: client.query.bind(client),
+          userId: agentId,
+          provider,
+          simSlot: normalizedSlot,
+          simIccid: normalizedIccid,
+          installationId: normalizedInstallationId,
+          simSubscriptionId: normalizedSubscriptionId
+        });
+
+      if (roleVerification.ok === false) {
+        throw {
+          statusCode: roleVerification.status,
+          code: roleVerification.code,
+          message: roleVerification.message
         };
       }
 
@@ -435,20 +676,20 @@ exports.recordCashOutManual = async (req, res) => {
            reference, agent_id, branch_id, company_id, provider,
            transaction_type, status, amount, fee,
            customer_phone, notes, sim_iccid, sim_slot,
-           installation_id, sim_subscription_id,
+           installation_id, sim_subscription_id, sim_role,
            client_operation_id, completed_at
          ) VALUES (
            $1, $2, $3, $4, $5,
            'cash_out', 'success', $6, 0,
            $7, $8, $9, $10,
-           $11, $12, $13, NOW()
+           $11, $12, 'agent', $13, NOW()
          )
          ON CONFLICT (agent_id, client_operation_id)
            WHERE client_operation_id IS NOT NULL
          DO NOTHING
          RETURNING id, reference, status, amount, provider, transaction_type,
                    customer_phone, notes, sim_iccid, sim_slot,
-                   installation_id, sim_subscription_id,
+                   installation_id, sim_subscription_id, sim_role,
                    branch_id, company_id, created_at, completed_at`,
         [
           internalReference,
@@ -474,7 +715,7 @@ exports.recordCashOutManual = async (req, res) => {
         const winnerResult = await client.query(
           `SELECT id, reference, status, amount, provider, transaction_type,
                   customer_phone, notes, sim_iccid, sim_slot,
-                  installation_id, sim_subscription_id,
+                  installation_id, sim_subscription_id, sim_role,
                   branch_id, company_id, created_at, completed_at
            FROM transactions
            WHERE agent_id = $1
@@ -532,6 +773,7 @@ exports.recordCashOutManual = async (req, res) => {
          WHERE id = $2
            AND agent_id = $3
            AND provider = $4
+           AND sim_role = 'agent'
          RETURNING id`,
         [
           simWallet.id,
@@ -569,6 +811,7 @@ exports.recordCashOutManual = async (req, res) => {
          WHERE id = $2
            AND agent_id = $3
            AND provider = $4
+           AND sim_role = 'agent'
          RETURNING id`,
         [
           eFloatAfter,
@@ -865,6 +1108,7 @@ exports.recordFloatReceived = async (req, res) => {
       normalizedExternalReference &&
     String(existing.notes || "") === normalizedNotes &&
     isSameSimIdentity(existing) &&
+    isAgentTransactionRole(existing) &&
     existing.status === "success";
 
   try {
@@ -875,7 +1119,7 @@ exports.recordFloatReceived = async (req, res) => {
         `SELECT id, reference, network_reference, status, amount,
                 provider, transaction_type, notes,
                 sim_iccid, sim_slot,
-                installation_id, sim_subscription_id,
+                installation_id, sim_subscription_id, sim_role,
                 sim_wallet_id,
                 branch_id, company_id,
                 created_at, completed_at
@@ -904,6 +1148,25 @@ exports.recordFloatReceived = async (req, res) => {
         return {
           transaction: existing,
           idempotentReplay: true
+        };
+      }
+
+      const roleVerification =
+        await verifyAgentFinancialSimRole({
+          queryFn: client.query.bind(client),
+          userId: agentId,
+          provider,
+          simSlot: normalizedSlot,
+          simIccid: normalizedIccid,
+          installationId: normalizedInstallationId,
+          simSubscriptionId: normalizedSubscriptionId
+        });
+
+      if (roleVerification.ok === false) {
+        throw {
+          statusCode: roleVerification.status,
+          code: roleVerification.code,
+          message: roleVerification.message
         };
       }
 
@@ -963,10 +1226,7 @@ exports.recordFloatReceived = async (req, res) => {
            $8,
            $9,
            $10,
-           $11,
-           $12,
-           $13,
-           NOW()
+           $11, $12, 'agent', $13, NOW()
          )
          ON CONFLICT (agent_id, client_operation_id)
            WHERE client_operation_id IS NOT NULL
@@ -974,7 +1234,7 @@ exports.recordFloatReceived = async (req, res) => {
          RETURNING id, reference, network_reference, status, amount,
                    provider, transaction_type, notes,
                    sim_iccid, sim_slot,
-                   installation_id, sim_subscription_id,
+                   installation_id, sim_subscription_id, sim_role,
                    sim_wallet_id,
                    branch_id, company_id,
                    created_at, completed_at`,
@@ -1002,7 +1262,7 @@ exports.recordFloatReceived = async (req, res) => {
           `SELECT id, reference, network_reference, status, amount,
                   provider, transaction_type, notes,
                   sim_iccid, sim_slot,
-                  installation_id, sim_subscription_id,
+                  installation_id, sim_subscription_id, sim_role,
                   sim_wallet_id,
                   branch_id, company_id,
                   created_at, completed_at
@@ -1056,6 +1316,7 @@ exports.recordFloatReceived = async (req, res) => {
            WHERE id = $2
              AND agent_id = $3
              AND provider = $4
+           AND sim_role = 'agent'
            RETURNING id`,
           [
             simWallet.id,
@@ -1084,6 +1345,7 @@ exports.recordFloatReceived = async (req, res) => {
            WHERE id = $2
              AND agent_id = $3
              AND provider = $4
+           AND sim_role = 'agent'
            RETURNING id`,
           [
             eFloatAfter,
