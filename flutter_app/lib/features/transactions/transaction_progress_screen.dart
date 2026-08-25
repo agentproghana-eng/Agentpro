@@ -9,6 +9,7 @@ import '../../core/services/permission_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
+import '../../shared/utils/transaction_labels.dart';
 import '../../shared/widgets/ussd_accessibility_disclosure.dart';
 import '../../core/services/offline_queue_service.dart';
 import '../../core/services/sim_role_assignment_service.dart';
@@ -1482,8 +1483,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     final isAwaitingPIN = _status == USSDStatus.awaitingPIN;
     final activeStep = _activeProgressStep;
     final provider = widget.data['provider']?.toString() ?? '';
-    final type =
-        widget.data['transaction_type']?.toString().replaceAll('_', ' ') ?? '';
+    final rawType = widget.data['transaction_type']?.toString() ?? '';
+    final type = rawType.isEmpty ? '' : transactionTypeLabel(rawType, provider);
 
     return SafeArea(
       child: ListView(
@@ -1714,18 +1715,6 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     );
   }
 
-  String _resultTitleCase(String value) {
-    return value
-        .replaceAll('_', ' ')
-        .split(' ')
-        .where((part) => part.isNotEmpty)
-        .map(
-          (part) =>
-              '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}',
-        )
-        .join(' ');
-  }
-
   String _resultTimeLabel(DateTime value) {
     final hour = value.hour == 0
         ? 12
@@ -1947,8 +1936,9 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     final showAmount = parsedAmount > 0;
 
     final rawType = widget.data['transaction_type']?.toString() ?? '';
-    final transactionType = _resultTitleCase(rawType);
     final provider = widget.data['provider']?.toString() ?? '';
+    final transactionType =
+        rawType.isEmpty ? '' : transactionTypeLabel(rawType, provider);
     final providerLabel = _providerLabel(provider);
     final customerPhone =
         widget.data['customer_phone']?.toString().trim() ?? '';

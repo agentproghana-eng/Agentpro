@@ -67,11 +67,11 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     {'value': 'send_money', 'label': 'Send'},
     {'value': 'airtime', 'label': 'Airtime'},
     {'value': 'data_bundle', 'label': 'Data'},
-    {'value': 'merchant_payment', 'label': 'Merchant'},
+    {'value': 'merchant_payment', 'label': 'Pay to Merchant'},
     {'value': 'pay_to_agent', 'label': 'Pay to Agent'},
-    {'value': 'balance_enquiry', 'label': 'Balance'},
-    {'value': 'business_deposit', 'label': 'Business In'},
-    {'value': 'business_withdrawal', 'label': 'Business Out'},
+    {'value': 'balance_enquiry', 'label': 'Check Balance'},
+    {'value': 'business_deposit', 'label': 'Business Deposit'},
+    {'value': 'business_withdrawal', 'label': 'Business Withdrawal'},
   ];
 
   final _statuses = const [
@@ -589,6 +589,17 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     return '${labels[_sortBy] ?? 'Date'} $arrow';
   }
 
+  void _leaveHistory() {
+    if (Navigator.of(context).canPop()) {
+      context.pop();
+      return;
+    }
+
+    // Notification navigation can make Transaction History the route root.
+    // Return to the authenticated home instead of closing the application.
+    context.go('/');
+  }
+
   @override
   void dispose() {
     _searchDebounce?.cancel();
@@ -678,8 +689,15 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Transaction History')),
+    final scaffold = Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          tooltip: 'Back',
+          onPressed: _leaveHistory,
+          icon: const Icon(Icons.arrow_back),
+        ),
+        title: const Text('Transaction History'),
+      ),
       body: Column(
         children: [
           Padding(
@@ -926,6 +944,16 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
           ),
         ],
       ),
+    );
+
+    return PopScope(
+      canPop: Navigator.of(context).canPop(),
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          context.go('/');
+        }
+      },
+      child: scaffold,
     );
   }
 }

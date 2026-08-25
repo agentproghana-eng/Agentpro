@@ -130,6 +130,63 @@ async function sendToCompany(companyId, notification) {
 
 // ── Specific Notification Types ──────────────────────────────
 
+function transactionNotificationTypeLabel(transaction) {
+  const transactionType = String(
+    transaction?.transaction_type || ''
+  ).trim();
+
+  const provider = String(
+    transaction?.provider || ''
+  ).trim().toLowerCase();
+
+  if (provider === 'mtn' && transactionType === 'send_money') {
+    return 'Cash In';
+  }
+
+  if (
+    (provider === 'telecel' || provider === 'at_money') &&
+    transactionType === 'cash_in'
+  ) {
+    return 'Deposit';
+  }
+
+  if (provider === 'telecel' && transactionType === 'cash_out') {
+    return 'Withdrawal';
+  }
+
+  const labels = {
+    cash_in: 'Cash In',
+    cash_out: 'Cash Out',
+    send_money: 'Send Money',
+    merchant_payment: 'Pay to Merchant',
+    pay_to_agent: 'Pay to Agent',
+    bill_payment: 'Bill Payment',
+    airtime: 'Airtime',
+    data_bundle: 'Data Bundle',
+    balance_enquiry: 'Check Balance',
+    commission_balance: 'Commission Balance',
+    cash_in_commission: 'Cash In Commission',
+    cash_out_commission: 'Cash Out Commission',
+    commission_transfer: 'Commission to Float',
+    working_to_float: 'Working Account to Float',
+    float_to_working: 'Float to Working Account',
+  };
+
+  if (labels[transactionType]) {
+    return labels[transactionType];
+  }
+
+  return transactionType
+    .split('_')
+    .filter(Boolean)
+    .map(
+      (part) =>
+        part.charAt(0).toUpperCase() +
+        part.slice(1).toLowerCase()
+    )
+    .join(' ');
+}
+
 async function sendTransactionNotification(
   agentId,
   { type, transaction },
@@ -137,7 +194,8 @@ async function sendTransactionNotification(
 ) {
   const transactionType = transaction.transaction_type || '';
   const isBalanceEnquiry = transactionType === 'balance_enquiry';
-  const typeLabel = transactionType.replace('_', ' ');
+  const typeLabel =
+    transactionNotificationTypeLabel(transaction);
   const amountStr = isBalanceEnquiry
     ? null
     : `GH₵${parseFloat(transaction.amount).toFixed(2)}`;

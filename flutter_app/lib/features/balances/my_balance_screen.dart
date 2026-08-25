@@ -39,7 +39,7 @@ class _MyBalanceScreenState extends State<MyBalanceScreen> {
       case 'telecel':
         return 'Telecel';
       case 'at_money':
-        return 'AirtelTigo';
+        return 'AT Money';
       default:
         return provider;
     }
@@ -231,7 +231,34 @@ class _MyBalanceScreenState extends State<MyBalanceScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Text(_error!))
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.account_balance_wallet_outlined,
+                          size: 48,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          _error!,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: context.appSecondaryText,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          onPressed: _load,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Try Again'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
               : RefreshIndicator(
                   onRefresh: _load,
                   child: ListView(

@@ -151,7 +151,20 @@ class _AgentProAppState extends State<AgentProApp> {
         isTransactionRoute && isHistoryOrProgress == false;
 
     if (isTransactionDetailRoute == false) {
-      router.go(route);
+      // A notification destination must never become the application root.
+      // Establish the authenticated dashboard first, then push the target
+      // above it so AppBar Back and Android system Back remain inside AgentPro.
+      router.go('/');
+
+      await WidgetsBinding.instance.endOfFrame;
+
+      if (mounted == false) {
+        return;
+      }
+
+      unawaited(
+        router.push<void>(route),
+      );
       return;
     }
 

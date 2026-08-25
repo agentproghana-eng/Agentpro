@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/api/api_cache.dart';
 import '../../core/api/api_client.dart';
+import '../../core/services/notification_service.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
@@ -84,6 +88,91 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         setState(() => _loading = false);
       }
     }
+  }
+
+  Map<String, dynamic> _notificationData(
+    Map<String, dynamic> notification,
+  ) {
+    final rawData = notification['data'];
+
+    return rawData is Map
+        ? Map<String, dynamic>.from(rawData)
+        : <String, dynamic>{};
+  }
+
+  String? _routeForNotification(
+    Map<String, dynamic> notification,
+  ) {
+    final data = _notificationData(notification);
+
+    final route = notificationRouteForType(
+      notification['type']?.toString(),
+      transactionId: data['transaction_id']?.toString(),
+    );
+
+    return route == '/notifications' ? null : route;
+  }
+
+  Future<void> _persistNotificationRead(String notificationId) async {
+    try {
+      await ApiClient.instance.patch(
+        '/notifications/mark-read',
+        data: {
+          'notification_ids': [notificationId],
+        },
+      );
+    } catch (_) {
+      // The next refresh will restore the authoritative server state.
+      ApiCache.invalidate(_cacheKey);
+    }
+  }
+
+  void _markNotificationReadLocally(
+    Map<String, dynamic> notification,
+  ) {
+    if (notification['is_read'] == true) {
+      return;
+    }
+
+    final notificationId = notification['id']?.toString().trim() ?? '';
+
+    if (notificationId.isEmpty) {
+      return;
+    }
+
+    final updated = _notifications
+        .map(
+          (item) => item['id']?.toString() == notificationId
+              ? {
+                  ...item,
+                  'is_read': true,
+                }
+              : item,
+        )
+        .toList();
+
+    setState(() => _notifications = updated);
+
+    ApiCache.put<List<Map<String, dynamic>>>(
+      _cacheKey,
+      updated,
+      ttl: const Duration(seconds: 45),
+    );
+
+    unawaited(
+      _persistNotificationRead(notificationId),
+    );
+  }
+
+  void _openNotification(
+    Map<String, dynamic> notification,
+    String route,
+  ) {
+    _markNotificationReadLocally(notification);
+
+    unawaited(
+      context.push<void>(route),
+    );
   }
 
   Future<void> _markAllRead() async {
@@ -205,6 +294,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     itemBuilder: (context, index) {
                       final notification = _notifications[index];
                       final isRead = notification['is_read'] == true;
+                      final route = _routeForNotification(notification);
 
                       return ListTile(
                         leading: CircleAvatar(
@@ -249,6 +339,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                             ),
                           ],
                         ),
+                        trailing: route == null
+                            ? null
+                            : const Icon(
+                                Icons.chevron_right_rounded,
+                              ),
+                        onTap: route == null
+                            ? null
+                            : () => _openNotification(
+                                  notification,
+                                  route,
+                                ),
                         tileColor: isRead
                             ? null
                             : AppTheme.primaryColor.withValues(

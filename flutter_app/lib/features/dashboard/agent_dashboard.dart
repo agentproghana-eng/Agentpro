@@ -87,9 +87,9 @@ class _MoreTab extends StatelessWidget {
           ),
           MoreTile(
             Icons.account_balance_wallet_outlined,
-            'Float Balance',
+            'My Balance',
             () => context.push('/my-balance'),
-            subtitle: 'Monitor your available e-float and cash',
+            subtitle: 'View physical cash and exact SIM balances',
           ),
           MoreTile(
             Icons.request_page_outlined,
@@ -135,7 +135,15 @@ class _MoreTab extends StatelessWidget {
           MoreTile(
             Icons.logout,
             'Sign Out',
-            () => context.read<AuthBloc>().add(AuthLogoutEvent()),
+            () async {
+              final confirmed = await confirmSignOut(context);
+
+              if (!context.mounted || !confirmed) {
+                return;
+              }
+
+              context.read<AuthBloc>().add(AuthLogoutEvent());
+            },
             color: AppTheme.errorColor,
           ),
         ],
