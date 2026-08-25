@@ -244,6 +244,68 @@ describe('Cash adjustment review locking and idempotency', () => {
     );
   });
 
+  it('prevents manager from reviewing own pending adjustment', async () => {
+    mockClientQuery.mockResolvedValueOnce({
+      rows: [
+        pendingMovement({
+          agent_id: 'reviewer-1'
+        })
+      ]
+    });
+
+    const res = makeRes();
+
+    await balanceController.reviewCashAdjustment(
+      makeReq('approve', 'manager'),
+      res
+    );
+
+    expect(res.status)
+      .toHaveBeenCalledWith(403);
+
+    expect(res.json)
+      .toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          code: 'SELF_REVIEW_NOT_ALLOWED'
+        })
+      );
+
+    expect(mockClientQuery)
+      .toHaveBeenCalledTimes(1);
+  });
+
+  it('prevents business owner from reviewing own pending adjustment', async () => {
+    mockClientQuery.mockResolvedValueOnce({
+      rows: [
+        pendingMovement({
+          agent_id: 'reviewer-1'
+        })
+      ]
+    });
+
+    const res = makeRes();
+
+    await balanceController.reviewCashAdjustment(
+      makeReq('approve', 'business_owner'),
+      res
+    );
+
+    expect(res.status)
+      .toHaveBeenCalledWith(403);
+
+    expect(res.json)
+      .toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          code: 'SELF_REVIEW_NOT_ALLOWED'
+        })
+      );
+
+    expect(mockClientQuery)
+      .toHaveBeenCalledTimes(1);
+  });
+
   it('scopes manager review to their own company and managed branches', async () => {
     mockClientQuery.mockResolvedValueOnce({
       rows: []
