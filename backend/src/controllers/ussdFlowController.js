@@ -33,7 +33,11 @@ exports.listFlows = async (req, res) => {
       // must never be used as the definition of "Global".
       conditions.push(
         `(
-          (f.company_id IS NULL AND f.owner_user_id IS NULL)
+          (
+            f.company_id IS NULL
+            AND f.owner_user_id IS NULL
+            AND f.business_sim_role IS NOT NULL
+          )
           OR
           (f.company_id = $${idx++} AND f.owner_user_id IS NULL)
         )`,

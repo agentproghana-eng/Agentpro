@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../../core/api/api_client.dart';
+import 'transaction_reference_display.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_widgets.dart';
 import '../../shared/theme/app_colors.dart';
@@ -82,7 +83,11 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                     const SizedBox(height: 12),
                     Card(
                       child: Column(children: [
-                        _DetailRow('Reference', _tx!['reference']),
+                        _DetailRow(
+                          'Reference',
+                          compactTransactionReference(_tx!['reference']),
+                          copyValue: _tx!['reference']?.toString(),
+                        ),
                         if (_tx!['network_reference'] != null)
                           _DetailRow('Network Ref', _tx!['network_reference']),
                         _DetailRow('Customer', _tx!['customer_phone'] ?? '—'),
@@ -126,20 +131,82 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
 class _DetailRow extends StatelessWidget {
   final String label;
   final String? value;
-  const _DetailRow(this.label, this.value);
+  final String? copyValue;
+
+  const _DetailRow(
+    this.label,
+    this.value, {
+    this.copyValue,
+  });
   @override
   Widget build(BuildContext context) {
+    final displayValue = value ?? '—';
+    final fullCopyValue = copyValue ?? value;
+
+    final valueText = Text(
+      displayValue,
+      textAlign: TextAlign.end,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(
+        fontWeight: FontWeight.w600,
+        fontSize: 13,
+      ),
+    );
+
     return ListTile(
       dense: true,
-      title: Text(label,
-          style: TextStyle(color: context.appSecondaryText, fontSize: 12)),
-      trailing: GestureDetector(
-        onLongPress: () {
-          Clipboard.setData(ClipboardData(text: value ?? ''));
-        },
-        child: Text(value ?? '—',
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+      title: Text(
+        label,
+        style: TextStyle(
+          color: context.appSecondaryText,
+          fontSize: 12,
+        ),
       ),
+      trailing: copyValue == null
+          ? GestureDetector(
+              onLongPress: fullCopyValue == null
+                  ? null
+                  : () {
+                      Clipboard.setData(
+                        ClipboardData(text: fullCopyValue),
+                      );
+                    },
+              child: valueText,
+            )
+          : SizedBox(
+              width: 190,
+              child: Row(
+                children: [
+                  Expanded(child: valueText),
+                  IconButton(
+                    tooltip: 'Copy full reference',
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(
+                      Icons.copy_outlined,
+                      size: 17,
+                    ),
+                    onPressed: fullCopyValue == null || fullCopyValue.isEmpty
+                        ? null
+                        : () {
+                            Clipboard.setData(
+                              ClipboardData(
+                                text: fullCopyValue,
+                              ),
+                            );
+
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Full reference copied',
+                                ),
+                              ),
+                            );
+                          },
+                  ),
+                ],
+              ),
+            ),
     );
   }
 }

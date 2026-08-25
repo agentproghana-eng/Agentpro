@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/utils/transaction_labels.dart';
 import 'ussd_flow_editor_screen.dart';
+import 'ussd_flow_grouping.dart';
 
 // Lists Custom USSD flows for either Business or Personal mode.
 //
@@ -417,48 +419,146 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
                     )
                   : RefreshIndicator(
                       onRefresh: _load,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(12),
-                        itemCount: _flows.length,
-                        itemBuilder: (_, i) {
-                          final flow =
-                              Map<String, dynamic>.from(_flows[i] as Map);
-                          final isActive = _isActive(flow);
-
-                          final provider = _providerLabel(
-                              flow['provider']?.toString() ?? '');
-                          final transactionType = _humanize(
-                            flow['transaction_type']?.toString() ?? '',
+                      child: Builder(
+                        builder: (context) {
+                          final groups = groupUssdFlows(
+                            _flows,
+                            isPersonal: widget.isPersonal,
                           );
 
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            child: ListTile(
-                              title: Text(
-                                '$provider · $transactionType',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13,
-                                  color: isActive
-                                      ? context.appPrimaryText
-                                      : context.appSecondaryText,
+                          return ListView.builder(
+                            padding: const EdgeInsets.all(12),
+                            itemCount: groups.length,
+                            itemBuilder: (_, i) {
+                              final group = groups[i];
+
+                              final activeCount = group.flows
+                                  .where(
+                                    (flow) => _isActive(flow),
+                                  )
+                                  .length;
+
+                              final provider = _providerLabel(group.provider);
+
+                              final motherLabel = transactionTypeLabel(
+                                group.transactionType,
+                                group.provider,
+                              );
+
+                              final roleLabel = widget.isPersonal
+                                  ? null
+                                  : ussdFlowRoleLabel(
+                                      group.simRole,
+                                    );
+
+                              return Card(
+                                margin: const EdgeInsets.only(
+                                  bottom: 8,
                                 ),
-                              ),
-                              subtitle: Padding(
-                                padding: const EdgeInsets.only(top: 3),
-                                child: Text(
-                                  '${flow['dial_code'] ?? ''} · '
-                                  '${_scopeDescription(flow)} · '
-                                  '${_scopeLabel(flow)}',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: context.appSecondaryText,
+                                child: ExpansionTile(
+                                  key: PageStorageKey(
+                                    group.key,
                                   ),
+                                  tilePadding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 3,
+                                  ),
+                                  childrenPadding: const EdgeInsets.only(
+                                    bottom: 6,
+                                  ),
+                                  title: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          '$provider · $motherLabel',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      _statusBadge(
+                                        context,
+                                        isActive: activeCount > 0,
+                                      ),
+                                    ],
+                                  ),
+                                  subtitle: Padding(
+                                    padding: const EdgeInsets.only(
+                                      top: 4,
+                                    ),
+                                    child: Text(
+                                      [
+                                        if (roleLabel != null) roleLabel,
+                                        '${group.flows.length} '
+                                            '${group.flows.length == 1 ? 'subflow' : 'subflows'}',
+                                        '$activeCount active',
+                                      ].join(' · '),
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: context.appSecondaryText,
+                                      ),
+                                    ),
+                                  ),
+                                  children: [
+                                    const Divider(height: 1),
+                                    ...group.flows.map(
+                                      (flow) {
+                                        final isActive = _isActive(flow);
+
+                                        return ListTile(
+                                          contentPadding:
+                                              const EdgeInsets.fromLTRB(
+                                            18,
+                                            2,
+                                            8,
+                                            2,
+                                          ),
+                                          leading: Icon(
+                                            Icons
+                                                .subdirectory_arrow_right_rounded,
+                                            size: 19,
+                                            color: context.appSecondaryText,
+                                          ),
+                                          title: Text(
+                                            ussdFlowVariantLabel(
+                                              flow,
+                                            ),
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 12.5,
+                                              color: isActive
+                                                  ? context.appPrimaryText
+                                                  : context.appSecondaryText,
+                                            ),
+                                          ),
+                                          subtitle: Padding(
+                                            padding: const EdgeInsets.only(
+                                              top: 3,
+                                            ),
+                                            child: Text(
+                                              '${flow['dial_code'] ?? ''} · '
+                                              '${_scopeDescription(flow)} · '
+                                              '${_scopeLabel(flow)}',
+                                              style: TextStyle(
+                                                fontSize: 10.5,
+                                                color: context.appSecondaryText,
+                                              ),
+                                            ),
+                                          ),
+                                          trailing: _buildTrailing(
+                                            context,
+                                            flow,
+                                          ),
+                                          onTap: () => _openFlow(flow),
+                                        );
+                                      },
+                                    ),
+                                  ],
                                 ),
-                              ),
-                              trailing: _buildTrailing(context, flow),
-                              onTap: () => _openFlow(flow),
-                            ),
+                              );
+                            },
                           );
                         },
                       ),

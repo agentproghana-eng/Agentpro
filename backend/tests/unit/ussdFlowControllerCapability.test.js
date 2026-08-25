@@ -108,6 +108,38 @@ describe('USSD Flow Builder capability enforcement', () => {
     });
   });
 
+  test('Business owner list excludes Personal Global seed rows', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    const req = {
+      user: {
+        id: 'business-user-1',
+        role: 'business_owner',
+        company_id: 'company-1',
+      },
+    };
+    const res = makeRes();
+
+    await ussdFlowController.listFlows(req, res);
+
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+
+    const [sql, params] = mockQuery.mock.calls[0];
+
+    expect(sql).toContain(
+      'f.business_sim_role IS NOT NULL'
+    );
+    expect(sql).toContain(
+      'f.company_id = $1'
+    );
+    expect(params).toEqual(['company-1']);
+
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: [],
+    });
+  });
+
   test('Business get cannot expose a Personal-owned row to superuser', async () => {
     mockQuery.mockResolvedValueOnce({ rows: [] });
 

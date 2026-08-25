@@ -16,6 +16,7 @@ import '../../core/services/dashboard_refresh_service.dart';
 import '../../core/services/storage_service.dart';
 import '../ussd_flows/ussd_flow_runtime_policy.dart';
 import '../ussd_flows/ussd_flow_draft_validation.dart';
+import 'transaction_reference_display.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/auth/auth_bloc.dart';
 
@@ -2117,7 +2118,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
                   _resultDetailRow(
                     icon: Icons.tag,
                     label: 'AgentPro Reference',
-                    value: reference,
+                    value: compactTransactionReference(reference),
                   ),
                 ],
                 if (networkReference.isNotEmpty) ...[
