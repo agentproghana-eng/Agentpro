@@ -28,6 +28,15 @@ const {
   consumeMfaChallenge,
 } = require('../services/mfaChallengeService');
 
+const {
+  beginPersonalPhoneVerification,
+  verifyPersonalPhoneCode,
+  consumePersonalPhoneVerification,
+} = require("../services/personalPhoneVerificationService");
+const {
+  grantPersonalTrial,
+} = require("../services/personalTrialEntitlementService");
+
 // ─── Token Helpers ───────────────────────────────────────────
 
 function generateAccessToken(user, sessionId) {
@@ -75,6 +84,88 @@ function digestRefreshToken(token) {
 function getRefreshTokenExpiry() {
   const days = parseInt(process.env.JWT_REFRESH_EXPIRES_IN) || 30;
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+}
+
+const PERSONAL_VERIFICATION_CODES = new Set([
+  "PHONE_VERIFICATION_RESEND_TOO_SOON",
+  "PHONE_VERIFICATION_RATE_LIMITED",
+  "PHONE_VERIFICATION_TEMPORARILY_UNAVAILABLE",
+  "PHONE_VERIFICATION_PROTECTION_UNAVAILABLE",
+  "PHONE_VERIFICATION_DELIVERY_UNAVAILABLE",
+  "PHONE_VERIFICATION_INVALID_CODE",
+  "PHONE_VERIFICATION_BINDING_MISMATCH",
+  "PHONE_VERIFICATION_EXPIRED",
+  "PHONE_VERIFICATION_TOKEN_INVALID",
+  "INVALID_TRIAL_PHONE",
+  "INVALID_TRIAL_INSTALLATION",
+  "INVALID_TRIAL_SIM_IDENTITY",
+  "TRIAL_IDENTITY_PROTECTION_UNAVAILABLE",
+]);
+
+function isPersonalVerificationError(error) {
+  return PERSONAL_VERIFICATION_CODES.has(error?.code);
+}
+
+function personalVerificationErrorStatus(error) {
+  const code = error?.code;
+
+  if (
+    [
+      "PHONE_VERIFICATION_RESEND_TOO_SOON",
+      "PHONE_VERIFICATION_RATE_LIMITED",
+    ].includes(code)
+  ) {
+    return 429;
+  }
+
+  if (
+    [
+      "PHONE_VERIFICATION_TEMPORARILY_UNAVAILABLE",
+      "PHONE_VERIFICATION_PROTECTION_UNAVAILABLE",
+      "PHONE_VERIFICATION_DELIVERY_UNAVAILABLE",
+      "TRIAL_IDENTITY_PROTECTION_UNAVAILABLE",
+    ].includes(code)
+  ) {
+    return 503;
+  }
+
+  if (PERSONAL_VERIFICATION_CODES.has(code)) {
+    return 422;
+  }
+
+  return 500;
+}
+
+function respondPersonalVerificationError(res, error) {
+  const status = personalVerificationErrorStatus(error);
+
+  const code =
+    typeof error?.code === "string"
+      ? error.code
+      : "PERSONAL_VERIFICATION_FAILED";
+
+  const message =
+    status >= 500
+      ? "Registration verification is temporarily unavailable."
+      : typeof error?.message === "string"
+        ? error.message
+        : "Registration verification failed.";
+
+  const body = {
+    success: false,
+    code,
+    message,
+  };
+
+  if (Number.isInteger(error?.retryAfterSeconds)) {
+    body.retry_after_seconds = error.retryAfterSeconds;
+  }
+
+  if (Number.isInteger(error?.remainingAttempts)) {
+    body.remaining_attempts = error.remainingAttempts;
+  }
+
+  return res.status(status).json(body);
 }
 
 // ─── Business Owner Registration ─────────────────────────────
@@ -169,92 +260,242 @@ exports.register = async (req, res) => {
 // shape as login()) since there's no pending-approval wait to justify a
 // separate login step right after.
 
-exports.registerPersonal = async (req, res) => {
-  const { first_name, last_name, phone, email, password } = req.body;
-  // New Personal Subscribers get 7 days of full Paid access to try
-  // everything before deciding whether to pay - reuses the existing
-  // plan/expires_at mechanism exactly as a real subscription would, so
-  // the daily expirePersonalSubscriptions job auto-reverts this trial
-  // to Free with zero new logic needed. Computed once here (rather
-  // than via SQL's NOW()) so the exact same value can be used in both
-  // the INSERT below and the response JSON without a second query.
-  const trialExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+exports.startPersonalPhoneVerification = async (req, res) => {
+  const { phone, installation_id, sim_iccid } = req.body;
 
   try {
-    const existing = await query(
-      'SELECT id FROM users WHERE email = $1',
-      [email.toLowerCase()]
-    );
+    const result = await beginPersonalPhoneVerification({
+      phone,
+      installationId: installation_id || null,
+      simIccid: sim_iccid || null,
+    });
+
+    return res.status(202).json({
+      success: true,
+      code: "PHONE_VERIFICATION_CODE_SENT",
+      message: "Verification code sent.",
+      data: {
+        challenge_token: result.challengeToken,
+        expires_in_seconds: result.expiresInSeconds,
+      },
+    });
+  } catch (error) {
+    if (isPersonalVerificationError(error)) {
+      return respondPersonalVerificationError(res, error);
+    }
+
+    logger.error("Personal phone verification start failed", {
+      code: error?.code || "UNEXPECTED",
+    });
+
+    return res.status(500).json({
+      success: false,
+      message: "Registration verification is temporarily unavailable.",
+    });
+  }
+};
+
+exports.verifyPersonalPhone = async (req, res) => {
+  const { challenge_token, code, phone, installation_id, sim_iccid } = req.body;
+
+  try {
+    const result = await verifyPersonalPhoneCode({
+      challengeToken: challenge_token,
+      code,
+      phone,
+      installationId: installation_id || null,
+      simIccid: sim_iccid || null,
+    });
+
+    return res.json({
+      success: true,
+      code: "PHONE_VERIFICATION_COMPLETE",
+      message: "Phone number verified.",
+      data: {
+        verification_token: result.verifiedToken,
+        expires_in_seconds: result.expiresInSeconds,
+      },
+    });
+  } catch (error) {
+    if (isPersonalVerificationError(error)) {
+      return respondPersonalVerificationError(res, error);
+    }
+
+    logger.error("Personal phone verification failed", {
+      code: error?.code || "UNEXPECTED",
+    });
+
+    return res.status(500).json({
+      success: false,
+      message: "Registration verification is temporarily unavailable.",
+    });
+  }
+};
+
+exports.registerPersonal = async (req, res) => {
+  const {
+    first_name,
+    last_name,
+    phone,
+    email,
+    password,
+    phone_verification_token,
+    installation_id,
+    sim_iccid,
+  } = req.body;
+
+  try {
+    const existing = await query("SELECT id FROM users WHERE email = $1", [
+      email.toLowerCase(),
+    ]);
+
     if (existing.rows.length > 0) {
       return res.status(409).json({
         success: false,
-        message: 'An account with this email already exists'
+        message: "An account with this email already exists",
       });
     }
 
-    const passwordHash = await bcrypt.hash(password, parseInt(process.env.BCRYPT_ROUNDS) || 12);
+    const passwordHash = await bcrypt.hash(
+      password,
+      parseInt(process.env.BCRYPT_ROUNDS) || 12,
+    );
 
-    const user = await withTransaction(async (client) => {
+    const registration = await withTransaction(async (client) => {
+      const verification = await consumePersonalPhoneVerification({
+        verifiedToken: phone_verification_token,
+        phone,
+        installationId: installation_id || null,
+        simIccid: sim_iccid || null,
+      });
+
+      const phoneVerifiedAt = new Date(verification.verifiedAt);
+
+      if (Number.isNaN(phoneVerifiedAt.getTime())) {
+        const error = new Error("Verified phone timestamp is invalid.");
+
+        error.code = "PHONE_VERIFICATION_TOKEN_INVALID";
+
+        throw error;
+      }
+
       const userResult = await client.query(
         `INSERT INTO users (
-          role, first_name, last_name, email, phone, password_hash, status
-        ) VALUES ('customer', $1, $2, $3, $4, $5, 'active')
-        RETURNING id, role, first_name, last_name, email, phone, company_id, profile_image_url, must_change_password`,
-        [first_name, last_name, email.toLowerCase(), phone, passwordHash]
+                role,
+                first_name,
+                last_name,
+                email,
+                phone,
+                password_hash,
+                phone_verified_at,
+                status
+              )
+              VALUES (
+                'customer',
+                $1,
+                $2,
+                $3,
+                $4,
+                $5,
+                $6,
+                'active'
+              )
+              RETURNING
+                id,
+                role,
+                first_name,
+                last_name,
+                email,
+                phone,
+                phone_verified_at,
+                company_id,
+                profile_image_url,
+                must_change_password`,
+        [
+          first_name,
+          last_name,
+          email.toLowerCase(),
+          phone,
+          passwordHash,
+          phoneVerifiedAt,
+        ],
       );
+
       const newUser = userResult.rows[0];
 
+      const trial = await grantPersonalTrial({
+        dbClient: client,
+        userId: newUser.id,
+        source: "registration",
+        phone: newUser.phone,
+        phoneVerifiedAt: newUser.phone_verified_at,
+        installationId: installation_id || null,
+        simIccid: sim_iccid || null,
+      });
+
+      const personalPlan = trial.granted ? "paid" : "free";
+
+      const personalExpiresAt = trial.granted ? trial.expiresAt : null;
+
       await client.query(
-        `INSERT INTO personal_subscriptions (user_id, plan, expires_at) VALUES ($1, 'paid', $2)`,
-        [newUser.id, trialExpiresAt]
+        `INSERT INTO personal_subscriptions (
+               user_id,
+               plan,
+               expires_at
+             )
+             VALUES ($1, $2, $3)`,
+        [newUser.id, personalPlan, personalExpiresAt],
       );
 
       await auditLog({
         userId: newUser.id,
         companyId: null,
-        action: 'PERSONAL_USER_REGISTERED',
-        entityType: 'user',
+        action: "PERSONAL_USER_REGISTERED",
+        entityType: "user",
         entityId: newUser.id,
-        newValues: { email, role: 'customer' },
+        newValues: {
+          email,
+          role: "customer",
+          trial_granted: trial.granted,
+        },
         ipAddress: req.ip,
-        userAgent: req.headers['user-agent'],
-        requestId: req.requestId
+        userAgent: req.headers["user-agent"],
+        requestId: req.requestId,
       });
 
-      return newUser;
+      return {
+        user: newUser,
+        trial,
+        personalPlan,
+        personalExpiresAt,
+      };
     });
 
-    // Auto-login: persist the durable session first, then bind the
-    // access token to that exact refresh-session row.
+    const user = registration.user;
+
     const refreshToken = generateRefreshToken(user);
+
     const tokenDigest = digestRefreshToken(refreshToken);
+
     const tokenHash = await bcrypt.hash(tokenDigest, 8);
 
     const sessionResult = await query(
       `INSERT INTO refresh_tokens (
-         user_id,
-         token_hash,
-         token_digest,
-         expires_at
-       )
-       VALUES ($1, $2, $3, $4)
-       RETURNING id`,
-      [
-        user.id,
-        tokenHash,
-        tokenDigest,
-        getRefreshTokenExpiry(),
-      ]
+           user_id,
+           token_hash,
+           token_digest,
+           expires_at
+         )
+         VALUES ($1, $2, $3, $4)
+         RETURNING id`,
+      [user.id, tokenHash, tokenDigest, getRefreshTokenExpiry()],
     );
 
-    const accessToken = generateAccessToken(
-      user,
-      sessionResult.rows[0].id,
-    );
+    const accessToken = generateAccessToken(user, sessionResult.rows[0].id);
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
-      message: 'Registration successful',
+      message: "Registration successful",
       data: {
         access_token: accessToken,
         refresh_token: refreshToken,
@@ -265,18 +506,36 @@ exports.registerPersonal = async (req, res) => {
           last_name: user.last_name,
           email: user.email,
           phone: user.phone,
+          phone_verified_at: user.phone_verified_at,
           company_id: user.company_id,
-          personal_subscription_plan: 'paid',
-          personal_subscription_expires_at: trialExpiresAt,
+          personal_subscription_plan: registration.personalPlan,
+          personal_subscription_expires_at: registration.personalExpiresAt,
+          personal_trial_granted: registration.trial.granted,
           profile_image_url: user.profile_image_url,
           must_change_password: user.must_change_password,
-        }
-      }
+        },
+      },
+    });
+  } catch (error) {
+    if (error?.code === "23505") {
+      return res.status(409).json({
+        success: false,
+        message: "An account with this email already exists",
+      });
+    }
+
+    if (isPersonalVerificationError(error)) {
+      return respondPersonalVerificationError(res, error);
+    }
+
+    logger.error("Personal registration error", {
+      code: error?.code || "UNEXPECTED",
     });
 
-  } catch (error) {
-    logger.error('Personal registration error:', error);
-    res.status(500).json({ success: false, message: 'Registration failed. Please try again.' });
+    return res.status(500).json({
+      success: false,
+      message: "Registration failed. Please try again.",
+    });
   }
 };
 
@@ -288,54 +547,203 @@ exports.registerPersonal = async (req, res) => {
 // rather than erroring.
 
 exports.addPersonalCapability = async (req, res) => {
+  const { phone_verification_token, installation_id, sim_iccid } = req.body;
+
   try {
-    const existing = await query(
-      'SELECT plan, expires_at FROM personal_subscriptions WHERE user_id = $1',
-      [req.user.id]
-    );
-    if (existing.rows.length > 0) {
+    const result = await withTransaction(async (client) => {
+      const userResult = await client.query(
+        `SELECT
+                 id,
+                 phone,
+                 phone_verified_at
+               FROM users
+               WHERE id = $1
+               FOR UPDATE`,
+        [req.user.id],
+      );
+
+      if (userResult.rows.length === 0) {
+        const error = new Error("User account was not found.");
+
+        error.code = "PERSONAL_CAPABILITY_USER_NOT_FOUND";
+
+        throw error;
+      }
+
+      const accountUser = userResult.rows[0];
+
+      const existing = await client.query(
+        `SELECT
+                 plan,
+                 expires_at
+               FROM personal_subscriptions
+               WHERE user_id = $1`,
+        [req.user.id],
+      );
+
+      if (existing.rows.length > 0) {
+        return {
+          alreadyEnabled: true,
+          plan: existing.rows[0].plan,
+          expiresAt: existing.rows[0].expires_at,
+          trialGranted: false,
+        };
+      }
+
+      const verification = await consumePersonalPhoneVerification({
+        verifiedToken: phone_verification_token,
+        phone: accountUser.phone,
+        installationId: installation_id || null,
+        simIccid: sim_iccid || null,
+      });
+
+      const verifiedAt = new Date(verification.verifiedAt);
+
+      if (Number.isNaN(verifiedAt.getTime())) {
+        const error = new Error("Verified phone timestamp is invalid.");
+
+        error.code = "PHONE_VERIFICATION_TOKEN_INVALID";
+
+        throw error;
+      }
+
+      const verifiedUser = await client.query(
+        `UPDATE users
+               SET phone_verified_at =
+                 COALESCE(
+                   phone_verified_at,
+                   $2
+                 )
+               WHERE id = $1
+               RETURNING
+                 phone,
+                 phone_verified_at`,
+        [req.user.id, verifiedAt],
+      );
+
+      const verifiedPhone = verifiedUser.rows[0];
+
+      const trial = await grantPersonalTrial({
+        dbClient: client,
+        userId: req.user.id,
+        source: "personal_capability",
+        phone: verifiedPhone.phone,
+        phoneVerifiedAt: verifiedPhone.phone_verified_at,
+        installationId: installation_id || null,
+        simIccid: sim_iccid || null,
+      });
+
+      const plan = trial.granted ? "paid" : "free";
+
+      const expiresAt = trial.granted ? trial.expiresAt : null;
+
+      const inserted = await client.query(
+        `INSERT INTO personal_subscriptions (
+                 user_id,
+                 plan,
+                 expires_at
+               )
+               VALUES ($1, $2, $3)
+               ON CONFLICT (user_id)
+               DO NOTHING
+               RETURNING
+                 plan,
+                 expires_at`,
+        [req.user.id, plan, expiresAt],
+      );
+
+      let finalPlan = plan;
+
+      let finalExpiresAt = expiresAt;
+
+      let created = inserted.rows.length > 0;
+
+      if (created === false) {
+        const concurrent = await client.query(
+          `SELECT
+                   plan,
+                   expires_at
+                 FROM personal_subscriptions
+                 WHERE user_id = $1`,
+          [req.user.id],
+        );
+
+        if (concurrent.rows.length === 0) {
+          throw new Error("Personal capability state could not be resolved.");
+        }
+
+        finalPlan = concurrent.rows[0].plan;
+
+        finalExpiresAt = concurrent.rows[0].expires_at;
+      }
+
+      if (created) {
+        await auditLog({
+          userId: req.user.id,
+          companyId: req.user.company_id,
+          action: "PERSONAL_CAPABILITY_ADDED",
+          entityType: "user",
+          entityId: req.user.id,
+          newValues: {
+            trial_granted: trial.granted,
+            personal_subscription_plan: finalPlan,
+          },
+          ipAddress: req.ip,
+          userAgent: req.headers["user-agent"],
+          requestId: req.requestId,
+        });
+      }
+
+      return {
+        alreadyEnabled: created === false,
+        plan: finalPlan,
+        expiresAt: finalExpiresAt,
+        trialGranted: trial.granted && finalPlan === "paid",
+      };
+    });
+
+    if (result.alreadyEnabled) {
       return res.json({
         success: true,
-        message: 'Personal capability is already enabled on this account.',
+        message: "Personal capability is already enabled on this account.",
         data: {
-          personal_subscription_plan: existing.rows[0].plan,
-          personal_subscription_expires_at: existing.rows[0].expires_at,
-        }
+          personal_subscription_plan: result.plan,
+          personal_subscription_expires_at: result.expiresAt,
+        },
       });
     }
 
-    // Same 7-day trial as new registrations - reuses the existing
-    // plan/expires_at mechanism, no new logic needed.
-    const inserted = await query(
-      `INSERT INTO personal_subscriptions (user_id, plan, expires_at)
-       VALUES ($1, 'paid', NOW() + INTERVAL '7 days')
-       RETURNING plan, expires_at`,
-      [req.user.id]
-    );
-
-    await auditLog({
-      userId: req.user.id,
-      companyId: req.user.company_id,
-      action: 'PERSONAL_CAPABILITY_ADDED',
-      entityType: 'user',
-      entityId: req.user.id,
-      ipAddress: req.ip,
-      userAgent: req.headers['user-agent'],
-      requestId: req.requestId
-    });
-
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
-      message: 'Personal capability enabled — you get 7 days of full Paid access to try everything, then it reverts to Free unless you subscribe.',
+      message: result.trialGranted
+        ? "Personal capability enabled with your one-time trial."
+        : "Personal capability enabled on the Free plan.",
       data: {
-        personal_subscription_plan: inserted.rows[0].plan,
-        personal_subscription_expires_at: inserted.rows[0].expires_at,
-      }
+        personal_subscription_plan: result.plan,
+        personal_subscription_expires_at: result.expiresAt,
+        personal_trial_granted: result.trialGranted,
+      },
+    });
+  } catch (error) {
+    if (error?.code === "PERSONAL_CAPABILITY_USER_NOT_FOUND") {
+      return res.status(404).json({
+        success: false,
+        message: "User account was not found.",
+      });
+    }
+
+    if (isPersonalVerificationError(error)) {
+      return respondPersonalVerificationError(res, error);
+    }
+
+    logger.error("Add personal capability error", {
+      code: error?.code || "UNEXPECTED",
     });
 
-  } catch (error) {
-    logger.error('Add personal capability error:', error);
-    res.status(500).json({ success: false, message: 'Failed to enable Personal capability. Please try again.' });
+    return res.status(500).json({
+      success: false,
+      message: "Failed to enable Personal capability. Please try again.",
+    });
   }
 };
 

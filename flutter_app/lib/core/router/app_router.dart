@@ -59,6 +59,7 @@ import '../../features/marketplace/saved_ads_screen.dart';
 import '../../features/marketplace/marketplace_enquiries_screen.dart';
 import '../../features/marketplace/marketplace_conversation_screen.dart';
 import '../../features/settings/settings_screen.dart';
+import '../../features/settings/add_personal_capability_screen.dart';
 import '../../features/settings/sim_purpose_settings_screen.dart';
 import '../../features/notifications/notifications_screen.dart';
 import '../../features/branches/branches_screen.dart';
@@ -501,6 +502,10 @@ class AppRouter {
           builder: (_, state) => SettingsScreen(
             isPersonal: state.uri.queryParameters['mode'] == 'personal',
           ),
+        ),
+        GoRoute(
+          path: '/settings/add-personal-capability',
+          builder: (_, __) => const AddPersonalCapabilityScreen(),
         ),
         GoRoute(
             path: '/settings/sim-purpose',

@@ -422,4 +422,225 @@ describe('Subscription controller contracts', () => {
     },
   );
 
+  test(
+    'expired Personal subscription can submit a renewal payment',
+    async () => {
+      mockTransactionQuery
+        .mockReset();
+
+      mockTransactionQuery
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              user_id:
+                'personal-user-1',
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          rows: [],
+        })
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id:
+                'expired-renewal-payment',
+              user_id:
+                'personal-user-1',
+              amount:
+                '5.00',
+              status:
+                'pending',
+            },
+          ],
+        });
+
+      const req =
+        makePersonalReq({
+          momo_reference:
+            'EXPIRED-RENEWAL-REF',
+          payment_phone:
+            '0240000000',
+        });
+
+      const res =
+        makeRes();
+
+      await personalSubscriptionController
+        .submitPayment(
+          req,
+          res,
+        );
+
+      const insertCall =
+        mockTransactionQuery
+          .mock
+          .calls
+          .find(
+            ([sql]) =>
+              String(sql).includes(
+                'INSERT INTO personal_subscription_payments'
+              ),
+          );
+
+      expect(
+        insertCall,
+      ).toBeDefined();
+
+      expect(
+        insertCall[1],
+      ).toEqual([
+        'personal-user-1',
+        'EXPIRED-RENEWAL-REF',
+        '0240000000',
+      ]);
+
+      expect(
+        res.status,
+      ).toHaveBeenCalledWith(
+        201,
+      );
+
+      expect(
+        res.json,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success:
+            true,
+        }),
+      );
+    },
+  );
+
+  test(
+    'approval after Personal expiry starts a fresh paid month from approval time',
+    async () => {
+      const fixedNow =
+        new Date(
+          '2026-08-25T10:30:00.000Z',
+        );
+
+      const expiredAt =
+        new Date(
+          '2026-08-01T00:00:00.000Z',
+        );
+
+      const expectedExpiry =
+        new Date(
+          fixedNow,
+        );
+
+      expectedExpiry.setMonth(
+        expectedExpiry.getMonth() +
+          1,
+      );
+
+      mockTransactionQuery
+        .mockReset();
+
+      mockTransactionQuery
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id:
+                'expired-renewal-payment',
+              user_id:
+                'personal-user-1',
+              status:
+                'pending',
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              plan:
+                'paid',
+              expires_at:
+                expiredAt,
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          rows: [],
+        })
+        .mockResolvedValueOnce({
+          rows: [],
+        });
+
+      const req =
+        makePersonalReq({
+          action:
+            'approve',
+        });
+
+      req.params.payment_id =
+        '11111111-1111-4111-8111-111111111111';
+
+      const res =
+        makeRes();
+
+      jest.useFakeTimers();
+
+      jest.setSystemTime(
+        fixedNow,
+      );
+
+      try {
+        await personalSubscriptionController
+          .verifyPayment(
+            req,
+            res,
+          );
+      } finally {
+        jest.useRealTimers();
+      }
+
+      const subscriptionUpdate =
+        mockTransactionQuery
+          .mock
+          .calls
+          .find(
+            ([sql]) =>
+              String(sql).includes(
+                "UPDATE personal_subscriptions SET plan = 'paid'"
+              ),
+          );
+
+      expect(
+        subscriptionUpdate,
+      ).toBeDefined();
+
+      expect(
+        subscriptionUpdate[1][0],
+      ).toBeInstanceOf(
+        Date,
+      );
+
+      expect(
+        subscriptionUpdate[1][0]
+          .getTime(),
+      ).toBe(
+        expectedExpiry.getTime(),
+      );
+
+      expect(
+        subscriptionUpdate[1][0]
+          .getTime(),
+      ).toBeGreaterThan(
+        fixedNow.getTime(),
+      );
+
+      expect(
+        res.json,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success:
+            true,
+        }),
+      );
+    },
+  );
+
+
 });

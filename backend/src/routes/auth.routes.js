@@ -6,6 +6,8 @@ const { authenticate } = require('../middleware/auth');
 const {
   authLimiter,
   refreshLimiter,
+  personalPhoneVerificationSendLimiter,
+  personalPhoneVerificationVerifyLimiter,
 } = require('../middleware/rateLimit');
 
 // Validation middleware
@@ -34,22 +36,153 @@ router.post('/register', authLimiter, [
     .matches(/[0-9]/).withMessage('Password must contain a number'),
 ], handleValidation, authController.register);
 
+// POST /api/v1/auth/personal-phone-verification/start
+router.post(
+  "/personal-phone-verification/start",
+  personalPhoneVerificationSendLimiter,
+  [
+    body("phone").trim().notEmpty().withMessage("Phone number is required"),
+    body("installation_id")
+      .optional({
+        nullable: true,
+        checkFalsy: true,
+      })
+      .isUUID()
+      .withMessage("Invalid installation identity"),
+    body("sim_iccid")
+      .optional({
+        nullable: true,
+        checkFalsy: true,
+      })
+      .isString()
+      .trim()
+      .custom((value) => /^\d{10,25}$/.test(String(value).replace(/\s/g, "")))
+      .withMessage("Invalid SIM identity"),
+  ],
+  handleValidation,
+  authController.startPersonalPhoneVerification,
+);
+
+// POST /api/v1/auth/personal-phone-verification/verify
+router.post(
+  "/personal-phone-verification/verify",
+  personalPhoneVerificationVerifyLimiter,
+  [
+    body("challenge_token")
+      .isString()
+      .isLength({
+        min: 40,
+        max: 200,
+      })
+      .withMessage("Valid verification challenge is required"),
+    body("code")
+      .isString()
+      .matches(/^\d{6}$/)
+      .withMessage("Verification code must be exactly 6 digits"),
+    body("phone").trim().notEmpty().withMessage("Phone number is required"),
+    body("installation_id")
+      .optional({
+        nullable: true,
+        checkFalsy: true,
+      })
+      .isUUID()
+      .withMessage("Invalid installation identity"),
+    body("sim_iccid")
+      .optional({
+        nullable: true,
+        checkFalsy: true,
+      })
+      .isString()
+      .trim()
+      .custom((value) => /^\d{10,25}$/.test(String(value).replace(/\s/g, "")))
+      .withMessage("Invalid SIM identity"),
+  ],
+  handleValidation,
+  authController.verifyPersonalPhone,
+);
+
 // POST /api/v1/auth/register-personal
-router.post('/register-personal', authLimiter, [
-  body('first_name').trim().notEmpty().withMessage('First name is required'),
-  body('last_name').trim().notEmpty().withMessage('Last name is required'),
-  body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
-  body('phone').trim().notEmpty().withMessage('Phone number is required'),
-  body('password')
-    .isLength({ min: 8 }).withMessage('Password must be at least 8 characters')
-    .matches(/[A-Z]/).withMessage('Password must contain an uppercase letter')
-    .matches(/[0-9]/).withMessage('Password must contain a number'),
-], handleValidation, authController.registerPersonal);
+router.post(
+  "/register-personal",
+  authLimiter,
+  [
+    body("first_name").trim().notEmpty().withMessage("First name is required"),
+    body("last_name").trim().notEmpty().withMessage("Last name is required"),
+    body("email")
+      .isEmail()
+      .normalizeEmail()
+      .withMessage("Valid email is required"),
+    body("phone").trim().notEmpty().withMessage("Phone number is required"),
+    body("password")
+      .isLength({ min: 8 })
+      .withMessage("Password must be at least 8 characters")
+      .matches(/[A-Z]/)
+      .withMessage("Password must contain an uppercase letter")
+      .matches(/[0-9]/)
+      .withMessage("Password must contain a number"),
+    body("phone_verification_token")
+      .isString()
+      .isLength({ min: 40, max: 200 })
+      .withMessage("Verified phone token is required"),
+    body("installation_id")
+      .optional({
+        nullable: true,
+        checkFalsy: true,
+      })
+      .isUUID()
+      .withMessage("Invalid installation identity"),
+    body("sim_iccid")
+      .optional({
+        nullable: true,
+        checkFalsy: true,
+      })
+      .isString()
+      .trim()
+      .custom((value) => /^\d{10,25}$/.test(String(value).replace(/\s/g, "")))
+      .withMessage("Invalid SIM identity"),
+  ],
+  handleValidation,
+  authController.registerPersonal,
+);
 
 // POST /api/v1/auth/add-personal-capability (requires auth) - lets an
 // existing Business-side user also gain Personal capability without a
 // second account.
-router.post('/add-personal-capability', authenticate, authController.addPersonalCapability);
+router.post(
+  "/add-personal-capability",
+  authenticate,
+  [
+    body("phone_verification_token")
+      .optional({
+        nullable: true,
+        checkFalsy: true,
+      })
+      .isString()
+      .isLength({
+        min: 40,
+        max: 200,
+      })
+      .withMessage("Valid verified phone token is required"),
+    body("installation_id")
+      .optional({
+        nullable: true,
+        checkFalsy: true,
+      })
+      .isUUID()
+      .withMessage("Invalid installation identity"),
+    body("sim_iccid")
+      .optional({
+        nullable: true,
+        checkFalsy: true,
+      })
+      .isString()
+      .trim()
+      .custom((value) => /^\d{10,25}$/.test(String(value).replace(/\s/g, "")))
+      .withMessage("Invalid SIM identity"),
+  ],
+  handleValidation,
+  authController.addPersonalCapability,
+);
 
 // POST /api/v1/auth/login
 router.post('/login', authLimiter, [

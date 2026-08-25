@@ -37,13 +37,24 @@ class AuthSessionInvalidatedEvent extends AuthEvent {}
 // step needed (the backend auto-issues working tokens on success, no
 // approval gate to wait on).
 class AuthRegisterPersonalEvent extends AuthEvent {
-  final String firstName, lastName, email, phone, password;
+  final String firstName;
+  final String lastName;
+  final String email;
+  final String phone;
+  final String password;
+  final String phoneVerificationToken;
+  final String installationId;
+  final String? simIccid;
+
   AuthRegisterPersonalEvent({
     required this.firstName,
     required this.lastName,
     required this.email,
     required this.phone,
     required this.password,
+    required this.phoneVerificationToken,
+    required this.installationId,
+    this.simIccid,
   });
 }
 
@@ -237,34 +248,78 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   }
 
   Future<void> _onRegisterPersonal(
-      AuthRegisterPersonalEvent event, Emitter<AuthState> emit) async {
+    AuthRegisterPersonalEvent event,
+    Emitter<AuthState> emit,
+  ) async {
     emit(AuthLoading());
+
     try {
-      final response =
-          await ApiClient.instance.post('/auth/register-personal', data: {
-        'first_name': event.firstName,
-        'last_name': event.lastName,
-        'email': event.email,
-        'phone': event.phone,
-        'password': event.password,
-      });
+      final response = await ApiClient.instance.post(
+        '/auth/register-personal',
+        data: {
+          'first_name': event.firstName,
+          'last_name': event.lastName,
+          'email': event.email,
+          'phone': event.phone,
+          'password': event.password,
+          'phone_verification_token': event.phoneVerificationToken,
+          'installation_id': event.installationId,
+          if (event.simIccid?.trim().isNotEmpty == true)
+            'sim_iccid': event.simIccid?.trim(),
+        },
+      );
 
       final data = response.data['data'];
-      await StorageService.saveAccessToken(data['access_token']);
-      await StorageService.saveRefreshToken(data['refresh_token']);
-      await StorageService.saveUser(data['user']);
-      await StorageService.setSessionLocked(false);
+
+      await StorageService.saveAccessToken(
+        data['access_token'],
+      );
+
+      await StorageService.saveRefreshToken(
+        data['refresh_token'],
+      );
+
+      await StorageService.saveUser(
+        data['user'],
+      );
+
+      await StorageService.setSessionLocked(
+        false,
+      );
+
       unawaited(
         NotificationService.syncTokenWithBackend(),
       );
 
-      emit(AuthAuthenticated(data['user']));
-    } on Exception catch (e) {
+      emit(
+        AuthAuthenticated(
+          data['user'],
+        ),
+      );
+    } on DioException catch (error) {
       String message = 'Registration failed. Please try again.';
-      if (e.toString().contains('409')) {
+
+      final responseData = error.response?.data;
+
+      if (responseData is Map) {
+        final serverMessage = responseData['message'];
+
+        if (serverMessage is String && serverMessage.trim().isNotEmpty) {
+          message = serverMessage.trim();
+        }
+      } else if (error.response?.statusCode == 409) {
         message = 'An account with this email already exists.';
       }
-      emit(AuthError(message));
+
+      emit(
+        AuthError(message),
+      );
+    } on Exception {
+      emit(
+        AuthError(
+          'Registration failed. Please try again.',
+        ),
+      );
     }
   }
 
