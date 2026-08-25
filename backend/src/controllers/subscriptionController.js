@@ -4,6 +4,7 @@ const { auditLog } = require('../services/auditService');
 const { sendWelcomeEmail, sendSubscriptionReminderEmail } = require('../services/emailService');
 const { sendSubscriptionRenewalSMS } = require('../services/smsService');
 const { sendToUser, sendToCompany, sendSubscriptionSuspended } = require('../services/notificationService');
+const { activateBusinessSubscription } = require('../services/subscriptionActivationService');
 
 // ── Get Subscription Status ───────────────────────────────────
 
@@ -77,14 +78,24 @@ exports.submitPayment = async (req, res) => {
     let pendingExists = false;
 
     await withTransaction(async (client) => {
-      await client.query(
-        'SELECT id FROM subscriptions WHERE id = $1 FOR UPDATE',
+      const lockedSubscription = await client.query(
+        'SELECT id, status, expires_at FROM subscriptions WHERE id = $1 FOR UPDATE',
         [sub.id]
       );
 
+      const lockedSub = lockedSubscription.rows[0];
+
+      const entitlementBase =
+        lockedSub.status === 'active' &&
+        lockedSub.expires_at &&
+        new Date(lockedSub.expires_at) > new Date()
+          ? lockedSub.expires_at
+          : null;
+
       const pending = await client.query(
         `SELECT id FROM subscription_payments
-         WHERE subscription_id = $1 AND status = 'pending'`,
+         WHERE subscription_id = $1
+           AND status IN ('pending', 'submitted')`,
         [sub.id]
       );
 
@@ -95,9 +106,31 @@ exports.submitPayment = async (req, res) => {
 
       payment = await client.query(
         `INSERT INTO subscription_payments
-           (subscription_id, company_id, amount, momo_reference, payment_phone, notes)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-        [sub.id, companyId, billing.amount, momo_reference, payment_phone, notes]
+           (
+             subscription_id,
+             company_id,
+             amount,
+             momo_reference,
+             payment_phone,
+             notes,
+             payment_provider,
+             entitlement_base_expires_at,
+             entitlement_base_captured
+           )
+         VALUES (
+           $1, $2, $3, $4, $5, $6,
+           'manual_momo', $7, TRUE
+         )
+         RETURNING *`,
+        [
+          sub.id,
+          companyId,
+          billing.amount,
+          momo_reference,
+          payment_phone,
+          notes,
+          entitlementBase,
+        ]
       );
 
       await auditLog({
@@ -209,80 +242,76 @@ exports.verifyPayment = async (req, res) => {
         return;
       }
 
+      if (payment.payment_provider === 'paystack') {
+        verificationError = {
+          status: 409,
+          message:
+            'Paystack payments are verified automatically and cannot be manually approved or rejected.',
+        };
+        return;
+      }
+
       if (action === 'approve') {
-        const now = new Date();
-        const expiresAt = new Date(now);
-        expiresAt.setMonth(
-          expiresAt.getMonth() + (payment.period_months || 1)
-        );
+        const activation =
+          await activateBusinessSubscription({
+            client,
+            payment,
+            verifiedBy: req.user.id,
+            providerStatus: 'manual_verified',
+          });
 
-        const sub = await client.query(
-          'SELECT * FROM subscriptions WHERE id = $1',
-          [payment.subscription_id]
-        );
-
-        let startFrom = now;
-
-        if (
-          sub.rows[0].status === 'active' &&
-          sub.rows[0].expires_at > now
-        ) {
-          startFrom = new Date(sub.rows[0].expires_at);
-          expiresAt.setTime(startFrom.getTime());
-          expiresAt.setMonth(
-            expiresAt.getMonth() + (payment.period_months || 1)
+        if (activation.outcome !== 'activated') {
+          await client.query(
+            `UPDATE subscription_payments
+             SET status = 'rejected',
+                 provider_status = 'superseded',
+                 verified_at = NOW(),
+                 verified_by = $1,
+                 rejection_reason =
+                   'This subscription cycle was already fulfilled by another payment.'
+             WHERE id = $2`,
+            [
+              req.user.id,
+              payment_id,
+            ]
           );
+
+          await auditLog({
+            userId: req.user.id,
+            companyId: payment.company_id,
+            action:
+              'SUBSCRIPTION_PAYMENT_SUPERSEDED',
+            entityType:
+              'subscription_payment',
+            entityId: payment_id,
+            newValues: {
+              payment_provider:
+                payment.payment_provider ||
+                'manual_momo',
+            },
+            ipAddress: req.ip,
+            requestId: req.requestId,
+            dbClient: client,
+            strict: true,
+          });
+
+          verificationError = {
+            status: 409,
+            message:
+              'This subscription cycle was already fulfilled by another payment.',
+          };
+
+          return;
         }
 
-        const graceEnds = new Date(expiresAt);
-        graceEnds.setDate(graceEnds.getDate() + 7);
+        approvedExpiresAt =
+          activation.expiresAt;
 
-        await client.query(
-          `UPDATE subscriptions
-           SET plan = 'business', status = 'active',
-               started_at = COALESCE(started_at, $1),
-               expires_at = $2, grace_period_ends_at = $3
-           WHERE id = $4`,
-          [
-            startFrom,
-            expiresAt,
-            graceEnds,
-            payment.subscription_id,
-          ]
-        );
-
-        await client.query(
-          `UPDATE subscription_payments
-           SET status = 'verified',
-               verified_at = NOW(),
-               verified_by = $1
-           WHERE id = $2`,
-          [req.user.id, payment_id]
-        );
-
-        await client.query(
-          `UPDATE companies
-           SET status = 'active',
-               approved_at = NOW(),
-               approved_by = $1
-           WHERE id = $2
-             AND status = 'pending'`,
-          [req.user.id, payment.company_id]
-        );
-
-        await client.query(
-          `UPDATE users
-           SET status = 'active'
-           WHERE company_id = $1
-             AND status = 'pending'`,
-          [payment.company_id]
-        );
-
-        approvedExpiresAt = expiresAt;
       } else {
         await client.query(
           `UPDATE subscription_payments
            SET status = 'rejected',
+               provider_status = 'manual_rejected',
                verified_at = NOW(),
                verified_by = $1,
                rejection_reason = $2
@@ -439,6 +468,7 @@ exports.listPendingPayments = async (req, res) => {
        INNER JOIN companies c ON sp.company_id = c.id
        INNER JOIN users u ON c.id = u.company_id AND u.role = 'business_owner'
        WHERE sp.status = 'pending'
+         AND sp.payment_provider = 'manual_momo'
        ORDER BY sp.submitted_at ASC`
     );
 
@@ -446,6 +476,49 @@ exports.listPendingPayments = async (req, res) => {
   } catch (error) {
     logger.error('List pending payments error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch pending payments' });
+  }
+};
+
+// ── List Paystack Reconciliation Payments (Superuser) ─────────
+
+exports.listReconciliationPayments = async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT sp.*,
+              'business' AS account_mode,
+              c.name AS company_name,
+              u.first_name,
+              u.last_name,
+              u.email
+       FROM subscription_payments sp
+       INNER JOIN companies c
+         ON c.id = sp.company_id
+       INNER JOIN users u
+         ON u.company_id = c.id
+        AND u.role = 'business_owner'
+       WHERE sp.payment_provider = 'paystack'
+         AND sp.reconciliation_required = TRUE
+       ORDER BY COALESCE(
+         sp.verified_at,
+         sp.submitted_at
+       ) ASC`
+    );
+
+    res.json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (error) {
+    logger.error(
+      'List Business Paystack reconciliation payments error:',
+      error
+    );
+
+    res.status(500).json({
+      success: false,
+      message:
+        'Failed to fetch Business Paystack reconciliation payments',
+    });
   }
 };
 

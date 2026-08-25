@@ -5,6 +5,7 @@ const mockBusinessController = {
   getSubscription: jest.fn((_req, res) => res.status(204).end()),
   submitPayment: jest.fn((_req, res) => res.status(204).end()),
   listPendingPayments: jest.fn((_req, res) => res.status(204).end()),
+  listReconciliationPayments: jest.fn((_req, res) => res.status(204).end()),
   verifyPayment: jest.fn((_req, res) => res.status(204).end()),
 };
 
@@ -12,6 +13,7 @@ const mockPersonalController = {
   getSubscription: jest.fn((_req, res) => res.status(204).end()),
   submitPayment: jest.fn((_req, res) => res.status(204).end()),
   listPendingPayments: jest.fn((_req, res) => res.status(204).end()),
+  listReconciliationPayments: jest.fn((_req, res) => res.status(204).end()),
   verifyPayment: jest.fn((_req, res) => res.status(204).end()),
 };
 

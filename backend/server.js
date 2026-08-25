@@ -37,6 +37,7 @@ const notificationRoutes = require('./src/routes/notification.routes');
 const adminRoutes = require('./src/routes/admin.routes');
 const branchRoutes = require('./src/routes/branch.routes');
 const ussdFlowRoutes = require('./src/routes/ussdFlow.routes');
+const paystackWebhookRoutes = require('./src/routes/paystackWebhook.routes');
 
 const app = express();
 
@@ -105,7 +106,22 @@ app.use(cors({
 }));
 
 app.use(compression());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({
+  limit: '10mb',
+  verify(req, res, buffer) {
+    const requestPath =
+      String(req.originalUrl || '')
+        .split('?')[0];
+
+    if (
+      requestPath ===
+      '/api/v1/webhooks/paystack'
+    ) {
+      req.rawBody =
+        Buffer.from(buffer);
+    }
+  },
+}));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Assign a correlation ID before request logging.
@@ -191,6 +207,7 @@ app.use(`${API}/shifts`, shiftRoutes);
 app.use(`${API}/ussd-overrides`, ussdOverrideRoutes);
 app.use(`${API}/agent-posts`, agentPostRoutes);
 app.use(`${API}/commissions`, commissionRoutes);
+app.use(`${API}/webhooks/paystack`, paystackWebhookRoutes);
 app.use(`${API}/subscriptions`, subscriptionRoutes);
 app.use(`${API}/marketplace`, marketplaceRoutes);
 app.use(`${API}/personal-transactions`, personalTransactionRoutes);
