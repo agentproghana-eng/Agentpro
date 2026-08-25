@@ -10,7 +10,7 @@ describe("reportClassification", () => {
       "send_money",
       "airtime",
       "data_bundle",
-      "bill_payment",
+      "pay_to_agent",
     ]);
   });
 

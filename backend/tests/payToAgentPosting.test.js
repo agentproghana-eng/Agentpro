@@ -63,7 +63,7 @@ function baseTransaction(overrides = {}) {
     id: "tx-1",
     agent_id: "agent-1",
     provider: "mtn",
-    transaction_type: "bill_payment",
+    transaction_type: "pay_to_agent",
     amount: "100.00",
     fee: "1.00",
     reference: "APG-PAY-AGENT-1",
@@ -150,7 +150,7 @@ describe("postPayToAgent", () => {
     expect(movements).toHaveLength(2);
 
     expect(movements[0][0]).toContain(
-      "'bill_payment'"
+      "'pay_to_agent'"
     );
 
     expect(movements[0][0]).toContain(
@@ -175,7 +175,7 @@ describe("postPayToAgent", () => {
     ]);
 
     expect(movements[1][0]).toContain(
-      "'bill_payment'"
+      "'pay_to_agent'"
     );
 
     expect(movements[1][0]).toContain(

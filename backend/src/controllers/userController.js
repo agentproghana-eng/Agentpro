@@ -1241,8 +1241,8 @@ function quickActionDisplayLabel(provider, transactionType, capabilityLabel) {
     return "Cash In";
   }
 
-  // MTN's old Bill Payment naming is now Pay to Agent.
-  if (normalizedType === "bill_payment") {
+  // Pay to Agent uses its own canonical transaction type.
+  if (normalizedType === "pay_to_agent") {
     return "Pay to Agent";
   }
 

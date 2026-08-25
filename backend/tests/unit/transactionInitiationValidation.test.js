@@ -280,7 +280,7 @@ describe('Business transaction initiation validation', () => {
       await expectFieldRejected(
         {
           provider: 'mtn',
-          transaction_type: 'bill_payment',
+          transaction_type: 'pay_to_agent',
           amount: 10,
           payment_reference: 'FLOAT EXCHANGE',
         },
@@ -295,7 +295,7 @@ describe('Business transaction initiation validation', () => {
       await expectFieldRejected(
         {
           provider: 'mtn',
-          transaction_type: 'bill_payment',
+          transaction_type: 'pay_to_agent',
           amount: 10,
           customer_phone: '0240000000',
         },
@@ -309,7 +309,7 @@ describe('Business transaction initiation validation', () => {
     async () => {
       await expectAccepted({
         provider: 'mtn',
-        transaction_type: 'bill_payment',
+        transaction_type: 'pay_to_agent',
         amount: 10,
         customer_phone: '0240000000',
         payment_reference: 'FLOAT EXCHANGE',

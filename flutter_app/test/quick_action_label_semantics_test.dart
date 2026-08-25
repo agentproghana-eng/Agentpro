@@ -17,11 +17,11 @@ void main() {
       expect(definition.displayLabel, 'Cash In');
     });
 
-    test('bill_payment is displayed as Pay to Agent', () {
+    test('pay_to_agent is displayed as Pay to Agent', () {
       final definition = QuickActionCatalogDefinition.fromJson(
         const {
           'provider': 'mtn',
-          'transaction_type': 'bill_payment',
+          'transaction_type': 'pay_to_agent',
           'display_label': 'Bill Payment',
           'quick_action_group': 'Transfers & Payments',
         },

@@ -68,7 +68,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     {'value': 'airtime', 'label': 'Airtime'},
     {'value': 'data_bundle', 'label': 'Data'},
     {'value': 'merchant_payment', 'label': 'Merchant'},
-    {'value': 'bill_payment', 'label': 'Pay to Agent'},
+    {'value': 'pay_to_agent', 'label': 'Pay to Agent'},
     {'value': 'balance_enquiry', 'label': 'Balance'},
     {'value': 'business_deposit', 'label': 'Business In'},
     {'value': 'business_withdrawal', 'label': 'Business Out'},

@@ -293,7 +293,7 @@ List<QuickActionPreference> normalizeBusinessQuickActionPreferences({
       return preference.copyWith(clearCustomName: true);
     }
 
-    if (preference.actionKey == 'bill_payment' &&
+    if (preference.actionKey == 'pay_to_agent' &&
         customName == 'bill payment') {
       return preference.copyWith(clearCustomName: true);
     }

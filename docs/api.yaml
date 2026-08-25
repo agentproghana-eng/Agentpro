@@ -160,7 +160,7 @@ components:
           enum: [mtn, telecel, at_money]
         transaction_type:
           type: string
-          enum: [cash_in, cash_out, send_money, merchant_payment, bill_payment, airtime, data_bundle, balance_enquiry, mini_statement, reversal]
+          enum: [cash_in, cash_out, send_money, merchant_payment, pay_to_agent, airtime, data_bundle, balance_enquiry, mini_statement, reversal]
         status:
           type: string
           enum: [initiated, processing, success, failed, reversed, pending_confirmation]
@@ -467,7 +467,7 @@ paths:
                   enum: [mtn, telecel, at_money]
                 transaction_type:
                   type: string
-                  enum: [cash_in, cash_out, send_money, merchant_payment, bill_payment, airtime, data_bundle, balance_enquiry, mini_statement]
+                  enum: [cash_in, cash_out, send_money, merchant_payment, pay_to_agent, airtime, data_bundle, balance_enquiry, mini_statement]
                 amount:
                   type: number
                   minimum: 1
@@ -485,7 +485,7 @@ paths:
                   description: Required for send_money
                 biller_code:
                   type: string
-                  description: Required for bill_payment
+                  description: Required for pay_to_agent
                 account_number:
                   type: string
       responses:

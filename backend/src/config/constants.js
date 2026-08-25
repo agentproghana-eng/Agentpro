@@ -21,6 +21,7 @@ module.exports = {
     CASH_OUT: 'cash_out',
     SEND_MONEY: 'send_money',
     MERCHANT_PAYMENT: 'merchant_payment',
+    PAY_TO_AGENT: 'pay_to_agent',
     BILL_PAYMENT: 'bill_payment',
     AIRTIME: 'airtime',
     DATA_BUNDLE: 'data_bundle',
