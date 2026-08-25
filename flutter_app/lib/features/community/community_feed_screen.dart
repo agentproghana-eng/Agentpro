@@ -427,10 +427,12 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
       case 'save':
         await _toggleSaved(post);
       case 'share':
-        await Share.share(
-          post['content']?.toString().trim().isNotEmpty == true
-              ? post['content'].toString()
-              : 'Voice note from Agent Community',
+        await SharePlus.instance.share(
+          ShareParams(
+            text: post['content']?.toString().trim().isNotEmpty == true
+                ? post['content'].toString()
+                : 'Voice note from Agent Community',
+          ),
         );
       case 'report':
         await _reportPost(post);
@@ -1046,11 +1048,15 @@ class _AgentCommunityPostCard extends StatelessWidget {
                   const Spacer(),
                   IconButton(
                     tooltip: 'Share',
-                    onPressed: () => Share.share(
-                      content?.isNotEmpty == true
-                          ? content!
-                          : 'Voice note from Agent Community',
-                    ),
+                    onPressed: () async {
+                      await SharePlus.instance.share(
+                        ShareParams(
+                          text: content?.isNotEmpty == true
+                              ? content!
+                              : 'Voice note from Agent Community',
+                        ),
+                      );
+                    },
                     icon: const Icon(Icons.share_outlined),
                   ),
                 ],
