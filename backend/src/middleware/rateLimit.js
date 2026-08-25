@@ -90,6 +90,38 @@ exports.authLimiter =
     passOnStoreError: false,
   });
 
+exports.personalPhoneVerificationSendLimiter =
+  createLimiter({
+    windowMs:
+      15 * 60 * 1000,
+
+    max: 8,
+
+    message:
+      'Too many verification-code requests. Please wait and try again.',
+
+    prefix:
+      'agentpro:rate-limit:phone-verification-send:',
+
+    passOnStoreError: false,
+  });
+
+exports.personalPhoneVerificationVerifyLimiter =
+  createLimiter({
+    windowMs:
+      15 * 60 * 1000,
+
+    max: 30,
+
+    message:
+      'Too many verification attempts. Please wait and try again.',
+
+    prefix:
+      'agentpro:rate-limit:phone-verification-verify:',
+
+    passOnStoreError: false,
+  });
+
 exports.refreshLimiter =
   createLimiter({
     windowMs:

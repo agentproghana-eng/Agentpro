@@ -89,46 +89,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // Idempotent on the backend (safe even if already added), and only
-  // ever reachable from a tile that's already hidden once this
-  // succeeds - AuthUpdateUserEvent merges the two returned fields into
-  // the cached user without a full re-login, same mechanism already
-  // used for self-service settings changes elsewhere in the app.
-  Future<void> _addPersonalCapability(BuildContext context) async {
-    try {
-      final res = await ApiClient.instance.post(
-        '/auth/add-personal-capability',
-      );
-      final data = res.data['data'];
-      if (context.mounted) {
-        context.read<AuthBloc>().add(
-              AuthUpdateUserEvent({
-                'personal_subscription_plan':
-                    data['personal_subscription_plan'],
-                'personal_subscription_expires_at':
-                    data['personal_subscription_expires_at'],
-              }),
-            );
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Personal account added! Find it under Switch to Personal Mode.',
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to add Personal account'),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
@@ -191,7 +151,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   icon: Icons.person_add_outlined,
                   title: 'Add Personal Account',
                   subtitle: 'Use Agent Pro Ghana for your own transactions too',
-                  onTap: () => _addPersonalCapability(context),
+                  onTap: () =>
+                      context.push('/settings/add-personal-capability'),
                 ),
               ],
               if (user['company_id'] != null &&

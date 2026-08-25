@@ -584,7 +584,7 @@ void main() {
         final toggle = _slice(
           source,
           'Future<void> _toggleDeviceAuth',
-          'Future<void> _addPersonalCapability',
+          '  @override',
         );
 
         expect(
