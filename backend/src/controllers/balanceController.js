@@ -444,13 +444,10 @@ exports.getOwnSimWalletBalance = async (req, res) => {
         `SELECT
            d.balance_code,
            d.display_label,
-           COALESCE(
-             a.current_balance,
-             0.00
-           )::text AS current_balance,
+           a.current_balance::text AS current_balance,
            a.last_updated_at
          FROM sim_wallet_balance_definitions d
-         LEFT JOIN sim_wallet_balance_accounts a
+         INNER JOIN sim_wallet_balance_accounts a
            ON a.sim_wallet_id = $1::uuid
           AND a.balance_code = d.balance_code
          WHERE d.provider = $2
@@ -1757,6 +1754,20 @@ exports.reviewCashAdjustment = async (req, res) => {
       }
 
       const movement = movementResult.rows[0];
+
+      // A maker may not review their own pending cash adjustment.
+      // Monitoring authority does not grant self-approval authority.
+      if (
+        movement.status === "pending" &&
+        movement.agent_id === reviewerId
+      ) {
+        throw {
+          statusCode: 403,
+          code: "SELF_REVIEW_NOT_ALLOWED",
+          message:
+            "You cannot review your own cash adjustment"
+        };
+      }
 
       // Same final decision is an idempotent replay. Do not touch balances.
       if (movement.status === requestedStatus) {

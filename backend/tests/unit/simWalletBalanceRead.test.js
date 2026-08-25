@@ -522,6 +522,161 @@ describe(
     );
 
     test(
+      "validated definition without an actual account does not fabricate zero",
+      async () => {
+        mockResolveSimRoleAssignment
+          .mockResolvedValueOnce({
+            ok: true,
+            role: "merchant",
+            sim_slot: 0,
+          });
+
+        mockQuery
+          .mockResolvedValueOnce({
+            rows: [
+              {
+                id: "wallet-merchant-no-account",
+                sim_role: "merchant",
+                identity_status:
+                  "identified",
+                sim_iccid:
+                  "MERCHANT-NO-ACCOUNT",
+                installation_id: null,
+                sim_subscription_id: 10,
+                last_known_sim_slot: 0,
+                last_updated_at: null,
+              },
+            ],
+          })
+          .mockResolvedValueOnce({
+            rows: [],
+          });
+
+        const res = makeRes();
+
+        await balanceController
+          .getOwnSimWalletBalance(
+            makeReq({
+              provider: "mtn",
+              sim_iccid:
+                "MERCHANT-NO-ACCOUNT",
+              sim_slot: "0",
+            }),
+            res,
+          );
+
+        const sql =
+          mockQuery.mock.calls[1][0];
+
+        expect(sql).toContain(
+          "INNER JOIN sim_wallet_balance_accounts a"
+        );
+
+        expect(sql).not.toContain(
+          "LEFT JOIN sim_wallet_balance_accounts a"
+        );
+
+        expect(sql).not.toContain(
+          "COALESCE"
+        );
+
+        const payload =
+          res.json.mock.calls[0][0]
+            .data;
+
+        expect(
+          payload.balances
+        ).toEqual([]);
+
+        expect(
+          payload.balance_semantics_validated
+        ).toBe(false);
+      },
+    );
+
+    test(
+      "real generic account with genuine zero remains visible",
+      async () => {
+        mockResolveSimRoleAssignment
+          .mockResolvedValueOnce({
+            ok: true,
+            role: "merchant",
+            sim_slot: 0,
+          });
+
+        mockQuery
+          .mockResolvedValueOnce({
+            rows: [
+              {
+                id:
+                  "wallet-merchant-zero",
+                sim_role:
+                  "merchant",
+                identity_status:
+                  "identified",
+                sim_iccid:
+                  "MERCHANT-ZERO",
+                installation_id:
+                  null,
+                sim_subscription_id:
+                  11,
+                last_known_sim_slot:
+                  0,
+                last_updated_at:
+                  null,
+              },
+            ],
+          })
+          .mockResolvedValueOnce({
+            rows: [
+              {
+                balance_code:
+                  "merchant_value",
+                display_label:
+                  "Merchant Value",
+                current_balance:
+                  "0.00",
+                last_updated_at:
+                  "2026-08-25T00:00:00.000Z",
+              },
+            ],
+          });
+
+        const res = makeRes();
+
+        await balanceController
+          .getOwnSimWalletBalance(
+            makeReq({
+              provider: "mtn",
+              sim_iccid:
+                "MERCHANT-ZERO",
+              sim_slot: "0",
+            }),
+            res,
+          );
+
+        const payload =
+          res.json.mock.calls[0][0]
+            .data;
+
+        expect(
+          payload.balances
+        ).toEqual([
+          expect.objectContaining({
+            balance_code:
+              "merchant_value",
+            current_balance:
+              "0.00",
+          }),
+        ]);
+
+        expect(
+          payload.balance_semantics_validated
+        ).toBe(true);
+      },
+    );
+
+    test(
       "Subscriber domain is separate even when no wallet exists yet",
       async () => {
         mockResolveSimRoleAssignment
