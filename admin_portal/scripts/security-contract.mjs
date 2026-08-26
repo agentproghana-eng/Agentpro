@@ -130,6 +130,13 @@ assert(
 );
 
 assert(
+  headers.includes(
+    'Cache-Control: no-store, max-age=0',
+  ),
+  'Admin SPA routes must not serve stale HTML after deployment',
+);
+
+assert(
   redirects.includes('/index.html'),
   'BrowserRouter requires SPA fallback',
 );

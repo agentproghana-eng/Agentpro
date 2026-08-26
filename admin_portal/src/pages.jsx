@@ -15,6 +15,9 @@ export function Badge({ status }) {
     failed: 'bg-red-100 text-red-700',
     business: 'bg-blue-100 text-blue-700',
     free: 'bg-gray-100 text-gray-500',
+    paid: 'bg-green-100 text-green-700',
+    expired: 'bg-red-100 text-red-700',
+    none: 'bg-gray-100 text-gray-500',
   };
   return (
     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colors[status] || 'bg-gray-100 text-gray-500'}`}>
@@ -210,7 +213,7 @@ export function CompaniesPage() {
               label: 'Plan',
               render: (row) => (
                 <Badge
-                  status={row.subscription_plan || 'free'}
+                  status={row.subscription_plan || 'none'}
                 />
               ),
             },
@@ -219,9 +222,19 @@ export function CompaniesPage() {
               label: 'Subscription',
               render: (row) => (
                 <Badge
-                  status={row.subscription_status || 'pending'}
+                  status={row.subscription_status || 'none'}
                 />
               ),
+            },
+            {
+              key: 'subscription_expires_at',
+              label: 'Expires',
+              render: (row) =>
+                row.subscription_expires_at
+                  ? new Date(
+                      row.subscription_expires_at,
+                    ).toLocaleDateString()
+                  : '—',
             },
             {
               key: 'status',
@@ -266,6 +279,160 @@ export function CompaniesPage() {
           onRowClick={(row) =>
             navigate(`/companies/${row.company_id}`)
           }
+        />
+      </div>
+    </div>
+  );
+}
+
+
+// ── Personal Users Page ────────────────────────────────────────
+
+export function PersonalUsersPage() {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+
+  const load = async () => {
+    setLoading(true);
+
+    try {
+      const response = await API.get(
+        '/users?personal_only=true&limit=100',
+      );
+
+      setUsers(response.data.data || []);
+    } catch (_) {
+      toast.error('Failed to load Personal users');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const filtered = users.filter((user) => {
+    const term = search.trim().toLowerCase();
+
+    if (!term) return true;
+
+    return [
+      user.first_name,
+      user.last_name,
+      user.email,
+      user.phone,
+      user.company_name,
+    ]
+      .filter(Boolean)
+      .some((value) =>
+        String(value)
+          .toLowerCase()
+          .includes(term),
+      );
+  });
+
+  return (
+    <div>
+      <PageHeader
+        title="Personal Users"
+        subtitle="Personal-capability accounts and subscription state"
+        action={
+          <input
+            value={search}
+            onChange={(event) =>
+              setSearch(event.target.value)
+            }
+            placeholder="Search Personal users..."
+            className="w-64 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+        }
+      />
+
+      <div className="overflow-hidden rounded-xl bg-white shadow-sm">
+        <Table
+          loading={loading}
+          data={filtered}
+          emptyMsg="No Personal users found"
+          columns={[
+            {
+              key: 'name',
+              label: 'User',
+              render: (row) => (
+                <div>
+                  <p className="font-semibold text-gray-900">
+                    {row.first_name || '—'}{' '}
+                    {row.last_name || ''}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {row.company_name ||
+                      'Personal only'}
+                  </p>
+                </div>
+              ),
+            },
+            {
+              key: 'email',
+              label: 'Contact',
+              render: (row) => (
+                <div>
+                  <p>{row.email || '—'}</p>
+                  <p className="text-xs text-gray-500">
+                    {row.phone || '—'}
+                  </p>
+                </div>
+              ),
+            },
+            {
+              key: 'role',
+              label: 'Account Role',
+              render: (row) => (
+                <Badge status={row.role} />
+              ),
+            },
+            {
+              key: 'personal_subscription_plan',
+              label: 'Personal Plan',
+              render: (row) => (
+                <Badge
+                  status={
+                    row.personal_subscription_plan ||
+                    'none'
+                  }
+                />
+              ),
+            },
+            {
+              key: 'personal_subscription_status',
+              label: 'Subscription',
+              render: (row) => (
+                <Badge
+                  status={
+                    row.personal_subscription_status ||
+                    'none'
+                  }
+                />
+              ),
+            },
+            {
+              key: 'personal_subscription_expires_at',
+              label: 'Expires',
+              render: (row) =>
+                row.personal_subscription_expires_at
+                  ? new Date(
+                      row.personal_subscription_expires_at,
+                    ).toLocaleDateString()
+                  : '—',
+            },
+            {
+              key: 'status',
+              label: 'Account',
+              render: (row) => (
+                <Badge status={row.status} />
+              ),
+            },
+          ]}
         />
       </div>
     </div>

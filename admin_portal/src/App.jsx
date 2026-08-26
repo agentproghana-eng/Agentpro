@@ -1072,6 +1072,7 @@ const NAV = [
   { path: '/registrations', icon: '🔔', label: 'Registrations' },
   { path: '/subscriptions', icon: '💳', label: 'Subscriptions' },
   { path: '/companies', icon: '🏢', label: 'Companies' },
+  { path: '/personal-users', icon: '👤', label: 'Personal Users' },
   { path: '/community', icon: '💬', label: 'Community' },
   {
     path: '/marketplace-businesses',
@@ -2308,6 +2309,7 @@ function MarketplacePage() {
 
 import {
   CompaniesPage,
+  PersonalUsersPage,
   MarketplaceBusinessesPage,
   CommunityModerationPage,
   CompanyDetailPage,
@@ -2337,6 +2339,10 @@ export default function App() {
                   <Route path="/marketplace" element={<MarketplacePage />} />
                   <Route path="/config" element={<ConfigPage />} />
                   <Route path="/companies" element={<CompaniesPage />} />
+                  <Route
+                    path="/personal-users"
+                    element={<PersonalUsersPage />}
+                  />
                   <Route
                     path="/marketplace-businesses"
                     element={<MarketplaceBusinessesPage />}
