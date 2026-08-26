@@ -4,6 +4,11 @@ const { auditLog } = require("./auditService");
 
 const { sendToUser } = require("./notificationService");
 
+const {
+  sendWelcomeEmail,
+  sendSubscriptionRenewalEmail,
+} = require("./emailService");
+
 const { logger } = require("../utils/logger");
 
 const {
@@ -149,11 +154,17 @@ async function buildNotification(client, located, activation) {
 
   if (located.accountMode === "business") {
     const owner = await client.query(
-      `SELECT id
-         FROM users
-         WHERE company_id = $1
-           AND role = 'business_owner'
-         LIMIT 1`,
+      `SELECT
+         u.id,
+         u.email,
+         u.first_name,
+         c.name AS company_name
+       FROM users u
+       JOIN companies c
+         ON c.id = u.company_id
+       WHERE u.company_id = $1
+         AND u.role = 'business_owner'
+       LIMIT 1`,
       [located.payment.company_id],
     );
 
@@ -163,6 +174,7 @@ async function buildNotification(client, located, activation) {
 
     return {
       userId: owner.rows[0].id,
+      businessOwner: owner.rows[0],
       payload: {
         type: "renewal_approved",
         title: "✅ Subscription Activated",
@@ -222,6 +234,7 @@ async function fulfillPaystackTransaction(
 
   let result = null;
   let notification = null;
+  let businessEmail = null;
 
   await withTransaction(async (client) => {
     const located = await findPaymentForUpdate(client, reference);
@@ -399,6 +412,29 @@ async function fulfillPaystackTransaction(
       });
 
       notification = await buildNotification(client, located, activation);
+
+      if (
+        located.accountMode === "business" &&
+        notification?.businessOwner?.email
+      ) {
+        const paymentAmount = Number(payment.amount);
+
+        businessEmail = {
+          wasRenewal: activation.wasRenewal === true,
+          email: notification.businessOwner.email,
+          firstName: notification.businessOwner.first_name,
+          companyName: notification.businessOwner.company_name,
+          amount: Number.isFinite(paymentAmount)
+            ? paymentAmount
+            : expectedMinor / 100,
+          expiresAt: activation.expiresAt,
+          provider: "Paystack",
+          paymentMethod: data?.channel || null,
+          reference,
+          paidAt:
+            data?.paid_at || data?.paidAt || data?.transaction_date || null,
+        };
+      }
     }
 
     result = {
@@ -409,6 +445,39 @@ async function fulfillPaystackTransaction(
       expiresAt: activation.expiresAt || null,
     };
   });
+
+  if (businessEmail) {
+    try {
+      if (businessEmail.wasRenewal) {
+        await sendSubscriptionRenewalEmail(
+          businessEmail.email,
+          businessEmail.firstName,
+          businessEmail.companyName,
+          businessEmail.amount,
+          businessEmail.expiresAt,
+          {
+            provider: businessEmail.provider,
+            paymentMethod: businessEmail.paymentMethod,
+            reference: businessEmail.reference,
+            paidAt: businessEmail.paidAt,
+          },
+        );
+      } else {
+        await sendWelcomeEmail(
+          businessEmail.email,
+          businessEmail.firstName,
+          businessEmail.companyName,
+        );
+      }
+    } catch (error) {
+      logger.error(
+        businessEmail.wasRenewal
+          ? "Paystack subscription renewal email error:"
+          : "Paystack subscription welcome email error:",
+        error,
+      );
+    }
+  }
 
   if (notification) {
     try {

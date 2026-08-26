@@ -170,6 +170,18 @@ describe(
           new Date(
             '2026-12-05T08:36:37.632Z',
           ),
+          {
+            provider:
+              'Paystack',
+            paymentMethod:
+              'mobile_money',
+            reference:
+              'APG-BSUB-RECEIPT-TEST',
+            paidAt:
+              new Date(
+                '2026-08-26T18:04:42.000Z',
+              ),
+          },
         );
 
         const payload =
@@ -199,6 +211,42 @@ describe(
           payload.html,
         ).toContain(
           '05 December 2026',
+        );
+
+        expect(
+          payload.html,
+        ).toContain(
+          'Paystack',
+        );
+
+        expect(
+          payload.html,
+        ).toContain(
+          'Mobile Money',
+        );
+
+        expect(
+          payload.html,
+        ).toContain(
+          'APG-BSUB-RECEIPT-TEST',
+        );
+
+        expect(
+          payload.html,
+        ).toContain(
+          '26 August 2026',
+        );
+
+        expect(
+          payload.text,
+        ).toContain(
+          'Payment provider: Paystack',
+        );
+
+        expect(
+          payload.text,
+        ).toContain(
+          'Reference: APG-BSUB-RECEIPT-TEST',
         );
 
         expect(
