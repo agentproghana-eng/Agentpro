@@ -39,6 +39,7 @@ jest.mock(
 );
 
 const {
+  sendToUser,
   sendTransactionNotification,
 } = require(
   '../../src/services/notificationService'
@@ -232,7 +233,7 @@ describe(
     );
 
     test(
-      'strict successful delivery still persists the notification row',
+      'strict successful delivery persists before FCM and records delivery metadata',
       async () => {
         mockMessagingSend
           .mockResolvedValueOnce(
@@ -240,6 +241,14 @@ describe(
           );
 
         mockQuery
+          .mockResolvedValueOnce({
+            rows: [
+              {
+                id:
+                  'notification-1',
+              },
+            ],
+          })
           .mockResolvedValueOnce({
             rows: [
               {
@@ -276,14 +285,220 @@ describe(
 
         expect(
           mockQuery
-        ).toHaveBeenCalledTimes(2);
+        ).toHaveBeenCalledTimes(3);
 
         expect(
-          mockQuery.mock
-            .calls[1][0]
+          mockQuery.mock.calls[0][0]
         ).toContain(
           'INSERT INTO notifications'
         );
+
+        expect(
+          mockQuery.mock.calls[1][0]
+        ).toContain(
+          'SELECT fcm_token'
+        );
+
+        expect(
+          mockQuery.mock.calls[2][0]
+        ).toContain(
+          'UPDATE notifications'
+        );
+      }
+    );
+
+    test(
+      'notification persists when the user has no FCM token',
+      async () => {
+        mockQuery
+          .mockResolvedValueOnce({
+            rows: [
+              {
+                id:
+                  'notification-no-token',
+              },
+            ],
+          })
+          .mockResolvedValueOnce({
+            rows: [],
+          });
+
+        await expect(
+          sendToUser(
+            'user-no-token',
+            {
+              type:
+                'personal_subscription_rejected',
+              title:
+                'Payment Not Verified',
+              body:
+                'Your payment could not be verified.',
+              data: {},
+            }
+          )
+        ).resolves
+          .toBeUndefined();
+
+        expect(
+          mockQuery
+        ).toHaveBeenCalledTimes(2);
+
+        expect(
+          mockQuery.mock.calls[0][0]
+        ).toContain(
+          'INSERT INTO notifications'
+        );
+
+        expect(
+          mockQuery.mock.calls[1][0]
+        ).toContain(
+          'SELECT fcm_token'
+        );
+
+        expect(
+          mockMessagingSend
+        ).not.toHaveBeenCalled();
+      }
+    );
+
+    test(
+      'FCM failure leaves persisted notification and strict mode propagates',
+      async () => {
+        const error =
+          Object.assign(
+            new Error(
+              'FCM unavailable'
+            ),
+            {
+              code:
+                'messaging/internal-error',
+            }
+          );
+
+        mockQuery
+          .mockResolvedValueOnce({
+            rows: [
+              {
+                id:
+                  'notification-failed-push',
+              },
+            ],
+          })
+          .mockResolvedValueOnce({
+            rows: [
+              {
+                fcm_token:
+                  'test-fcm-token',
+              },
+            ],
+          });
+
+        mockMessagingSend
+          .mockRejectedValueOnce(
+            error
+          );
+
+        await expect(
+          sendToUser(
+            'user-1',
+            {
+              type:
+                'transaction_success',
+              title:
+                'Transaction Successful',
+              body:
+                'Completed.',
+              data: {},
+            },
+            {
+              throwOnError:
+                true,
+            }
+          )
+        ).rejects.toBe(
+          error
+        );
+
+        expect(
+          mockQuery.mock.calls[0][0]
+        ).toContain(
+          'INSERT INTO notifications'
+        );
+      }
+    );
+
+    test(
+      'persisted delivery key without FCM message retries push',
+      async () => {
+        mockQuery
+          .mockResolvedValueOnce({
+            rows: [
+              {
+                id:
+                  'notification-existing',
+                fcm_message_id:
+                  null,
+              },
+            ],
+          })
+          .mockResolvedValueOnce({
+            rows: [
+              {
+                fcm_token:
+                  'test-fcm-token',
+              },
+            ],
+          })
+          .mockResolvedValueOnce({
+            rows: [],
+          });
+
+        mockMessagingSend
+          .mockResolvedValueOnce(
+            'fcm-message-retry'
+          );
+
+        await expect(
+          sendToUser(
+            'user-1',
+            {
+              type:
+                'transaction_success',
+              title:
+                'Transaction Successful',
+              body:
+                'Completed.',
+              data: {},
+            },
+            {
+              throwOnError:
+                true,
+              deliveryKey:
+                'transaction:retry:success',
+            }
+          )
+        ).resolves.toBe(
+          'fcm-message-retry'
+        );
+
+        expect(
+          mockMessagingSend
+        ).toHaveBeenCalledTimes(1);
+
+        expect(
+          mockQuery.mock.calls[0][0]
+        ).toContain(
+          'WHERE delivery_key = $1'
+        );
+
+        expect(
+          mockQuery.mock.calls.some(
+            ([sql]) =>
+              sql.includes(
+                'INSERT INTO notifications'
+              )
+          )
+        ).toBe(false);
       }
     );
 

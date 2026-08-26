@@ -52,7 +52,8 @@ describe("low float notification recipient scope", () => {
       }
 
       if (
-        text.includes("SELECT fcm_token FROM users")
+        text.includes("SELECT fcm_token") &&
+        text.includes("FROM users")
       ) {
         if (params[0] === "owner-1") {
           return {
@@ -77,6 +78,19 @@ describe("low float notification recipient scope", () => {
 
       if (
         text.includes("INSERT INTO notifications")
+      ) {
+        return {
+          rows: [
+            {
+              id:
+                `notification-${params[0]}`
+            }
+          ]
+        };
+      }
+
+      if (
+        text.includes("UPDATE notifications")
       ) {
         return {
           rows: []
@@ -133,11 +147,19 @@ describe("low float notification recipient scope", () => {
 
     const tokenRecipients =
       query.mock.calls
-        .filter(([statement]) =>
-          String(statement).includes(
-            "SELECT fcm_token FROM users"
-          )
-        )
+        .filter(([statement]) => {
+          const sql =
+            String(statement);
+
+          return (
+            sql.includes(
+              "SELECT fcm_token"
+            ) &&
+            sql.includes(
+              "FROM users"
+            )
+          );
+        })
         .map(([, tokenParams]) =>
           tokenParams[0]
         )

@@ -13,10 +13,12 @@ async function sendToUser(
     deliveryKey = null,
   } = {}
 ) {
+  let notificationId = null;
+
   try {
     if (deliveryKey) {
       const existingDelivery = await query(
-        `SELECT fcm_message_id
+        `SELECT id, fcm_message_id
          FROM notifications
          WHERE delivery_key = $1
            AND user_id = $2
@@ -25,18 +27,63 @@ async function sendToUser(
       );
 
       if (existingDelivery.rows.length > 0) {
-        return existingDelivery.rows[0].fcm_message_id || deliveryKey;
+        notificationId =
+          existingDelivery.rows[0].id || null;
+
+        if (
+          existingDelivery.rows[0].fcm_message_id
+        ) {
+          return existingDelivery.rows[0]
+            .fcm_message_id;
+        }
       }
     }
 
+    // In-app notification persistence is authoritative and must not
+    // depend on Firebase availability or a current device FCM token.
+    if (!notificationId) {
+      const persisted = await query(
+        `INSERT INTO notifications (
+           user_id,
+           type,
+           title,
+           body,
+           data,
+           delivery_key
+         )
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id`,
+        [
+          userId,
+          type || 'system_update',
+          title,
+          body,
+          JSON.stringify(data),
+          deliveryKey,
+        ]
+      );
+
+      notificationId =
+        persisted.rows[0]?.id || null;
+    }
+
     const result = await query(
-      'SELECT fcm_token FROM users WHERE id = $1 AND fcm_token IS NOT NULL',
+      `SELECT fcm_token
+       FROM users
+       WHERE id = $1
+         AND fcm_token IS NOT NULL`,
       [userId]
     );
 
-    if (result.rows.length === 0 || !result.rows[0].fcm_token) return;
+    if (
+      result.rows.length === 0 ||
+      !result.rows[0].fcm_token
+    ) {
+      return undefined;
+    }
 
     const fcmToken = result.rows[0].fcm_token;
+
     const messageData = {
       ...data,
       type: type || 'general',
@@ -64,41 +111,38 @@ async function sendToUser(
 
     const response = await getMessaging().send(message);
 
-    // Persist the logical delivery identity after FCM accepts the send.
-    // A retry that happens after this point can be suppressed before
-    // another FCM send.
-    await query(
-      `INSERT INTO notifications (
-         user_id,
-         type,
-         title,
-         body,
-         data,
-         sent_at,
-         fcm_message_id,
-         delivery_key
-       )
-       VALUES ($1, $2, $3, $4, $5, NOW(), $6, $7)
-       ON CONFLICT (delivery_key)
-         WHERE delivery_key IS NOT NULL
-       DO NOTHING`,
-      [
-        userId,
-        type || 'system_update',
-        title,
-        body,
-        JSON.stringify(data),
-        response,
-        deliveryKey,
-      ]
-    );
+    // Firebase has already accepted the push at this point. Metadata
+    // persistence is best-effort so a database metadata error cannot
+    // trigger an outbox retry and duplicate the external push.
+    if (notificationId) {
+      try {
+        await query(
+          `UPDATE notifications
+           SET sent_at = NOW(),
+               fcm_message_id = $1
+           WHERE id = $2`,
+          [response, notificationId]
+        );
+      } catch (metadataError) {
+        logger.error(
+          'Notification delivery metadata update error',
+          { error: metadataError }
+        );
+      }
+    }
 
     return response;
   } catch (error) {
-    if (error.code === 'messaging/registration-token-not-registered') {
-      // Clear invalid token
-      await query('UPDATE users SET fcm_token = NULL WHERE id = $1', [userId]);
+    if (
+      error.code ===
+      'messaging/registration-token-not-registered'
+    ) {
+      await query(
+        'UPDATE users SET fcm_token = NULL WHERE id = $1',
+        [userId]
+      );
     }
+
     logger.error('FCM send error', { error });
 
     if (throwOnError) {
