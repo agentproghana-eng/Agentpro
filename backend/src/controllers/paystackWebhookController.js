@@ -20,6 +20,11 @@ exports.handleWebhook = async (req, res) => {
 
   const event = req.body;
 
+  logger.info("Paystack webhook received", {
+    event: event?.event || null,
+    reference: event?.data?.reference ? String(event.data.reference) : null,
+  });
+
   if (event?.event !== "charge.success") {
     return res.status(200).json({
       success: true,
