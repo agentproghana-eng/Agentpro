@@ -3,6 +3,7 @@ const mockWithTransaction = jest.fn();
 const mockTransactionQuery = jest.fn();
 const mockAuditLog = jest.fn();
 const mockSendWelcomeEmail = jest.fn();
+const mockSendSubscriptionRenewalEmail = jest.fn();
 const mockSendToUser = jest.fn();
 const mockSendToCompany = jest.fn();
 const mockSendSubscriptionSuspended = jest.fn();
@@ -27,6 +28,8 @@ jest.mock('../../src/services/auditService', () => ({
 
 jest.mock('../../src/services/emailService', () => ({
   sendWelcomeEmail: (...args) => mockSendWelcomeEmail(...args),
+  sendSubscriptionRenewalEmail: (...args) =>
+    mockSendSubscriptionRenewalEmail(...args),
   sendSubscriptionReminderEmail: jest.fn(),
 }));
 
@@ -95,6 +98,7 @@ describe('Subscription controller contracts', () => {
 
     mockAuditLog.mockResolvedValue(undefined);
     mockSendWelcomeEmail.mockResolvedValue(undefined);
+    mockSendSubscriptionRenewalEmail.mockResolvedValue(undefined);
     mockSendToUser.mockResolvedValue(undefined);
     mockSendToCompany.mockResolvedValue(undefined);
     mockSendSubscriptionSuspended.mockResolvedValue(undefined);
@@ -324,6 +328,235 @@ describe('Subscription controller contracts', () => {
       expect(res.status).not.toHaveBeenCalledWith(500);
 
       expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+        }),
+      );
+    },
+  );
+
+
+  test(
+    'Business renewal sends the renewal email and never the onboarding email',
+    async () => {
+      const currentExpiry =
+        new Date(
+          '2026-11-05T08:36:37.632Z',
+        );
+
+      mockTransactionQuery
+        .mockResolvedValueOnce({
+          rows: [{
+            id: 'business-payment-renewal',
+            subscription_id: 'subscription-1',
+            company_id: 'company-1',
+            status: 'pending',
+            period_months: 1,
+            amount: '10.00',
+            payment_provider: 'manual_momo',
+            entitlement_base_captured: true,
+            entitlement_base_expires_at:
+              currentExpiry,
+          }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{
+            id: 'subscription-1',
+            status: 'active',
+            started_at:
+              new Date(
+                '2026-09-05T08:36:37.632Z',
+              ),
+            expires_at:
+              currentExpiry,
+          }],
+        })
+        .mockResolvedValueOnce({
+          rows: [],
+        })
+        .mockResolvedValueOnce({
+          rows: [],
+        })
+        .mockResolvedValueOnce({
+          rows: [],
+        })
+        .mockResolvedValueOnce({
+          rows: [],
+        })
+        .mockResolvedValueOnce({
+          rows: [{
+            id: 'owner-1',
+            email: 'owner@example.com',
+            first_name: 'Owner',
+            phone: null,
+          }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{
+            name: 'Example Company',
+          }],
+        });
+
+      const req = makeBusinessReq({
+        action: 'approve',
+      });
+
+      req.params.payment_id =
+        '11111111-1111-4111-8111-111111111111';
+
+      const res = makeRes();
+
+      await subscriptionController.verifyPayment(
+        req,
+        res,
+      );
+
+      expect(
+        mockSendWelcomeEmail,
+      ).not.toHaveBeenCalled();
+
+      expect(
+        mockSendSubscriptionRenewalEmail,
+      ).toHaveBeenCalledTimes(1);
+
+      expect(
+        mockSendSubscriptionRenewalEmail,
+      ).toHaveBeenCalledWith(
+        'owner@example.com',
+        'Owner',
+        'Example Company',
+        '10.00',
+        expect.any(Date),
+      );
+
+      const renewalArgs =
+        mockSendSubscriptionRenewalEmail
+          .mock
+          .calls[0];
+
+      expect(
+        renewalArgs[4].toISOString(),
+      ).toBe(
+        '2026-12-05T08:36:37.632Z',
+      );
+
+      expect(
+        res.status,
+      ).not.toHaveBeenCalledWith(
+        500,
+      );
+
+      expect(
+        res.json,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+        }),
+      );
+    },
+  );
+
+  test(
+    'expired Business subscription still sends a renewal email instead of onboarding',
+    async () => {
+      const expiredAt =
+        new Date(
+          '2026-08-01T00:00:00.000Z',
+        );
+
+      mockTransactionQuery
+        .mockResolvedValueOnce({
+          rows: [{
+            id: 'business-payment-expired-renewal',
+            subscription_id: 'subscription-1',
+            company_id: 'company-1',
+            status: 'pending',
+            period_months: 1,
+            amount: '10.00',
+            payment_provider: 'manual_momo',
+            entitlement_base_captured: true,
+            entitlement_base_expires_at: null,
+          }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{
+            id: 'subscription-1',
+            status: 'suspended',
+            started_at:
+              new Date(
+                '2026-06-01T00:00:00.000Z',
+              ),
+            expires_at:
+              expiredAt,
+          }],
+        })
+        .mockResolvedValueOnce({
+          rows: [],
+        })
+        .mockResolvedValueOnce({
+          rows: [],
+        })
+        .mockResolvedValueOnce({
+          rows: [],
+        })
+        .mockResolvedValueOnce({
+          rows: [],
+        })
+        .mockResolvedValueOnce({
+          rows: [{
+            id: 'owner-1',
+            email: 'owner@example.com',
+            first_name: 'Owner',
+            phone: null,
+          }],
+        })
+        .mockResolvedValueOnce({
+          rows: [{
+            name: 'Example Company',
+          }],
+        });
+
+      const req = makeBusinessReq({
+        action: 'approve',
+      });
+
+      req.params.payment_id =
+        '11111111-1111-4111-8111-111111111111';
+
+      const res = makeRes();
+
+      await subscriptionController.verifyPayment(
+        req,
+        res,
+      );
+
+      expect(
+        mockSendWelcomeEmail,
+      ).not.toHaveBeenCalled();
+
+      expect(
+        mockSendSubscriptionRenewalEmail,
+      ).toHaveBeenCalledTimes(1);
+
+      expect(
+        mockSendSubscriptionRenewalEmail,
+      ).toHaveBeenCalledWith(
+        'owner@example.com',
+        'Owner',
+        'Example Company',
+        '10.00',
+        expect.any(Date),
+      );
+
+      expect(
+        res.status,
+      ).not.toHaveBeenCalledWith(
+        500,
+      );
+
+      expect(
+        res.json,
+      ).toHaveBeenCalledWith(
         expect.objectContaining({
           success: true,
         }),

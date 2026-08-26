@@ -1,7 +1,11 @@
 const { query, withTransaction } = require('../config/database');
 const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
-const { sendWelcomeEmail, sendSubscriptionReminderEmail } = require('../services/emailService');
+const {
+  sendWelcomeEmail,
+  sendSubscriptionRenewalEmail,
+  sendSubscriptionReminderEmail,
+} = require('../services/emailService');
 const { sendSubscriptionRenewalSMS } = require('../services/smsService');
 const { sendToUser, sendToCompany, sendSubscriptionSuspended } = require('../services/notificationService');
 const { activateBusinessSubscription } = require('../services/subscriptionActivationService');
@@ -217,6 +221,7 @@ exports.verifyPayment = async (req, res) => {
     let owner = null;
     let companyName = null;
     let approvedExpiresAt = null;
+    let approvedPaymentWasRenewal = false;
 
     await withTransaction(async (client) => {
       const paymentResult = await client.query(
@@ -259,6 +264,9 @@ exports.verifyPayment = async (req, res) => {
             verifiedBy: req.user.id,
             providerStatus: 'manual_verified',
           });
+
+        approvedPaymentWasRenewal =
+          activation.wasRenewal === true;
 
         if (activation.outcome !== 'activated') {
           await client.query(
@@ -374,14 +382,26 @@ exports.verifyPayment = async (req, res) => {
     if (owner) {
       if (action === 'approve') {
         try {
-          await sendWelcomeEmail(
-            owner.email,
-            owner.first_name,
-            companyName
-          );
+          if (approvedPaymentWasRenewal) {
+            await sendSubscriptionRenewalEmail(
+              owner.email,
+              owner.first_name,
+              companyName,
+              payment.amount,
+              approvedExpiresAt
+            );
+          } else {
+            await sendWelcomeEmail(
+              owner.email,
+              owner.first_name,
+              companyName
+            );
+          }
         } catch (emailErr) {
           logger.error(
-            'Failed to send subscription welcome email:',
+            approvedPaymentWasRenewal
+              ? 'Failed to send subscription renewal email:'
+              : 'Failed to send subscription welcome email:',
             emailErr
           );
         }

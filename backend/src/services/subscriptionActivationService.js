@@ -99,6 +99,9 @@ async function activateBusinessSubscription({
 
   const subscription = subscriptionResult.rows[0];
 
+  const wasRenewal =
+    Boolean(subscription.started_at);
+
   const currentBase = activeBaseExpiry(
     {
       active: subscription.status === "active",
@@ -186,6 +189,7 @@ async function activateBusinessSubscription({
     outcome: "activated",
     expiresAt,
     graceEnds,
+    wasRenewal,
   };
 }
 
