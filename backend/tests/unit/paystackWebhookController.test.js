@@ -2,6 +2,10 @@ const mockVerifySignature = jest.fn();
 
 const mockFulfill = jest.fn();
 
+const mockLoggerInfo = jest.fn();
+
+const mockLoggerError = jest.fn();
+
 jest.mock("../../src/services/paystackService", () => ({
   verifyWebhookSignature: (...args) => mockVerifySignature(...args),
 }));
@@ -12,7 +16,8 @@ jest.mock("../../src/services/paystackSubscriptionService", () => ({
 
 jest.mock("../../src/utils/logger", () => ({
   logger: {
-    error: jest.fn(),
+    info: (...args) => mockLoggerInfo(...args),
+    error: (...args) => mockLoggerError(...args),
   },
 }));
 
@@ -48,6 +53,8 @@ describe("Paystack webhook controller", () => {
     expect(res.status).toHaveBeenCalledWith(401);
 
     expect(mockFulfill).not.toHaveBeenCalled();
+
+    expect(mockLoggerInfo).not.toHaveBeenCalled();
   });
 
   test("ignores signed events other than charge.success", async () => {
@@ -96,6 +103,11 @@ describe("Paystack webhook controller", () => {
     const res = makeRes();
 
     await controller.handleWebhook(req, res);
+
+    expect(mockLoggerInfo).toHaveBeenCalledWith("Paystack webhook received", {
+      event: "charge.success",
+      reference: data.reference,
+    });
 
     expect(mockFulfill).toHaveBeenCalledWith(data, {
       source: "webhook",
