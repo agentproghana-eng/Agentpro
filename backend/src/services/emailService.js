@@ -598,6 +598,7 @@ async function sendSubscriptionRenewalEmail(
   companyName,
   amount,
   expiryDate,
+  details = {},
 ) {
   const safeName =
     escapeHtml(firstName);
@@ -610,6 +611,114 @@ async function sendSubscriptionRenewalEmail(
 
   const expiryLabel =
     formatDateGh(expiryDate);
+
+  const paymentProviderLabel =
+    String(details?.provider || "").trim();
+
+  const paymentMethodLabel =
+    String(details?.paymentMethod || "")
+      .trim()
+      .replace(/[_-]+/g, " ")
+      .replace(
+        /\b\w/g,
+        (character) =>
+          character.toUpperCase(),
+      );
+
+  const referenceLabel =
+    String(details?.reference || "").trim();
+
+  const renewedOnLabel =
+    details?.paidAt
+      ? formatDateGh(details.paidAt)
+      : "";
+
+  const receiptDetails = [
+    paymentProviderLabel
+      ? [
+          "Payment provider",
+          paymentProviderLabel,
+        ]
+      : null,
+    paymentMethodLabel
+      ? [
+          "Payment method",
+          paymentMethodLabel,
+        ]
+      : null,
+    referenceLabel
+      ? [
+          "Reference",
+          referenceLabel,
+        ]
+      : null,
+    renewedOnLabel
+      ? [
+          "Renewed on",
+          renewedOnLabel,
+        ]
+      : null,
+  ].filter(Boolean);
+
+  const receiptDetailsHtml =
+    receiptDetails.length > 0
+      ? `
+        <table
+          role="presentation"
+          cellspacing="0"
+          cellpadding="0"
+          border="0"
+          width="100%"
+          style="
+            margin: 0 0 22px;
+            border: 1px solid ${BRAND.border};
+            border-radius: 12px;
+          "
+        >
+          ${receiptDetails
+            .map(
+              ([label, value]) => `
+                <tr>
+                  <td
+                    style="
+                      padding: 10px 18px;
+                      color: ${BRAND.muted};
+                      font-size: 11px;
+                      line-height: 17px;
+                      font-weight: 700;
+                    "
+                  >
+                    ${escapeHtml(
+                      label.toUpperCase(),
+                    )}
+                  </td>
+
+                  <td
+                    align="right"
+                    style="
+                      padding: 10px 18px;
+                      color: ${BRAND.text};
+                      font-size: 13px;
+                      line-height: 18px;
+                      font-weight: 700;
+                      overflow-wrap: anywhere;
+                    "
+                  >
+                    ${escapeHtml(value)}
+                  </td>
+                </tr>
+              `,
+            )
+            .join("")}
+        </table>
+      `
+      : "";
+
+  const receiptDetailsText =
+    receiptDetails.map(
+      ([label, value]) =>
+        `${label}: ${value}`,
+    );
 
   const html = renderEmail({
     preheader:
@@ -709,6 +818,8 @@ async function sendSubscriptionRenewalEmail(
         </tr>
       </table>
 
+      ${receiptDetailsHtml}
+
       <p
         style="
           margin: 0;
@@ -729,6 +840,7 @@ async function sendSubscriptionRenewalEmail(
     `The AgentPro Business Plan for ${companyName} has been renewed successfully.`,
     `Verified payment: ${amountLabel}`,
     `Active until: ${expiryLabel}`,
+    ...receiptDetailsText,
     "",
     "No further action is required.",
     textFooter(),

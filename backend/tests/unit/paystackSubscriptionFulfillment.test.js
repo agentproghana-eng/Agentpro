@@ -4,6 +4,10 @@ const mockAuditLog = jest.fn();
 
 const mockSendToUser = jest.fn();
 
+const mockSendWelcomeEmail = jest.fn();
+
+const mockSendSubscriptionRenewalEmail = jest.fn();
+
 const mockActivateBusiness = jest.fn();
 
 const mockActivatePersonal = jest.fn();
@@ -18,6 +22,12 @@ jest.mock("../../src/services/auditService", () => ({
 
 jest.mock("../../src/services/notificationService", () => ({
   sendToUser: (...args) => mockSendToUser(...args),
+}));
+
+jest.mock("../../src/services/emailService", () => ({
+  sendWelcomeEmail: (...args) => mockSendWelcomeEmail(...args),
+  sendSubscriptionRenewalEmail: (...args) =>
+    mockSendSubscriptionRenewalEmail(...args),
 }));
 
 jest.mock("../../src/services/subscriptionActivationService", () => ({
@@ -52,6 +62,10 @@ describe("Paystack subscription fulfillment", () => {
     mockAuditLog.mockResolvedValue(undefined);
 
     mockSendToUser.mockResolvedValue(undefined);
+
+    mockSendWelcomeEmail.mockResolvedValue(undefined);
+
+    mockSendSubscriptionRenewalEmail.mockResolvedValue(undefined);
   });
 
   test("refuses amount mismatch without activating entitlement", async () => {
@@ -99,6 +113,7 @@ describe("Paystack subscription fulfillment", () => {
             subscription_id: "subscription-1",
             status: "submitted",
             expected_amount_minor: "5000",
+            amount: "50.00",
             entitlement_base_captured: true,
           },
         ],
@@ -110,6 +125,9 @@ describe("Paystack subscription fulfillment", () => {
         rows: [
           {
             id: "owner-1",
+            email: "owner@example.com",
+            first_name: "Eric",
+            company_name: "Agentpro",
           },
         ],
       });
@@ -117,6 +135,7 @@ describe("Paystack subscription fulfillment", () => {
     mockActivateBusiness.mockResolvedValue({
       outcome: "activated",
       expiresAt,
+      wasRenewal: true,
     });
 
     const result = await fulfillPaystackTransaction({
@@ -126,6 +145,7 @@ describe("Paystack subscription fulfillment", () => {
       amount: 5000,
       currency: "GHS",
       channel: "mobile_money",
+      paid_at: "2026-08-26T18:04:42.000Z",
     });
 
     expect(result.outcome).toBe("activated");
@@ -140,6 +160,79 @@ describe("Paystack subscription fulfillment", () => {
         type: "renewal_approved",
       }),
     );
+
+    expect(mockSendSubscriptionRenewalEmail).toHaveBeenCalledWith(
+      "owner@example.com",
+      "Eric",
+      "Agentpro",
+      50,
+      expiresAt,
+      {
+        provider: "Paystack",
+        paymentMethod: "mobile_money",
+        reference: "APG-BSUB-TEST",
+        paidAt: "2026-08-26T18:04:42.000Z",
+      },
+    );
+
+    expect(mockSendWelcomeEmail).not.toHaveBeenCalled();
+  });
+
+  test("first Paystack Business activation sends welcome email instead of renewal email", async () => {
+    const expiresAt = new Date("2026-09-25T00:00:00.000Z");
+
+    client.query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "payment-first",
+            company_id: "company-1",
+            subscription_id: "subscription-1",
+            status: "submitted",
+            expected_amount_minor: "5000",
+            amount: "50.00",
+            entitlement_base_captured: true,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "owner-1",
+            email: "owner@example.com",
+            first_name: "Eric",
+            company_name: "Agentpro",
+          },
+        ],
+      });
+
+    mockActivateBusiness.mockResolvedValue({
+      outcome: "activated",
+      expiresAt,
+      wasRenewal: false,
+    });
+
+    const result = await fulfillPaystackTransaction({
+      id: 12346,
+      reference: "APG-BSUB-FIRST",
+      status: "success",
+      amount: 5000,
+      currency: "GHS",
+      channel: "mobile_money",
+    });
+
+    expect(result.outcome).toBe("activated");
+
+    expect(mockSendWelcomeEmail).toHaveBeenCalledWith(
+      "owner@example.com",
+      "Eric",
+      "Agentpro",
+    );
+
+    expect(mockSendSubscriptionRenewalEmail).not.toHaveBeenCalled();
   });
 
   test("same verified payment is idempotent", async () => {
@@ -169,5 +262,9 @@ describe("Paystack subscription fulfillment", () => {
     expect(mockActivateBusiness).not.toHaveBeenCalled();
 
     expect(mockSendToUser).not.toHaveBeenCalled();
+
+    expect(mockSendWelcomeEmail).not.toHaveBeenCalled();
+
+    expect(mockSendSubscriptionRenewalEmail).not.toHaveBeenCalled();
   });
 });
