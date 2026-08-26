@@ -112,8 +112,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   icon: Icons.security,
                   title: 'Offline sign-in',
                   subtitle:
-                      'Use your phone PIN, pattern, password or biometrics '
-                      'to unlock a saved AgentPro session without internet.',
+                      'Sign in without internet using your phone PIN, password or biometrics.',
                   trailing: Switch(
                     value: _deviceAuthEnabled,
                     onChanged: _toggleDeviceAuth,
@@ -479,19 +478,28 @@ class _SettingsTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tile = ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      dense: true,
+      visualDensity: const VisualDensity(horizontal: -1, vertical: -2),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 1),
+      horizontalTitleGap: 10,
       leading: Container(
-        width: 42,
-        height: 42,
+        width: 38,
+        height: 38,
         decoration: BoxDecoration(
           color: context.appTileColor(const Color(0xFFEAF5F2)),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
         ),
-        child: Icon(icon, color: iconColor ?? AppTheme.primaryColor),
+        child: Icon(icon, size: 21, color: iconColor ?? AppTheme.primaryColor),
       ),
       title: Text(
         title,
-        style: TextStyle(fontWeight: FontWeight.w600, color: titleColor),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          fontSize: 14,
+          color: titleColor,
+        ),
       ),
       subtitle: subtitle == null
           ? null
@@ -499,11 +507,19 @@ class _SettingsTile extends StatelessWidget {
               padding: const EdgeInsets.only(top: 2),
               child: Text(
                 subtitle!,
-                style: TextStyle(color: context.appSecondaryText, height: 1.35),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: context.appSecondaryText,
+                  fontSize: 12.5,
+                  height: 1.28,
+                ),
               ),
             ),
       trailing: trailing ??
-          (onTap != null ? const Icon(Icons.chevron_right_rounded) : null),
+          (onTap != null
+              ? const Icon(Icons.chevron_right_rounded, size: 21)
+              : null),
     );
 
     if (onTap == null) {

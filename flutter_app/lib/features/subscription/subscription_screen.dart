@@ -23,6 +23,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
   bool _submitting = false;
   bool _paystackBusy = false;
   bool _checkoutLaunched = false;
+  bool _automaticVerificationPending = false;
   String? _paystackReference;
 
   @override
@@ -42,16 +43,11 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
   }
 
   @override
-  void didChangeAppLifecycleState(
-    AppLifecycleState state,
-  ) {
-    if (state == AppLifecycleState.resumed &&
-        _checkoutLaunched &&
-        !_paystackBusy) {
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _checkoutLaunched) {
       _checkoutLaunched = false;
-      _verifyPaystack(
-        showPendingMessage: false,
-      );
+      _automaticVerificationPending = true;
+      _runAutomaticPaystackVerification();
     }
   }
 
@@ -65,6 +61,41 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
     setState(() {
       _paystackReference = reference;
     });
+
+    if (reference == null || reference.trim().isEmpty) {
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _checkoutLaunched) {
+        return;
+      }
+
+      _automaticVerificationPending = true;
+      _runAutomaticPaystackVerification();
+    });
+  }
+
+  Future<void> _runAutomaticPaystackVerification() async {
+    if (!_automaticVerificationPending || _paystackBusy || !mounted) {
+      return;
+    }
+
+    _automaticVerificationPending = false;
+
+    await _verifyPaystack(showPendingMessage: false);
+
+    if (!mounted || _paystackReference == null || _paystackBusy) {
+      return;
+    }
+
+    await Future<void>.delayed(const Duration(seconds: 2));
+
+    if (!mounted || _paystackReference == null || _paystackBusy) {
+      return;
+    }
+
+    await _verifyPaystack(showPendingMessage: false);
   }
 
   Future<void> _startPaystack() async {
@@ -97,9 +128,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              'The secure payment page could not be opened.',
-            ),
+            content: Text('The secure payment page could not be opened.'),
             backgroundColor: AppTheme.errorColor,
           ),
         );
@@ -124,12 +153,12 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
           _paystackBusy = false;
         });
       }
+
+      await _runAutomaticPaystackVerification();
     }
   }
 
-  Future<void> _verifyPaystack({
-    bool showPendingMessage = true,
-  }) async {
+  Future<void> _verifyPaystack({bool showPendingMessage = true}) async {
     if (_paystackBusy) return;
 
     var reference = _paystackReference;
@@ -183,9 +212,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              'Payment confirmed. Your subscription is active.',
-            ),
+            content: Text('Payment confirmed. Your subscription is active.'),
           ),
         );
 
@@ -263,9 +290,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
       final rawData = res.data['data'];
 
       if (rawData is! Map) {
-        throw const FormatException(
-          'Invalid subscription status response',
-        );
+        throw const FormatException('Invalid subscription status response');
       }
 
       if (!mounted) return;
@@ -300,14 +325,20 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
 
     setState(() => _submitting = true);
     try {
-      await ApiClient.instance.post('/subscriptions/payment', data: {
-        'momo_reference': _refCtrl.text.trim(),
-        'payment_phone': _phoneCtrl.text.trim(),
-      });
+      await ApiClient.instance.post(
+        '/subscriptions/payment',
+        data: {
+          'momo_reference': _refCtrl.text.trim(),
+          'payment_phone': _phoneCtrl.text.trim(),
+        },
+      );
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Payment submitted! Pending verification.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Payment submitted! Pending verification.'),
+          ),
+        );
         _load();
       }
     } catch (e) {
@@ -341,256 +372,283 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _loadError != null
-              ? Center(
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.cloud_off_outlined, size: 48),
+                    const SizedBox(height: 12),
+                    Text(
+                      _loadError!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: context.appSecondaryText),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: _load,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Try Again'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                // Status Card
+                Card(
+                  color: status == 'active'
+                      ? AppTheme.successColor.withValues(alpha: 0.1)
+                      : AppTheme.errorColor.withValues(alpha: 0.1),
                   child: Padding(
-                    padding: const EdgeInsets.all(24),
+                    padding: const EdgeInsets.all(20),
                     child: Column(
-                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
-                          Icons.cloud_off_outlined,
+                        Icon(
+                          status == 'active'
+                              ? Icons.check_circle
+                              : Icons.warning,
+                          color: status == 'active'
+                              ? AppTheme.successColor
+                              : AppTheme.errorColor,
                           size: 48,
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 8),
                         Text(
-                          _loadError!,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: context.appSecondaryText,
+                          status == 'active'
+                              ? 'Business Plan — Active'
+                              : 'Subscription ${status.toUpperCase()}',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(height: 16),
-                        ElevatedButton.icon(
-                          onPressed: _load,
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('Try Again'),
-                        ),
+                        if (expiresAt != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'Expires: ${DateFormat('dd MMM yyyy').format(DateTime.parse(expiresAt))}',
+                            style: TextStyle(color: context.appPrimaryText),
+                          ),
+                        ],
                       ],
                     ),
                   ),
-                )
-              : ListView(padding: const EdgeInsets.all(16), children: [
-                  // Status Card
-                  Card(
-                    color: status == 'active'
-                        ? AppTheme.successColor.withValues(alpha: 0.1)
-                        : AppTheme.errorColor.withValues(alpha: 0.1),
-                    child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(children: [
-                          Icon(
-                              status == 'active'
-                                  ? Icons.check_circle
-                                  : Icons.warning,
-                              color: status == 'active'
-                                  ? AppTheme.successColor
-                                  : AppTheme.errorColor,
-                              size: 48),
-                          const SizedBox(height: 8),
-                          Text(
-                              status == 'active'
-                                  ? 'Business Plan — Active'
-                                  : 'Subscription ${status.toUpperCase()}',
-                              style: const TextStyle(
-                                  fontSize: 18, fontWeight: FontWeight.bold)),
-                          if (expiresAt != null) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                                'Expires: ${DateFormat('dd MMM yyyy').format(DateTime.parse(expiresAt))}',
-                                style:
-                                    TextStyle(color: context.appPrimaryText)),
-                          ],
-                        ])),
-                  ),
-                  const SizedBox(height: 16),
+                ),
+                const SizedBox(height: 16),
 
-                  // Plan Features
-                  Card(
+                // Plan Features
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Business Plan — GH₵${((_data?["payment_instructions"]?["amount"] as num?) ?? 10).toStringAsFixed(2)}/month",
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        for (final f in [
+                          'All Mobile Money transactions (MTN, Telecel, AT)',
+                          'Multi-branch management',
+                          'Float management & alerts',
+                          'Commission tracking',
+                          'Reports (PDF, Excel, CSV)',
+                          'Business Hub (Marketplace)',
+                          'AI Assistant',
+                          'Push notifications',
+                          'Cloud sync',
+                        ])
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 6),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.check,
+                                  color: AppTheme.successColor,
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    f,
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.verified_user_outlined),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Pay with Paystack — Instant Activation',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Complete payment on the secure hosted checkout. '
+                          'AgentPro activates access only after the backend confirms the payment.',
+                          style: TextStyle(
+                            color: context.appSecondaryText,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        AppButton(
+                          label: status == 'active'
+                              ? 'Renew with Paystack'
+                              : 'Pay with Paystack',
+                          icon: Icons.open_in_new,
+                          onPressed: _startPaystack,
+                          isLoading: _paystackBusy,
+                        ),
+                        if (_paystackReference != null) ...[
+                          const SizedBox(height: 8),
+                          Center(
+                            child: TextButton.icon(
+                              onPressed: _paystackBusy
+                                  ? null
+                                  : () => _verifyPaystack(),
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Check payment status'),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Payment Instructions
+                if (instructions != null)
+                  Builder(
+                    builder: (context) => Card(
+                      color: context.isDarkMode
+                          ? const Color(0xFF332B15)
+                          : Colors.amber[50],
                       child: Padding(
-                          padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.all(16),
+                        child: DefaultTextStyle.merge(
+                          style: TextStyle(
+                            color: context.isDarkMode
+                                ? AppTheme.secondaryColor
+                                : const Color(0xFF7A5B00),
+                          ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              const Text(
+                                'Pay Manually — Requires Verification',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 8),
                               Text(
-                                  "Business Plan — GH₵${((_data?["payment_instructions"]?["amount"] as num?) ?? 10).toStringAsFixed(2)}/month",
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16)),
-                              const SizedBox(height: 12),
-                              for (final f in [
-                                'All Mobile Money transactions (MTN, Telecel, AT)',
-                                'Multi-branch management',
-                                'Float management & alerts',
-                                'Commission tracking',
-                                'Reports (PDF, Excel, CSV)',
-                                'Business Hub (Marketplace)',
-                                'AI Assistant',
-                                'Push notifications',
-                                'Cloud sync',
-                              ])
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 6),
-                                  child: Row(children: [
-                                    const Icon(Icons.check,
-                                        color: AppTheme.successColor, size: 16),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                        child: Text(f,
-                                            style:
-                                                const TextStyle(fontSize: 13))),
-                                  ]),
-                                ),
-                            ],
-                          ))),
-                  const SizedBox(height: 16),
-
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Row(
-                            children: [
-                              Icon(
-                                Icons.verified_user_outlined,
+                                '1. Send GH₵${instructions['amount']} via MTN MoMo',
                               ),
-                              SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Pay with Paystack — Instant Activation',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
+                              Text(
+                                '2. To: ${instructions['merchant_number']} (${instructions['merchant_name']})',
                               ),
+                              const Text('3. Copy the transaction reference'),
+                              const Text('4. Submit the reference below'),
                             ],
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Complete payment on the secure hosted checkout. '
-                            'AgentPro activates access only after the backend confirms the payment.',
+                        ),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 16),
+
+                AppButton(
+                  label: status == 'active'
+                      ? 'Submit Manual Renewal'
+                      : 'Submit Manual Payment',
+                  icon: Icons.payment,
+                  onPressed: () => showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(20),
+                      ),
+                    ),
+                    builder: (_) => Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        16,
+                        16,
+                        16,
+                        MediaQuery.of(context).viewInsets.bottom + 16,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text(
+                            'Submit Manual Payment Reference',
                             style: TextStyle(
-                              color: context.appSecondaryText,
-                              fontSize: 13,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                           const SizedBox(height: 16),
-                          AppButton(
-                            label: status == 'active'
-                                ? 'Renew with Paystack'
-                                : 'Pay with Paystack',
-                            icon: Icons.open_in_new,
-                            onPressed: _startPaystack,
-                            isLoading: _paystackBusy,
-                          ),
-                          if (_paystackReference != null) ...[
-                            const SizedBox(height: 8),
-                            Center(
-                              child: TextButton.icon(
-                                onPressed: _paystackBusy
-                                    ? null
-                                    : () => _verifyPaystack(),
-                                icon: const Icon(
-                                  Icons.refresh,
-                                ),
-                                label: const Text(
-                                  'Check payment status',
-                                ),
-                              ),
+                          TextField(
+                            controller: _refCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'MTN MoMo Reference',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.receipt),
                             ),
-                          ],
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _phoneCtrl,
+                            keyboardType: TextInputType.phone,
+                            decoration: const InputDecoration(
+                              labelText: 'Phone used to pay',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.phone),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          AppButton(
+                            label: 'Submit Reference for Verification',
+                            onPressed: _submitPayment,
+                            isLoading: _submitting,
+                          ),
                         ],
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-
-                  // Payment Instructions
-                  if (instructions != null)
-                    Builder(
-                        builder: (context) => Card(
-                              color: context.isDarkMode
-                                  ? const Color(0xFF332B15)
-                                  : Colors.amber[50],
-                              child: Padding(
-                                  padding: const EdgeInsets.all(16),
-                                  child: DefaultTextStyle.merge(
-                                    style: TextStyle(
-                                        color: context.isDarkMode
-                                            ? AppTheme.secondaryColor
-                                            : const Color(0xFF7A5B00)),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        const Text(
-                                            'Pay Manually — Requires Verification',
-                                            style: TextStyle(
-                                                fontWeight: FontWeight.bold)),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                            '1. Send GH₵${instructions['amount']} via MTN MoMo'),
-                                        Text(
-                                            '2. To: ${instructions['merchant_number']} (${instructions['merchant_name']})'),
-                                        const Text(
-                                            '3. Copy the transaction reference'),
-                                        const Text(
-                                            '4. Submit the reference below'),
-                                      ],
-                                    ),
-                                  )),
-                            )),
-                  const SizedBox(height: 16),
-
-                  AppButton(
-                    label: status == 'active'
-                        ? 'Submit Manual Renewal'
-                        : 'Submit Manual Payment',
-                    icon: Icons.payment,
-                    onPressed: () => showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      shape: const RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.vertical(top: Radius.circular(20))),
-                      builder: (_) => Padding(
-                        padding: EdgeInsets.fromLTRB(16, 16, 16,
-                            MediaQuery.of(context).viewInsets.bottom + 16),
-                        child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              const Text('Submit Manual Payment Reference',
-                                  style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 16),
-                              TextField(
-                                  controller: _refCtrl,
-                                  decoration: const InputDecoration(
-                                      labelText: 'MTN MoMo Reference',
-                                      border: OutlineInputBorder(),
-                                      prefixIcon: Icon(Icons.receipt))),
-                              const SizedBox(height: 12),
-                              TextField(
-                                  controller: _phoneCtrl,
-                                  keyboardType: TextInputType.phone,
-                                  decoration: const InputDecoration(
-                                      labelText: 'Phone used to pay',
-                                      border: OutlineInputBorder(),
-                                      prefixIcon: Icon(Icons.phone))),
-                              const SizedBox(height: 20),
-                              AppButton(
-                                  label: 'Submit Reference for Verification',
-                                  onPressed: _submitPayment,
-                                  isLoading: _submitting),
-                            ]),
-                      ),
-                    ),
-                  ),
-                ]),
+                ),
+              ],
+            ),
     );
   }
 }
