@@ -173,6 +173,7 @@ exports.listUsers = async (req, res) => {
     status,
     branch_id,
     company_id,
+    personal_only,
     page = 1,
     limit = 20,
   } = req.query;
@@ -223,6 +224,14 @@ exports.listUsers = async (req, res) => {
       params.push(company_id);
     }
 
+    if (personal_only === "true") {
+      conditions.push(`EXISTS (
+        SELECT 1
+        FROM personal_subscriptions ps_filter
+        WHERE ps_filter.user_id = u.id
+      )`);
+    }
+
     // Staff branch filtering follows the user's own agent_branches
     // assignment, not branch_managers. Managers may oversee multiple
     // branches, but that is a separate authorization relationship.
@@ -243,10 +252,35 @@ exports.listUsers = async (req, res) => {
         `SELECT u.id, u.role, u.first_name, u.last_name, u.email, u.phone,
                 u.status, u.created_at, u.last_login_at, u.profile_image_url,
                 u.company_id, c.name as company_name,
+                business_subscription.plan as subscription_plan,
+                business_subscription.status as subscription_status,
+                business_subscription.expires_at as subscription_expires_at,
+                ps.plan as personal_subscription_plan,
+                ps.expires_at as personal_subscription_expires_at,
+                CASE
+                  WHEN ps.user_id IS NULL THEN NULL
+                  WHEN ps.plan = 'paid'
+                    AND ps.expires_at > NOW()
+                    THEN 'active'
+                  WHEN ps.plan = 'paid' THEN 'expired'
+                  ELSE 'free'
+                END as personal_subscription_status,
                 assigned_branch.branch_id,
                 assigned_branch.branch_name
          FROM users u
          LEFT JOIN companies c ON u.company_id = c.id
+         LEFT JOIN personal_subscriptions ps
+           ON ps.user_id = u.id
+         LEFT JOIN LATERAL (
+           SELECT
+             s.plan,
+             s.status,
+             s.expires_at
+           FROM subscriptions s
+           WHERE s.company_id = u.company_id
+           ORDER BY s.created_at DESC
+           LIMIT 1
+         ) business_subscription ON true
          LEFT JOIN LATERAL (
            SELECT ab.branch_id, b.name as branch_name
            FROM agent_branches ab
