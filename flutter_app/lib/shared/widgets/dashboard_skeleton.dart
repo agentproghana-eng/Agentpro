@@ -80,21 +80,22 @@ class ShiftCardSkeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     return DashboardSkeleton(
       child: Container(
-        margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+        margin: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
         decoration: BoxDecoration(
           color: context.appSurface,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(13),
           border: Border.all(
-              color: context.appSecondaryText.withValues(alpha: 0.07)),
+            color: context.appSecondaryText.withValues(alpha: 0.07),
+          ),
         ),
         child: const Row(
           children: [
-            SkeletonBox(width: 38, height: 38, radius: 19),
-            SizedBox(width: 12),
-            Expanded(child: SkeletonBox(height: 13)),
-            SizedBox(width: 20),
-            SkeletonBox(width: 82, height: 38, radius: 12),
+            SkeletonBox(width: 32, height: 32, radius: 16),
+            SizedBox(width: 10),
+            Expanded(child: SkeletonBox(height: 12)),
+            SizedBox(width: 14),
+            SkeletonBox(width: 74, height: 32, radius: 10),
           ],
         ),
       ),

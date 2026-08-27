@@ -31,6 +31,9 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
   DateTimeRange? _customRange;
 
   bool _loading = false;
+  bool _loadingSummary = false;
+  int _summaryRequestId = 0;
+  Map<String, dynamic>? _activitySummary;
 
   static const Map<String, String> _periods = {
     'today': 'Today',
@@ -49,11 +52,11 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
 
   static const Map<String, String> _types = {
     'all': 'All Types',
-    'send_money_same_network': 'Send Money (Same Network)',
-    'send_money_cross_network': 'Send Money (Other Network)',
+    'send_money_same_network': 'Transfer Money · Same Network',
+    'send_money_cross_network': 'Transfer Money · Other Network',
     'buy_airtime': 'Buy Airtime',
     'buy_data': 'Buy Data',
-    'buy_mashup': 'Mash Up',
+    'buy_mashup': 'Buy Data · MashUp',
     'check_momo_balance': 'Check MoMo Balance',
     'check_airtime_balance': 'Check Airtime Balance',
     'withdraw_cash': 'Withdraw Cash',
@@ -65,6 +68,17 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
     'failed': 'Failed',
     'pending_confirmation': 'Pending',
   };
+
+  @override
+  void initState() {
+    super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _isPaid) {
+        _loadActivitySummary();
+      }
+    });
+  }
 
   bool get _isPaid {
     final state = context.read<AuthBloc>().state;
@@ -140,6 +154,84 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
     return params;
   }
 
+  Map<String, dynamic> _summaryParameters() {
+    final params = _reportParameters();
+
+    params.remove('format');
+
+    return params;
+  }
+
+  int _summaryInt(String key) {
+    final value = _activitySummary?[key];
+
+    if (value is int) {
+      return value;
+    }
+
+    if (value is num) {
+      return value.toInt();
+    }
+
+    return int.tryParse(
+          value?.toString() ?? '',
+        ) ??
+        0;
+  }
+
+  double get _summarySuccessRate {
+    final value = _activitySummary?['success_rate'];
+
+    if (value is num) {
+      return value.toDouble();
+    }
+
+    return double.tryParse(
+          value?.toString() ?? '',
+        ) ??
+        0;
+  }
+
+  Future<void> _loadActivitySummary() async {
+    final requestId = ++_summaryRequestId;
+
+    if (mounted) {
+      setState(() => _loadingSummary = true);
+    }
+
+    try {
+      final response = await ApiClient.instance.get(
+        '/personal-reports/transactions/summary',
+        queryParameters: _summaryParameters(),
+      );
+
+      if (!mounted || requestId != _summaryRequestId) {
+        return;
+      }
+
+      final body = response.data;
+      final rawData = body is Map ? body['data'] : null;
+
+      final summary = rawData is Map
+          ? Map<String, dynamic>.from(rawData)
+          : <String, dynamic>{};
+
+      setState(() {
+        _activitySummary = summary;
+        _loadingSummary = false;
+      });
+    } catch (_) {
+      if (!mounted || requestId != _summaryRequestId) {
+        return;
+      }
+
+      setState(() {
+        _activitySummary = null;
+        _loadingSummary = false;
+      });
+    }
+  }
+
   String _reportOpenFailureMessage(ResultType type) {
     switch (type) {
       case ResultType.noAppToOpen:
@@ -177,9 +269,7 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Report generated, but it could not be opened.',
-          ),
+          content: Text('Report generated, but it could not be opened.'),
           backgroundColor: AppTheme.errorColor,
         ),
       );
@@ -274,6 +364,8 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
       _period = 'custom';
       _customRange = selected;
     });
+
+    await _loadActivitySummary();
   }
 
   Future<String?> _showSelector({
@@ -411,6 +503,8 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
       _period = selected;
       _customRange = null;
     });
+
+    await _loadActivitySummary();
   }
 
   Future<void> _selectProvider() async {
@@ -422,6 +516,7 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
 
     if (selected != null && mounted) {
       setState(() => _providerFilter = selected);
+      await _loadActivitySummary();
     }
   }
 
@@ -434,6 +529,7 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
 
     if (selected != null && mounted) {
       setState(() => _typeFilter = selected);
+      await _loadActivitySummary();
     }
   }
 
@@ -446,6 +542,7 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
 
     if (selected != null && mounted) {
       setState(() => _statusFilter = selected);
+      await _loadActivitySummary();
     }
   }
 
@@ -458,15 +555,15 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
     final theme = Theme.of(context);
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.only(bottom: 9),
       child: InkWell(
         onTap: _loading ? null : onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         child: Ink(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
           decoration: BoxDecoration(
             color: context.appSurface,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: theme.dividerColor.withValues(alpha: 0.65),
             ),
@@ -474,15 +571,15 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
           child: Row(
             children: [
               Container(
-                width: 40,
-                height: 40,
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
                   color: AppTheme.primaryColor.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(11),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(icon, color: AppTheme.primaryColor, size: 21),
+                child: Icon(icon, color: AppTheme.primaryColor, size: 19),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -562,6 +659,187 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
     );
   }
 
+  Widget _summaryMetric(
+    BuildContext context, {
+    required String label,
+    required int value,
+    required Color color,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: 5,
+          vertical: 9,
+        ),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          children: [
+            Text(
+              '$value',
+              style: TextStyle(
+                fontSize: 18,
+                height: 1,
+                fontWeight: FontWeight.w800,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 9.5,
+                fontWeight: FontWeight.w600,
+                color: context.appSecondaryText,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _activitySummaryCard(BuildContext context) {
+    final summary = _activitySummary;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: context.appSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AppTheme.primaryColor.withValues(alpha: 0.16),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.insights_outlined,
+                size: 18,
+                color: AppTheme.primaryColor,
+              ),
+              const SizedBox(width: 7),
+              const Expanded(
+                child: Text(
+                  'Activity Summary',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              if (_loadingSummary)
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (summary == null && _loadingSummary)
+            Text(
+              'Loading matching activity...',
+              style: TextStyle(
+                fontSize: 11,
+                color: context.appSecondaryText,
+              ),
+            )
+          else if (summary == null)
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Activity summary is temporarily unavailable.',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: context.appSecondaryText,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _loadingSummary ? null : _loadActivitySummary,
+                  child: const Text('Retry'),
+                ),
+              ],
+            )
+          else ...[
+            Row(
+              children: [
+                _summaryMetric(
+                  context,
+                  label: 'Total',
+                  value: _summaryInt('count'),
+                  color: AppTheme.primaryColor,
+                ),
+                const SizedBox(width: 6),
+                _summaryMetric(
+                  context,
+                  label: 'Successful',
+                  value: _summaryInt('success_count'),
+                  color: AppTheme.successColor,
+                ),
+                const SizedBox(width: 6),
+                _summaryMetric(
+                  context,
+                  label: 'Failed',
+                  value: _summaryInt('failed_count'),
+                  color: AppTheme.errorColor,
+                ),
+                const SizedBox(width: 6),
+                _summaryMetric(
+                  context,
+                  label: 'Pending',
+                  value: _summaryInt('pending_count'),
+                  color: AppTheme.secondaryColor,
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Text(
+                  'Success rate',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    color: context.appSecondaryText,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '${_summarySuccessRate.toStringAsFixed(1)}%',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.primaryColor,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 5),
+            LinearProgressIndicator(
+              value: (_summarySuccessRate / 100).clamp(0.0, 1.0).toDouble(),
+              minHeight: 4,
+              color: AppTheme.primaryColor,
+              backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(20),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _formatCard({
     required String value,
     required String label,
@@ -581,7 +859,7 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
         borderRadius: BorderRadius.circular(14),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+          padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 9),
           decoration: BoxDecoration(
             color: selected
                 ? AppTheme.primaryColor.withValues(alpha: 0.10)
@@ -634,13 +912,13 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
       appBar: AppBar(title: const Text('My Reports')),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: [
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(13),
               decoration: BoxDecoration(
                 color: AppTheme.primaryColor.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: AppTheme.primaryColor.withValues(alpha: 0.18),
                 ),
@@ -649,8 +927,8 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    width: 42,
-                    height: 42,
+                    width: 38,
+                    height: 38,
                     decoration: BoxDecoration(
                       color: AppTheme.primaryColor,
                       borderRadius: BorderRadius.circular(12),
@@ -666,14 +944,14 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Transaction Report',
+                          'Personal Reports',
                           style: theme.textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Choose the activity to include, then generate a PDF or CSV report.',
+                          'Filter your activity and export a clean transaction report.',
                           style: TextStyle(
                             fontSize: 12,
                             height: 1.35,
@@ -686,7 +964,24 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                const Icon(
+                  Icons.tune_rounded,
+                  size: 18,
+                  color: AppTheme.primaryColor,
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  'Report Filters',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
             _selectorTile(
               label: 'Period',
               value: _labelFor(_periods, _period),
@@ -712,7 +1007,8 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
               icon: Icons.task_alt_outlined,
               onTap: _selectStatus,
             ),
-            const SizedBox(height: 4),
+            _activitySummaryCard(context),
+            const SizedBox(height: 14),
             Text(
               'Export Format',
               style: theme.textTheme.labelLarge?.copyWith(
@@ -735,7 +1031,7 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 18),
             AppButton(
               label: _loading ? 'Generating Report' : 'Generate Report',
               icon: Icons.download_rounded,

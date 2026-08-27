@@ -109,7 +109,13 @@ class QuickActionPreference {
   }
 
   Color resolvedIconBackgroundColor(Color defaultColor) {
-    return quickActionColorFromHex(iconBackgroundColorHex) ?? defaultColor;
+    final customColor = quickActionColorFromHex(iconBackgroundColorHex);
+
+    if (customColor == null) {
+      return defaultColor;
+    }
+
+    return customColor.withValues(alpha: 0.14);
   }
 
   String get identityKey {
@@ -226,37 +232,35 @@ List<QuickActionPreference> normalizePersonalQuickActionPreferences({
     (item) => item.actionKey == 'send_money_cross_network',
   );
 
-  // Personal mode presents one Send Money action when both underlying
-  // network variants are available. The Personal transaction screen
-  // decides which concrete transaction type is required.
+  // Personal mode presents one Transfer Money action when both
+  // underlying network variants are available. The Personal transaction
+  // screen decides which concrete transaction type is required.
   if (!hasSameNetwork || !hasOtherNetwork) {
     return visible
         .take(9)
         .toList()
         .asMap()
         .entries
-        .map(
-          (entry) => entry.value.copyWith(position: entry.key),
-        )
+        .map((entry) => entry.value.copyWith(position: entry.key))
         .toList();
   }
 
   final normalized = <QuickActionPreference>[];
-  var sendMoneyInserted = false;
+  var transferMoneyInserted = false;
 
   for (final preference in visible) {
-    final isSendMoney = preference.actionKey == 'send_money_same_network' ||
+    final isTransferMoney = preference.actionKey == 'send_money_same_network' ||
         preference.actionKey == 'send_money_cross_network';
 
-    if (isSendMoney) {
-      if (!sendMoneyInserted) {
+    if (isTransferMoney) {
+      if (!transferMoneyInserted) {
         normalized.add(
           preference.copyWith(
             actionKey: 'send_money',
-            customName: 'Send Money',
+            customName: 'Transfer Money',
           ),
         );
-        sendMoneyInserted = true;
+        transferMoneyInserted = true;
       }
 
       continue;
@@ -270,9 +274,7 @@ List<QuickActionPreference> normalizePersonalQuickActionPreferences({
       .toList()
       .asMap()
       .entries
-      .map(
-        (entry) => entry.value.copyWith(position: entry.key),
-      )
+      .map((entry) => entry.value.copyWith(position: entry.key))
       .toList();
 }
 
@@ -349,9 +351,7 @@ List<QuickActionPreference> normalizeBusinessQuickActionPreferences({
   return normalized
       .asMap()
       .entries
-      .map(
-        (entry) => entry.value.copyWith(position: entry.key),
-      )
+      .map((entry) => entry.value.copyWith(position: entry.key))
       .toList();
 }
 
@@ -368,11 +368,7 @@ class QuickActionIconOption {
 }
 
 const List<QuickActionIconOption> kQuickActionIconOptions = [
-  QuickActionIconOption(
-    key: 'send',
-    label: 'Send',
-    icon: Icons.send_rounded,
-  ),
+  QuickActionIconOption(key: 'send', label: 'Send', icon: Icons.send_rounded),
   QuickActionIconOption(
     key: 'payments',
     label: 'Payments',
@@ -408,11 +404,7 @@ const List<QuickActionIconOption> kQuickActionIconOptions = [
     label: 'Phone',
     icon: Icons.phone_android_rounded,
   ),
-  QuickActionIconOption(
-    key: 'data',
-    label: 'Data',
-    icon: Icons.wifi_rounded,
-  ),
+  QuickActionIconOption(key: 'data', label: 'Data', icon: Icons.wifi_rounded),
   QuickActionIconOption(
     key: 'balance',
     label: 'Balance',
@@ -468,11 +460,7 @@ const List<QuickActionIconOption> kQuickActionIconOptions = [
     label: 'QR Code',
     icon: Icons.qr_code_scanner_rounded,
   ),
-  QuickActionIconOption(
-    key: 'bolt',
-    label: 'Quick',
-    icon: Icons.bolt_rounded,
-  ),
+  QuickActionIconOption(key: 'bolt', label: 'Quick', icon: Icons.bolt_rounded),
   QuickActionIconOption(
     key: 'star',
     label: 'Favourite',
@@ -525,11 +513,7 @@ const List<QuickActionColorOption> kQuickActionColorOptions = [
     hex: '#D84315',
     color: Color(0xFFD84315),
   ),
-  QuickActionColorOption(
-    name: 'Red',
-    hex: '#C62828',
-    color: Color(0xFFC62828),
-  ),
+  QuickActionColorOption(name: 'Red', hex: '#C62828', color: Color(0xFFC62828)),
   QuickActionColorOption(
     name: 'Yellow',
     hex: '#FDD835',

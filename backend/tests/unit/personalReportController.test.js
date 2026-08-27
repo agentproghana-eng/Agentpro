@@ -178,6 +178,70 @@ describe('personalReportController activity reporting', () => {
     expect(summaryParams).toEqual(rowParams);
   });
 
+  test('returns normalized activity KPIs using the same Personal report filters', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          count: '8',
+          success_count: '5',
+          failed_count: '2',
+          pending_count: '1',
+          success_rate: '62.5',
+        },
+      ],
+    });
+
+    const req = {
+      user: { id: 'personal-user-1' },
+      query: {
+        provider: 'mtn',
+        status: 'success',
+        from_date: '2026-08-01T00:00:00.000Z',
+        to_date: '2026-08-27T23:59:59.999Z',
+      },
+    };
+
+    const res = makeRes();
+
+    await personalReportController.transactionReportSummary(
+      req,
+      res,
+    );
+
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+
+    const [sql, params] = mockQuery.mock.calls[0];
+
+    expect(sql).toContain('FROM personal_transactions');
+    expect(sql).toContain('provider = $2');
+    expect(sql).toContain('status = $3');
+
+    expect(sql).toContain(
+      "COUNT(CASE WHEN status = 'success' THEN 1 END) as success_count",
+    );
+
+    expect(sql).not.toContain('SUM(amount)');
+
+    expect(params).toEqual([
+      'personal-user-1',
+      'mtn',
+      'success',
+      '2026-08-01T00:00:00.000Z',
+      '2026-08-27T23:59:59.999Z',
+    ]);
+
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: {
+        count: 8,
+        success_count: 5,
+        failed_count: 2,
+        pending_count: 1,
+        success_rate: 62.5,
+      },
+    });
+  });
+
   test('passes activity counts to the Personal PDF generator', async () => {
     const rows = [
       {

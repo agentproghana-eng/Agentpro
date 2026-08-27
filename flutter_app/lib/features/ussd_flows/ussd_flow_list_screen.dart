@@ -111,6 +111,12 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
     return 'Your company';
   }
 
+  String _executionModeLabel(Map<String, dynamic> flow) {
+    return flow['execution_mode']?.toString().trim().toLowerCase() == 'direct'
+        ? 'Direct String'
+        : 'Interactive';
+  }
+
   Future<void> _openFlow(Map<String, dynamic> flow) async {
     if (_isGlobal(flow)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -539,6 +545,7 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
                                             ),
                                             child: Text(
                                               '${flow['dial_code'] ?? ''} · '
+                                              '${_executionModeLabel(flow)} · '
                                               '${_scopeDescription(flow)} · '
                                               '${_scopeLabel(flow)}',
                                               style: TextStyle(

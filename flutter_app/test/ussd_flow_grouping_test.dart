@@ -5,62 +5,80 @@ import 'package:agent_pro_ghana/features/ussd_flows/'
 void main() {
   group('groupUssdFlows', () {
     test('collapses Personal seed variants under one mother flow', () {
-      final groups = groupUssdFlows(
-        [
-          {
-            'id': 'one',
-            'provider': 'mtn',
-            'transaction_type': 'buy_mashup',
-            'recipient_mode': 'self',
-            'bundle_category': 'ghc5_page1_momo',
-          },
-          {
-            'id': 'two',
-            'provider': 'mtn',
-            'transaction_type': 'buy_mashup',
-            'recipient_mode': 'other',
-            'bundle_category': 'ghc5_page1_momo',
-          },
-          {
-            'id': 'three',
-            'provider': 'mtn',
-            'transaction_type': 'buy_mashup',
-            'recipient_mode': 'self',
-            'bundle_category': 'ghc10_page2_airtime',
-          },
-        ],
-        isPersonal: true,
-      );
+      final groups = groupUssdFlows([
+        {
+          'id': 'one',
+          'provider': 'mtn',
+          'transaction_type': 'buy_mashup',
+          'recipient_mode': 'self',
+          'bundle_category': 'ghc5_page1_momo',
+        },
+        {
+          'id': 'two',
+          'provider': 'mtn',
+          'transaction_type': 'buy_mashup',
+          'recipient_mode': 'other',
+          'bundle_category': 'ghc5_page1_momo',
+        },
+        {
+          'id': 'three',
+          'provider': 'mtn',
+          'transaction_type': 'buy_mashup',
+          'recipient_mode': 'self',
+          'bundle_category': 'ghc10_page2_airtime',
+        },
+      ], isPersonal: true);
 
       expect(groups, hasLength(1));
-      expect(groups.single.transactionType, 'buy_mashup');
+      expect(groups.single.transactionType, 'buy_data');
       expect(groups.single.flows, hasLength(3));
     });
 
+    test('groups Personal transfer variants under Transfer Money', () {
+      final groups = groupUssdFlows([
+        {
+          'id': 'same',
+          'provider': 'mtn',
+          'transaction_type': 'send_money_same_network',
+        },
+        {
+          'id': 'cross',
+          'provider': 'mtn',
+          'transaction_type': 'send_money_cross_network',
+        },
+      ], isPersonal: true);
+
+      expect(groups, hasLength(1));
+      expect(groups.single.transactionType, 'transfer_money');
+      expect(groups.single.flows, hasLength(2));
+
+      expect(groups.single.flows.map(ussdFlowVariantLabel).toSet(), {
+        'Same Network',
+        'Other Network',
+      });
+    });
+
     test('keeps Business SIM roles as separate mother flows', () {
-      final groups = groupUssdFlows(
-        [
-          {
-            'id': 'agent-airtime',
-            'provider': 'mtn',
-            'transaction_type': 'airtime',
-            'business_sim_role': 'agent',
-          },
-          {
-            'id': 'merchant-airtime',
-            'provider': 'mtn',
-            'transaction_type': 'airtime',
-            'business_sim_role': 'merchant',
-          },
-        ],
-        isPersonal: false,
-      );
+      final groups = groupUssdFlows([
+        {
+          'id': 'agent-airtime',
+          'provider': 'mtn',
+          'transaction_type': 'airtime',
+          'business_sim_role': 'agent',
+        },
+        {
+          'id': 'merchant-airtime',
+          'provider': 'mtn',
+          'transaction_type': 'airtime',
+          'business_sim_role': 'merchant',
+        },
+      ], isPersonal: false);
 
       expect(groups, hasLength(2));
-      expect(
-        groups.map((group) => group.simRole).toSet(),
-        {'agent', 'merchant'},
-      );
+      expect(groups.map((group) => group.simRole).toSet(), {
+        'agent',
+        'merchant',
+      });
     });
 
     test('variant label hides database-row terminology', () {
@@ -72,10 +90,7 @@ void main() {
         'Self · Flexi Momo',
       );
 
-      expect(
-        ussdFlowVariantLabel({}),
-        'Default flow',
-      );
+      expect(ussdFlowVariantLabel({}), 'Default flow');
     });
   });
 }

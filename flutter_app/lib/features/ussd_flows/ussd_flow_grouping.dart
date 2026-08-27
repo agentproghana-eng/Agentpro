@@ -14,6 +14,17 @@ class UssdFlowGroup {
   String get key => '$provider|$transactionType|$simRole';
 }
 
+String personalUssdFlowPresentationType(String transactionType) {
+  return switch (transactionType.trim().toLowerCase()) {
+    'send_money' ||
+    'send_money_same_network' ||
+    'send_money_cross_network' =>
+      'transfer_money',
+    'buy_mashup' => 'buy_data',
+    _ => transactionType.trim().toLowerCase(),
+  };
+}
+
 List<UssdFlowGroup> groupUssdFlows(
   Iterable<dynamic> rawFlows, {
   required bool isPersonal,
@@ -29,17 +40,18 @@ List<UssdFlowGroup> groupUssdFlows(
 
     final provider = flow['provider']?.toString().trim().toLowerCase() ?? '';
 
-    final transactionType =
+    final rawTransactionType =
         flow['transaction_type']?.toString().trim().toLowerCase() ?? '';
+
+    final transactionType = isPersonal
+        ? personalUssdFlowPresentationType(rawTransactionType)
+        : rawTransactionType;
 
     if (provider.isEmpty || transactionType.isEmpty) {
       continue;
     }
 
-    final simRole = _resolvedSimRole(
-      flow,
-      isPersonal: isPersonal,
-    );
+    final simRole = _resolvedSimRole(flow, isPersonal: isPersonal);
 
     final key = '$provider|$transactionType|$simRole';
 
@@ -94,10 +106,23 @@ List<UssdFlowGroup> groupUssdFlows(
   return groups;
 }
 
-String ussdFlowVariantLabel(
-  Map<String, dynamic> flow,
-) {
+String ussdFlowVariantLabel(Map<String, dynamic> flow) {
   final parts = <String>[];
+
+  final transactionType =
+      flow['transaction_type']?.toString().trim().toLowerCase() ?? '';
+
+  if (transactionType == 'send_money_same_network') {
+    return 'Same Network';
+  }
+
+  if (transactionType == 'send_money_cross_network') {
+    return 'Other Network';
+  }
+
+  if (transactionType == 'buy_mashup') {
+    parts.add('MashUp');
+  }
 
   final recipientMode = flow['recipient_mode']?.toString().trim() ?? '';
 
@@ -128,10 +153,7 @@ String ussdFlowRoleLabel(String role) {
   };
 }
 
-String _resolvedSimRole(
-  Map<String, dynamic> flow, {
-  required bool isPersonal,
-}) {
+String _resolvedSimRole(Map<String, dynamic> flow, {required bool isPersonal}) {
   if (isPersonal) {
     return 'personal';
   }

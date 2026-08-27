@@ -107,14 +107,15 @@ void main() {
     );
   });
 
-  test('personal Send Money app bar is concise without duplicate Return', () {
+  test('personal Transfer Money app bar is concise without duplicate Return',
+      () {
     expect(
       personal,
-      contains("'send_money_same_network' => 'Send Money'"),
+      contains("'send_money_same_network': 'Transfer Money · Same Network'"),
     );
     expect(
       personal,
-      contains("'send_money_cross_network' => 'Send Money'"),
+      contains("'send_money_cross_network': 'Transfer Money · Other Network'"),
     );
     expect(personal, isNot(contains("label: const Text('Return')")));
   });

@@ -96,7 +96,7 @@ void main() {
     expect(transactionSource, contains("child: Text('Someone else')"));
   });
 
-  test('Personal Send Money is grouped into one Home action', () {
+  test('Personal Transfer Money is grouped into one Home action', () {
     expect(
       homeSource,
       contains('normalizePersonalQuickActionPreferences('),
@@ -128,7 +128,7 @@ void main() {
     );
     expect(
       quickActionPreferenceSource,
-      contains("customName: 'Send Money'"),
+      contains("customName: 'Transfer Money'"),
     );
 
     expect(

@@ -691,6 +691,100 @@ describe('USSD Flow Builder capability enforcement', () => {
 
 
 
+  test('Business execution-mode update revalidates persisted metadata before write', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 'company-flow-invalid-metadata',
+          company_id: 'company-1',
+          owner_user_id: null,
+          provider: 'mtn',
+          transaction_type: 'cash_in',
+          dial_code: 'tel:*170#',
+          success_markers: ['successful'],
+          failure_markers: ['failed'],
+          execution_mode: 'interactive',
+          is_active: true,
+        },
+      ],
+    });
+
+    const req = {
+      user: {
+        id: 'business-user-1',
+        role: 'business_owner',
+        company_id: 'company-1',
+      },
+      params: {
+        id: 'company-flow-invalid-metadata',
+      },
+      body: {
+        execution_mode: 'direct',
+      },
+    };
+
+    const res = makeRes();
+
+    await ussdFlowController.updateFlow(req, res);
+
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+    expect(mockWithTransaction).not.toHaveBeenCalled();
+
+    expect(res.status).toHaveBeenCalledWith(422);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: false,
+        code: 'USSD_FLOW_INVALID_METADATA',
+      }),
+    );
+  });
+
+  test('Personal execution-mode update revalidates persisted metadata before write', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 'personal-flow-invalid-metadata',
+          owner_user_id: 'personal-user-1',
+          company_id: null,
+          provider: 'telecel',
+          transaction_type: 'buy_airtime',
+          dial_code: 'tel:*110#',
+          success_markers: ['successful'],
+          failure_markers: ['failed'],
+          execution_mode: 'interactive',
+          is_active: true,
+        },
+      ],
+    });
+
+    const req = {
+      user: {
+        id: 'personal-user-1',
+      },
+      params: {
+        id: 'personal-flow-invalid-metadata',
+      },
+      body: {
+        execution_mode: 'direct',
+      },
+    };
+
+    const res = makeRes();
+
+    await personalUssdFlowController.updateFlow(req, res);
+
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+    expect(mockWithTransaction).not.toHaveBeenCalled();
+
+    expect(res.status).toHaveBeenCalledWith(422);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: false,
+        code: 'USSD_FLOW_INVALID_METADATA',
+      }),
+    );
+  });
+
   test('Business reactivation rejects unsafe persisted steps', async () => {
     mockQuery
       .mockResolvedValueOnce({

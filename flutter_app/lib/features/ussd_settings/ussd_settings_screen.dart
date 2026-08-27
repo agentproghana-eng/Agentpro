@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:go_router/go_router.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/auth_bloc.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
+import '../ussd_flows/ussd_flow_editor_screen.dart';
 
 class UssdSettingsScreen extends StatefulWidget {
   // Reused for both account modes, but the automation configuration
@@ -286,6 +286,71 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
     }
   }
 
+  Future<void> _createAutomation() async {
+    await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => UssdFlowEditorScreen(
+          apiBasePath:
+              widget.isPersonal ? '/personal-ussd-flows' : '/ussd-flows',
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCreateAutomationCard(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.primaryColor.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AppTheme.primaryColor.withValues(alpha: 0.16),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(
+                Icons.auto_fix_high_outlined,
+                size: 20,
+                color: AppTheme.primaryColor,
+              ),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Create USSD Automation',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Text(
+            'Create a Direct USSD String for a complete one-dial code, '
+            'or an Interactive Flow for provider menus that must be '
+            'handled step by step.',
+            style: TextStyle(
+              fontSize: 10.5,
+              color: context.appSecondaryText,
+            ),
+          ),
+          const SizedBox(height: 10),
+          ElevatedButton.icon(
+            onPressed: _createAutomation,
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Create Automation'),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _providerLabel(String provider) {
     return switch (provider) {
       'mtn' => 'MTN',
@@ -432,77 +497,9 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
             ),
           ],
           const SizedBox(height: 18),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: context.appSurface,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "${widget.isPersonal ? "Subscriber" : "Agent"} Quick Actions",
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Choose and reorder up to 9 dashboard actions in a 3×3 grid.',
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    color: context.appSecondaryText,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  onPressed: () => context.push(
-                    widget.isPersonal
-                        ? '/personal-quick-actions'
-                        : '/agent-quick-actions',
-                  ),
-                  icon: const Icon(Icons.grid_view_outlined),
-                  label: const Text('Customize Quick Actions'),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          if (widget.isPersonal) ...[
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: context.appSurface,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Personal USSD Flows',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    'Personal automation uses Custom USSD Flows. '
-                    'There is no separate dial-pattern override.',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      color: context.appSecondaryText,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  OutlinedButton.icon(
-                    onPressed: () => context.push('/personal-ussd-flows'),
-                    icon: const Icon(Icons.route_outlined),
-                    label: const Text('Manage Custom USSD Flows'),
-                  ),
-                ],
-              ),
-            ),
-          ] else ...[
+          _buildCreateAutomationCard(context),
+          if (!widget.isPersonal) ...[
+            const SizedBox(height: 16),
             const Text(
               'Transaction Type',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),

@@ -170,7 +170,24 @@ bool isTrustedPinlessPersonalRuntimeFlow({
 String? validateUssdFlowDraftSteps(
   List<Map<String, dynamic>> steps, {
   bool allowPinless = false,
+  String executionMode = 'interactive',
 }) {
+  final normalizedExecutionMode = executionMode.trim().toLowerCase();
+
+  if (!const {'interactive', 'direct'}.contains(
+    normalizedExecutionMode,
+  )) {
+    return 'Execution mode must be Interactive Flow or Direct USSD String.';
+  }
+
+  if (normalizedExecutionMode == 'direct') {
+    if (steps.isNotEmpty) {
+      return 'Direct USSD String must not contain interactive steps.';
+    }
+
+    return null;
+  }
+
   if (steps.isEmpty) {
     return 'At least one step is required.';
   }

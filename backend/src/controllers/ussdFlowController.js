@@ -148,8 +148,13 @@ exports.createFlow = async (req, res) => {
     recipient_mode,
     business_sim_role,
     account_mode,
+    execution_mode,
     steps,
   } = req.body;
+
+  const executionMode = String(execution_mode || "interactive")
+    .trim()
+    .toLowerCase();
 
   const businessSimRole = String(business_sim_role || "agent")
     .trim()
@@ -184,7 +189,9 @@ exports.createFlow = async (req, res) => {
     });
   }
 
-  const stepError = validateFlowSteps(steps);
+  const stepError = validateFlowSteps(steps, {
+    executionMode,
+  });
   if (stepError) {
     return res.status(422).json({ success: false, message: stepError });
   }
@@ -275,10 +282,14 @@ exports.createFlow = async (req, res) => {
            failure_markers,
            bundle_category,
            recipient_mode,
+           execution_mode,
            business_sim_role,
            created_by
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         VALUES (
+           $1, $2, $3, $4, $5, $6,
+           $7, $8, $9, $10, $11
+         )
          RETURNING *`,
         [
           companyId,
@@ -289,6 +300,7 @@ exports.createFlow = async (req, res) => {
           failure_markers || [],
           bundle_category || null,
           recipient_mode || null,
+          executionMode,
           persistedBusinessSimRole,
           req.user.id,
         ],
@@ -324,6 +336,7 @@ exports.createFlow = async (req, res) => {
         transaction_type,
         bundle_category: bundle_category || null,
         recipient_mode: recipient_mode || null,
+        execution_mode: executionMode,
         business_sim_role: persistedBusinessSimRole,
         account_mode: isGlobalTarget ? resolvedGlobalAccountMode : "business",
         company_id: companyId,
@@ -370,6 +383,7 @@ exports.updateFlow = async (req, res) => {
     bundle_category,
     recipient_mode,
     business_sim_role,
+    execution_mode,
     is_active,
     steps,
   } = req.body;
@@ -386,6 +400,17 @@ exports.updateFlow = async (req, res) => {
     req.body,
     "business_sim_role",
   );
+
+  const hasExecutionMode = Object.prototype.hasOwnProperty.call(
+    req.body,
+    "execution_mode",
+  );
+
+  const requestedExecutionMode = hasExecutionMode
+    ? String(execution_mode || "")
+        .trim()
+        .toLowerCase()
+    : null;
 
   const requestedBusinessSimRole = hasBusinessSimRole
     ? String(business_sim_role || "")
@@ -438,10 +463,17 @@ exports.updateFlow = async (req, res) => {
     const effectiveFailureMarkers =
       failure_markers !== undefined ? failure_markers : flow.failure_markers;
 
+    const effectiveExecutionMode = hasExecutionMode
+      ? requestedExecutionMode
+      : String(flow.execution_mode || "interactive")
+          .trim()
+          .toLowerCase();
+
     const shouldValidateMetadata =
       dial_code !== undefined ||
       success_markers !== undefined ||
       failure_markers !== undefined ||
+      hasExecutionMode ||
       (is_active === true && flow.is_active !== true);
 
     if (shouldValidateMetadata && effectiveDialCode !== undefined) {
@@ -500,7 +532,10 @@ exports.updateFlow = async (req, res) => {
     // If reactivation does not replace the steps, validate the persisted
     // configuration before making it executable again. This protects
     // historical flows created before today's stricter safety rules.
-    if (is_active === true && flow.is_active !== true && steps === undefined) {
+    if (
+      steps === undefined &&
+      (hasExecutionMode || (is_active === true && flow.is_active !== true))
+    ) {
       const persistedStepsResult = await query(
         `SELECT match_all, action, action_value
          FROM ussd_flow_steps
@@ -509,7 +544,9 @@ exports.updateFlow = async (req, res) => {
         [id],
       );
 
-      const persistedStepError = validateFlowSteps(persistedStepsResult.rows);
+      const persistedStepError = validateFlowSteps(persistedStepsResult.rows, {
+        executionMode: effectiveExecutionMode,
+      });
 
       if (persistedStepError) {
         return res.status(422).json({
@@ -522,7 +559,9 @@ exports.updateFlow = async (req, res) => {
     }
 
     if (steps !== undefined) {
-      const stepError = validateFlowSteps(steps);
+      const stepError = validateFlowSteps(steps, {
+        executionMode: effectiveExecutionMode,
+      });
       if (stepError) {
         return res.status(422).json({ success: false, message: stepError });
       }
@@ -538,9 +577,11 @@ exports.updateFlow = async (req, res) => {
            recipient_mode = CASE WHEN $6 THEN $7 ELSE recipient_mode END,
            business_sim_role =
              CASE WHEN $8 THEN $9 ELSE business_sim_role END,
-           is_active = COALESCE($10, is_active),
+           execution_mode =
+             CASE WHEN $10 THEN $11 ELSE execution_mode END,
+           is_active = COALESCE($12, is_active),
            updated_at = NOW()
-         WHERE id = $11
+         WHERE id = $13
          RETURNING *`,
         [
           dial_code,
@@ -552,6 +593,8 @@ exports.updateFlow = async (req, res) => {
           recipient_mode || null,
           hasBusinessSimRole,
           requestedBusinessSimRole,
+          hasExecutionMode,
+          requestedExecutionMode,
           is_active,
           id,
         ],
@@ -586,6 +629,7 @@ exports.updateFlow = async (req, res) => {
           ? { bundle_category: bundle_category || null }
           : {}),
         ...(hasRecipientMode ? { recipient_mode: recipient_mode || null } : {}),
+        ...(hasExecutionMode ? { execution_mode: requestedExecutionMode } : {}),
         is_active,
         steps_replaced: steps !== undefined,
       },
@@ -800,7 +844,9 @@ exports.resolveFlow = async (req, res) => {
       [flow.id],
     );
 
-    const runtimeStepError = validateFlowSteps(stepsResult.rows);
+    const runtimeStepError = validateFlowSteps(stepsResult.rows, {
+      executionMode: flow.execution_mode || "interactive",
+    });
 
     if (runtimeStepError) {
       logger.warn("Unsafe Business USSD flow blocked at runtime", {
