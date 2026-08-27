@@ -108,7 +108,8 @@ class _ManagerMoreTab extends StatelessWidget {
             Icons.wifi_tethering,
             'USSD Automation',
             () => context.push('/ussd-settings'),
-            subtitle: 'Configure SIMs and automated transaction actions',
+            subtitle:
+                'View company automation settings and Telecel Operator ID',
           ),
           const MoreGroupLabel('Business'),
           MoreTile(
@@ -145,20 +146,15 @@ class _ManagerMoreTab extends StatelessWidget {
             subtitle: 'Guides, assistance and support options',
           ),
           const Divider(),
-          MoreTile(
-            Icons.logout,
-            'Sign Out',
-            () async {
-              final confirmed = await confirmSignOut(context);
+          MoreTile(Icons.logout, 'Sign Out', () async {
+            final confirmed = await confirmSignOut(context);
 
-              if (!context.mounted || !confirmed) {
-                return;
-              }
+            if (!context.mounted || !confirmed) {
+              return;
+            }
 
-              context.read<AuthBloc>().add(AuthLogoutEvent());
-            },
-            color: AppTheme.errorColor,
-          ),
+            context.read<AuthBloc>().add(AuthLogoutEvent());
+          }, color: AppTheme.errorColor),
         ],
       ),
     );

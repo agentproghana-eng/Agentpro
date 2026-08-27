@@ -50,7 +50,7 @@ void main() {
       ).hasMatch(grouping),
       isTrue,
     );
-    expect(grouping, contains("'buy_mashup' => 'buy_data'"));
+    expect(grouping, contains("'buy_mashup' => 'mashup'"));
     expect(grouping, contains("return 'Same Network'"));
     expect(grouping, contains("return 'Other Network'"));
   });
@@ -111,14 +111,11 @@ void main() {
     expect(personal, contains("'Report Filters'"));
     expect(personal, contains("'Activity Summary'"));
     expect(personal, contains("'Success rate'"));
-    expect(
-      personal,
-      contains("'/personal-reports/transactions/summary'"),
-    );
+    expect(personal, contains("'/personal-reports/transactions/summary'"));
     expect(
       personal,
       contains("'send_money_same_network': 'Transfer Money · Same Network'"),
     );
-    expect(personal, contains("'buy_mashup': 'Buy Data · MashUp'"));
+    expect(personal, contains("'buy_mashup': 'MashUp'"));
   });
 }

@@ -75,14 +75,7 @@ class PersonalMoreTab extends StatelessWidget {
               Icons.wifi_tethering,
               'USSD Automation',
               () => context.push('/personal-ussd-settings'),
-              subtitle: 'Configure SIMs and personal transaction automation',
-            ),
-          if (isPaid)
-            MoreTile(
-              Icons.route_outlined,
-              'Custom USSD Flows',
-              () => context.push('/personal-ussd-flows'),
-              subtitle: 'Create and manage your own USSD sequences',
+              subtitle: 'Create and manage personal USSD automations',
             ),
           const MoreGroupLabel('Account'),
           MoreTile(
@@ -112,20 +105,15 @@ class PersonalMoreTab extends StatelessWidget {
             subtitle: 'Guides, assistance and support options',
           ),
           const Divider(),
-          MoreTile(
-            Icons.logout,
-            'Sign Out',
-            () async {
-              final confirmed = await confirmSignOut(context);
+          MoreTile(Icons.logout, 'Sign Out', () async {
+            final confirmed = await confirmSignOut(context);
 
-              if (!context.mounted || !confirmed) {
-                return;
-              }
+            if (!context.mounted || !confirmed) {
+              return;
+            }
 
-              context.read<AuthBloc>().add(AuthLogoutEvent());
-            },
-            color: AppTheme.errorColor,
-          ),
+            context.read<AuthBloc>().add(AuthLogoutEvent());
+          }, color: AppTheme.errorColor),
         ],
       ),
     );

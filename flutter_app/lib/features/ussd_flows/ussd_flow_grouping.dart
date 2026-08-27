@@ -20,7 +20,7 @@ String personalUssdFlowPresentationType(String transactionType) {
     'send_money_same_network' ||
     'send_money_cross_network' =>
       'transfer_money',
-    'buy_mashup' => 'buy_data',
+    'buy_mashup' => 'mashup',
     _ => transactionType.trim().toLowerCase(),
   };
 }

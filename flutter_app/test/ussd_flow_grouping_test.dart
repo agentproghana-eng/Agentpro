@@ -30,7 +30,7 @@ void main() {
       ], isPersonal: true);
 
       expect(groups, hasLength(1));
-      expect(groups.single.transactionType, 'buy_data');
+      expect(groups.single.transactionType, 'mashup');
       expect(groups.single.flows, hasLength(3));
     });
 

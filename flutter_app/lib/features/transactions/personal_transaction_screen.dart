@@ -22,7 +22,7 @@ const Map<String, String> kPersonalTransactionLabels = {
   'send_money_cross_network': 'Transfer Money · Other Network',
   'buy_airtime': 'Buy Airtime',
   'buy_data': 'Buy Data',
-  'buy_mashup': 'Buy Data · MashUp',
+  'buy_mashup': 'MashUp',
   'check_momo_balance': 'Check MoMo Balance',
   'check_airtime_balance': 'Check Airtime Balance',
   'withdraw_cash': 'Withdraw Cash',

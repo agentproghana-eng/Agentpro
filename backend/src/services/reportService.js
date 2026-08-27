@@ -83,9 +83,17 @@ function drawWatermark(doc) {
 // layout flow, regardless of when it's called.
 function decoratePage(doc, pageNum) {
   drawWatermark(doc);
+
   const y = doc.y;
+  const footerY = doc.page.height - 55;
+
   doc.fontSize(8).fillColor(COLORS.muted).font('Helvetica')
-    .text(`Page ${pageNum}`, 40, doc.page.height - 30, { width: doc.page.width - 80, align: 'center' });
+    .text(`Page ${pageNum}`, 40, footerY, {
+      width: doc.page.width - 80,
+      align: 'center',
+      lineBreak: false,
+    });
+
   doc.y = y;
 }
 
