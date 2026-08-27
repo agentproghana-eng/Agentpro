@@ -5,32 +5,44 @@
  */
 
 /**
- * Calculate commission for a transaction
+ * Calculate provider commission earned by the agent.
+ *
+ * The configured commission is paid by the service provider to the
+ * agent. Legacy provider-share columns remain in the database only for
+ * historical compatibility and receive zero for new postings.
+ *
  * @param {number} amount - Transaction amount in GHS
  * @param {number} ratePercent - Commission rate (e.g. 0.02 = 2%)
- * @param {number|null} threshold - Amount above which cap applies
- * @param {number|null} cap - Maximum commission amount
- * @param {number} providerSharePercent - Provider's share (e.g. 0.30 = 30%)
+ * @param {number|null} threshold - Amount at which the cap applies
+ * @param {number|null} cap - Maximum provider commission
  * @returns {{ gross: number, provider_share: number, net: number }}
  */
-function calculateCommission(amount, ratePercent, threshold, cap, providerSharePercent) {
+function calculateCommission(
+  amount,
+  ratePercent,
+  threshold,
+  cap
+) {
   let gross = amount * ratePercent;
 
-  // Apply cap if threshold is reached.
-  // Boundary is inclusive (>=): a transaction of exactly `threshold` is
-  // capped, not just amounts strictly above it. This only has an
-  // observable effect for custom commission rules where rate * threshold
-  // does not naturally equal cap (the seeded default rule — 2% of GHS
-  // 1000 = GHS 20 = the cap — produces the same result either way).
-  if (threshold !== null && cap !== null && amount >= threshold) {
+  if (
+    threshold !== null &&
+    cap !== null &&
+    amount >= threshold
+  ) {
     gross = Math.min(gross, cap);
   }
 
-  gross = Math.round(gross * 100) / 100;
-  const providerShare = Math.round(gross * providerSharePercent * 100) / 100;
-  const net = Math.round((gross - providerShare) * 100) / 100;
+  gross =
+    Math.round(
+      (gross + Number.EPSILON) * 100
+    ) / 100;
 
-  return { gross, provider_share: providerShare, net };
+  return {
+    gross,
+    provider_share: 0,
+    net: gross
+  };
 }
 
 /**

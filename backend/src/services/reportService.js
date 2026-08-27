@@ -11,6 +11,119 @@ const GHS = (n) => `GHS ${parseFloat(n || 0).toFixed(2)}`;
 const dateStr = (d) => d ? new Date(d).toLocaleDateString('en-GH') : '—';
 const dateTimeStr = (d) => d ? new Date(d).toLocaleString('en-GH') : '—';
 
+const reportPeriodLabel = (filters = {}) => {
+  const from =
+    filters.from_date
+      ? dateStr(filters.from_date)
+      : '—';
+
+  const to =
+    filters.to_date
+      ? dateStr(filters.to_date)
+      : '—';
+
+  return `${from} – ${to}`;
+};
+
+function businessTransactionTypeLabel(
+  type,
+  provider
+) {
+  const normalizedType =
+    String(type || '')
+      .trim()
+      .toLowerCase();
+
+  const normalizedProvider =
+    String(provider || '')
+      .trim()
+      .toLowerCase();
+
+  if (
+    normalizedProvider === 'mtn' &&
+    normalizedType === 'send_money'
+  ) {
+    return 'Cash In';
+  }
+
+  if (
+    (
+      normalizedProvider === 'telecel' ||
+      normalizedProvider === 'at_money'
+    ) &&
+    normalizedType === 'cash_in'
+  ) {
+    return 'Deposit';
+  }
+
+  if (
+    normalizedProvider === 'telecel' &&
+    normalizedType === 'cash_out'
+  ) {
+    return 'Withdrawal';
+  }
+
+  const labels = {
+    cash_in: 'Cash In',
+    cash_out: 'Cash Out',
+    send_money: 'Send Money',
+    merchant_payment: 'Pay to Merchant',
+    pay_to_agent: 'Pay to Agent',
+    bill_payment: 'Bill Payment',
+    airtime: 'Airtime',
+    data_bundle: 'Data Bundle',
+    balance_enquiry: 'Check Balance',
+    commission_balance: 'Commission Balance',
+    cash_in_commission: 'Cash In Commission',
+    cash_out_commission: 'Cash Out Commission',
+    commission_transfer: 'Commission to Float',
+    float_received: 'Float Received',
+    working_to_float: 'Working Account to Float',
+    float_to_working: 'Float to Working Account',
+    business_deposit: 'Business Deposit',
+    business_withdrawal: 'Business Withdrawal',
+  };
+
+  if (labels[normalizedType]) {
+    return labels[normalizedType];
+  }
+
+  return normalizedType
+    .replace(/_/g, ' ')
+    .replace(
+      /\b\w/g,
+      (character) =>
+        character.toUpperCase()
+    );
+}
+
+function providerDisplayLabel(provider) {
+  const normalized =
+    String(provider || '')
+      .trim()
+      .toLowerCase();
+
+  if (normalized === 'mtn') {
+    return 'MTN';
+  }
+
+  if (normalized === 'telecel') {
+    return 'Telecel';
+  }
+
+  if (normalized === 'at_money') {
+    return 'AT Money';
+  }
+
+  return normalized
+    .replace(/_/g, ' ')
+    .replace(
+      /\b\w/g,
+      (character) =>
+        character.toUpperCase()
+    );
+}
+
 // Best available SIM identifier for a transaction: full/last-6 ICCID
 // when present, else the SIM slot number as a weaker fallback (no
 // special permission needed, available on virtually every device -
@@ -176,7 +289,12 @@ async function generateTransactionReceipt(transaction) {
 
 // ── Transaction Report PDF ─────────────────────────────────────
 
-async function generateTransactionReportPDF({ transactions, filters, summary, title }) {
+async function generateTransactionReportPDF({
+  transactions,
+  filters = {},
+  summary,
+  title,
+}) {
   const doc = new PDFDocument({ size: 'A4', margin: 40 });
   const buffers = [];
   doc.on('data', b => buffers.push(b));
@@ -187,38 +305,241 @@ async function generateTransactionReportPDF({ transactions, filters, summary, ti
     let pageNum = 1;
     decoratePage(doc, pageNum);
 
-    // Header
-    doc.rect(0, 0, doc.page.width, 70).fill(COLORS.primary);
-    try { doc.image(LOGO_PATH, 15, 15, { height: 40 }); } catch (e) { logger.warn('Logo image not found, skipping:', e.message); }
-    doc.fillColor(COLORS.secondary).fontSize(18).font('Helvetica-Bold')
-      .text('Agent Pro Ghana', 40, 15);
-    doc.fillColor('white').fontSize(11).font('Helvetica')
-      .text(title || 'Transaction Report', 40, 35);
-    doc.fontSize(9)
-      .text(`Generated: ${dateTimeStr(new Date())}`, 40, 52);
-    doc.fillColor(COLORS.text);
-    doc.moveDown(2.5);
+    // Professional business report header
+    doc.rect(
+      0,
+      0,
+      doc.page.width,
+      104
+    ).fill(COLORS.primary);
 
-    // Summary Cards
+    try {
+      const logo =
+        doc.openImage(LOGO_PATH);
+
+      const logoHeight = 28;
+
+      const logoWidth =
+        logo.width &&
+        logo.height
+          ? (
+              logo.width /
+              logo.height
+            ) *
+            logoHeight
+          : logoHeight;
+
+      doc.image(
+        logo,
+        (
+          doc.page.width -
+          logoWidth
+        ) / 2,
+        8,
+        {
+          height: logoHeight,
+        }
+      );
+    } catch (e) {
+      logger.warn(
+        'Logo image not found, skipping:',
+        e.message
+      );
+    }
+
+    doc.fillColor(COLORS.secondary)
+      .fontSize(17)
+      .font('Helvetica-Bold')
+      .text(
+        'AgentPro',
+        40,
+        39,
+        {
+          width:
+            doc.page.width - 80,
+          align: 'center',
+        }
+      );
+
+    doc.fillColor('white')
+      .fontSize(11)
+      .font('Helvetica-Bold')
+      .text(
+        title ||
+          'Business Transaction Report',
+        40,
+        59,
+        {
+          width:
+            doc.page.width - 80,
+          align: 'center',
+        }
+      );
+
+    doc.fontSize(7.5)
+      .font('Helvetica')
+      .text(
+        `Reporting Period: ${reportPeriodLabel(filters)}`,
+        40,
+        79
+      )
+      .text(
+        `Scope: ${filters.scope_label || 'All Branches'}`,
+        40,
+        91
+      )
+      .text(
+        `Generated: ${dateTimeStr(new Date())}`,
+        300,
+        91,
+        {
+          width: doc.page.width - 340,
+          align: 'right',
+        }
+      );
+
+    doc.fillColor(COLORS.text);
+
+    const providerCommission =
+      summary.provider_commission ??
+      summary.total_commission ??
+      0;
+
+    const agentServiceFees =
+      summary.agent_service_fees ??
+      summary.total_service_fees ??
+      0;
+
+    const grossEarnings =
+      summary.gross_earnings ??
+      (
+        parseFloat(
+          providerCommission || 0
+        ) +
+        parseFloat(
+          agentServiceFees || 0
+        )
+      );
+
     const summaries = [
-      ['Total Transactions', summary.count || 0],
-      ['Customer Volume', GHS(summary.total_amount)],
-      ['Net Commission', GHS(summary.total_commission)],
-      ['Success Rate', `${summary.success_rate || 0}%`],
+      [
+        'Total Volume',
+        GHS(summary.total_volume),
+      ],
+      [
+        'Customer Volume',
+        GHS(summary.total_amount),
+      ],
+      [
+        'Total Transactions',
+        summary.count || 0,
+      ],
+      [
+        'Success Rate',
+        `${summary.success_rate || 0}%`,
+      ],
+      [
+        'Provider Commission',
+        GHS(providerCommission),
+      ],
+      [
+        'Agent Service Fees',
+        GHS(agentServiceFees),
+      ],
+      [
+        'Gross Earnings',
+        GHS(grossEarnings),
+      ],
+      [
+        'Successful Transactions',
+        summary.successful_transactions || 0,
+      ],
     ];
 
-    const cardWidth = (doc.page.width - 80 - 30) / 4;
-    summaries.forEach(([label, value], i) => {
-      const x = 40 + i * (cardWidth + 10);
-      const y = doc.y;
-      doc.rect(x, y, cardWidth, 48).fill(COLORS.light);
-      doc.fontSize(7).fillColor(COLORS.muted).font('Helvetica')
-        .text(label, x + 6, y + 8, { width: cardWidth - 12 });
-      doc.fontSize(12).fillColor(COLORS.primary).font('Helvetica-Bold')
-        .text(String(value), x + 6, y + 20, { width: cardWidth - 12 });
-    });
+    const cardsPerRow = 4;
+    const cardGap = 10;
+    const cardHeight = 48;
 
-    doc.moveDown(3.5);
+    const cardWidth =
+      (
+        doc.page.width -
+        80 -
+        cardGap * (cardsPerRow - 1)
+      ) /
+      cardsPerRow;
+
+    const summaryTop = 118;
+
+    summaries.forEach(
+      ([label, value], i) => {
+        const row =
+          Math.floor(i / cardsPerRow);
+
+        const column =
+          i % cardsPerRow;
+
+        const x =
+          40 +
+          column *
+            (cardWidth + cardGap);
+
+        const y =
+          summaryTop +
+          row *
+            (cardHeight + cardGap);
+
+        doc.rect(
+          x,
+          y,
+          cardWidth,
+          cardHeight
+        ).fill(COLORS.light);
+
+        doc.fontSize(7)
+          .fillColor(COLORS.muted)
+          .font('Helvetica')
+          .text(
+            label,
+            x + 6,
+            y + 7,
+            {
+              width:
+                cardWidth - 12,
+            }
+          );
+
+        doc.fontSize(11)
+          .fillColor(COLORS.primary)
+          .font('Helvetica-Bold')
+          .text(
+            String(value),
+            x + 6,
+            y + 24,
+            {
+              width:
+                cardWidth - 12,
+            }
+          );
+      }
+    );
+
+    doc.fontSize(6.5)
+      .fillColor(COLORS.muted)
+      .font('Helvetica')
+      .text(
+        'Total Volume includes all successful monetary movements. Customer Volume includes successful customer-facing services only.',
+        40,
+        summaryTop + 112,
+        {
+          width:
+            doc.page.width - 80,
+        }
+      );
+
+    doc.fillColor(COLORS.text);
+
+    doc.y =
+      summaryTop + 132;
 
     // Table Header
     // Widths rebalanced to fit the new SIM column within the same
@@ -226,15 +547,15 @@ async function generateTransactionReportPDF({ transactions, filters, summary, ti
     // the page - full ICCID doesn't fit here, shown as last 6 digits
     // only (full value is in the Excel report and Audit Logs).
     const cols = [
-      { label: 'Date', width: 50 },
-      { label: 'Reference', width: 60 },
-      { label: 'Type', width: 45 },
-      { label: 'Provider', width: 40 },
-      { label: 'Customer', width: 55 },
-      { label: 'Agent', width: 55 },
+      { label: 'Date', width: 48 },
+      { label: 'Reference', width: 58 },
+      { label: 'Type', width: 62 },
+      { label: 'Provider', width: 48 },
+      { label: 'Customer', width: 54 },
+      { label: 'Agent', width: 48 },
       { label: 'Amount', width: 55 },
-      { label: 'Charge', width: 40 },
-      { label: 'Status', width: 80 },
+      { label: 'Service Fee', width: 46 },
+      { label: 'Status', width: 61 },
       { label: 'SIM', width: 35 },
     ];
 
@@ -265,8 +586,13 @@ async function generateTransactionReportPDF({ transactions, filters, summary, ti
       const rowData = [
         dateStr(tx.created_at),
         tx.reference,
-        (tx.transaction_type || '').replace('_', ' '),
-        (tx.provider || '').toUpperCase(),
+        businessTransactionTypeLabel(
+          tx.transaction_type,
+          tx.provider
+        ),
+        providerDisplayLabel(
+          tx.provider
+        ),
         tx.customer_phone || '—',
         tx.agent_name || '—',
         GHS(tx.amount),
@@ -294,7 +620,12 @@ async function generateTransactionReportPDF({ transactions, filters, summary, ti
 
 // ── Transaction Report Excel ──────────────────────────────────
 
-async function generateTransactionReportExcel({ transactions, filters, summary, title }) {
+async function generateTransactionReportExcel({
+  transactions,
+  filters = {},
+  summary,
+  title,
+}) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Agent Pro Ghana';
   workbook.created = new Date();
@@ -303,27 +634,124 @@ async function generateTransactionReportExcel({ transactions, filters, summary, 
     pageSetup: { paperSize: 9, orientation: 'landscape' },
   });
 
-  // Title
-  sheet.mergeCells('A1:H1');
-  sheet.getCell('A1').value = title || 'Agent Pro Ghana — Transaction Report';
-  sheet.getCell('A1').font = { size: 14, bold: true, color: { argb: 'FF006B5E' } };
-  sheet.getCell('A1').alignment = { horizontal: 'center' };
-  sheet.mergeCells('A2:H2');
-  sheet.getCell('A2').value = `Generated: ${dateTimeStr(new Date())}`;
-  sheet.getCell('A2').font = { size: 9, color: { argb: 'FF666666' } };
-  sheet.getCell('A2').alignment = { horizontal: 'center' };
+  const providerCommission =
+    summary.provider_commission ??
+    summary.total_commission ??
+    0;
 
-  // Summary row
+  const agentServiceFees =
+    summary.agent_service_fees ??
+    summary.total_service_fees ??
+    0;
+
+  const grossEarnings =
+    summary.gross_earnings ??
+    (
+      parseFloat(
+        providerCommission || 0
+      ) +
+      parseFloat(
+        agentServiceFees || 0
+      )
+    );
+
+  // Professional business report header
+  sheet.mergeCells('A1:N1');
+  sheet.getCell('A1').value =
+    title ||
+    'Business Transaction Report';
+
+  sheet.getCell('A1').font = {
+    size: 15,
+    bold: true,
+    color: {
+      argb: 'FF006B5E'
+    }
+  };
+
+  sheet.getCell('A1').alignment = {
+    horizontal: 'center'
+  };
+
+  sheet.mergeCells('A2:N2');
+  sheet.getCell('A2').value =
+    `Reporting Period: ${reportPeriodLabel(filters)}`;
+
+  sheet.getCell('A2').font = {
+    size: 9,
+    color: {
+      argb: 'FF666666'
+    }
+  };
+
+  sheet.getCell('A2').alignment = {
+    horizontal: 'center'
+  };
+
+  sheet.mergeCells('A3:N3');
+  sheet.getCell('A3').value =
+    `Scope: ${filters.scope_label || 'All Branches'}  •  Generated: ${dateTimeStr(new Date())}`;
+
+  sheet.getCell('A3').font = {
+    size: 9,
+    color: {
+      argb: 'FF666666'
+    }
+  };
+
+  sheet.getCell('A3').alignment = {
+    horizontal: 'center'
+  };
+
   sheet.addRow([]);
-  sheet.addRow(['Summary']);
-  sheet.addRow(['Total Transactions', summary.count, '', 'Customer Volume', `GHS ${parseFloat(summary.total_amount||0).toFixed(2)}`, '', 'Net Commission', `GHS ${parseFloat(summary.total_commission||0).toFixed(2)}`]);
+
+  const summaryTitle =
+    sheet.addRow([
+      'Business Performance Summary'
+    ]);
+
+  summaryTitle.getCell(1).font = {
+    bold: true,
+    color: {
+      argb: 'FF006B5E'
+    }
+  };
+
+  sheet.addRow([
+    'Total Volume',
+    `GHS ${parseFloat(summary.total_volume || 0).toFixed(2)}`,
+    '',
+    'Customer Volume',
+    `GHS ${parseFloat(summary.total_amount || 0).toFixed(2)}`,
+    '',
+    'Total Transactions',
+    summary.count || 0,
+    '',
+    'Success Rate',
+    `${summary.success_rate || 0}%`,
+  ]);
+
+  sheet.addRow([
+    'Provider Commission',
+    `GHS ${parseFloat(providerCommission || 0).toFixed(2)}`,
+    '',
+    'Agent Service Fees',
+    `GHS ${parseFloat(agentServiceFees || 0).toFixed(2)}`,
+    '',
+    'Gross Earnings',
+    `GHS ${parseFloat(grossEarnings || 0).toFixed(2)}`,
+    '',
+    'Successful Transactions',
+    summary.successful_transactions || 0,
+  ]);
+
   sheet.addRow([]);
 
   // Headers
   const headerRow = sheet.addRow([
     'Date', 'Reference', 'Network Ref', 'Transaction Type',
     'Provider', 'Customer Phone', 'Customer Name', 'Amount (GHS)',
-    'Transfer Charges (GHS)', 'Commission (GHS)', 'Status', 'Agent', 'Branch', 'SIM (ICCID)',
+    'Agent Service Fee (GHS)', 'Provider Commission (GHS)', 'Status', 'Agent', 'Branch', 'SIM (ICCID)',
   ]);
   headerRow.eachCell(cell => {
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF006B5E' } };
@@ -337,8 +765,13 @@ async function generateTransactionReportExcel({ transactions, filters, summary, 
       tx.created_at ? new Date(tx.created_at) : '',
       tx.reference,
       tx.network_reference || '',
-      (tx.transaction_type || '').replace(/_/g, ' '),
-      (tx.provider || '').toUpperCase(),
+      businessTransactionTypeLabel(
+        tx.transaction_type,
+        tx.provider
+      ),
+      providerDisplayLabel(
+        tx.provider
+      ),
       tx.customer_phone || '',
       tx.customer_name || '',
       parseFloat(tx.amount || 0),
@@ -380,7 +813,7 @@ async function generateCommissionReportPDF({ commissions, summary, title, groupB
     doc.fillColor(COLORS.secondary).fontSize(18).font('Helvetica-Bold')
       .text('Agent Pro Ghana', 40, 15);
     doc.fillColor('white').fontSize(11).font('Helvetica')
-      .text(title || 'Commission Report', 40, 35);
+      .text(title || 'Provider Commission Report', 40, 35);
     doc.fontSize(9).text(`Generated: ${dateTimeStr(new Date())}`, 40, 52);
     doc.fillColor(COLORS.text);
     doc.moveDown(3);
@@ -389,9 +822,9 @@ async function generateCommissionReportPDF({ commissions, summary, title, groupB
     doc.fontSize(9).font('Helvetica-Bold').text('Summary');
     doc.moveDown(0.3);
     [
-      ['Gross Commission:', GHS(summary.total_gross)],
-      ['Provider Share:', GHS(summary.total_provider_share)],
-      ['Net Commission:', GHS(summary.total_net)],
+      ['Provider Commission:', GHS(summary.total_gross)],
+      ['Legacy Deduction:', GHS(summary.total_provider_share)],
+      ['Credited to Agent:', GHS(summary.total_net)],
       ['Transactions:', String(summary.transaction_count || 0)],
     ].forEach(([label, val]) => {
       doc.fontSize(8).fillColor(COLORS.muted).font('Helvetica')
@@ -400,15 +833,56 @@ async function generateCommissionReportPDF({ commissions, summary, title, groupB
       doc.moveDown(0.2);
     });
 
+    if (
+      parseFloat(
+        summary.total_provider_share || 0
+      ) > 0
+    ) {
+      doc.moveDown(0.5);
+
+      doc.fontSize(7)
+        .fillColor(COLORS.muted)
+        .font('Helvetica')
+        .text(
+          'Legacy Deduction represents historical AgentPro records created before the provider-commission accounting correction. New commission postings use GHS 0.00 legacy deduction.',
+          40,
+          doc.y,
+          {
+            width:
+              doc.page.width - 80,
+          }
+        );
+    }
+
     doc.moveDown(1);
 
     // Table
     const cols = [
-      { label: groupBy === 'agent' ? 'Agent' : groupBy === 'branch' ? 'Branch' : 'Period', width: 140 },
-      { label: 'Transactions', width: 80 },
-      { label: 'Gross', width: 85 },
-      { label: 'Provider Share', width: 90 },
-      { label: 'Net Commission', width: 100 },
+      {
+        label:
+          groupBy === 'agent'
+            ? 'Agent'
+            : groupBy === 'branch'
+              ? 'Branch'
+              : 'Period',
+        width: 120,
+      },
+      {
+        label: 'Transactions',
+        width: 70,
+      },
+      {
+        label: 'Provider Commission',
+        width: 110,
+      },
+      {
+        label: 'Legacy Deduction',
+        width: 90,
+      },
+      {
+        label: 'Credited to Agent',
+        width: 105,
+      },
     ];
 
     const headerY = doc.y;
@@ -465,7 +939,7 @@ async function generateCommissionReportExcel({ commissions, summary, title, grou
   });
 
   sheet.mergeCells('A1:E1');
-  sheet.getCell('A1').value = title || 'Agent Pro Ghana — Commission Report';
+  sheet.getCell('A1').value = title || 'Agent Pro Ghana — Provider Commission Report';
   sheet.getCell('A1').font = { size: 14, bold: true, color: { argb: 'FF006B5E' } };
   sheet.getCell('A1').alignment = { horizontal: 'center' };
   sheet.mergeCells('A2:E2');
@@ -477,18 +951,18 @@ async function generateCommissionReportExcel({ commissions, summary, title, grou
   sheet.addRow(['Summary']);
   sheet.addRow([
     'Transactions', summary.transaction_count || 0,
-    '', 'Gross Commission', `GHS ${parseFloat(summary.total_gross || 0).toFixed(2)}`,
+    '', 'Provider Commission', `GHS ${parseFloat(summary.total_gross || 0).toFixed(2)}`,
   ]);
   sheet.addRow([
-    'Provider Share', `GHS ${parseFloat(summary.total_provider_share || 0).toFixed(2)}`,
-    '', 'Net Commission', `GHS ${parseFloat(summary.total_net || 0).toFixed(2)}`,
+    'Legacy Deduction', `GHS ${parseFloat(summary.total_provider_share || 0).toFixed(2)}`,
+    '', 'Credited to Agent', `GHS ${parseFloat(summary.total_net || 0).toFixed(2)}`,
   ]);
   sheet.addRow([]);
 
   // Same label logic as the PDF version's table header - keep in sync.
   const periodLabel = groupBy === 'agent' ? 'Agent' : groupBy === 'branch' ? 'Branch' : 'Period';
   const headerRow = sheet.addRow([
-    periodLabel, 'Transactions', 'Gross Commission (GHS)', 'Provider Share (GHS)', 'Net Commission (GHS)',
+    periodLabel, 'Transactions', 'Provider Commission (GHS)', 'Legacy Deduction (GHS)', 'Credited to Agent (GHS)',
   ]);
   headerRow.eachCell(cell => {
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF006B5E' } };

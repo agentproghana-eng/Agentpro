@@ -131,12 +131,12 @@ exports.initiateTransaction = async (req, res) => {
     .trim()
     .toLowerCase();
 
-  const isTransferChargeTransaction =
+  const isAgentServiceFeeTransaction =
     (provider === "mtn" && transaction_type === "send_money") ||
     ((provider === "telecel" || provider === "at_money") &&
       transaction_type === "cash_in");
 
-  const feeValue = isTransferChargeTransaction ? parseFloat(fee) || 0 : 0;
+  const feeValue = isAgentServiceFeeTransaction ? parseFloat(fee) || 0 : 0;
 
   const normalizeSlot = (value) =>
     value === null || value === undefined || value === ""

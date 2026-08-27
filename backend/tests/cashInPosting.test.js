@@ -218,7 +218,7 @@ describe("postCashIn", () => {
     ["telecel", "1.20", 1.2, 301.2],
     ["at_money", "1.20", 1.2, 301.2]
   ])(
-    "%s Deposit GHS 100 with GHS %s Transfer Charges adds the actual charge to cash",
+    "%s Deposit GHS 100 with GHS %s Agent Service Fee adds the actual charge to cash",
     async (
       provider,
       fee,
@@ -259,7 +259,7 @@ describe("postCashIn", () => {
       expect(result.eFloatBefore).toBe(500);
       expect(result.eFloatAfter).toBe(400);
 
-      // Physical side includes the actual Transfer Charges.
+      // Physical side includes the actual Agent Service Fee.
       expect(result.cashBefore).toBe(200);
       expect(result.cashAfter).toBeCloseTo(
         expectedCashAfter,

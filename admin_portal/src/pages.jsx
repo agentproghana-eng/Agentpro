@@ -2378,7 +2378,7 @@ export function CommissionsPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({
     rate_percent: '', threshold_amount: '', cap_amount: '',
-    provider_share_percent: '0.30', provider: '', transaction_type: '',
+    provider: '', transaction_type: '',
     effective_from: new Date().toISOString().slice(0, 10),
   });
   const [saving, setSaving] = useState(false);
@@ -2400,7 +2400,6 @@ export function CommissionsPage() {
         rate_percent: parseFloat(form.rate_percent),
         threshold_amount: form.threshold_amount ? parseFloat(form.threshold_amount) : null,
         cap_amount: form.cap_amount ? parseFloat(form.cap_amount) : null,
-        provider_share_percent: parseFloat(form.provider_share_percent),
         provider: form.provider || null,
         transaction_type: form.transaction_type || null,
         effective_from: form.effective_from,
@@ -2416,20 +2415,13 @@ export function CommissionsPage() {
     const rate = parseFloat(rule.rate_percent);
     const threshold = rule.threshold_amount ? parseFloat(rule.threshold_amount) : null;
     const cap = rule.cap_amount ? parseFloat(rule.cap_amount) : null;
-    const provShare = parseFloat(rule.provider_share_percent);
 
     const amounts = [100, 500, threshold || 1000, (threshold || 1000) + 100].filter(Boolean);
     return amounts.map(amt => {
       let gross = amt * rate;
       if (threshold && cap && amt >= threshold) gross = Math.min(gross, cap);
       gross = Math.round(gross * 100) / 100;
-      // Mirror the backend's exact rounding sequence (commissionService.js):
-      // provider_share is rounded independently FIRST, then net is derived
-      // as gross - rounded(provider_share) — NOT as gross * (1 - share).
-      // Those two formulas disagree by a cent in thousands of realistic
-      // cases, which would make this preview misleading vs. real payouts.
-      const providerShare = Math.round(gross * provShare * 100) / 100;
-      const net = Math.round((gross - providerShare) * 100) / 100;
+      const net = gross;
       return { amount: amt, gross, net };
     });
   };
@@ -2485,7 +2477,7 @@ export function CommissionsPage() {
                     </div>
                   </div>
                   <div className="text-right text-sm text-gray-500">
-                    <p>Provider share: {(parseFloat(rule.provider_share_percent) * 100).toFixed(0)}%</p>
+                    <p>Full configured commission goes to the agent</p>
                     <p>From: {rule.effective_from}</p>
                   </div>
                 </div>
@@ -2499,8 +2491,8 @@ export function CommissionsPage() {
                     <thead>
                       <tr className="border-b border-gray-100">
                         <th className="text-left px-3 py-2 text-gray-500">Transaction</th>
-                        <th className="text-left px-3 py-2 text-gray-500">Gross Commission</th>
-                        <th className="text-left px-3 py-2 text-gray-500">Net (Your Share)</th>
+                        <th className="text-left px-3 py-2 text-gray-500">Provider Commission</th>
+                        <th className="text-left px-3 py-2 text-gray-500">Agent Receives</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2535,13 +2527,6 @@ export function CommissionsPage() {
                   <input type="number" step="0.01" value={form.rate_percent}
                     onChange={e => setForm(f => ({ ...f, rate_percent: e.target.value }))}
                     placeholder="e.g. 0.02 for 2%"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Provider Share %</label>
-                  <input type="number" step="0.01" value={form.provider_share_percent}
-                    onChange={e => setForm(f => ({ ...f, provider_share_percent: e.target.value }))}
-                    placeholder="e.g. 0.30 for 30%"
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
                 </div>
                 <div>

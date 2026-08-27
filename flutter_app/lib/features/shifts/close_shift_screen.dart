@@ -351,7 +351,19 @@ class _CloseShiftScreenState extends State<CloseShiftScreen> {
     BuildContext context,
     Map<String, dynamic> result,
   ) {
-    final variance = _number(result['variance']);
+    final openingLedgerVariance = _number(
+      result['opening_ledger_variance'] ??
+          result['opening_cash_variance'],
+    );
+    final closingLedgerVariance = _number(
+      result['closing_ledger_variance'] ??
+          result['closing_cash_variance'] ??
+          result['variance'],
+    );
+    final netShiftVariance = _number(
+      result['net_shift_variance'] ??
+          result['variance'],
+    );
     final flagged = result['flagged'] == true;
     final expected = _number(result['closing_cash_expected']);
     final actual = _number(
@@ -361,11 +373,11 @@ class _CloseShiftScreenState extends State<CloseShiftScreen> {
 
     final color = flagged ? AppTheme.errorColor : AppTheme.primaryColor;
 
-    final varianceLabel = variance == 0
-        ? 'Exact match'
-        : variance > 0
-            ? 'GH₵ ${variance.toStringAsFixed(2)} surplus'
-            : 'GH₵ ${(-variance).toStringAsFixed(2)} short';
+    final varianceLabel = netShiftVariance == 0
+        ? 'Shift balanced'
+        : netShiftVariance > 0
+            ? 'GH₵ ${netShiftVariance.toStringAsFixed(2)} shift surplus'
+            : 'GH₵ ${(-netShiftVariance).toStringAsFixed(2)} shift shortage';
 
     return Scaffold(
       appBar: AppBar(
@@ -418,6 +430,21 @@ class _CloseShiftScreenState extends State<CloseShiftScreen> {
           _SummaryRow(
             label: 'Actual cash counted',
             value: 'GH₵ ${actual.toStringAsFixed(2)}',
+          ),
+          _SummaryRow(
+            label: 'Opening ledger variance',
+            value:
+                'GH₵ ${openingLedgerVariance.toStringAsFixed(2)}',
+          ),
+          _SummaryRow(
+            label: 'Closing ledger variance',
+            value:
+                'GH₵ ${closingLedgerVariance.toStringAsFixed(2)}',
+          ),
+          _SummaryRow(
+            label: 'Net shift variance',
+            value:
+                'GH₵ ${netShiftVariance.toStringAsFixed(2)}',
           ),
           _SummaryRow(
             label: 'Transactions this shift',

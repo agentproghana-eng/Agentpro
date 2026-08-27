@@ -7,10 +7,10 @@ const {
 
 // Posts the accounting effect of earned commission.
 //
-// Net commission is the amount economically attributable to the agent:
-// gross commission less the provider share. The provider share remains
-// represented in the commissions record but is never added to the
-// agent's spendable commission balance.
+// Provider commission is income paid by the mobile-money provider
+// to the agent for eligible Cash In/Deposit and Cash Out/Withdrawal
+// transactions. New postings credit the full configured commission.
+// Legacy provider-share columns remain only for historical compatibility.
 //
 // This function intentionally does NOT swallow errors. It runs inside
 // transaction completion's database transaction, so incomplete commission
@@ -21,6 +21,42 @@ async function calculateAndPostCommission(
   transaction,
   agentId
 ) {
+  const provider =
+    String(transaction?.provider || "")
+      .trim()
+      .toLowerCase();
+
+  const transactionType =
+    String(transaction?.transaction_type || "")
+      .trim()
+      .toLowerCase();
+
+  const simRole =
+    String(transaction?.sim_role || "")
+      .trim()
+      .toLowerCase();
+
+  const isAgentRole =
+    simRole === "" ||
+    simRole === "agent";
+
+  const isCashIn =
+    transactionType === "cash_in" ||
+    (
+      provider === "mtn" &&
+      transactionType === "send_money"
+    );
+
+  const isCashOut =
+    transactionType === "cash_out";
+
+  if (
+    !isAgentRole ||
+    (!isCashIn && !isCashOut)
+  ) {
+    return null;
+  }
+
   const ruleResult = await client.query(
     `SELECT *
      FROM commission_rules
@@ -62,8 +98,7 @@ async function calculateAndPostCommission(
       : null,
     rule.cap_amount
       ? parseFloat(rule.cap_amount)
-      : null,
-    parseFloat(rule.provider_share_percent)
+      : null
   );
 
   const commissionResult = await client.query(

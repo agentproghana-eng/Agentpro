@@ -34,7 +34,10 @@ class _DashboardOwnerGlanceState extends State<DashboardOwnerGlance>
   bool _loading = false;
 
   double? _volume;
-  double? _commission;
+  double? _providerCommission;
+  double? _agentServiceFees;
+  double? _grossEarnings;
+  double? _successRate;
   int? _transactionCount;
 
   @override
@@ -180,14 +183,42 @@ class _DashboardOwnerGlanceState extends State<DashboardOwnerGlance>
         ],
       );
 
-      final commission = _findNumber(
+      final providerCommission = _findNumber(
         data,
         const [
+          'today_provider_commission',
           'today_commission',
           'commission_today',
           'total_commission_today',
           'commission_earned',
           'total_commission',
+        ],
+      );
+
+      final agentServiceFees = _findNumber(
+        data,
+        const [
+          'today_agent_service_fees',
+          'agent_service_fees_today',
+          'agent_service_fees',
+        ],
+      );
+
+      final grossEarnings = _findNumber(
+        data,
+        const [
+          'today_gross_earnings',
+          'gross_earnings_today',
+          'gross_earnings',
+        ],
+      );
+
+      final successRate = _findNumber(
+        data,
+        const [
+          'today_success_rate',
+          'success_rate_today',
+          'success_rate',
         ],
       );
 
@@ -206,7 +237,10 @@ class _DashboardOwnerGlanceState extends State<DashboardOwnerGlance>
 
       setState(() {
         _volume = volume;
-        _commission = commission;
+        _providerCommission = providerCommission;
+        _agentServiceFees = agentServiceFees;
+        _grossEarnings = grossEarnings;
+        _successRate = successRate;
         _transactionCount = count?.round();
       });
     } catch (_) {
@@ -255,6 +289,11 @@ class _DashboardOwnerGlanceState extends State<DashboardOwnerGlance>
 
   String _count(int? value) {
     return value?.toString() ?? 'Unavailable';
+  }
+
+  String _percentage(double? value) {
+    if (value == null) return 'Unavailable';
+    return '${value.toStringAsFixed(1)}%';
   }
 
   @override
@@ -402,27 +441,62 @@ class _DashboardOwnerGlanceState extends State<DashboardOwnerGlance>
             ),
           )
         else
-          Row(
+          Column(
             children: [
-              Expanded(
-                child: _Metric(
-                  label: 'Volume',
-                  value: _money(_volume),
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: _Metric(
+                      label: 'Customer Volume',
+                      value: _money(_volume),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _Metric(
+                      label: 'Gross Earnings',
+                      value: _money(_grossEarnings),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _Metric(
+                      label: 'Transactions',
+                      value: _count(_transactionCount),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _Metric(
-                  label: 'Commission',
-                  value: _money(_commission),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _Metric(
-                  label: 'Transactions',
-                  value: _count(_transactionCount),
-                ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: _Metric(
+                      label: 'Provider Commission',
+                      value: _money(
+                        _providerCommission,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _Metric(
+                      label: 'Agent Service Fees',
+                      value: _money(
+                        _agentServiceFees,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _Metric(
+                      label: 'Success Rate',
+                      value: _percentage(
+                        _successRate,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -451,7 +525,7 @@ class _Metric extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(minHeight: 65),
+      constraints: const BoxConstraints(minHeight: 72),
       padding: const EdgeInsets.all(9),
       decoration: BoxDecoration(
         color: AppTheme.primaryColor.withValues(alpha: 0.055),

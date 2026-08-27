@@ -185,7 +185,7 @@ describe("postSendMoney", () => {
 
       expect(movements).toHaveLength(2);
 
-      // With no Transfer Charges, both principal movements remain
+      // With no Agent Service Fee, both principal movements remain
       // exactly GHS 100.
       expect(movements[0][1]).toEqual([
         "agent-1",
@@ -227,7 +227,7 @@ describe("postSendMoney", () => {
     ["1.00", 1, 301],
     ["1.20", 1.2, 301.2]
   ])(
-    "MTN Cash In GHS 100 with GHS %s Transfer Charges adds the actual charge to cash",
+    "MTN Cash In GHS 100 with GHS %s Agent Service Fee adds the actual charge to cash",
     async (fee, expectedCharge, expectedCashAfter) => {
       const client = makeClient();
 
@@ -251,7 +251,7 @@ describe("postSendMoney", () => {
         2
       );
 
-      // Electronic principal is unaffected by Transfer Charges.
+      // Electronic principal is unaffected by Agent Service Fee.
       expect(result.eFloatBefore).toBe(500);
       expect(result.eFloatAfter).toBe(400);
 

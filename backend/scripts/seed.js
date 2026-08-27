@@ -251,11 +251,11 @@ async function seedDefaultCommissionRule() {
     return;
   }
 
-  // Global default: 2% rate, capped at GH₵20 above GH₵1000 threshold, 30% provider share
+  // Global bootstrap rate: 2%, capped at GH₵20 above GH₵1000. Full configured commission belongs to the agent.
   await query(
     `INSERT INTO commission_rules
        (rate_percent, threshold_amount, cap_amount, provider_share_percent, effective_from, is_active)
-     VALUES (0.0200, 1000.00, 20.00, 0.30, CURRENT_DATE, TRUE)`
+     VALUES (0.0200, 1000.00, 20.00, 0.00, CURRENT_DATE, TRUE)`
   );
 
   logger.info('✅ Default commission rule created (2% rate, GH₵20 cap above GH₵1000)');
