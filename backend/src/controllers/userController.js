@@ -357,11 +357,21 @@ exports.createUser = async (req, res) => {
 
   try {
     const existing = await query(
-      "SELECT id, status, company_id FROM users WHERE email = $1",
+      "SELECT id, status, company_id, account_deleted_at FROM users WHERE email = $1",
       [email.toLowerCase()],
     );
     if (existing.rows.length > 0) {
       const existingUser = existing.rows[0];
+
+      if (existingUser.account_deleted_at) {
+        return res.status(409).json({
+          success: false,
+          code: "ACCOUNT_PERMANENTLY_DELETED",
+          message:
+            "This historical account was permanently deleted and cannot be reactivated.",
+        });
+      }
+
       if (existingUser.status !== "deactivated") {
         return res
           .status(409)
@@ -576,7 +586,7 @@ exports.updateUser = async (req, res) => {
   try {
     // Fetch target user first to verify company ownership
     const target = await query(
-      "SELECT id, company_id, role FROM users WHERE id = $1",
+      "SELECT id, company_id, role, account_deleted_at FROM users WHERE id = $1",
       [user_id],
     );
     if (target.rows.length === 0) {
@@ -603,6 +613,15 @@ exports.updateUser = async (req, res) => {
       return res
         .status(403)
         .json({ success: false, message: "Cannot modify this user" });
+    }
+
+    if (targetUser.account_deleted_at) {
+      return res.status(409).json({
+        success: false,
+        code: "ACCOUNT_PERMANENTLY_DELETED",
+        message:
+          "A permanently deleted account cannot be modified or reactivated.",
+      });
     }
 
     // Prevent self-suspension lockout

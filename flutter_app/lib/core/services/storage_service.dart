@@ -586,6 +586,18 @@ class StorageService {
     return token != null;
   }
 
+  static Future<void> clearDeletedAccountData(Map<String, dynamic> user) async {
+    final dashboardKey = _offlineDashboardStorageKey(user);
+
+    if (dashboardKey != null) {
+      _offlineDashboardWrites.remove(dashboardKey);
+
+      await _storage.delete(key: dashboardKey);
+    }
+
+    await clearSession();
+  }
+
   /// Clears all session data while preserving the device-authentication
   /// preference, which is a device setting rather than account data.
   static Future<void> clearSession() async {

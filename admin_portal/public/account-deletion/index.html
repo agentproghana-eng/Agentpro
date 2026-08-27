@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
+  <meta
+    name="description"
+    content="Request permanent deletion of your AgentPro account and associated personal data."
+  />
+  <meta
+    name="robots"
+    content="index, follow"
+  />
+  <title>AgentPro Account Deletion</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --brand: #0f766e;
+      --brand-dark: #115e59;
+      --accent: #c9972f;
+      --danger: #b42318;
+      --text: #16211f;
+      --muted: #5f6f6b;
+      --border: #dce6e3;
+      --surface: #ffffff;
+      --soft: #f4faf8;
+      --warning: #fff8e6;
+      --max: 760px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(
+          180deg,
+          #eaf7f4 0,
+          #f8fbfa 260px,
+          #f8fbfa 100%
+        );
+      color: var(--text);
+      font-family:
+        Inter,
+        ui-sans-serif,
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+      line-height: 1.6;
+    }
+
+    a {
+      color: var(--brand-dark);
+    }
+
+    .shell {
+      width: min(
+        calc(100% - 32px),
+        var(--max)
+      );
+      margin: 0 auto;
+      padding: 40px 0 64px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 24px;
+      color: var(--brand-dark);
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 38px;
+      height: 38px;
+      place-items: center;
+      border-radius: 12px;
+      background: var(--brand);
+      color: #ffffff;
+      font-size: 19px;
+      box-shadow:
+        0 8px 20px
+        rgba(15, 118, 110, 0.18);
+    }
+
+    .card {
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      background: var(--surface);
+      box-shadow:
+        0 24px 70px
+        rgba(22, 33, 31, 0.08);
+    }
+
+    .hero {
+      padding: 38px 38px 30px;
+      border-bottom:
+        1px solid var(--border);
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--brand);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size:
+        clamp(30px, 6vw, 44px);
+      line-height: 1.08;
+      letter-spacing: -0.04em;
+    }
+
+    .lead {
+      margin: 18px 0 0;
+      color: var(--muted);
+      font-size: 17px;
+    }
+
+    .content {
+      padding: 34px 38px 40px;
+    }
+
+    section + section {
+      margin-top: 34px;
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 21px;
+      line-height: 1.25;
+    }
+
+    p {
+      margin: 0 0 12px;
+    }
+
+    ul {
+      margin: 10px 0 0;
+      padding-left: 22px;
+    }
+
+    li + li {
+      margin-top: 7px;
+    }
+
+    .request-box {
+      padding: 22px;
+      border:
+        1px solid
+        rgba(15, 118, 110, 0.24);
+      border-radius: 18px;
+      background: var(--soft);
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 48px;
+      margin-top: 12px;
+      padding: 0 22px;
+      border-radius: 12px;
+      background: var(--brand);
+      color: #ffffff;
+      font-weight: 800;
+      text-decoration: none;
+    }
+
+    .button:hover,
+    .button:focus-visible {
+      background: var(--brand-dark);
+    }
+
+    .email {
+      overflow-wrap: anywhere;
+      font-weight: 700;
+    }
+
+    .warning {
+      margin-top: 16px;
+      padding: 16px 18px;
+      border-left:
+        4px solid var(--accent);
+      border-radius: 10px;
+      background: var(--warning);
+    }
+
+    .warning strong {
+      color: #77550a;
+    }
+
+    .retention {
+      padding: 20px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+    }
+
+    .danger {
+      color: var(--danger);
+      font-weight: 750;
+    }
+
+    footer {
+      margin-top: 24px;
+      color: var(--muted);
+      font-size: 14px;
+      text-align: center;
+    }
+
+    @media (max-width: 620px) {
+      .shell {
+        width:
+          min(
+            calc(100% - 20px),
+            var(--max)
+          );
+        padding-top: 20px;
+      }
+
+      .hero,
+      .content {
+        padding-left: 22px;
+        padding-right: 22px;
+      }
+
+      .card {
+        border-radius: 18px;
+      }
+
+      .button {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div
+      class="brand"
+      aria-label="AgentPro Ghana"
+    >
+      <span
+        class="brand-mark"
+        aria-hidden="true"
+      >A</span>
+      <span>AgentPro Ghana</span>
+    </div>
+
+    <article class="card">
+      <header class="hero">
+        <p class="eyebrow">
+          Account &amp; Data Control
+        </p>
+        <h1>
+          Delete your AgentPro account
+        </h1>
+        <p class="lead">
+          This public page lets you request permanent
+          deletion of your AgentPro account even if you
+          no longer have access to the app.
+        </p>
+      </header>
+
+      <div class="content">
+        <section>
+          <h2>
+            Request deletion without the app
+          </h2>
+
+          <div class="request-box">
+            <p>
+              Email AgentPro Support and clearly state
+              that you want your AgentPro account
+              permanently deleted.
+            </p>
+
+            <p>
+              Use the email address registered to your
+              account where possible. Include the
+              registered email address or phone number
+              so that Support can locate the correct
+              account and verify ownership.
+            </p>
+
+            <a
+              class="button"
+              href="mailto:support@agentproghana.com?subject=AgentPro%20Account%20Deletion%20Request"
+            >
+              Email deletion request
+            </a>
+
+            <p style="margin-top: 14px">
+              Support email:
+              <a
+                class="email"
+                href="mailto:support@agentproghana.com"
+              >
+                support@agentproghana.com
+              </a>
+            </p>
+          </div>
+
+          <div class="warning">
+            <strong>
+              Protect your account:
+            </strong>
+            Do not send your password, Mobile Money PIN,
+            transaction PIN, MFA recovery codes, or other
+            secret authentication credentials by email.
+          </div>
+        </section>
+
+        <section>
+          <h2>
+            If you can still use AgentPro
+          </h2>
+          <p>
+            You can also initiate deletion directly in
+            the app from
+            <strong>
+              Settings → Delete Account
+            </strong>.
+            The in-app flow requires your current
+            password before deletion.
+          </p>
+        </section>
+
+        <section>
+          <h2>
+            What happens after your request
+          </h2>
+          <ul>
+            <li>
+              AgentPro Support verifies that the request
+              belongs to the account owner.
+            </li>
+            <li>
+              If the account has an open operational
+              shift or unresolved financial activity,
+              reconciliation may need to be completed
+              before deletion can finish.
+            </li>
+            <li>
+              The account is permanently deleted and
+              cannot be reactivated.
+            </li>
+            <li>
+              Active authentication sessions and
+              account access are revoked.
+            </li>
+            <li>
+              Direct personal profile data that is not
+              required to be retained is removed or
+              anonymized.
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>
+            Data removed
+          </h2>
+          <p>
+            Account deletion removes or anonymizes
+            direct personal account information that is
+            no longer required, including profile and
+            contact information and user-controlled
+            content where applicable.
+          </p>
+        </section>
+
+        <section class="retention">
+          <h2>
+            Data that may be retained
+          </h2>
+          <p>
+            Limited records may be retained when
+            necessary for legitimate security,
+            fraud-prevention, accounting, regulatory,
+            legal, or audit purposes.
+          </p>
+
+          <p>
+            These can include financial and transaction
+            records, fraud-prevention records, security
+            and audit records, and limited pseudonymous
+            anti-abuse identifiers.
+          </p>
+
+          <p>
+            Retained records are not used to reactivate
+            a permanently deleted AgentPro account.
+          </p>
+
+          <p class="danger">
+            Deleting your account does not reset
+            previously used free-trial eligibility.
+          </p>
+        </section>
+
+        <section>
+          <h2>
+            Need help?
+          </h2>
+          <p>
+            Contact
+            <a
+              class="email"
+              href="mailto:support@agentproghana.com"
+            >
+              support@agentproghana.com
+            </a>
+            and use the subject
+            “AgentPro Account Deletion Request”.
+          </p>
+        </section>
+      </div>
+    </article>
+
+    <footer>
+      AgentPro Ghana · Account deletion resource
+    </footer>
+  </main>
+</body>
+</html>

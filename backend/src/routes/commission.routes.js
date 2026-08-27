@@ -3,6 +3,10 @@ const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
 const { query } = require('../config/database');
 const { getCommissionSummary } = require('../services/commissionService');
+const {
+  normalizeCommissionScopeValue,
+  isSupportedProviderCommissionCombination,
+} = require('../config/commissionRulePolicy');
 
 router.use(authenticate);
 
@@ -51,6 +55,42 @@ router.post('/rules', authorize('superuser'), async (req, res) => {
     effective_from,
   } = req.body;
 
+  const normalizedProvider =
+    normalizeCommissionScopeValue(
+      provider
+    );
+
+  const normalizedTransactionType =
+    normalizeCommissionScopeValue(
+      transaction_type
+    );
+
+  if (
+    !normalizedProvider ||
+    !normalizedTransactionType
+  ) {
+    return res.status(422).json({
+      success: false,
+      code: 'COMMISSION_RULE_SCOPE_REQUIRED',
+      message:
+        'Provider and transaction type are required for every commission rule.',
+    });
+  }
+
+  if (
+    !isSupportedProviderCommissionCombination(
+      normalizedProvider,
+      normalizedTransactionType
+    )
+  ) {
+    return res.status(422).json({
+      success: false,
+      code: 'COMMISSION_RULE_SCOPE_UNSUPPORTED',
+      message:
+        'Commission rules are allowed only for supported Agent Cash In/Deposit and Cash Out/Withdrawal transactions.',
+    });
+  }
+
   try {
     const result = await query(
       `INSERT INTO commission_rules (
@@ -70,8 +110,8 @@ router.post('/rules', authorize('superuser'), async (req, res) => {
        RETURNING *`,
       [
         company_id || null,
-        provider || null,
-        transaction_type || null,
+        normalizedProvider,
+        normalizedTransactionType,
         rate_percent,
         threshold_amount,
         cap_amount,

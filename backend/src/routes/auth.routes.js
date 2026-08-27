@@ -251,6 +251,23 @@ router.post('/logout', authenticate, [
     .withMessage('Invalid FCM token'),
 ], handleValidation, authController.logout);
 
+// DELETE /api/v1/auth/account
+router.delete(
+  '/account',
+  authLimiter,
+  authenticate,
+  [
+    body('password')
+      .isString()
+      .isLength({ min: 1, max: 200 })
+      .withMessage(
+        'Current password is required'
+      ),
+  ],
+  handleValidation,
+  authController.deleteAccount,
+);
+
 // POST /api/v1/auth/forgot-password
 router.post('/forgot-password', authLimiter, [
   body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),

@@ -297,7 +297,7 @@ describe(
 
         const end =
           controller.indexOf(
-            'exports.getMe =',
+            'function cloudinaryPublicIdFromUrl',
             start,
           );
 

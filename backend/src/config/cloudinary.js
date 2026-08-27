@@ -28,11 +28,20 @@ async function uploadFile(source, options = {}) {
 /**
  * Delete a file from Cloudinary by public_id
  */
-async function deleteFile(publicId) {
+async function deleteFile(
+  publicId,
+  options = {},
+) {
   try {
-    return await cloudinary.uploader.destroy(publicId);
+    return await cloudinary.uploader.destroy(
+      publicId,
+      options,
+    );
   } catch (error) {
-    logger.error('Cloudinary delete error:', error);
+    logger.error(
+      'Cloudinary delete error:',
+      error,
+    );
     throw error;
   }
 }

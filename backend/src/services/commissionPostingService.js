@@ -4,6 +4,9 @@ const {
 const {
   getOrCreateAgentSimWallet
 } = require("./agentWalletService");
+const {
+  isSupportedProviderCommissionCombination
+} = require("../config/commissionRulePolicy");
 
 // Posts the accounting effect of earned commission.
 //
@@ -40,19 +43,15 @@ async function calculateAndPostCommission(
     simRole === "" ||
     simRole === "agent";
 
-  const isCashIn =
-    transactionType === "cash_in" ||
-    (
-      provider === "mtn" &&
-      transactionType === "send_money"
+  const isSupportedCommissionTransaction =
+    isSupportedProviderCommissionCombination(
+      provider,
+      transactionType
     );
-
-  const isCashOut =
-    transactionType === "cash_out";
 
   if (
     !isAgentRole ||
-    (!isCashIn && !isCashOut)
+    !isSupportedCommissionTransaction
   ) {
     return null;
   }
@@ -61,20 +60,20 @@ async function calculateAndPostCommission(
     `SELECT *
      FROM commission_rules
      WHERE (company_id = $1 OR company_id IS NULL)
-       AND (provider = $2 OR provider IS NULL)
-       AND (transaction_type = $3 OR transaction_type IS NULL)
+       AND provider = $2
+       AND transaction_type = $3
        AND is_active = TRUE
        AND effective_from <= CURRENT_DATE
        AND (effective_to IS NULL OR effective_to >= CURRENT_DATE)
      ORDER BY
        company_id NULLS LAST,
-       provider NULLS LAST,
-       transaction_type NULLS LAST
+       effective_from DESC,
+       created_at DESC
      LIMIT 1`,
     [
       transaction.company_id,
-      transaction.provider,
-      transaction.transaction_type
+      provider,
+      transactionType
     ]
   );
 

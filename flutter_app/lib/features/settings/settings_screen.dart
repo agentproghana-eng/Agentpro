@@ -6,6 +6,7 @@ import '../../core/auth/auth_bloc.dart';
 import '../../core/api/api_client.dart';
 import '../../core/services/biometric_service.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/services/offline_queue_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
@@ -89,6 +90,94 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _openDeleteAccount(Map<String, dynamic> user) async {
+    if (user.isEmpty) {
+      return;
+    }
+
+    final unresolvedCount = OfflineQueueService.unresolvedCountForUser(user);
+
+    final syncInProgress = OfflineQueueService.hasActiveSyncForUser(user);
+
+    if (unresolvedCount > 0 || syncInProgress) {
+      final openSync = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Sync required'),
+          content: Text(
+            syncInProgress
+                ? 'AgentPro is still synchronizing transactions. Wait for synchronization to finish before deleting this account.'
+                : '$unresolvedCount unsynchronized transaction${unresolvedCount == 1 ? '' : 's'} must be resolved before this account can be deleted.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            if (!syncInProgress)
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Open Sync'),
+              ),
+          ],
+        ),
+      );
+
+      if (openSync == true && mounted) {
+        context.push('/sync');
+      }
+
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _DeleteAccountSheet(user: user),
+    );
+  }
+
+  Future<void> _openPrivacyPolicy() async {
+    final uri = Uri.parse(
+      'https://admin.agentproghana.com/privacy-policy/',
+    );
+
+    try {
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!launched && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not open the AgentPro Privacy Policy.',
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not open the AgentPro Privacy Policy.',
+            ),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
@@ -96,6 +185,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         authState is AuthAuthenticated ? authState.user : <String, dynamic>{};
 
     final pendingCount = OfflineQueueService.pendingCountForUser(user);
+
+    final role = (user['role'] ?? '').toString().trim().toLowerCase();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -216,6 +307,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const _SettingsDivider(),
               _SettingsTile(
+                icon: Icons.privacy_tip_outlined,
+                title: 'Privacy Policy',
+                subtitle: 'How AgentPro handles your data',
+                onTap: _openPrivacyPolicy,
+              ),
+              const _SettingsDivider(),
+              _SettingsTile(
                 icon: Icons.support_agent,
                 title: 'Contact Support',
                 subtitle: 'Help, guides and contact options',
@@ -261,6 +359,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ),
+              if (role != 'superuser') ...[
+                const _SettingsDivider(),
+                _SettingsTile(
+                  icon: Icons.delete_forever_outlined,
+                  iconColor: AppTheme.errorColor,
+                  title: 'Delete Account',
+                  titleColor: AppTheme.errorColor,
+                  subtitle:
+                      'Permanently delete this AgentPro account and remove personal account data',
+                  onTap: () => _openDeleteAccount(user),
+                ),
+              ],
             ],
           ),
         ],
@@ -662,6 +772,225 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
     _currentCtrl.dispose();
     _newCtrl.dispose();
     _confirmCtrl.dispose();
+    super.dispose();
+  }
+}
+
+class _DeleteAccountSheet extends StatefulWidget {
+  final Map<String, dynamic> user;
+
+  const _DeleteAccountSheet({required this.user});
+
+  @override
+  State<_DeleteAccountSheet> createState() => _DeleteAccountSheetState();
+}
+
+class _DeleteAccountSheetState extends State<_DeleteAccountSheet> {
+  final _formKey = GlobalKey<FormState>();
+
+  final _passwordCtrl = TextEditingController();
+
+  bool _obscurePassword = true;
+  bool _confirmed = false;
+  bool _loading = false;
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    if (!_confirmed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Confirm that you understand account deletion is permanent.',
+          ),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+
+      return;
+    }
+
+    final unresolvedCount = OfflineQueueService.unresolvedCountForUser(
+      widget.user,
+    );
+
+    final syncInProgress = OfflineQueueService.hasActiveSyncForUser(
+      widget.user,
+    );
+
+    if (unresolvedCount > 0 || syncInProgress) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            syncInProgress
+                ? 'Wait for transaction synchronization to finish before deleting your account.'
+                : 'Resolve all unsynchronized transactions before deleting your account.',
+          ),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+
+      return;
+    }
+
+    setState(() => _loading = true);
+
+    try {
+      await ApiClient.instance.delete(
+        '/auth/account',
+        data: {'password': _passwordCtrl.text},
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      final authBloc = context.read<AuthBloc>();
+
+      final messenger = ScaffoldMessenger.of(context);
+
+      Navigator.pop(context);
+
+      authBloc.add(AuthAccountDeletedEvent(widget.user));
+
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Your AgentPro account has been permanently deleted.'),
+        ),
+      );
+    } on DioException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      final responseData = error.response?.data;
+
+      String message = 'Your account could not be deleted. Please try again.';
+
+      if (responseData is Map) {
+        final serverMessage = responseData['message'];
+
+        if (serverMessage is String && serverMessage.trim().isNotEmpty) {
+          message = serverMessage.trim();
+        }
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: AppTheme.errorColor),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        18,
+        16,
+        MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: AppTheme.errorColor),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Delete Account',
+                    style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'This permanently deletes your AgentPro account. '
+              'Your profile and direct personal data will be removed. '
+              'Financial, transaction, fraud-prevention, security and audit '
+              'records may be retained where required.',
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Deleting the account does not reset a previously used free trial.',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'If you have an open shift or an unsynchronized transaction, '
+              'finish it before deleting the account.',
+            ),
+            const SizedBox(height: 18),
+            _PasswordField(
+              controller: _passwordCtrl,
+              label: 'Current Password',
+              obscure: _obscurePassword,
+              onToggle: () =>
+                  setState(() => _obscurePassword = !_obscurePassword),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Current password is required';
+                }
+
+                return null;
+              },
+            ),
+            const SizedBox(height: 12),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _confirmed,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: const Text(
+                'I understand that account deletion cannot be undone.',
+              ),
+              onChanged: _loading
+                  ? null
+                  : (value) => setState(() => _confirmed = value ?? false),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 48,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.errorColor,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: _loading ? null : _submit,
+                child: _loading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text(
+                        'Permanently Delete Account',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _passwordCtrl.dispose();
     super.dispose();
   }
 }

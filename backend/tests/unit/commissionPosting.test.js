@@ -217,6 +217,137 @@ describe('Commission ledger posting', () => {
     ]);
   });
 
+  it('uses an exact provider and transaction type rule lookup without wildcard fallback', async () => {
+    const client = makeClient();
+
+    client.query.mockResolvedValue({
+      rows: []
+    });
+
+    const result =
+      await calculateAndPostCommission(
+        client,
+        makeTransaction(),
+        'agent-1'
+      );
+
+    expect(result).toBeNull();
+    expect(client.query).toHaveBeenCalledTimes(1);
+
+    const [
+      sql,
+      params
+    ] = client.query.mock.calls[0];
+
+    expect(sql).toContain(
+      'AND provider = $2'
+    );
+
+    expect(sql).toContain(
+      'AND transaction_type = $3'
+    );
+
+    expect(sql).not.toContain(
+      'provider IS NULL'
+    );
+
+    expect(sql).not.toContain(
+      'transaction_type IS NULL'
+    );
+
+    expect(params).toEqual([
+      'company-1',
+      'mtn',
+      'send_money'
+    ]);
+  });
+
+  it.each([
+    ['mtn', 'cash_in'],
+    ['telecel', 'send_money'],
+    ['at_money', 'send_money'],
+    ['mtn', 'airtime'],
+  ])(
+    'does not query commission rules for unsupported %s / %s',
+    async (
+      provider,
+      transactionType
+    ) => {
+      const client = makeClient();
+
+      const result =
+        await calculateAndPostCommission(
+          client,
+          makeTransaction({
+            provider,
+            transaction_type:
+              transactionType
+          }),
+          'agent-1'
+        );
+
+      expect(result).toBeNull();
+
+      expect(
+        client.query
+      ).not.toHaveBeenCalled();
+
+      expect(
+        mockGetOrCreateAgentSimWallet
+      ).not.toHaveBeenCalled();
+    }
+  );
+
+  it('allows Telecel Deposit to reach exact rule lookup', async () => {
+    const client = makeClient();
+
+    client.query.mockResolvedValue({
+      rows: []
+    });
+
+    await calculateAndPostCommission(
+      client,
+      makeTransaction({
+        provider: 'telecel',
+        transaction_type: 'cash_in'
+      }),
+      'agent-1'
+    );
+
+    expect(
+      client.query.mock.calls[0][1]
+    ).toEqual([
+      'company-1',
+      'telecel',
+      'cash_in'
+    ]);
+  });
+
+  it('allows AT Money Withdrawal to reach exact rule lookup', async () => {
+    const client = makeClient();
+
+    client.query.mockResolvedValue({
+      rows: []
+    });
+
+    await calculateAndPostCommission(
+      client,
+      makeTransaction({
+        provider: 'at_money',
+        transaction_type: 'cash_out'
+      }),
+      'agent-1'
+    );
+
+    expect(
+      client.query.mock.calls[0][1]
+    ).toEqual([
+      'company-1',
+      'at_money',
+      'cash_out'
+    ]);
+  });
+
   it('does not post provider commission for unrelated services', async () => {
     const client = makeClient();
 

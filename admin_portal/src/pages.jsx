@@ -2372,6 +2372,39 @@ export function AuditLogsPage() {
 
 // ── Commission Rules Page ─────────────────────────────────────
 
+const commissionTypesByProvider = {
+  mtn: [
+    {
+      value: 'send_money',
+      label: 'Cash In',
+    },
+    {
+      value: 'cash_out',
+      label: 'Cash Out',
+    },
+  ],
+  telecel: [
+    {
+      value: 'cash_in',
+      label: 'Deposit',
+    },
+    {
+      value: 'cash_out',
+      label: 'Withdrawal',
+    },
+  ],
+  at_money: [
+    {
+      value: 'cash_in',
+      label: 'Deposit',
+    },
+    {
+      value: 'cash_out',
+      label: 'Withdrawal',
+    },
+  ],
+};
+
 export function CommissionsPage() {
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -2383,6 +2416,11 @@ export function CommissionsPage() {
   });
   const [saving, setSaving] = useState(false);
 
+  const transactionTypeOptions =
+    commissionTypesByProvider[
+      form.provider
+    ] || [];
+
   const load = async () => {
     try {
       const res = await API.get('/commissions/rules');
@@ -2393,15 +2431,32 @@ export function CommissionsPage() {
   useEffect(() => { load(); }, []);
 
   const save = async () => {
-    if (!form.rate_percent) return toast.error('Rate is required');
+    if (!form.rate_percent) {
+      return toast.error(
+        'Rate is required'
+      );
+    }
+
+    if (!form.provider) {
+      return toast.error(
+        'Provider is required'
+      );
+    }
+
+    if (!form.transaction_type) {
+      return toast.error(
+        'Transaction type is required'
+      );
+    }
+
     setSaving(true);
     try {
       await API.post('/commissions/rules', {
         rate_percent: parseFloat(form.rate_percent),
         threshold_amount: form.threshold_amount ? parseFloat(form.threshold_amount) : null,
         cap_amount: form.cap_amount ? parseFloat(form.cap_amount) : null,
-        provider: form.provider || null,
-        transaction_type: form.transaction_type || null,
+        provider: form.provider,
+        transaction_type: form.transaction_type,
         effective_from: form.effective_from,
       });
       toast.success('Commission rule created ✅');
@@ -2459,19 +2514,19 @@ export function CommissionsPage() {
                       {rule.provider ? (
                         <Badge status={rule.provider} />
                       ) : (
-                        <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">All Providers</span>
+                        <span className="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full">Legacy wildcard — ignored</span>
                       )}
                       {rule.transaction_type ? (
                         <span className="text-xs bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full">
                           {rule.transaction_type.replace(/_/g, ' ')}
                         </span>
                       ) : (
-                        <span className="text-xs bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full">All Types</span>
+                        <span className="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full">Legacy wildcard — ignored</span>
                       )}
                       {rule.company_id ? (
                         <span className="text-xs bg-orange-50 text-orange-600 px-2 py-0.5 rounded-full">Custom Rule</span>
                       ) : (
-                        <span className="text-xs bg-green-50 text-green-600 px-2 py-0.5 rounded-full">Global Default</span>
+                        <span className="text-xs bg-green-50 text-green-600 px-2 py-0.5 rounded-full">Global Rule</span>
                       )}
                       <Badge status={rule.is_active ? 'active' : 'deactivated'} />
                     </div>
@@ -2546,27 +2601,47 @@ export function CommissionsPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Provider (leave blank = all)</label>
-                  <select value={form.provider} onChange={e => setForm(f => ({ ...f, provider: e.target.value }))}
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Provider *</label>
+                  <select
+                    value={form.provider}
+                    onChange={e =>
+                      setForm(f => ({
+                        ...f,
+                        provider: e.target.value,
+                        transaction_type: '',
+                      }))
+                    }
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
-                    <option value="">All Providers</option>
+                    <option value="">Select provider</option>
                     <option value="mtn">MTN Mobile Money</option>
                     <option value="telecel">Telecel Cash</option>
                     <option value="at_money">AT Money</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Transaction Type (leave blank = all)</label>
-                  <select value={form.transaction_type} onChange={e => setForm(f => ({ ...f, transaction_type: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
-                    <option value="">All Types</option>
-                    <option value="cash_in">Cash In</option>
-                    <option value="cash_out">Cash Out</option>
-                    <option value="send_money">Send Money</option>
-                    <option value="merchant_payment">Merchant Payment</option>
-                    <option value="pay_to_agent">Pay to Agent</option>
-                    <option value="airtime">Airtime</option>
-                    <option value="data_bundle">Data Bundle</option>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Transaction Type *</label>
+                  <select
+                    value={form.transaction_type}
+                    disabled={!form.provider}
+                    onChange={e =>
+                      setForm(f => ({
+                        ...f,
+                        transaction_type: e.target.value,
+                      }))
+                    }
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary disabled:bg-gray-50 disabled:text-gray-400">
+                    <option value="">
+                      {form.provider
+                        ? 'Select transaction type'
+                        : 'Select provider first'}
+                    </option>
+                    {transactionTypeOptions.map(option => (
+                      <option
+                        key={option.value}
+                        value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>

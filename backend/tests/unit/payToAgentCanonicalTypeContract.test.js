@@ -70,16 +70,40 @@ describe("Pay to Agent canonical transaction type", () => {
     expect(migration100).toContain("pay_to_merchant_step_count <> 6");
   });
 
-  test("Admin UI keeps Pay to Agent distinct from future Bill Payment", () => {
-    expect(adminPagesSource).toContain(
-      '<option value="pay_to_agent">Pay to Agent</option>',
+  test("Admin commission rules do not misclassify Pay to Agent or Bill Payment", () => {
+    const policyStart = adminPagesSource.indexOf(
+      "const commissionTypesByProvider =",
     );
 
-    expect(adminPagesSource).not.toContain(
-      '<option value="pay_to_agent">Bill Payment</option>',
+    const policyEnd = adminPagesSource.indexOf(
+      "export function CommissionsPage()",
+      policyStart,
     );
 
-    expect(adminPagesSource).not.toContain('<option value="bill_payment">');
+    expect(policyStart).toBeGreaterThanOrEqual(0);
+    expect(policyEnd).toBeGreaterThan(policyStart);
+
+    const commissionPolicySource =
+      adminPagesSource.slice(
+        policyStart,
+        policyEnd,
+      );
+
+    expect(commissionPolicySource).toContain(
+      "value: 'send_money'",
+    );
+
+    expect(commissionPolicySource).toContain(
+      "value: 'cash_out'",
+    );
+
+    expect(commissionPolicySource).not.toContain(
+      "pay_to_agent",
+    );
+
+    expect(commissionPolicySource).not.toContain(
+      "bill_payment",
+    );
   });
 
   test("runtime Pay to Agent paths no longer use bill_payment", () => {

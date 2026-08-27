@@ -483,4 +483,118 @@ void main() {
       );
     });
   });
+
+  group('OfflineQueueService account deletion safety', () {
+    test('dead-letter unsynced work still blocks account deletion', () async {
+      final localId = await OfflineQueueService.queueTransaction(
+        identity: userACompany1,
+        requestFields: const {'provider': 'mtn', 'transaction_type': 'cash_in'},
+        status: 'success',
+        sessionLog: const [],
+        isPersonal: true,
+      );
+
+      final box = Hive.box('offline_transaction_queue_v2');
+
+      final raw =
+          jsonDecode(box.get(localId) as String) as Map<String, dynamic>;
+
+      raw['dead_letter'] = true;
+
+      await box.put(localId, jsonEncode(raw));
+
+      expect(
+        OfflineQueueService.getPendingTransactions(userACompany1),
+        isEmpty,
+      );
+
+      expect(
+        OfflineQueueService.unresolvedCountForUser(const {
+          'id': 'user-a',
+          'company_id': 'company-1',
+        }),
+        1,
+      );
+
+      await expectLater(
+        OfflineQueueService.purgeDeletedAccountData(const {
+          'id': 'user-a',
+          'company_id': 'company-1',
+        }),
+        throwsStateError,
+      );
+    });
+
+    test(
+      'successful deletion purge removes user queue and Personal cache but preserves company cache',
+      () async {
+        final localId = await OfflineQueueService.queueTransaction(
+          identity: userACompany1,
+          requestFields: const {
+            'provider': 'mtn',
+            'transaction_type': 'cash_in',
+          },
+          status: 'success',
+          sessionLog: const [],
+          isPersonal: true,
+        );
+
+        final box = Hive.box('offline_transaction_queue_v2');
+
+        final raw =
+            jsonDecode(box.get(localId) as String) as Map<String, dynamic>;
+
+        raw['synced'] = true;
+
+        await box.put(localId, jsonEncode(raw));
+
+        const personalFlow = <String, dynamic>{'dial_code': '*111#'};
+
+        const businessFlow = <String, dynamic>{'dial_code': '*222#'};
+
+        await OfflineQueueService.cacheFlow(
+          'mtn',
+          'send_money',
+          personalFlow,
+          identity: userACompany1,
+          isPersonal: true,
+        );
+
+        await OfflineQueueService.cacheFlow(
+          'mtn',
+          'send_money',
+          businessFlow,
+          identity: userACompany1,
+          isPersonal: false,
+        );
+
+        await OfflineQueueService.purgeDeletedAccountData(const {
+          'id': 'user-a',
+          'company_id': 'company-1',
+        });
+
+        expect(box.get(localId), isNull);
+
+        expect(
+          OfflineQueueService.getCachedFlow(
+            'mtn',
+            'send_money',
+            identity: userACompany1,
+            isPersonal: true,
+          ),
+          isNull,
+        );
+
+        expect(
+          OfflineQueueService.getCachedFlow(
+            'mtn',
+            'send_money',
+            identity: userBCompany1,
+            isPersonal: false,
+          ),
+          businessFlow,
+        );
+      },
+    );
+  });
 }
