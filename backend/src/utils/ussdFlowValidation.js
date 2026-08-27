@@ -19,7 +19,30 @@ const VALUE_REQUIRED_FLOW_ACTIONS = new Set([
 
 function validateFlowSteps(steps, options = {}) {
   const allowPinless = options.allowPinless === true;
-  if (!Array.isArray(steps) || steps.length === 0) {
+
+  const executionMode = String(
+    options.executionMode || 'interactive'
+  )
+    .trim()
+    .toLowerCase();
+
+  if (!['interactive', 'direct'].includes(executionMode)) {
+    return 'execution_mode must be interactive or direct.';
+  }
+
+  if (!Array.isArray(steps)) {
+    return 'Steps must be an array.';
+  }
+
+  if (executionMode === 'direct') {
+    if (steps.length !== 0) {
+      return 'Direct USSD String must not contain interactive steps.';
+    }
+
+    return null;
+  }
+
+  if (steps.length === 0) {
     return 'At least one step is required.';
   }
 

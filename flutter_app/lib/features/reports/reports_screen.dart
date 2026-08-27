@@ -257,8 +257,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       selected: tempSortOrder == 'asc',
                       onSelected: (_) =>
                           setSheetState(() => tempSortOrder = 'asc'),
-                      selectedColor:
-                          AppTheme.primaryColor.withValues(alpha: 0.15),
+                      selectedColor: AppTheme.primaryColor.withValues(
+                        alpha: 0.15,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -268,8 +269,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       selected: tempSortOrder == 'desc',
                       onSelected: (_) =>
                           setSheetState(() => tempSortOrder = 'desc'),
-                      selectedColor:
-                          AppTheme.primaryColor.withValues(alpha: 0.15),
+                      selectedColor: AppTheme.primaryColor.withValues(
+                        alpha: 0.15,
+                      ),
                     ),
                   ),
                 ],
@@ -406,9 +408,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Report generated, but it could not be opened.',
-          ),
+          content: Text('Report generated, but it could not be opened.'),
           backgroundColor: AppTheme.errorColor,
         ),
       );
@@ -591,8 +591,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
       decoration: BoxDecoration(
         color: context.appSurface,
         borderRadius: BorderRadius.circular(14),
-        border:
-            Border.all(color: context.appSecondaryText.withValues(alpha: 0.12)),
+        border: Border.all(
+          color: context.appSecondaryText.withValues(alpha: 0.12),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -656,11 +657,65 @@ class _ReportsScreenState extends State<ReportsScreen> {
         isLoading: _loading,
         message: 'Generating report...',
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: [
+            Container(
+              padding: const EdgeInsets.all(13),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.18),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.analytics_outlined,
+                      color: AppTheme.primaryColor,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Business Reports',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Filter activity, review the match count, then export.',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: context.appSecondaryText,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
             Card(
+              elevation: 0,
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(14),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -687,10 +742,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    Divider(
-                      height: 1,
-                      color: context.appDivider,
-                    ),
+                    Divider(height: 1, color: context.appDivider),
                     const SizedBox(height: 8),
                     InkWell(
                       onTap: () {
@@ -710,8 +762,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                               width: 40,
                               height: 40,
                               decoration: BoxDecoration(
-                                color: AppTheme.primaryColor
-                                    .withValues(alpha: 0.10),
+                                color: AppTheme.primaryColor.withValues(
+                                  alpha: 0.10,
+                                ),
                                 borderRadius: BorderRadius.circular(11),
                               ),
                               child: const Icon(
@@ -779,10 +832,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                 ),
                               )
                             else
-                              _multiChipRow(
-                                visibleProviders,
-                                _providerFilters,
-                              ),
+                              _multiChipRow(visibleProviders, _providerFilters),
                             if (showSimFilter) ...[
                               const SizedBox(height: 18),
                               _sectionLabel('SIM'),
@@ -836,9 +886,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                       ),
                                     ),
                                 ],
-                                onChanged: (v) => _setReportFilter(
-                                  () => _agentId = v,
-                                ),
+                                onChanged: (v) =>
+                                    _setReportFilter(() => _agentId = v),
                               ),
                             ],
                             if (showBranchPicker) ...[
@@ -868,9 +917,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                       child: Text(b['name'] ?? ''),
                                     ),
                                 ],
-                                onChanged: (v) => _setReportFilter(
-                                  () => _branchId = v,
-                                ),
+                                onChanged: (v) =>
+                                    _setReportFilter(() => _branchId = v),
                               ),
                             ],
                             const SizedBox(height: 18),
@@ -884,9 +932,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                   vertical: 13,
                                 ),
                                 decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: context.appDivider,
-                                  ),
+                                  border: Border.all(color: context.appDivider),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Row(
@@ -925,8 +971,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
             Card(
               child: Padding(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 16,
+                  horizontal: 14,
+                  vertical: 12,
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1077,6 +1123,7 @@ class _ReportTile extends StatelessWidget {
   final Color color;
   final String title, subtitle;
   final VoidCallback onTap;
+
   const _ReportTile({
     required this.icon,
     required this.color,
@@ -1084,18 +1131,41 @@ class _ReportTile extends StatelessWidget {
     required this.subtitle,
     required this.onTap,
   });
+
   @override
   Widget build(BuildContext context) {
     return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: color.withValues(alpha: 0.1),
-          child: Icon(icon, color: color),
+        dense: true,
+        visualDensity: const VisualDensity(horizontal: -1, vertical: -1),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+        horizontalTitleGap: 10,
+        leading: Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: color, size: 20),
         ),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+        title: Text(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+        ),
+        subtitle: Text(
+          subtitle,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 11.5),
+        ),
         trailing: const Icon(
           Icons.download_outlined,
+          size: 20,
           color: AppTheme.primaryColor,
         ),
         onTap: onTap,

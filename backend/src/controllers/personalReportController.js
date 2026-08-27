@@ -2,34 +2,172 @@ const { query } = require('../config/database');
 const { logger } = require('../utils/logger');
 const { generatePersonalTransactionReportPDF, generateCSV } = require('../services/reportService');
 
+function buildPersonalReportScope(userId, filters = {}) {
+  const {
+    from_date,
+    to_date,
+    provider,
+    transaction_type,
+    status,
+    period,
+  } = filters;
+
+  let resolvedFrom = from_date;
+  let resolvedTo = to_date || new Date().toISOString();
+
+  if (period && !from_date) {
+    const now = new Date();
+
+    if (period === 'today') {
+      resolvedFrom = new Date(
+        now.setHours(0, 0, 0, 0),
+      ).toISOString();
+    }
+
+    if (period === 'week') {
+      const date = new Date();
+      date.setDate(date.getDate() - 7);
+      resolvedFrom = date.toISOString();
+    }
+
+    if (period === 'month') {
+      const date = new Date();
+      date.setDate(1);
+      date.setHours(0, 0, 0, 0);
+      resolvedFrom = date.toISOString();
+    }
+
+    if (period === 'year') {
+      const date = new Date();
+      date.setMonth(0, 1);
+      date.setHours(0, 0, 0, 0);
+      resolvedFrom = date.toISOString();
+    }
+  }
+
+  const conditions = ['user_id = $1'];
+  const params = [userId];
+
+  let index = 2;
+
+  if (provider) {
+    conditions.push(`provider = $${index++}`);
+    params.push(provider);
+  }
+
+  if (transaction_type) {
+    conditions.push(`transaction_type = $${index++}`);
+    params.push(transaction_type);
+  }
+
+  if (status) {
+    conditions.push(`status = $${index++}`);
+    params.push(status);
+  }
+
+  if (resolvedFrom) {
+    conditions.push(`created_at >= $${index++}`);
+    params.push(resolvedFrom);
+  }
+
+  if (resolvedTo) {
+    conditions.push(`created_at <= $${index++}`);
+    params.push(resolvedTo);
+  }
+
+  return {
+    where: `WHERE ${conditions.join(' AND ')}`,
+    params,
+    resolvedFrom,
+    resolvedTo,
+  };
+}
+
+function personalActivitySummarySql(where) {
+  return `SELECT COUNT(*) as count,
+                 COUNT(CASE WHEN status = 'success' THEN 1 END) as success_count,
+                 COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed_count,
+                 COUNT(CASE WHEN status = 'pending_confirmation' THEN 1 END) as pending_count,
+                 ROUND(
+                   100.0 * COUNT(CASE WHEN status = 'success' THEN 1 END)
+                   / NULLIF(COUNT(*), 0),
+                   1
+                 ) as success_rate
+          FROM personal_transactions ${where}`;
+}
+
 // ─── Personal Transaction Report (CSV + PDF) ─────────────────
 // Paid-Personal-only per spec. Always scoped to the current user.
 // Deliberately simpler than the Agent transaction report.
 
-exports.transactionReport = async (req, res) => {
-  const { format = 'pdf', from_date, to_date, provider, transaction_type, status, period } = req.query;
+exports.transactionReportSummary = async (req, res) => {
   const userId = req.user.id;
 
   try {
-    let resolvedFrom = from_date;
-    let resolvedTo = to_date || new Date().toISOString();
-    if (period && !from_date) {
-      const now = new Date();
-      if (period === 'today') resolvedFrom = new Date(now.setHours(0, 0, 0, 0)).toISOString();
-      if (period === 'week') { const d = new Date(); d.setDate(d.getDate() - 7); resolvedFrom = d.toISOString(); }
-      if (period === 'month') { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); resolvedFrom = d.toISOString(); }
-      if (period === 'year') { const d = new Date(); d.setMonth(0, 1); d.setHours(0, 0, 0, 0); resolvedFrom = d.toISOString(); }
-    }
+    const { where, params } = buildPersonalReportScope(
+      userId,
+      req.query,
+    );
 
-    const conditions = ['user_id = $1'];
-    const params = [userId];
-    let idx = 2;
-    if (provider) { conditions.push(`provider = $${idx++}`); params.push(provider); }
-    if (transaction_type) { conditions.push(`transaction_type = $${idx++}`); params.push(transaction_type); }
-    if (status) { conditions.push(`status = $${idx++}`); params.push(status); }
-    if (resolvedFrom) { conditions.push(`created_at >= $${idx++}`); params.push(resolvedFrom); }
-    if (resolvedTo) { conditions.push(`created_at <= $${idx++}`); params.push(resolvedTo); }
-    const where = `WHERE ${conditions.join(' AND ')}`;
+    const result = await query(
+      personalActivitySummarySql(where),
+      params,
+    );
+
+    const row = result.rows[0] || {};
+
+    const toInteger = (value) => {
+      const parsed = Number.parseInt(
+        value ?? 0,
+        10,
+      );
+
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+
+    const parsedRate = Number.parseFloat(
+      row.success_rate ?? 0,
+    );
+
+    return res.json({
+      success: true,
+      data: {
+        count: toInteger(row.count),
+        success_count: toInteger(row.success_count),
+        failed_count: toInteger(row.failed_count),
+        pending_count: toInteger(row.pending_count),
+        success_rate: Number.isFinite(parsedRate)
+          ? parsedRate
+          : 0,
+      },
+    });
+  } catch (error) {
+    logger.error(
+      'Personal transaction report summary error:',
+      error,
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch report summary',
+    });
+  }
+};
+
+exports.transactionReport = async (req, res) => {
+  const { format = 'pdf', period } = req.query;
+  const userId = req.user.id;
+
+  try {
+    const {
+      where,
+      params,
+      resolvedFrom,
+      resolvedTo,
+    } = buildPersonalReportScope(
+      userId,
+      req.query,
+    );
 
     // Personal reporting records app-performed transaction activity.
     // Keep every filtered transaction in the report and expose simple
@@ -37,17 +175,8 @@ exports.transactionReport = async (req, res) => {
     const [txResult, summaryResult] = await Promise.all([
       query(`SELECT * FROM personal_transactions ${where} ORDER BY created_at DESC LIMIT 5000`, params),
       query(
-        `SELECT COUNT(*) as count,
-                COUNT(CASE WHEN status = 'success' THEN 1 END) as success_count,
-                COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed_count,
-                COUNT(CASE WHEN status = 'pending_confirmation' THEN 1 END) as pending_count,
-                ROUND(
-                  100.0 * COUNT(CASE WHEN status = 'success' THEN 1 END)
-                  / NULLIF(COUNT(*), 0),
-                  1
-                ) as success_rate
-         FROM personal_transactions ${where}`,
-        params
+        personalActivitySummarySql(where),
+        params,
       ),
     ]);
 

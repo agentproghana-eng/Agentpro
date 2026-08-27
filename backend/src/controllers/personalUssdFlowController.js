@@ -225,6 +225,7 @@ exports.resolveFlow = async (req, res) => {
     const runtimeStepError = validateFlowSteps(
       stepsResult.rows,
       {
+        executionMode: flow.execution_mode || 'interactive',
         allowPinless:
           isTrustedPinlessRuntimeFlow(
             flow,
@@ -332,8 +333,15 @@ exports.createFlow = async (req, res) => {
     failure_markers,
     bundle_category,
     recipient_mode,
+    execution_mode,
     steps,
   } = req.body;
+
+  const executionMode = String(
+    execution_mode || 'interactive'
+  )
+    .trim()
+    .toLowerCase();
 
   if (!provider || !transaction_type || !dial_code) {
     return res.status(422).json({ success: false, message: 'provider, transaction_type, and dial_code are required' });
@@ -353,7 +361,12 @@ exports.createFlow = async (req, res) => {
     });
   }
 
-  const stepError = validateFlowSteps(steps);
+  const stepError = validateFlowSteps(
+    steps,
+    {
+      executionMode,
+    }
+  );
   if (stepError) {
     return res.status(422).json({ success: false, message: stepError });
   }
@@ -393,9 +406,10 @@ exports.createFlow = async (req, res) => {
            failure_markers,
            bundle_category,
            recipient_mode,
+           execution_mode,
            created_by
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING *`,
         [
           req.user.id,
@@ -406,6 +420,7 @@ exports.createFlow = async (req, res) => {
           failure_markers || [],
           bundle_category || null,
           recipient_mode || null,
+          executionMode,
           req.user.id,
         ]
       );
@@ -434,6 +449,7 @@ exports.createFlow = async (req, res) => {
         transaction_type,
         bundle_category: bundle_category || null,
         recipient_mode: recipient_mode || null,
+        execution_mode: executionMode,
         step_count: steps.length,
       },
       ipAddress: req.ip,
@@ -471,6 +487,7 @@ exports.updateFlow = async (req, res) => {
     failure_markers,
     bundle_category,
     recipient_mode,
+    execution_mode,
     is_active,
     steps,
   } = req.body;
@@ -479,6 +496,15 @@ exports.updateFlow = async (req, res) => {
       Object.prototype.hasOwnProperty.call(req.body, 'bundle_category');
   const hasRecipientMode =
       Object.prototype.hasOwnProperty.call(req.body, 'recipient_mode');
+
+  const hasExecutionMode =
+      Object.prototype.hasOwnProperty.call(req.body, 'execution_mode');
+
+  const requestedExecutionMode = hasExecutionMode
+    ? String(execution_mode || '')
+        .trim()
+        .toLowerCase()
+    : null;
 
   try {
     const existing = await query(
@@ -502,10 +528,17 @@ exports.updateFlow = async (req, res) => {
         ? failure_markers
         : flow.failure_markers;
 
+    const effectiveExecutionMode = hasExecutionMode
+      ? requestedExecutionMode
+      : String(flow.execution_mode || 'interactive')
+          .trim()
+          .toLowerCase();
+
     const shouldValidateMetadata =
       dial_code !== undefined ||
       success_markers !== undefined ||
       failure_markers !== undefined ||
+      hasExecutionMode ||
       (is_active === true && flow.is_active !== true);
 
     if (
@@ -558,7 +591,13 @@ exports.updateFlow = async (req, res) => {
     // If reactivation does not replace the steps, validate the persisted
     // configuration before making it executable again. This protects
     // historical Personal flows created before today's stricter safety rules.
-    if (is_active === true && flow.is_active !== true && steps === undefined) {
+    if (
+      steps === undefined &&
+      (
+        hasExecutionMode ||
+        (is_active === true && flow.is_active !== true)
+      )
+    ) {
       const persistedStepsResult = await query(
         `SELECT match_all, action, action_value
          FROM ussd_flow_steps
@@ -568,7 +607,12 @@ exports.updateFlow = async (req, res) => {
       );
 
       const persistedStepError =
-        validateFlowSteps(persistedStepsResult.rows);
+        validateFlowSteps(
+          persistedStepsResult.rows,
+          {
+            executionMode: effectiveExecutionMode,
+          }
+        );
 
       if (persistedStepError) {
         return res.status(422).json({
@@ -581,7 +625,12 @@ exports.updateFlow = async (req, res) => {
     }
 
     if (steps !== undefined) {
-      const stepError = validateFlowSteps(steps);
+      const stepError = validateFlowSteps(
+        steps,
+        {
+          executionMode: effectiveExecutionMode,
+        }
+      );
       if (stepError) {
         return res.status(422).json({ success: false, message: stepError });
       }
@@ -595,9 +644,11 @@ exports.updateFlow = async (req, res) => {
            failure_markers = COALESCE($3, failure_markers),
            bundle_category = CASE WHEN $4 THEN $5 ELSE bundle_category END,
            recipient_mode = CASE WHEN $6 THEN $7 ELSE recipient_mode END,
-           is_active = COALESCE($8, is_active),
+           execution_mode =
+             CASE WHEN $8 THEN $9 ELSE execution_mode END,
+           is_active = COALESCE($10, is_active),
            updated_at = NOW()
-         WHERE id = $9`,
+         WHERE id = $11`,
         [
           dial_code || null,
           success_markers || null,
@@ -606,6 +657,8 @@ exports.updateFlow = async (req, res) => {
           bundle_category || null,
           hasRecipientMode,
           recipient_mode || null,
+          hasExecutionMode,
+          requestedExecutionMode,
           is_active ?? null,
           id,
         ]
@@ -637,6 +690,9 @@ exports.updateFlow = async (req, res) => {
           : {}),
         ...(hasRecipientMode
           ? { recipient_mode: recipient_mode || null }
+          : {}),
+        ...(hasExecutionMode
+          ? { execution_mode: requestedExecutionMode }
           : {}),
         is_active,
         steps_replaced: steps !== undefined,

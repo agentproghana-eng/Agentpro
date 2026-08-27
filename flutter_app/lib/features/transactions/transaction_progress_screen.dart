@@ -902,10 +902,11 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     final rawSteps = flowData['steps'];
     final dialCode = flowData['dial_code'];
 
-    if (rawSteps is! List ||
-        rawSteps.isEmpty ||
-        dialCode is! String ||
-        dialCode.isEmpty) {
+    final executionMode =
+        flowData['execution_mode']?.toString().trim().toLowerCase() ??
+            'interactive';
+
+    if (rawSteps is! List || dialCode is! String || dialCode.isEmpty) {
       throw const FormatException('Cached USSD flow is incomplete');
     }
 
@@ -926,6 +927,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     final flowValidationError = validateUssdFlowDraftSteps(
       steps,
       allowPinless: allowPinless,
+      executionMode: executionMode,
     );
 
     if (flowValidationError != null) {
@@ -982,6 +984,20 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       return;
     }
 
+    if (executionMode == 'direct') {
+      await _startDirectUssdAutomation(
+        transactionId: transactionId,
+        automationParams: automationParams,
+        provider: provider,
+        simSlot: simSlot,
+        flowData: flowData,
+        dialCode: dialCode,
+        successMarkers: successMarkers,
+        failureMarkers: failureMarkers,
+      );
+      return;
+    }
+
     final selectionsMap = <String, String>{};
 
     if (selectionsInOrder.isNotEmpty) {
@@ -1011,6 +1027,54 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       failureMarkers: failureMarkers,
       selections: selectionsMap.isEmpty ? null : selectionsMap,
     );
+  }
+
+  Future<void> _startDirectUssdAutomation({
+    required String transactionId,
+    required Map<String, String> automationParams,
+    required String provider,
+    required int simSlot,
+    required Map<String, dynamic> flowData,
+    required String dialCode,
+    required List<String>? successMarkers,
+    required List<String>? failureMarkers,
+  }) async {
+    final template = USSDTemplate(
+      id: flowData['id']?.toString() ?? 'direct_custom_flow',
+      ussdStringPattern: dialCode,
+      pinPromptStrings: const ['pin'],
+      successStrings: successMarkers ?? const <String>[],
+      failureStrings: failureMarkers ?? const <String>[],
+      timeoutSeconds: 30,
+      retryCount: 0,
+    );
+
+    _engine = USSDEngine(
+      template: template,
+      automationParams: automationParams,
+      provider: provider,
+      simSlot: simSlot,
+    );
+
+    _engineProgressSubscription?.cancel();
+
+    _engineProgressSubscription = _engine!.progressStream.listen((progress) {
+      if (!mounted) return;
+
+      setState(() {
+        _status = progress.status;
+        _statusMessage = progress.message;
+      });
+    });
+
+    final result = await _engine!.execute();
+
+    if (_requiresPostPinConfirmation(result)) {
+      await _confirmManually(requiredChoice: true);
+      return;
+    }
+
+    await _reportResult(transactionId, result);
   }
 
   Future<void> _startAccessibilityAutomation(

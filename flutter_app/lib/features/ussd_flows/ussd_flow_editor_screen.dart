@@ -62,6 +62,7 @@ class UssdFlowEditorScreen extends StatefulWidget {
 class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
   String _provider = '';
   String _transactionType = '';
+  String _executionMode = 'interactive';
   List<String> _providers = [];
   List<Map<String, String>> _transactionTypes = [];
   bool _loadingCapabilities = true;
@@ -98,6 +99,10 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
       final flow = widget.existingFlow!;
       _provider = flow['provider']?.toString() ?? '';
       _transactionType = flow['transaction_type']?.toString() ?? '';
+      _executionMode =
+          flow['execution_mode']?.toString().trim().toLowerCase() == 'direct'
+              ? 'direct'
+              : 'interactive';
       _dialCodeCtrl.text = flow['dial_code'] ?? '';
       _successMarkersCtrl.text =
           (flow['success_markers'] as List?)?.join(', ') ?? '';
@@ -112,7 +117,9 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
       }
     }
 
-    if (_steps.isEmpty) _steps.add(_StepDraft());
+    if (_steps.isEmpty && _executionMode == 'interactive') {
+      _steps.add(_StepDraft());
+    }
 
     _loadCapabilities();
   }
@@ -289,6 +296,19 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
     });
   }
 
+  void _setExecutionMode(String mode) {
+    final normalized =
+        mode.trim().toLowerCase() == 'direct' ? 'direct' : 'interactive';
+
+    setState(() {
+      _executionMode = normalized;
+
+      if (_executionMode == 'interactive' && _steps.isEmpty) {
+        _steps.add(_StepDraft());
+      }
+    });
+  }
+
   Future<void> _save() async {
     if (_provider.isEmpty || _transactionType.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -330,9 +350,14 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
       return;
     }
 
-    final stepPayload = _steps.map((step) => step.toMap()).toList();
+    final stepPayload = _executionMode == 'direct'
+        ? <Map<String, dynamic>>[]
+        : _steps.map((step) => step.toMap()).toList();
 
-    final stepError = validateUssdFlowDraftSteps(stepPayload);
+    final stepError = validateUssdFlowDraftSteps(
+      stepPayload,
+      executionMode: _executionMode,
+    );
 
     if (stepError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -357,6 +382,7 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
       'recipient_mode': _recipientModeCtrl.text.trim().isEmpty
           ? null
           : _recipientModeCtrl.text.trim(),
+      'execution_mode': _executionMode,
       'steps': stepPayload,
     };
 
@@ -527,6 +553,50 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
           ),
           const SizedBox(height: 16),
           Text(
+            'EXECUTION MODE',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: context.appSecondaryText,
+            ),
+          ),
+          const SizedBox(height: 8),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment<String>(
+                value: 'direct',
+                icon: Icon(Icons.dialpad_outlined),
+                label: Text('Direct USSD String'),
+              ),
+              ButtonSegment<String>(
+                value: 'interactive',
+                icon: Icon(Icons.account_tree_outlined),
+                label: Text('Interactive Flow'),
+              ),
+            ],
+            selected: {_executionMode},
+            onSelectionChanged: (selection) {
+              if (selection.isNotEmpty) {
+                _setExecutionMode(selection.first);
+              }
+            },
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _executionMode == 'direct'
+                ? 'Use Direct USSD String only when the complete provider '
+                    'request fits in one dial, for example '
+                    '*138*1*2*1*1#. If the network still needs AgentPro '
+                    'to choose menus, use Interactive Flow.'
+                : 'Interactive Flow reads each provider menu and follows '
+                    'the steps you configure until secure PIN entry.',
+            style: TextStyle(
+              fontSize: 9.5,
+              color: context.appSecondaryText,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
             'FLOW VARIANT (OPTIONAL)',
             style: TextStyle(
               fontSize: 11,
@@ -559,7 +629,7 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            'DIAL CODE',
+            _executionMode == 'direct' ? 'DIRECT USSD STRING' : 'DIAL CODE',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.bold,
@@ -570,9 +640,22 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
           TextField(
             controller: _dialCodeCtrl,
             style: const TextStyle(fontFamily: 'monospace'),
-            decoration: const InputDecoration(
-              hintText: '*100#',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              hintText: _executionMode == 'direct' ? '*138*1*2*1*1#' : '*100#',
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            _executionMode == 'direct'
+                ? 'AgentPro sends this as one USSD request. Do not include '
+                    'a PIN. Use Interactive Flow if additional menu input '
+                    'is required.'
+                : 'This is the first USSD code AgentPro opens before '
+                    'following the interactive steps below.',
+            style: TextStyle(
+              fontSize: 9.5,
+              color: context.appSecondaryText,
             ),
           ),
           const SizedBox(height: 16),
@@ -609,154 +692,92 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
               border: OutlineInputBorder(),
             ),
           ),
-          const SizedBox(height: 20),
-          Text(
-            'STEPS (in order)',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              color: context.appSecondaryText,
+          if (_executionMode == 'interactive') ...[
+            const SizedBox(height: 20),
+            Text(
+              'STEPS (in order)',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: context.appSecondaryText,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          ..._steps.asMap().entries.map((entry) {
-            final i = entry.key;
-            final step = entry.value;
-            return Card(
-              margin: const EdgeInsets.only(bottom: 10),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Step ${i + 1}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
+            const SizedBox(height: 8),
+            ..._steps.asMap().entries.map((entry) {
+              final i = entry.key;
+              final step = entry.value;
+              return Card(
+                margin: const EdgeInsets.only(bottom: 10),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Step ${i + 1}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
                             ),
                           ),
-                        ),
-                        IconButton(
-                          tooltip: 'Move step up',
-                          icon: const Icon(
-                            Icons.keyboard_arrow_up,
-                            size: 22,
-                          ),
-                          color: context.appSecondaryText,
-                          disabledColor:
-                              context.appSecondaryText.withValues(alpha: 0.3),
-                          onPressed: i == 0 ? null : () => _moveStep(i, i - 1),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                            minWidth: 34,
-                            minHeight: 34,
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Move step down',
-                          icon: const Icon(
-                            Icons.keyboard_arrow_down,
-                            size: 22,
-                          ),
-                          color: context.appSecondaryText,
-                          disabledColor:
-                              context.appSecondaryText.withValues(alpha: 0.3),
-                          onPressed: i == _steps.length - 1
-                              ? null
-                              : () => _moveStep(i, i + 1),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                            minWidth: 34,
-                            minHeight: 34,
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Remove step',
-                          icon: Icon(
-                            Icons.close,
-                            size: 18,
+                          IconButton(
+                            tooltip: 'Move step up',
+                            icon: const Icon(
+                              Icons.keyboard_arrow_up,
+                              size: 22,
+                            ),
                             color: context.appSecondaryText,
+                            disabledColor:
+                                context.appSecondaryText.withValues(alpha: 0.3),
+                            onPressed:
+                                i == 0 ? null : () => _moveStep(i, i - 1),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 34,
+                              minHeight: 34,
+                            ),
                           ),
-                          onPressed: () => _removeStep(i),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(
-                            minWidth: 34,
-                            minHeight: 34,
+                          IconButton(
+                            tooltip: 'Move step down',
+                            icon: const Icon(
+                              Icons.keyboard_arrow_down,
+                              size: 22,
+                            ),
+                            color: context.appSecondaryText,
+                            disabledColor:
+                                context.appSecondaryText.withValues(alpha: 0.3),
+                            onPressed: i == _steps.length - 1
+                                ? null
+                                : () => _moveStep(i, i + 1),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 34,
+                              minHeight: 34,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Match if screen contains (comma-separated, ALL must match)',
-                      style: TextStyle(
-                        fontSize: 9.5,
-                        color: context.appSecondaryText,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    TextField(
-                      controller: step.matchAllCtrl,
-                      style: const TextStyle(fontSize: 12),
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        border: OutlineInputBorder(),
-                        hintText: 'enter phone no',
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Action',
-                      style: TextStyle(
-                        fontSize: 9.5,
-                        color: context.appSecondaryText,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: context.appDivider),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: step.action,
-                          isExpanded: true,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: context.appPrimaryText,
+                          IconButton(
+                            tooltip: 'Remove step',
+                            icon: Icon(
+                              Icons.close,
+                              size: 18,
+                              color: context.appSecondaryText,
+                            ),
+                            onPressed: () => _removeStep(i),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 34,
+                              minHeight: 34,
+                            ),
                           ),
-                          items: _actions
-                              .map(
-                                (a) => DropdownMenuItem(
-                                  value: a['value'],
-                                  child: Text(a['label']!),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (v) => setState(() => step.action = v!),
-                        ),
+                        ],
                       ),
-                    ),
-                    if (step.action == 'send_selection') ...[
                       const SizedBox(height: 6),
                       Text(
-                        'The value is supplied dynamically by the transaction screen for this step.',
-                        style: TextStyle(
-                          fontSize: 9.5,
-                          color: context.appSecondaryText,
-                        ),
-                      ),
-                    ],
-                    if (step.needsActionValue) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        'Value to send',
+                        'Match if screen contains (comma-separated, ALL must match)',
                         style: TextStyle(
                           fontSize: 9.5,
                           color: context.appSecondaryText,
@@ -764,41 +785,106 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
                       ),
                       const SizedBox(height: 4),
                       TextField(
-                        controller: step.actionValueCtrl,
+                        controller: step.matchAllCtrl,
                         style: const TextStyle(fontSize: 12),
-                        keyboardType: step.action == 'auto_confirm_once'
-                            ? TextInputType.number
-                            : TextInputType.text,
-                        inputFormatters: step.action == 'auto_confirm_once'
-                            ? [
-                                FilteringTextInputFormatter.digitsOnly,
-                                LengthLimitingTextInputFormatter(1),
-                              ]
-                            : null,
-                        decoration: InputDecoration(
+                        decoration: const InputDecoration(
                           isDense: true,
-                          border: const OutlineInputBorder(),
-                          hintText: step.action == 'auto_confirm_once'
-                              ? 'Single digit, e.g. 1'
-                              : 'e.g. 1',
-                          helperText: step.action == 'auto_confirm_once'
-                              ? 'Must be after PIN Prompt. Only one is '
-                                  'allowed, using one non-sensitive '
-                                  'numeric menu choice.'
-                              : null,
+                          border: OutlineInputBorder(),
+                          hintText: 'enter phone no',
                         ),
                       ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Action',
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          color: context.appSecondaryText,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: context.appDivider),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: step.action,
+                            isExpanded: true,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: context.appPrimaryText,
+                            ),
+                            items: _actions
+                                .map(
+                                  (a) => DropdownMenuItem(
+                                    value: a['value'],
+                                    child: Text(a['label']!),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) => setState(() => step.action = v!),
+                          ),
+                        ),
+                      ),
+                      if (step.action == 'send_selection') ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          'The value is supplied dynamically by the transaction screen for this step.',
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            color: context.appSecondaryText,
+                          ),
+                        ),
+                      ],
+                      if (step.needsActionValue) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Value to send',
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            color: context.appSecondaryText,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        TextField(
+                          controller: step.actionValueCtrl,
+                          style: const TextStyle(fontSize: 12),
+                          keyboardType: step.action == 'auto_confirm_once'
+                              ? TextInputType.number
+                              : TextInputType.text,
+                          inputFormatters: step.action == 'auto_confirm_once'
+                              ? [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                  LengthLimitingTextInputFormatter(1),
+                                ]
+                              : null,
+                          decoration: InputDecoration(
+                            isDense: true,
+                            border: const OutlineInputBorder(),
+                            hintText: step.action == 'auto_confirm_once'
+                                ? 'Single digit, e.g. 1'
+                                : 'e.g. 1',
+                            helperText: step.action == 'auto_confirm_once'
+                                ? 'Must be after PIN Prompt. Only one is '
+                                    'allowed, using one non-sensitive '
+                                    'numeric menu choice.'
+                                : null,
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-            );
-          }),
-          OutlinedButton.icon(
-            onPressed: _addStep,
-            icon: const Icon(Icons.add),
-            label: const Text('Add Step'),
-          ),
+              );
+            }),
+            OutlinedButton.icon(
+              onPressed: _addStep,
+              icon: const Icon(Icons.add),
+              label: const Text('Add Step'),
+            ),
+          ],
           const SizedBox(height: 20),
           ElevatedButton(
             onPressed: _saving ? null : _save,

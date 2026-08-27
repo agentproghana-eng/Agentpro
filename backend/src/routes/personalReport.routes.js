@@ -8,6 +8,10 @@ const { authenticate, requirePersonalAccount, requirePaidPersonalPlan } = requir
 // reacting (also baseline).
 router.use(authenticate, requirePersonalAccount, requirePaidPersonalPlan);
 
+router.get(
+  '/transactions/summary',
+  personalReportController.transactionReportSummary,
+);
 router.get('/transactions', personalReportController.transactionReport);
 
 module.exports = router;

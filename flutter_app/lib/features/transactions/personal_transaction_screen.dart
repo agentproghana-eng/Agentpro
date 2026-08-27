@@ -17,12 +17,12 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 
 const Map<String, String> kPersonalTransactionLabels = {
-  'send_money': 'Send Money',
-  'send_money_same_network': 'Send Money (Same Network)',
-  'send_money_cross_network': 'Send Money (Other Network)',
+  'send_money': 'Transfer Money',
+  'send_money_same_network': 'Transfer Money · Same Network',
+  'send_money_cross_network': 'Transfer Money · Other Network',
   'buy_airtime': 'Buy Airtime',
   'buy_data': 'Buy Data',
-  'buy_mashup': 'Mash Up',
+  'buy_mashup': 'Buy Data · MashUp',
   'check_momo_balance': 'Check MoMo Balance',
   'check_airtime_balance': 'Check Airtime Balance',
   'withdraw_cash': 'Withdraw Cash',
@@ -382,9 +382,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     if (_isMtnDataBundle) {
       if (_bundleCategory == 'fixed_page1' ||
           _bundleCategory == 'fixed_page2') {
-        return [
-          if (_bundleChoice != null) _bundleChoice!.digit,
-        ];
+        return [if (_bundleChoice != null) _bundleChoice!.digit];
       }
 
       // Flexi is always menu option 1, so its flow uses a static
@@ -405,41 +403,29 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     return [if (_bundleChoice != null) _bundleChoice!.digit];
   }
 
-  DataBundleOption? _presetMtnDataPayment(
-    String bundleCategory,
-  ) {
+  DataBundleOption? _presetMtnDataPayment(String bundleCategory) {
     final normalized = bundleCategory.trim().toLowerCase();
 
     if (normalized.endsWith('_momo')) {
-      return kMtnDataPayment.firstWhere(
-        (item) => item.digit == '2',
-      );
+      return kMtnDataPayment.firstWhere((item) => item.digit == '2');
     }
 
     if (normalized.endsWith('_airtime')) {
-      return kMtnDataPayment.firstWhere(
-        (item) => item.digit == '1',
-      );
+      return kMtnDataPayment.firstWhere((item) => item.digit == '1');
     }
 
     return null;
   }
 
-  DataBundleOption? _presetMashupPayment(
-    String bundleCategory,
-  ) {
+  DataBundleOption? _presetMashupPayment(String bundleCategory) {
     final normalized = bundleCategory.trim().toLowerCase();
 
     if (normalized.endsWith('_momo')) {
-      return kMtnMashupPayment.firstWhere(
-        (item) => item.digit == '2',
-      );
+      return kMtnMashupPayment.firstWhere((item) => item.digit == '2');
     }
 
     if (normalized.endsWith('_airtime')) {
-      return kMtnMashupPayment.firstWhere(
-        (item) => item.digit == '1',
-      );
+      return kMtnMashupPayment.firstWhere((item) => item.digit == '1');
     }
 
     return null;
@@ -472,10 +458,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       if (bundle.startsWith('flexi_')) {
         _bundleCategory = 'flexi';
 
-        _bundleChoice = const DataBundleOption(
-          'Flexi Bundle',
-          '1',
-        );
+        _bundleChoice = const DataBundleOption('Flexi Bundle', '1');
 
         _flexiPayment = _presetMtnDataPayment(bundle);
 
@@ -488,9 +471,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         return;
       }
 
-      if (bundle.startsWith(
-        'fixed_page1_',
-      )) {
+      if (bundle.startsWith('fixed_page1_')) {
         _bundleCategory = 'fixed_page1';
 
         _flexiPayment = _presetMtnDataPayment(bundle);
@@ -504,9 +485,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         return;
       }
 
-      if (bundle.startsWith(
-        'fixed_page2_',
-      )) {
+      if (bundle.startsWith('fixed_page2_')) {
         _bundleCategory = 'fixed_page2';
 
         _flexiPayment = _presetMtnDataPayment(bundle);
@@ -600,9 +579,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         }
       }
 
-      supported.sort(
-        (a, b) => a.slot.compareTo(b.slot),
-      );
+      supported.sort((a, b) => a.slot.compareTo(b.slot));
 
       if (mounted == false) {
         return;
@@ -763,10 +740,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: AppTheme.errorColor,
-      ),
+      SnackBar(content: Text(message), backgroundColor: AppTheme.errorColor),
     );
   }
 
@@ -780,9 +754,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         requestFields['transaction_type']?.toString().trim() ?? '';
 
     if (transactionType.isEmpty) {
-      _showPersonalStartFailure(
-        'The transaction type is unavailable.',
-      );
+      _showPersonalStartFailure('The transaction type is unavailable.');
       return null;
     }
 
@@ -799,9 +771,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       final connectivity = await Connectivity().checkConnectivity();
 
       final isOffline = connectivity.isEmpty ||
-          connectivity.every(
-            (result) => result == ConnectivityResult.none,
-          );
+          connectivity.every((result) => result == ConnectivityResult.none);
 
       Map<String, dynamic> transaction;
 
@@ -1004,9 +974,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
 
     if (!_simDetectionComplete) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('SIM detection is still in progress.'),
-        ),
+        const SnackBar(content: Text('SIM detection is still in progress.')),
       );
       return;
     }
@@ -1045,9 +1013,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       'sim_slot': selectedSim.slot,
       'sim_subscription_id': selectedSim.subscriptionId,
       if (_isMtnCrossNetwork && _crossNetworkSelection != null)
-        'selections_in_order': <String>[
-          _crossNetworkSelection!,
-        ],
+        'selections_in_order': <String>[_crossNetworkSelection!],
     };
 
     final requestFields = await _withStableClientOperation(baseRequestFields);
@@ -1079,9 +1045,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   Future<void> _submitDataBundle() async {
     if (!_simDetectionComplete) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('SIM detection is still in progress.'),
-        ),
+        const SnackBar(content: Text('SIM detection is still in progress.')),
       );
       return;
     }
@@ -1160,15 +1124,13 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     final label = kPersonalTransactionLabels[widget.transactionType] ??
         widget.transactionType;
     final appBarLabel = switch (widget.transactionType) {
-      'send_money_same_network' => 'Send Money',
-      'send_money_cross_network' => 'Send Money',
+      'send_money_same_network' => 'Transfer Money',
+      'send_money_cross_network' => 'Transfer Money',
       _ => label,
     };
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(appBarLabel),
-      ),
+      appBar: AppBar(title: Text(appBarLabel)),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -1200,9 +1162,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           const SizedBox(width: 10),
           Text(
             'Detecting $_providerLabel SIMs…',
-            style: const TextStyle(
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.w600),
           ),
         ],
       );
@@ -1249,10 +1209,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       children: [
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 12,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
             color: context.appSurface,
             borderRadius: BorderRadius.circular(12),
@@ -1288,10 +1245,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           const SizedBox(height: 10),
           Text(
             'Select physical $_providerLabel SIM',
-            style: const TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
           ),
           const SizedBox(height: 8),
           Wrap(
@@ -1299,16 +1253,12 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
             runSpacing: 8,
             children: sims.map((sim) {
               final isSelected = selected?.slot == sim.slot;
-              final color = AppTheme.providerColor(
-                widget.provider,
-              );
+              final color = AppTheme.providerColor(widget.provider);
 
               final iccid = sim.iccid.trim();
               final tail = iccid.isEmpty
                   ? ''
-                  : iccid.substring(
-                      iccid.length > 6 ? iccid.length - 6 : 0,
-                    );
+                  : iccid.substring(iccid.length > 6 ? iccid.length - 6 : 0);
 
               return ChoiceChip(
                 selected: isSelected,
@@ -1369,7 +1319,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
                 });
               },
               validator: (value) =>
-                  value == null ? 'Choose where you are sending money' : null,
+                  value == null ? 'Choose how to transfer money' : null,
             ),
             const SizedBox(height: 14),
           ],
@@ -1382,10 +1332,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
                 helperText: 'Choose the MTN airtime destination',
               ),
               items: const [
-                DropdownMenuItem<String>(
-                  value: 'self',
-                  child: Text('Myself'),
-                ),
+                DropdownMenuItem<String>(value: 'self', child: Text('Myself')),
                 DropdownMenuItem<String>(
                   value: 'other',
                   child: Text('Someone else'),
@@ -1756,10 +1703,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
                 payment?.digit == '2'
                     ? 'AgentPro will automate the MTN Pulse menus and stop at the PIN prompt. Enter the PIN yourself on the network screen.'
                     : 'AgentPro will automate the MTN Pulse menus and classify the final MTN response.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: context.appSecondaryText,
-                ),
+                style: TextStyle(fontSize: 12, color: context.appSecondaryText),
               ),
             ),
             const SizedBox(height: 20),
@@ -1776,11 +1720,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     }
   }
 
-  Widget _mashupReviewRow(
-    BuildContext context,
-    String label,
-    String value,
-  ) {
+  Widget _mashupReviewRow(BuildContext context, String label, String value) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -1817,38 +1757,28 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         bundleCategory == null ||
         _recipientMode == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Complete the MashUp choices first.'),
-        ),
+        const SnackBar(content: Text('Complete the MashUp choices first.')),
       );
       return;
     }
 
     if (tier.id != 'ghc30' && _mashupAllocation == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Choose a MashUp allocation.'),
-        ),
+        const SnackBar(content: Text('Choose a MashUp allocation.')),
       );
       return;
     }
 
     if (_recipientMode == 'other' && _phoneCtrl.text.trim().length < 9) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Enter a valid recipient phone number.',
-          ),
-        ),
+        const SnackBar(content: Text('Enter a valid recipient phone number.')),
       );
       return;
     }
 
     if (!_simDetectionComplete) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('SIM detection is still in progress.'),
-        ),
+        const SnackBar(content: Text('SIM detection is still in progress.')),
       );
       return;
     }
@@ -2121,18 +2051,17 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         const SizedBox(height: 8),
         Text(
           'Fixed bundles',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 8),
         ...kMtnDataPage1.map(
           (opt) => _dbOptionTile(opt, () {
             setState(() {
-              final keepPresetPayment =
-                  (widget.initialBundleCategory ?? '').toLowerCase().startsWith(
-                        'fixed_page1_',
-                      );
+              final keepPresetPayment = (widget.initialBundleCategory ?? '')
+                  .toLowerCase()
+                  .startsWith('fixed_page1_');
 
               _bundleCategory = 'fixed_page1';
               _bundleChoice = opt;
@@ -2148,10 +2077,9 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         ...kMtnDataPage2.map(
           (opt) => _dbOptionTile(opt, () {
             setState(() {
-              final keepPresetPayment =
-                  (widget.initialBundleCategory ?? '').toLowerCase().startsWith(
-                        'fixed_page2_',
-                      );
+              final keepPresetPayment = (widget.initialBundleCategory ?? '')
+                  .toLowerCase()
+                  .startsWith('fixed_page2_');
 
               _bundleCategory = 'fixed_page2';
               _bundleChoice = opt;
@@ -2172,10 +2100,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     return ListView(
       children: [
         _dbBack(() => setState(() => _dbStep = 'mtn_bundle')),
-        Text(
-          'Flexi amount',
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
+        Text('Flexi amount', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 4),
         Text(
           'MTN currently accepts GHS 0.03 – 399.',
@@ -2197,9 +2122,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
             if (amount == null || amount < 0.03 || amount > 399) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text(
-                    'Enter an amount between GHS 0.03 and 399',
-                  ),
+                  content: Text('Enter an amount between GHS 0.03 and 399'),
                 ),
               );
               return;

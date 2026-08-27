@@ -103,16 +103,13 @@ class _DashboardShiftCardState extends State<DashboardShiftCard> {
         isOpen ? DateTime.tryParse(shift['opened_at']?.toString() ?? '') : null;
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-      padding: const EdgeInsets.symmetric(
-        horizontal: 16,
-        vertical: 15,
-      ),
+      margin: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
         color: isOpen
             ? context.appTileColor(const Color(0xFFDDF3EE))
             : context.appSurface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(13),
         border: Border.all(
           color: isOpen
               ? AppTheme.primaryColor.withValues(alpha: 0.18)
@@ -121,16 +118,16 @@ class _DashboardShiftCardState extends State<DashboardShiftCard> {
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.055),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
       child: Row(
         children: [
           Container(
-            width: 38,
-            height: 38,
+            width: 32,
+            height: 32,
             decoration: BoxDecoration(
               color: isOpen
                   ? AppTheme.primaryColor.withValues(alpha: 0.12)
@@ -140,10 +137,10 @@ class _DashboardShiftCardState extends State<DashboardShiftCard> {
             child: Icon(
               isOpen ? Icons.timer_outlined : Icons.timer_off_outlined,
               color: isOpen ? AppTheme.primaryColor : context.appSecondaryText,
-              size: 20,
+              size: 18,
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               isOpen
@@ -152,7 +149,7 @@ class _DashboardShiftCardState extends State<DashboardShiftCard> {
                   : 'No active shift',
               style: TextStyle(
                 fontWeight: FontWeight.w600,
-                fontSize: 13,
+                fontSize: 12,
                 color:
                     isOpen ? AppTheme.primaryColor : context.appSecondaryText,
               ),
@@ -167,11 +164,11 @@ class _DashboardShiftCardState extends State<DashboardShiftCard> {
             style: ElevatedButton.styleFrom(
               backgroundColor:
                   isOpen ? AppTheme.errorColor : AppTheme.primaryColor,
-              minimumSize: const Size(0, 38),
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              minimumSize: const Size(0, 32),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               elevation: 1,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
             ),
             child: _opening
@@ -185,7 +182,7 @@ class _DashboardShiftCardState extends State<DashboardShiftCard> {
                   )
                 : Text(
                     isOpen ? 'Close Shift' : 'Open Shift',
-                    style: const TextStyle(fontSize: 12),
+                    style: const TextStyle(fontSize: 11),
                   ),
           ),
         ],

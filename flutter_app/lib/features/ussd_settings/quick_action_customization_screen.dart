@@ -74,18 +74,18 @@ class _QuickActionCustomizationScreenState
   bool get _isAgentRole => _role == 'agent';
 
   String get _roleLabel => switch (_role) {
-    'subscriber' => 'Subscriber',
-    'evd' => 'EVD',
-    'merchant' => 'Merchant',
-    _ => 'Agent',
-  };
+        'subscriber' => 'Subscriber',
+        'evd' => 'EVD',
+        'merchant' => 'Merchant',
+        _ => 'Agent',
+      };
 
   String get _preferenceField => switch (_role) {
-    'subscriber' => 'subscriber_quick_actions',
-    'evd' => 'evd_quick_actions',
-    'merchant' => 'merchant_quick_actions',
-    _ => 'agent_quick_actions',
-  };
+        'subscriber' => 'subscriber_quick_actions',
+        'evd' => 'evd_quick_actions',
+        'merchant' => 'merchant_quick_actions',
+        _ => 'agent_quick_actions',
+      };
   String _provider = '';
   bool _loading = true;
   bool _saving = false;
@@ -96,6 +96,14 @@ class _QuickActionCustomizationScreenState
   Map<String, List<QuickActionPreference>> _preferences = {};
 
   List<String> get _providers {
+    final catalog = _catalog;
+
+    if (_isSubscriberRole && catalog != null) {
+      return catalog.providers
+          .where((provider) => catalog.definitionsFor(provider).isNotEmpty)
+          .toList();
+    }
+
     return <String>{...?_catalog?.providers, ..._preferences.keys}.toList();
   }
 
@@ -112,9 +120,8 @@ class _QuickActionCustomizationScreenState
       choices.add(_QuickActionChoice(definition: definition));
 
       for (final variant in definition.variants) {
-        final canonicalBundle = (variant.bundleCategory ?? '')
-            .trim()
-            .toLowerCase();
+        final canonicalBundle =
+            (variant.bundleCategory ?? '').trim().toLowerCase();
 
         // MTN MashUp page1/page2 are historical flow identities.
         // Live validation established that allocation digits 1-5 are
@@ -156,8 +163,7 @@ class _QuickActionCustomizationScreenState
   }
 
   List<QuickActionPreference> _defaultPreferencesFor(String provider) {
-    final definitions =
-        _catalog?.definitionsFor(provider) ??
+    final definitions = _catalog?.definitionsFor(provider) ??
         const <QuickActionCatalogDefinition>[];
 
     return definitions
@@ -236,12 +242,15 @@ class _QuickActionCustomizationScreenState
 
     final parsed = <String, List<QuickActionPreference>>{};
 
-    final providers = <String>{...?catalog?.providers, ...saved.keys}.toList();
+    final providers = _isSubscriberRole && catalog != null
+        ? catalog.providers
+            .where((provider) => catalog!.definitionsFor(provider).isNotEmpty)
+            .toList()
+        : <String>{...?catalog?.providers, ...saved.keys}.toList();
 
     for (final provider in providers) {
       final providerValue = saved[provider];
-      final definitions =
-          catalog?.definitionsFor(provider) ??
+      final definitions = catalog?.definitionsFor(provider) ??
           const <QuickActionCatalogDefinition>[];
 
       if (providerValue is List) {
@@ -301,12 +310,10 @@ class _QuickActionCustomizationScreenState
     String? loadError;
 
     if (catalogLoaded == false && preferencesLoaded) {
-      loadError =
-          'Global Quick Action templates are temporarily unavailable. '
+      loadError = 'Global Quick Action templates are temporarily unavailable. '
           'Your saved actions are still available.';
     } else if (catalogLoaded && preferencesLoaded == false) {
-      loadError =
-          'Could not load your saved Quick Action layout. '
+      loadError = 'Could not load your saved Quick Action layout. '
           'Showing available Global templates.';
     } else if (catalogLoaded == false && preferencesLoaded == false) {
       loadError = 'Could not load Quick Actions.';
@@ -470,8 +477,7 @@ class _QuickActionCustomizationScreenState
 
   Future<void> _renameAction(QuickActionPreference preference) async {
     final definition = _definitionFor(preference.actionKey);
-    final defaultLabel =
-        definition?.displayLabel ??
+    final defaultLabel = definition?.displayLabel ??
         quickActionTransactionLabel(preference.actionKey);
     var draftName = preference.customName ?? defaultLabel;
 
@@ -569,11 +575,11 @@ class _QuickActionCustomizationScreenState
                     padding: const EdgeInsets.all(16),
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 4,
-                          crossAxisSpacing: 10,
-                          mainAxisSpacing: 10,
-                          childAspectRatio: 0.9,
-                        ),
+                      crossAxisCount: 4,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 10,
+                      childAspectRatio: 0.9,
+                    ),
                     itemCount: kQuickActionIconOptions.length,
                     itemBuilder: (context, index) {
                       final option = kQuickActionIconOptions[index];
@@ -691,8 +697,8 @@ class _QuickActionCustomizationScreenState
 
                     final checkColor =
                         option.hex == '#FDD835' || option.hex == '#F9A825'
-                        ? Colors.black
-                        : Colors.white;
+                            ? Colors.black
+                            : Colors.white;
 
                     return InkWell(
                       onTap: () => Navigator.pop(sheetContext, option.hex),
@@ -784,11 +790,10 @@ class _QuickActionCustomizationScreenState
         .split(RegExp(r'\s+'))
         .where((part) => part.trim().isNotEmpty)
         .map((part) {
-          final trimmed = part.trim();
-          if (trimmed.isEmpty) return trimmed;
-          return trimmed[0].toUpperCase() + trimmed.substring(1).toLowerCase();
-        })
-        .join(' ');
+      final trimmed = part.trim();
+      if (trimmed.isEmpty) return trimmed;
+      return trimmed[0].toUpperCase() + trimmed.substring(1).toLowerCase();
+    }).join(' ');
   }
 
   String _friendlyVariantLabel({
@@ -921,8 +926,8 @@ class _QuickActionCustomizationScreenState
 
                     final checkColor =
                         option.hex == '#FDD835' || option.hex == '#F9A825'
-                        ? Colors.black
-                        : Colors.white;
+                            ? Colors.black
+                            : Colors.white;
 
                     return InkWell(
                       onTap: () => Navigator.pop(sheetContext, option.hex),
@@ -1084,11 +1089,9 @@ class _QuickActionCustomizationScreenState
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        for (
-                          var index = 0;
-                          index < _providers.length;
-                          index++
-                        ) ...[
+                        for (var index = 0;
+                            index < _providers.length;
+                            index++) ...[
                           _ProviderButton(
                             label: quickActionProviderLabel(_providers[index]),
                             value: _providers[index],
@@ -1160,12 +1163,10 @@ class _QuickActionCustomizationScreenState
                       final preference = _selected[index];
                       final definition = _definitionFor(preference.actionKey);
 
-                      final defaultLabel =
-                          definition?.displayLabel ??
+                      final defaultLabel = definition?.displayLabel ??
                           quickActionTransactionLabel(preference.actionKey);
 
-                      final icon =
-                          quickActionIconFromKey(preference.iconKey) ??
+                      final icon = quickActionIconFromKey(preference.iconKey) ??
                           definition?.icon ??
                           quickActionCatalogIcon(preference.actionKey);
 
@@ -1348,13 +1349,43 @@ class _QuickActionCustomizationScreenState
     );
   }
 
+  String _availableGroupLabel(_QuickActionChoice choice) {
+    final configuredGroup = choice.definition.quickActionGroup.isEmpty
+        ? 'Other Services'
+        : choice.definition.quickActionGroup;
+
+    if (!_isSubscriberRole) {
+      return configuredGroup;
+    }
+
+    return switch (choice.definition.type) {
+      'send_money_same_network' ||
+      'send_money_cross_network' =>
+        'Transfer Money',
+      'buy_airtime' => 'Buy Airtime',
+      'buy_data' || 'buy_mashup' => 'Buy Data',
+      _ => configuredGroup,
+    };
+  }
+
+  String _availableChoiceTitle(_QuickActionChoice choice) {
+    if (!_isSubscriberRole) {
+      return choice.displayLabel;
+    }
+
+    return switch (choice.definition.type) {
+      'send_money_same_network' => 'Same Network',
+      'send_money_cross_network' => 'Other Network',
+      'buy_mashup' => 'MashUp',
+      _ => choice.displayLabel,
+    };
+  }
+
   List<Widget> _buildGroupedAvailableActions(BuildContext context) {
     final grouped = <String, List<_QuickActionChoice>>{};
 
     for (final choice in _availableChoices) {
-      final group = choice.definition.quickActionGroup.isEmpty
-          ? 'Other Services'
-          : choice.definition.quickActionGroup;
+      final group = _availableGroupLabel(choice);
 
       grouped.putIfAbsent(group, () => <_QuickActionChoice>[]).add(choice);
     }
@@ -1393,7 +1424,7 @@ class _QuickActionCustomizationScreenState
               color: checked ? AppTheme.primaryColor : context.appSecondaryText,
             ),
             title: Text(
-              choice.displayLabel,
+              _availableChoiceTitle(choice),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -1512,13 +1543,11 @@ class _QuickActionPreview extends StatelessWidget {
         final preference = visible[index];
         final definition = _find(preference.actionKey);
 
-        final icon =
-            quickActionIconFromKey(preference.iconKey) ??
+        final icon = quickActionIconFromKey(preference.iconKey) ??
             definition?.icon ??
             quickActionCatalogIcon(preference.actionKey);
 
-        final defaultLabel =
-            definition?.displayLabel ??
+        final defaultLabel = definition?.displayLabel ??
             quickActionTransactionLabel(preference.actionKey);
 
         previewItems.add(

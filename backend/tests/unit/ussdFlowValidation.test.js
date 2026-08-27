@@ -15,6 +15,38 @@ describe('USSD Flow validation', () => {
     },
   ];
 
+  it('accepts Direct USSD String with zero interactive steps', () => {
+    expect(
+      validateFlowSteps([], {
+        executionMode: 'direct',
+      })
+    ).toBeNull();
+  });
+
+  it('rejects interactive steps inside Direct USSD String mode', () => {
+    expect(
+      validateFlowSteps(baseSteps(), {
+        executionMode: 'direct',
+      })
+    ).toContain('must not contain interactive steps');
+  });
+
+  it('keeps empty Interactive Flow invalid', () => {
+    expect(
+      validateFlowSteps([], {
+        executionMode: 'interactive',
+      })
+    ).toContain('At least one step is required');
+  });
+
+  it('rejects unknown execution modes', () => {
+    expect(
+      validateFlowSteps([], {
+        executionMode: 'future_mode',
+      })
+    ).toContain('execution_mode must be interactive or direct');
+  });
+
   it('accepts a normal flow containing a PIN prompt', () => {
     expect(validateFlowSteps(baseSteps())).toBeNull();
   });

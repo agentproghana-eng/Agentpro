@@ -16,6 +16,53 @@ Map<String, dynamic> step(
 void main() {
   metadataValidationTests();
   group('USSD Flow draft validation', () {
+    test('accepts Direct USSD String without interactive steps', () {
+      final result = validateUssdFlowDraftSteps(
+        const [],
+        executionMode: 'direct',
+      );
+
+      expect(result, isNull);
+    });
+
+    test('rejects interactive steps in Direct USSD String mode', () {
+      final result = validateUssdFlowDraftSteps(
+        [
+          step('pin_prompt'),
+        ],
+        executionMode: 'direct',
+      );
+
+      expect(
+        result,
+        contains('must not contain interactive steps'),
+      );
+    });
+
+    test('keeps empty Interactive Flow invalid', () {
+      final result = validateUssdFlowDraftSteps(
+        const [],
+        executionMode: 'interactive',
+      );
+
+      expect(
+        result,
+        contains('At least one step is required'),
+      );
+    });
+
+    test('rejects unknown execution mode', () {
+      final result = validateUssdFlowDraftSteps(
+        const [],
+        executionMode: 'future_mode',
+      );
+
+      expect(
+        result,
+        contains('Execution mode must be'),
+      );
+    });
+
     test('accepts a safe flow ending at PIN', () {
       final result = validateUssdFlowDraftSteps([
         step('send_digit', value: '1'),
