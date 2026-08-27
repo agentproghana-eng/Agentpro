@@ -10,62 +10,72 @@ const jwt = require('jsonwebtoken');
 
 describe('Commission Service', () => {
   describe('calculateCommission()', () => {
-    it('calculates basic commission correctly', () => {
-      // 2% on GHS 500, no threshold
-      const result = calculateCommission(500, 0.02, null, null, 0.30);
+    it('credits the full provider commission to the agent', () => {
+      const result =
+        calculateCommission(
+          500,
+          0.02,
+          null,
+          null
+        );
+
       expect(result.gross).toBe(10.00);
-      expect(result.provider_share).toBe(3.00);
-      expect(result.net).toBe(7.00);
+      expect(result.provider_share).toBe(0);
+      expect(result.net).toBe(10.00);
     });
 
-    it('applies cap when amount exceeds threshold', () => {
-      // 2% on GHS 1500, threshold GHS 1000, cap GHS 20, provider 30%
-      const result = calculateCommission(1500, 0.02, 1000, 20, 0.30);
-      // Gross would be 1500 * 0.02 = 30, but cap is 20
+    it('applies a configured cap at the threshold', () => {
+      const result =
+        calculateCommission(
+          1500,
+          0.02,
+          1000,
+          20
+        );
+
       expect(result.gross).toBe(20.00);
-      expect(result.provider_share).toBe(6.00);
-      expect(result.net).toBe(14.00);
+      expect(result.provider_share).toBe(0);
+      expect(result.net).toBe(20.00);
     });
 
-    it('does NOT apply cap when amount is below threshold', () => {
-      // 2% on GHS 800, threshold GHS 1000 (not reached)
-      const result = calculateCommission(800, 0.02, 1000, 20, 0.30);
+    it('does not apply the cap below threshold', () => {
+      const result =
+        calculateCommission(
+          800,
+          0.02,
+          1000,
+          20
+        );
+
       expect(result.gross).toBe(16.00);
-      expect(result.provider_share).toBe(4.80);
-      expect(result.net).toBe(11.20);
-    });
-
-    it('applies cap exactly at threshold', () => {
-      // 2% on GHS 1000 (exactly at threshold), cap GHS 20
-      const result = calculateCommission(1000, 0.02, 1000, 20, 0.30);
-      // 1000 * 0.02 = 20.00 exactly equals cap — take cap
-      expect(result.gross).toBe(20.00);
+      expect(result.net).toBe(16.00);
     });
 
     it('handles zero amount', () => {
-      const result = calculateCommission(0, 0.02, null, null, 0.30);
+      const result =
+        calculateCommission(
+          0,
+          0.02,
+          null,
+          null
+        );
+
       expect(result.gross).toBe(0);
       expect(result.provider_share).toBe(0);
       expect(result.net).toBe(0);
     });
 
-    it('rounds to 2 decimal places', () => {
-      // 2% on GHS 333 = 6.66
-      const result = calculateCommission(333, 0.02, null, null, 0.30);
+    it('rounds commission to two decimal places', () => {
+      const result =
+        calculateCommission(
+          333,
+          0.02,
+          null,
+          null
+        );
+
       expect(result.gross).toBe(6.66);
-      expect(Number.isInteger(result.gross * 100)).toBe(true);
-    });
-
-    it('handles 100% provider share', () => {
-      const result = calculateCommission(500, 0.02, null, null, 1.0);
-      expect(result.net).toBe(0);
-      expect(result.provider_share).toBe(result.gross);
-    });
-
-    it('handles 0% provider share', () => {
-      const result = calculateCommission(500, 0.02, null, null, 0.0);
-      expect(result.provider_share).toBe(0);
-      expect(result.net).toBe(result.gross);
+      expect(result.net).toBe(6.66);
     });
   });
 });

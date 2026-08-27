@@ -18,12 +18,12 @@ void main() {
       final phone = source.indexOf('// 1. PHONE NUMBER');
       final amount = source.indexOf('// 2. AMOUNT');
       final reference = source.indexOf('// 3. REFERENCE');
-      final charges = source.indexOf('// 4. TRANSFER CHARGES');
+      final serviceFee = source.indexOf('// 4. AGENT SERVICE FEE');
 
       expect(phone, greaterThanOrEqualTo(0));
       expect(amount, greaterThan(phone));
       expect(reference, greaterThan(amount));
-      expect(charges, greaterThan(reference));
+      expect(serviceFee, greaterThan(reference));
     });
 
     test('normal phone fields are labelled Phone Number', () {

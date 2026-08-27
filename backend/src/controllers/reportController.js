@@ -162,6 +162,22 @@ async function fetchTransactions(filters, userContext) {
     query(
       `SELECT
          COUNT(*) as count,
+         COUNT(
+           CASE
+             WHEN t.status = 'success'
+             THEN 1
+           END
+         ) as successful_transactions,
+         COALESCE(
+           SUM(
+             CASE
+               WHEN t.status = 'success'
+               THEN t.amount
+               ELSE 0
+             END
+           ),
+           0
+         ) as total_volume,
          COALESCE(
            SUM(
              CASE
@@ -176,14 +192,44 @@ async function fetchTransactions(filters, userContext) {
          COALESCE(
            SUM(
              CASE
-               WHEN t.status = 'success' THEN cm.net_commission
+               WHEN t.status = 'success'
+               THEN cm.net_commission
                ELSE 0
              END
            ),
            0
          ) as total_commission,
+         COALESCE(
+           SUM(
+             CASE
+               WHEN t.status = 'success'
+                AND (
+                  (
+                    t.provider::text = 'mtn'
+                    AND t.transaction_type::text = 'send_money'
+                  )
+                  OR
+                  (
+                    t.provider::text IN ('telecel', 'at_money')
+                    AND t.transaction_type::text = 'cash_in'
+                  )
+                )
+               THEN t.fee
+               ELSE 0
+             END
+           ),
+           0
+         ) as total_service_fees,
          ROUND(
-           100.0 * COUNT(CASE WHEN t.status = 'success' THEN 1 END) / NULLIF(COUNT(*), 0), 1
+           100.0 *
+           COUNT(
+             CASE
+               WHEN t.status = 'success'
+               THEN 1
+             END
+           ) /
+           NULLIF(COUNT(*), 0),
+           1
          ) as success_rate
        FROM transactions t
        LEFT JOIN commissions cm ON cm.transaction_id = t.id
@@ -192,7 +238,32 @@ async function fetchTransactions(filters, userContext) {
     ),
   ]);
 
-  return { transactions: txResult.rows, summary: summaryResult.rows[0] };
+  const rawSummary =
+    summaryResult.rows[0] || {};
+
+  const providerCommission =
+    parseFloat(
+      rawSummary.total_commission || 0
+    );
+
+  const agentServiceFees =
+    parseFloat(
+      rawSummary.total_service_fees || 0
+    );
+
+  return {
+    transactions: txResult.rows,
+    summary: {
+      ...rawSummary,
+      provider_commission:
+        providerCommission,
+      agent_service_fees:
+        agentServiceFees,
+      gross_earnings:
+        providerCommission +
+        agentServiceFees,
+    },
+  };
 }
 
 
@@ -510,11 +581,32 @@ exports.transactionReport = async (req, res) => {
       req.user
     );
 
-    const periodLabel = period || `${resolvedFrom?.slice(0, 10)} to ${resolvedTo?.slice(0, 10)}`;
-    const branchName = await resolveBranchName(branch_id, req.user);
-    const title = branchName
-      ? `Transaction Report — ${branchName} — ${periodLabel}`
-      : `Transaction Report — ${periodLabel}`;
+    const branchName =
+      await resolveBranchName(
+        branch_id,
+        req.user
+      );
+
+    const reportName =
+      period === 'today'
+        ? 'Daily Business Transaction Report'
+        : period === 'week'
+          ? 'Weekly Business Transaction Report'
+          : period === 'month'
+            ? 'Monthly Business Transaction Report'
+            : period === 'year'
+              ? 'Annual Business Transaction Report'
+              : 'Business Transaction Report';
+
+    const title = reportName;
+
+    const reportFilters = {
+      from_date: resolvedFrom,
+      to_date: resolvedTo,
+      period,
+      scope_label:
+        branchName || 'All Branches',
+    };
 
     if (format === 'csv') {
       const csv = generateCSV(transactions, [
@@ -526,8 +618,8 @@ exports.transactionReport = async (req, res) => {
         { label: 'Customer Phone', key: 'customer_phone' },
         { label: 'Customer Name', key: 'customer_name' },
         { label: 'Amount (GHS)', key: 'amount' },
-        { label: 'Transfer Charges (GHS)', key: 'fee' },
-        { label: 'Commission (GHS)', key: 'net_commission' },
+        { label: 'Agent Service Fee (GHS)', key: 'fee' },
+        { label: 'Provider Commission (GHS)', key: 'net_commission' },
         { label: 'Status', key: 'status' },
         { label: 'Agent', key: 'agent_name' },
         { label: 'Branch', key: 'branch_name' },
@@ -538,14 +630,24 @@ exports.transactionReport = async (req, res) => {
     }
 
     if (format === 'excel') {
-      const buffer = await generateTransactionReportExcel({ transactions, summary, title });
+      const buffer = await generateTransactionReportExcel({
+        transactions,
+        filters: reportFilters,
+        summary,
+        title,
+      });
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', `attachment; filename="transactions_${Date.now()}.xlsx"`);
       return res.send(buffer);
     }
 
     // Default: PDF
-    const buffer = await generateTransactionReportPDF({ transactions, summary, title });
+    const buffer = await generateTransactionReportPDF({
+      transactions,
+      filters: reportFilters,
+      summary,
+      title,
+    });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="transactions_${Date.now()}.pdf"`);
     return res.send(buffer);
@@ -604,16 +706,16 @@ exports.commissionReport = async (req, res) => {
 
     const branchName = await resolveBranchName(branch_id, req.user);
     const title = branchName
-      ? `Commission Report — ${branchName} — ${period || 'Custom Period'}`
-      : `Commission Report — ${period || 'Custom Period'}`;
+      ? `Provider Commission Report — ${branchName} — ${period || 'Custom Period'}`
+      : `Provider Commission Report — ${period || 'Custom Period'}`;
 
     if (format === 'csv') {
       const csv = generateCSV(data, [
         { label: 'Period', key: 'period', getValue: r => r.period ? new Date(r.period).toLocaleDateString('en-GH') : '' },
         { label: 'Transactions', key: 'transaction_count' },
-        { label: 'Gross Commission (GHS)', key: 'total_gross' },
-        { label: 'Provider Share (GHS)', key: 'total_provider_share' },
-        { label: 'Net Commission (GHS)', key: 'total_net' },
+        { label: 'Provider Commission (GHS)', key: 'total_gross' },
+        { label: 'Legacy Deduction (GHS)', key: 'total_provider_share' },
+        { label: 'Credited to Agent (GHS)', key: 'total_net' },
       ]);
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', `attachment; filename="commissions_${Date.now()}.csv"`);
@@ -729,8 +831,7 @@ exports.dashboardSummary = async (req, res) => {
         `SELECT
                 COUNT(
                   CASE
-                    WHEN t.status = 'success'
-                     AND t.transaction_type::text = ANY($2::text[])
+                    WHEN t.transaction_type::text = ANY($2::text[])
                     THEN 1
                   END
                 ) as customer_transaction_count,
@@ -748,13 +849,61 @@ exports.dashboardSummary = async (req, res) => {
                 COALESCE(
                   SUM(
                     CASE
-                      WHEN t.status = 'success' THEN cm.net_commission
+                      WHEN t.status = 'success'
+                      THEN cm.net_commission
                       ELSE 0
                     END
                   ),
                   0
                 ) as commission,
-                COUNT(CASE WHEN t.status = 'success' THEN 1 END) as success_count
+                COALESCE(
+                  SUM(
+                    CASE
+                      WHEN t.status = 'success'
+                       AND (
+                         (
+                           t.provider::text = 'mtn'
+                           AND t.transaction_type::text = 'send_money'
+                         )
+                         OR
+                         (
+                           t.provider::text IN ('telecel', 'at_money')
+                           AND t.transaction_type::text = 'cash_in'
+                         )
+                       )
+                      THEN t.fee
+                      ELSE 0
+                    END
+                  ),
+                  0
+                ) as agent_service_fees,
+                COUNT(
+                  CASE
+                    WHEN t.status = 'success'
+                     AND t.transaction_type::text = ANY($2::text[])
+                    THEN 1
+                  END
+                ) as success_count,
+                ROUND(
+                  100.0 *
+                  COUNT(
+                    CASE
+                      WHEN t.status = 'success'
+                       AND t.transaction_type::text = ANY($2::text[])
+                      THEN 1
+                    END
+                  ) /
+                  NULLIF(
+                    COUNT(
+                      CASE
+                        WHEN t.transaction_type::text = ANY($2::text[])
+                        THEN 1
+                      END
+                    ),
+                    0
+                  ),
+                  1
+                ) as success_rate
          FROM transactions t
          LEFT JOIN commissions cm ON cm.transaction_id = t.id
          WHERE t.created_at >= $1 ${aggregateScopeSql}`,
@@ -805,25 +954,67 @@ exports.dashboardSummary = async (req, res) => {
       ),
     ]);
 
+    const todayRow =
+      todayTx.rows[0] || {};
+
+    const todayProviderCommission =
+      parseFloat(
+        todayRow.commission || 0
+      );
+
+    const todayAgentServiceFees =
+      parseFloat(
+        todayRow.agent_service_fees || 0
+      );
+
+    const todayGrossEarnings =
+      todayProviderCommission +
+      todayAgentServiceFees;
+
+    const todaySuccessRate =
+      parseFloat(
+        todayRow.success_rate || 0
+      );
+
     res.json({
       success: true,
       data: {
-        today_volume: parseFloat(todayTx.rows[0].customer_volume),
-        today_commission: parseFloat(todayTx.rows[0].commission),
+        today_volume: parseFloat(
+          todayRow.customer_volume || 0
+        ),
+        today_commission:
+          todayProviderCommission,
+        today_provider_commission:
+          todayProviderCommission,
+        today_agent_service_fees:
+          todayAgentServiceFees,
+        today_gross_earnings:
+          todayGrossEarnings,
+        today_success_rate:
+          todaySuccessRate,
         today_transactions: parseInt(
-          todayTx.rows[0].customer_transaction_count
+          todayRow.customer_transaction_count || 0
         ),
         today: {
           transaction_count: parseInt(
-            todayTx.rows[0].customer_transaction_count
+            todayRow.customer_transaction_count || 0
           ),
           total_amount: parseFloat(
-            todayTx.rows[0].customer_volume
+            todayRow.customer_volume || 0
           ),
-          net_commission: parseFloat(
-            todayTx.rows[0].commission
+          net_commission:
+            todayProviderCommission,
+          provider_commission:
+            todayProviderCommission,
+          agent_service_fees:
+            todayAgentServiceFees,
+          gross_earnings:
+            todayGrossEarnings,
+          success_rate:
+            todaySuccessRate,
+          success_count: parseInt(
+            todayRow.success_count || 0
           ),
-          success_count: parseInt(todayTx.rows[0].success_count),
         },
         this_month: {
           transaction_count: parseInt(

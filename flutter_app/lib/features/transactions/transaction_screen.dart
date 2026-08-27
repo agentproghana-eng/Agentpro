@@ -138,7 +138,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
     _scheduleFlowPreload(immediate: true);
 
     _amountCtrl.addListener(() {
-      if (!_isTransferChargeFlow || !_feeAutoCalculated) return;
+      if (!_isAgentServiceFeeFlow || !_feeAutoCalculated) return;
       final amount = double.tryParse(_amountCtrl.text.replaceAll(',', '')) ?? 0;
       final fee = amount * 0.01;
       _feeCtrl.text = fee > 0 ? fee.toStringAsFixed(2) : '';
@@ -233,9 +233,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
       widget.transactionType == 'cash_in' &&
       (_selectedProvider == 'telecel' || _selectedProvider == 'at_money');
 
-  // Transfer Charges default to 1% but remain editable because the
-  // provider's actual charge can vary.
-  bool get _isTransferChargeFlow => _isMtnCashIn || _isDeposit;
+  // Agent Service Fee defaults to 1% but remains editable because the
+  // business may charge the customer a different service fee.
+  bool get _isAgentServiceFeeFlow => _isMtnCashIn || _isDeposit;
 
   // Telecel/AirtelTigo Cash Out: e-cash moves directly SIM-to-SIM,
   // invisible to USSD automation. No dial happens at all for this
@@ -735,7 +735,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'account_number': '',
         'payment_reference': _referenceCtrl.text.trim(),
         'merchant_id': _merchantIdCtrl.text.trim(),
-        'fee': _isTransferChargeFlow
+        'fee': _isAgentServiceFeeFlow
             ? (double.tryParse(_feeCtrl.text.replaceAll(',', '')) ?? 0)
             : 0,
         'notes': '',
@@ -798,7 +798,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
       'account_number': '',
       'payment_reference': _referenceCtrl.text.trim(),
       'merchant_id': _merchantIdCtrl.text.trim(),
-      'fee': _isTransferChargeFlow
+      'fee': _isAgentServiceFeeFlow
           ? (double.tryParse(_feeCtrl.text.replaceAll(',', '')) ?? 0)
           : 0,
       'notes': '',
@@ -1814,9 +1814,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 const SizedBox(height: 14),
               ],
 
-              // 4. TRANSFER CHARGES — only when AgentPro records a
-              // provider transfer charge for this transaction.
-              if (_isTransferChargeFlow) ...[
+              // 4. AGENT SERVICE FEE — only for Cash In / Deposit.
+              // This is business income collected from the customer.
+              if (_isAgentServiceFeeFlow) ...[
                 TextFormField(
                   controller: _feeCtrl,
                   keyboardType: const TextInputType.numberWithOptions(
@@ -1828,7 +1828,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     ),
                   ],
                   decoration: InputDecoration(
-                    labelText: 'Transfer Charges (GH₵)',
+                    labelText: 'Agent Service Fee (GH₵)',
                     hintText: '0.00',
                     prefixIcon: const Icon(Icons.receipt_long_outlined),
                     prefixText: 'GH₵  ',
@@ -1838,7 +1838,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     filled: true,
                     fillColor: context.appSurface,
                     helperText:
-                        'Defaults to 1% • edit if the actual charge differs',
+                        'Defaults to 1% • edit if your business charge differs',
                   ),
                   onChanged: (_) => _feeAutoCalculated = false,
                   validator: (v) {
@@ -1849,7 +1849,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     final n = double.tryParse(v);
 
                     if (n == null || n < 0) {
-                      return 'Enter a valid charge';
+                      return 'Enter a valid service fee';
                     }
 
                     return null;

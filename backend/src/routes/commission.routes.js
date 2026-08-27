@@ -41,15 +41,56 @@ router.get('/rules', authorize('superuser', 'business_owner'), async (req, res) 
 
 // Create commission rule (superuser only)
 router.post('/rules', authorize('superuser'), async (req, res) => {
-  const { company_id, provider, transaction_type, rate_percent, threshold_amount, cap_amount, provider_share_percent, effective_from } = req.body;
+  const {
+    company_id,
+    provider,
+    transaction_type,
+    rate_percent,
+    threshold_amount,
+    cap_amount,
+    effective_from,
+  } = req.body;
+
   try {
     const result = await query(
-      `INSERT INTO commission_rules (company_id, provider, transaction_type, rate_percent, threshold_amount, cap_amount, provider_share_percent, effective_from, approved_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-      [company_id || null, provider || null, transaction_type || null, rate_percent, threshold_amount, cap_amount, provider_share_percent || 0.30, effective_from || new Date(), req.user.id]
+      `INSERT INTO commission_rules (
+         company_id,
+         provider,
+         transaction_type,
+         rate_percent,
+         threshold_amount,
+         cap_amount,
+         provider_share_percent,
+         effective_from,
+         approved_by
+       )
+       VALUES (
+         $1, $2, $3, $4, $5, $6, $7, $8, $9
+       )
+       RETURNING *`,
+      [
+        company_id || null,
+        provider || null,
+        transaction_type || null,
+        rate_percent,
+        threshold_amount,
+        cap_amount,
+        0,
+        effective_from || new Date(),
+        req.user.id,
+      ]
     );
-    res.status(201).json({ success: true, data: result.rows[0] });
-  } catch (e) { res.status(500).json({ success: false, message: 'Failed to create rule' }); }
+
+    res.status(201).json({
+      success: true,
+      data: result.rows[0],
+    });
+  } catch (e) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create rule',
+    });
+  }
 });
 
 // Get commission summary

@@ -106,6 +106,7 @@ describe('Shift canonical cash drawer accounting', () => {
       company_id: 'company-1',
       status: 'open',
       opened_at: '2026-08-10T05:00:00.000Z',
+      opening_cash_variance: '10.00',
     };
 
     query
@@ -188,6 +189,9 @@ describe('Shift canonical cash drawer accounting', () => {
         closing_cash_expected: '410.00',
         closing_cash_actual: '425.00',
         variance: '15.00',
+        opening_ledger_variance: 10,
+        closing_ledger_variance: 15,
+        net_shift_variance: 5,
         flagged: false,
         threshold: 20,
       }),

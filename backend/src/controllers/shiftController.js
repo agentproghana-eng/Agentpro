@@ -649,10 +649,45 @@ exports.closeShift = async (req, res) => {
 
     const threshold = await getVarianceThreshold();
 
-    const flagged =
-      Math.abs(closed.variance) >= threshold;
+    const openingLedgerVariance =
+      Number(
+        closed.opening_cash_variance || 0
+      );
 
-    res.json({ success: true, data: { ...closed, flagged, threshold } });
+    const closingLedgerVariance =
+      Number(
+        closed.closing_cash_variance ??
+        closed.variance ??
+        0
+      );
+
+    const netShiftVariance =
+      Math.round(
+        (
+          closingLedgerVariance -
+          openingLedgerVariance +
+          Number.EPSILON
+        ) * 100
+      ) / 100;
+
+    const flagged =
+      Math.abs(netShiftVariance) >=
+      threshold;
+
+    res.json({
+      success: true,
+      data: {
+        ...closed,
+        opening_ledger_variance:
+          openingLedgerVariance,
+        closing_ledger_variance:
+          closingLedgerVariance,
+        net_shift_variance:
+          netShiftVariance,
+        flagged,
+        threshold,
+      },
+    });
   } catch (error) {
     logger.error('Close shift error:', error);
 
@@ -732,7 +767,17 @@ exports.listShifts = async (req, res) => {
       flagged_only === 'true'
     ) {
       conditions.push(
-        `ABS(s.variance) >= $${idx++}`
+        `ABS(
+           COALESCE(
+             s.closing_cash_variance,
+             s.variance,
+             0
+           ) -
+           COALESCE(
+             s.opening_cash_variance,
+             0
+           )
+         ) >= $${idx++}`
       );
       params.push(threshold);
     }
@@ -741,7 +786,31 @@ exports.listShifts = async (req, res) => {
 
     const [data, count] = await Promise.all([
       query(
-        `SELECT s.*, u.first_name, u.last_name, b.name as branch_name
+        `SELECT
+           s.*,
+           COALESCE(
+             s.opening_cash_variance,
+             0
+           ) AS opening_ledger_variance,
+           COALESCE(
+             s.closing_cash_variance,
+             s.variance,
+             0
+           ) AS closing_ledger_variance,
+           (
+             COALESCE(
+               s.closing_cash_variance,
+               s.variance,
+               0
+             ) -
+             COALESCE(
+               s.opening_cash_variance,
+               0
+             )
+           ) AS net_shift_variance,
+           u.first_name,
+           u.last_name,
+           b.name as branch_name
          FROM shifts s
          JOIN users u ON u.id = s.agent_id
          LEFT JOIN branches b ON b.id = s.branch_id
@@ -755,7 +824,15 @@ exports.listShifts = async (req, res) => {
 
     res.json({
       success: true,
-      data: data.rows.map(r => ({ ...r, flagged: Math.abs(r.variance) >= threshold })),
+      data: data.rows.map(r => ({
+        ...r,
+        flagged:
+          Math.abs(
+            Number(
+              r.net_shift_variance || 0
+            )
+          ) >= threshold,
+      })),
       meta: { total: parseInt(count.rows[0].count), page: parseInt(page), limit: parseInt(limit), threshold },
     });
   } catch (error) {

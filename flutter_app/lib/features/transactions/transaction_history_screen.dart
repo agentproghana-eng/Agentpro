@@ -16,7 +16,7 @@ import '../../core/services/sim_card_service.dart';
 // standalone filter shown only to Owner/Manager (Agents only ever see
 // their own transactions, so a branch picker is meaningless for them -
 // backend already scopes it that way regardless). Sort is a separate
-// control (Date/Amount/Commission/Transfer Charge, each ascending or
+// control (Date/Amount/Commission/Agent Service Fee, each ascending or
 // descending) - deliberately NOT combined with Provider, since sorting
 // alphabetically by provider name isn't a meaningful operation the way
 // sorting by a numeric field is.
@@ -92,7 +92,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     {'value': 'date', 'label': 'Date'},
     {'value': 'amount', 'label': 'Amount'},
     {'value': 'commission', 'label': 'Commission'},
-    {'value': 'fee', 'label': 'Transfer Charges'},
+    {'value': 'fee', 'label': 'Agent Service Fees'},
   ];
 
   @override

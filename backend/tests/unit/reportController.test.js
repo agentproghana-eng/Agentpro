@@ -59,8 +59,11 @@ describe('reportController transaction report accounting', () => {
       .mockResolvedValueOnce({
         rows: [{
           count: '4',
+          successful_transactions: '4',
+          total_volume: '7400.00',
           total_amount: '100.00',
           total_commission: '1.00',
+          total_service_fees: '2.00',
           success_rate: '100.0',
         }],
       });
@@ -111,9 +114,25 @@ describe('reportController transaction report accounting', () => {
       't.transaction_type::text = ANY($4::text[])',
     );
 
-    // Commission is recognized only for successful transactions.
+    // Provider commission is recognized only for successful transactions.
     expect(summarySql).toMatch(
-      /WHEN t\.status = 'success' THEN cm\.net_commission/
+      /WHEN t\.status = 'success'\s+THEN cm\.net_commission/
+    );
+
+    expect(summarySql).toContain(
+      ') as total_volume'
+    );
+
+    expect(summarySql).toContain(
+      ') as total_service_fees'
+    );
+
+    expect(summarySql).toContain(
+      "t.provider::text = 'mtn'"
+    );
+
+    expect(summarySql).toContain(
+      "t.transaction_type::text = 'send_money'"
     );
 
     expect(summaryParams).toEqual([
@@ -146,14 +165,16 @@ describe('reportController dashboard accounting', () => {
     jest.clearAllMocks();
   });
 
-  test('returns explicit today customer volume, commission, and customer transaction count', async () => {
+  test('returns explicit today volume, earnings, success rate, and transaction count', async () => {
     mockQuery
       .mockResolvedValueOnce({
         rows: [{
           customer_transaction_count: '3',
           customer_volume: '450.00',
           commission: '6.50',
-          success_count: '5',
+          agent_service_fees: '2.50',
+          success_count: '2',
+          success_rate: '66.7',
         }],
       })
       .mockResolvedValueOnce({
@@ -192,7 +213,7 @@ describe('reportController dashboard accounting', () => {
 
     // Today's commission follows the same settled-transaction rule.
     expect(todaySql).toMatch(
-      /WHEN t\.status = 'success' THEN cm\.net_commission/
+      /WHEN t\.status = 'success'\s+THEN cm\.net_commission/
     );
 
     expect(todayParams[1]).toEqual(
@@ -204,6 +225,10 @@ describe('reportController dashboard accounting', () => {
       data: expect.objectContaining({
         today_volume: 450,
         today_commission: 6.5,
+        today_provider_commission: 6.5,
+        today_agent_service_fees: 2.5,
+        today_gross_earnings: 9,
+        today_success_rate: 66.7,
         today_transactions: 3,
       }),
     });

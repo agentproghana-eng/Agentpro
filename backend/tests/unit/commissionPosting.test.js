@@ -17,7 +17,7 @@ function makeTransaction(overrides = {}) {
     branch_id: 'branch-1',
     company_id: 'company-1',
     provider: 'mtn',
-    transaction_type: 'cash_in',
+    transaction_type: 'send_money',
     amount: '100.00',
     sim_iccid: '8901000000000000001',
     sim_slot: 0,
@@ -40,7 +40,7 @@ beforeEach(() => {
 });
 
 describe('Commission ledger posting', () => {
-  it('posts net commission to the exact identified SIM wallet', async () => {
+  it('posts full provider commission to the exact identified SIM wallet', async () => {
     const client = makeClient();
 
     client.query
@@ -82,8 +82,8 @@ describe('Commission ledger posting', () => {
     expect(result).toEqual({
       commissionId: 'commission-1',
       gross: 2,
-      providerShare: 0.6,
-      net: 1.4,
+      providerShare: 0,
+      net: 2,
       simWalletId: 'wallet-1'
     });
 
@@ -114,7 +114,7 @@ describe('Commission ledger posting', () => {
       );
 
     expect(walletUpdate[1]).toEqual([
-      11.4,
+      12,
       'wallet-1',
       'agent-1',
       'mtn'
@@ -130,9 +130,9 @@ describe('Commission ledger posting', () => {
     expect(movement[1]).toEqual([
       'agent-1',
       'mtn',
-      1.4,
+      2,
       10,
-      11.4,
+      12,
       'APG-TX-001',
       'tx-1',
       'wallet-1',
@@ -203,9 +203,9 @@ describe('Commission ledger posting', () => {
     expect(movement[1]).toEqual([
       'agent-1',
       'mtn',
-      1.4,
+      2,
       5,
-      6.4,
+      7,
       'APG-TX-001',
       'tx-1',
       'wallet-u1',
@@ -217,45 +217,24 @@ describe('Commission ledger posting', () => {
     ]);
   });
 
-  it('records commission metadata but no wallet movement when net is zero', async () => {
+  it('does not post provider commission for unrelated services', async () => {
     const client = makeClient();
 
-    client.query
-      .mockResolvedValueOnce({
-        rows: [{
-          id: 'rule-1',
-          rate_percent: '0.0200',
-          threshold_amount: null,
-          cap_amount: null,
-          provider_share_percent: '1.0000'
-        }]
-      })
-      .mockResolvedValueOnce({
-        rows: [{ id: 'commission-1' }]
-      });
+    const result =
+      await calculateAndPostCommission(
+        client,
+        makeTransaction({
+          transaction_type: 'airtime'
+        }),
+        'agent-1'
+      );
 
-    const result = await calculateAndPostCommission(
-      client,
-      makeTransaction(),
-      'agent-1'
-    );
-
-    expect(result).toEqual({
-      commissionId: 'commission-1',
-      gross: 2,
-      providerShare: 2,
-      net: 0
-    });
+    expect(result).toBeNull();
+    expect(client.query).not.toHaveBeenCalled();
 
     expect(
       mockGetOrCreateAgentSimWallet
     ).not.toHaveBeenCalled();
-
-    expect(
-      client.query.mock.calls.some(([sql]) =>
-        String(sql).includes('agent_sim_wallets')
-      )
-    ).toBe(false);
   });
 
   it('does nothing when no commission rule applies', async () => {
