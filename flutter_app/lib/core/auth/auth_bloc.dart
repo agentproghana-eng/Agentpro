@@ -7,6 +7,7 @@ import '../services/storage_service.dart';
 import '../api/api_client.dart';
 import '../services/biometric_service.dart';
 import '../services/notification_service.dart';
+import '../services/offline_queue_service.dart';
 
 // ── Events ────────────────────────────────────────────────────
 abstract class AuthEvent {}
@@ -20,6 +21,12 @@ class AuthLoginEvent extends AuthEvent {
 }
 
 class AuthLogoutEvent extends AuthEvent {}
+
+class AuthAccountDeletedEvent extends AuthEvent {
+  final Map<String, dynamic> user;
+
+  AuthAccountDeletedEvent(this.user);
+}
 
 class AuthLockEvent extends AuthEvent {}
 
@@ -106,6 +113,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       _onSessionInvalidated,
     );
     on<AuthLogoutEvent>(_onLogout);
+    on<AuthAccountDeletedEvent>(_onAccountDeleted);
     on<AuthUpdateUserEvent>(_onUpdateUser);
 
     _sessionInvalidationSubscription =
@@ -444,6 +452,23 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await StorageService.saveUser(updatedUser);
       emit(AuthAuthenticated(updatedUser));
     }
+  }
+
+  Future<void> _onAccountDeleted(
+    AuthAccountDeletedEvent event,
+    Emitter<AuthState> emit,
+  ) async {
+    try {
+      await OfflineQueueService.purgeDeletedAccountData(event.user);
+    } catch (_) {}
+
+    try {
+      await StorageService.clearDeletedAccountData(event.user);
+    } catch (_) {
+      await StorageService.clearSession();
+    }
+
+    emit(AuthUnauthenticated());
   }
 
   @override

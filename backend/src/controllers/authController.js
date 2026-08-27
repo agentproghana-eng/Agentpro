@@ -36,6 +36,9 @@ const {
 const {
   grantPersonalTrial,
 } = require("../services/personalTrialEntitlementService");
+const {
+  deleteFile: deleteCloudinaryFile,
+} = require('../config/cloudinary');
 
 // ─── Token Helpers ───────────────────────────────────────────
 
@@ -2134,6 +2137,644 @@ exports.resetPassword = async (req, res) => {
   } catch (error) {
     logger.error('Password reset error:', error);
     res.status(500).json({ success: false, message: 'Failed to reset password' });
+  }
+};
+
+function cloudinaryPublicIdFromUrl(value) {
+  const raw = String(value || '').trim();
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(raw);
+    const marker = '/upload/';
+    const markerIndex =
+      parsed.pathname.indexOf(marker);
+
+    if (markerIndex < 0) {
+      return null;
+    }
+
+    let remainder =
+      decodeURIComponent(
+        parsed.pathname.slice(
+          markerIndex + marker.length,
+        ),
+      );
+
+    const segments =
+      remainder
+        .split('/')
+        .filter(Boolean);
+
+    if (
+      segments.length > 0 &&
+      /^v\d+$/.test(segments[0])
+    ) {
+      segments.shift();
+    }
+
+    if (segments.length === 0) {
+      return null;
+    }
+
+    const filename =
+      segments.pop();
+
+    const publicFilename =
+      filename.replace(
+        /\.[^.\/]+$/,
+        '',
+      );
+
+    if (!publicFilename) {
+      return null;
+    }
+
+    segments.push(publicFilename);
+
+    return segments.join('/');
+  } catch (_) {
+    return null;
+  }
+}
+
+function addDeletionMediaAsset(
+  assets,
+  value,
+  resourceType,
+) {
+  const publicId =
+    cloudinaryPublicIdFromUrl(value);
+
+  if (!publicId) {
+    return;
+  }
+
+  assets.push({
+    publicId,
+    resourceType,
+  });
+}
+
+exports.deleteAccount = async (
+  req,
+  res,
+) => {
+  const password =
+    String(
+      req.body?.password || '',
+    );
+
+  try {
+    const deletion =
+      await withTransaction(
+        async (client) => {
+          const userResult =
+            await client.query(
+              `SELECT
+                 id,
+                 role,
+                 company_id,
+                 password_hash,
+                 profile_image_url,
+                 account_deleted_at
+               FROM users
+               WHERE id = $1
+               FOR UPDATE`,
+              [req.user.id],
+            );
+
+          if (
+            userResult.rows.length === 0
+          ) {
+            return {
+              statusCode: 404,
+              success: false,
+              code: 'ACCOUNT_NOT_FOUND',
+              message:
+                'Account not found.',
+            };
+          }
+
+          const user =
+            userResult.rows[0];
+
+          if (
+            user.account_deleted_at
+          ) {
+            return {
+              statusCode: 410,
+              success: false,
+              code:
+                'ACCOUNT_ALREADY_DELETED',
+              message:
+                'This account has already been deleted.',
+            };
+          }
+
+          if (
+            user.role === 'superuser'
+          ) {
+            return {
+              statusCode: 403,
+              success: false,
+              code:
+                'SUPERUSER_SELF_DELETION_FORBIDDEN',
+              message:
+                'Administrator accounts cannot be deleted from the mobile app.',
+            };
+          }
+
+          const passwordValid =
+            await bcrypt.compare(
+              password,
+              user.password_hash,
+            );
+
+          if (!passwordValid) {
+            return {
+              statusCode: 401,
+              success: false,
+              code:
+                'ACCOUNT_DELETION_PASSWORD_INVALID',
+              message:
+                'Current password is incorrect.',
+            };
+          }
+
+          const openShift =
+            await client.query(
+              `SELECT id
+               FROM shifts
+               WHERE agent_id = $1
+                 AND status = 'open'
+               LIMIT 1`,
+              [user.id],
+            );
+
+          if (
+            openShift.rows.length > 0
+          ) {
+            return {
+              statusCode: 409,
+              success: false,
+              code:
+                'ACCOUNT_DELETION_OPEN_SHIFT',
+              message:
+                'Close your open shift before deleting your account.',
+            };
+          }
+
+          const replacementPassword =
+            crypto
+              .randomBytes(48)
+              .toString('hex');
+
+          const replacementPasswordHash =
+            await bcrypt.hash(
+              replacementPassword,
+              parseInt(
+                process.env.BCRYPT_ROUNDS,
+                10,
+              ) || 12,
+            );
+
+          const mediaAssets = [];
+
+          addDeletionMediaAsset(
+            mediaAssets,
+            user.profile_image_url,
+            'image',
+          );
+
+          const adMediaResult =
+            await client.query(
+              `SELECT
+                 image_urls,
+                 video_url
+               FROM advertisements
+               WHERE posted_by = $1`,
+              [user.id],
+            );
+
+          for (
+            const row
+            of adMediaResult.rows
+          ) {
+            for (
+              const imageUrl
+              of row.image_urls || []
+            ) {
+              addDeletionMediaAsset(
+                mediaAssets,
+                imageUrl,
+                'image',
+              );
+            }
+
+            addDeletionMediaAsset(
+              mediaAssets,
+              row.video_url,
+              'video',
+            );
+          }
+
+          const agentVoiceResult =
+            await client.query(
+              `SELECT audio_url
+               FROM agent_posts
+               WHERE author_id = $1
+                 AND audio_url IS NOT NULL`,
+              [user.id],
+            );
+
+          for (
+            const row
+            of agentVoiceResult.rows
+          ) {
+            addDeletionMediaAsset(
+              mediaAssets,
+              row.audio_url,
+              'video',
+            );
+          }
+
+          const personalVoiceResult =
+            await client.query(
+              `SELECT audio_url
+               FROM personal_posts
+               WHERE author_id = $1
+                 AND audio_url IS NOT NULL`,
+              [user.id],
+            );
+
+          for (
+            const row
+            of personalVoiceResult.rows
+          ) {
+            addDeletionMediaAsset(
+              mediaAssets,
+              row.audio_url,
+              'video',
+            );
+          }
+
+          await client.query(
+            `UPDATE personal_trial_entitlements
+             SET user_id = NULL
+             WHERE user_id = $1`,
+            [user.id],
+          );
+
+          await client.query(
+            `UPDATE personal_transactions
+             SET recipient_phone = NULL,
+                 sim_iccid = NULL,
+                 sim_slot = NULL,
+                 notes = NULL,
+                 failure_reason = NULL,
+                 ussd_session_log = NULL,
+                 client_operation_id = NULL,
+                 client_operation_fingerprint = NULL
+             WHERE user_id = $1`,
+            [user.id],
+          );
+
+          await client.query(
+            `UPDATE personal_subscription_payments
+             SET payment_phone = NULL,
+                 authorization_url = NULL
+             WHERE user_id = $1`,
+            [user.id],
+          );
+
+          await client.query(
+            `UPDATE agent_posts
+             SET content = '[deleted]',
+                 audio_url = NULL,
+                 status = 'removed',
+                 removed_reason =
+                   'Account deleted'
+             WHERE author_id = $1`,
+            [user.id],
+          );
+
+          await client.query(
+            `UPDATE agent_post_comments
+             SET content = '[deleted]'
+             WHERE author_id = $1`,
+            [user.id],
+          );
+
+          await client.query(
+            `UPDATE personal_posts
+             SET content = '[deleted]',
+                 audio_url = NULL,
+                 status = 'removed',
+                 removed_reason =
+                   'Account deleted'
+             WHERE author_id = $1`,
+            [user.id],
+          );
+
+          await client.query(
+            `UPDATE personal_post_comments
+             SET content = '[deleted]'
+             WHERE author_id = $1`,
+            [user.id],
+          );
+
+          await client.query(
+            `UPDATE advertisements
+             SET title = 'Deleted listing',
+                 description =
+                   'Listing removed after account deletion.',
+                 location = NULL,
+                 contact_phone = NULL,
+                 contact_email = NULL,
+                 image_urls = '{}'::TEXT[],
+                 video_url = NULL,
+                 status = CASE
+                   WHEN status IN (
+                     'draft',
+                     'pending_review',
+                     'pending_payment',
+                     'active'
+                   )
+                   THEN 'suspended'::ad_status
+                   ELSE status
+                 END,
+                 updated_at = NOW()
+             WHERE posted_by = $1`,
+            [user.id],
+          );
+
+          const deleteQueries = [
+            `DELETE FROM
+               marketplace_conversations
+             WHERE customer_id = $1
+                OR seller_id = $1`,
+            `DELETE FROM
+               marketplace_saved_ads
+             WHERE user_id = $1`,
+            `DELETE FROM
+               advertisement_views
+             WHERE viewed_by = $1`,
+            `DELETE FROM
+               ad_ratings
+             WHERE rated_by = $1`,
+            `DELETE FROM
+               agent_post_likes
+             WHERE user_id = $1`,
+            `DELETE FROM
+               agent_post_comment_reactions
+             WHERE user_id = $1`,
+            `DELETE FROM
+               personal_post_likes
+             WHERE user_id = $1`,
+            `DELETE FROM
+               personal_post_comment_reactions
+             WHERE user_id = $1`,
+            `DELETE FROM
+               agent_post_reports
+             WHERE reported_by = $1`,
+            `DELETE FROM
+               agent_comment_reports
+             WHERE reported_by = $1`,
+            `DELETE FROM
+               agent_community_blocks
+             WHERE blocker_id = $1
+                OR blocked_user_id = $1`,
+            `DELETE FROM
+               agent_saved_posts
+             WHERE user_id = $1`,
+            `DELETE FROM
+               notifications
+             WHERE user_id = $1`,
+            `DELETE FROM
+               ai_conversations
+             WHERE user_id = $1`,
+            `DELETE FROM
+               personal_subscriptions
+             WHERE user_id = $1`,
+            `DELETE FROM
+               user_sim_purposes
+             WHERE user_id = $1`,
+            `DELETE FROM
+               agent_sim_registry
+             WHERE agent_id = $1`,
+            `DELETE FROM
+               agent_ussd_overrides
+             WHERE agent_id = $1`,
+            `DELETE FROM
+               ussd_flows
+             WHERE owner_user_id = $1`,
+            `DELETE FROM
+               branch_managers
+             WHERE manager_id = $1`,
+            `DELETE FROM
+               agent_branches
+             WHERE agent_id = $1`,
+            `DELETE FROM
+               password_reset_tokens
+             WHERE user_id = $1`,
+            `DELETE FROM
+               refresh_tokens
+             WHERE user_id = $1`,
+          ];
+
+          for (
+            const sql
+            of deleteQueries
+          ) {
+            await client.query(
+              sql,
+              [user.id],
+            );
+          }
+
+          await client.query(
+            `UPDATE users
+             SET first_name = 'Deleted',
+                 last_name = 'User',
+                 email =
+                   'deleted+' ||
+                   REPLACE(
+                     id::text,
+                     '-',
+                     ''
+                   ) ||
+                   '@deleted.agentpro.invalid',
+                 phone = NULL,
+                 password_hash = $1,
+                 ghana_card_number = NULL,
+                 profile_image_url = NULL,
+                 status = 'deactivated',
+                 last_login_at = NULL,
+                 login_attempts = 0,
+                 locked_until = NULL,
+                 fcm_token = NULL,
+                 must_change_password = FALSE,
+                 telecel_operator_id = NULL,
+                 agent_quick_actions =
+                   '{}'::jsonb,
+                 personal_quick_actions =
+                   '{}'::jsonb,
+                 evd_quick_actions =
+                   '{}'::jsonb,
+                 merchant_quick_actions =
+                   '{}'::jsonb,
+                 mfa_enabled = FALSE,
+                 mfa_enabled_at = NULL,
+                 mfa_totp_secret_enc = NULL,
+                 mfa_recovery_code_hashes =
+                   '[]'::jsonb,
+                 mfa_last_totp_counter = NULL,
+                 phone_verified_at = NULL,
+                 account_deleted_at = NOW(),
+                 updated_at = NOW()
+             WHERE id = $2`,
+            [
+              replacementPasswordHash,
+              user.id,
+            ],
+          );
+
+          await auditLog({
+            userId: user.id,
+            companyId:
+              user.company_id,
+            action:
+              'ACCOUNT_DELETED',
+            entityType: 'user',
+            entityId: user.id,
+            newValues: {
+              account_deleted: true,
+              retained_records: [
+                'financial',
+                'transaction',
+                'fraud_prevention',
+                'security',
+                'audit',
+              ],
+            },
+            ipAddress: req.ip,
+            userAgent:
+              req.headers[
+                'user-agent'
+              ],
+            requestId:
+              req.requestId,
+            dbClient: client,
+            strict: true,
+          });
+
+          return {
+            statusCode: 200,
+            success: true,
+            mediaAssets,
+          };
+        },
+      );
+
+    if (!deletion.success) {
+      return res
+        .status(
+          deletion.statusCode,
+        )
+        .json({
+          success: false,
+          code: deletion.code,
+          message:
+            deletion.message,
+        });
+    }
+
+    const uniqueAssets =
+      Array.from(
+        new Map(
+          deletion.mediaAssets.map(
+            (asset) => [
+              `${asset.resourceType}:${asset.publicId}`,
+              asset,
+            ],
+          ),
+        ).values(),
+      );
+
+    let mediaCleanupFailures = 0;
+
+    if (uniqueAssets.length > 0) {
+      const cleanupResults =
+        await Promise.allSettled(
+          uniqueAssets.map(
+            (asset) =>
+              deleteCloudinaryFile(
+                asset.publicId,
+                {
+                  resource_type:
+                    asset.resourceType,
+                  invalidate: true,
+                },
+              ),
+          ),
+        );
+
+      mediaCleanupFailures =
+        cleanupResults.filter(
+          (result) =>
+            result.status ===
+            'rejected',
+        ).length;
+    }
+
+    if (
+      mediaCleanupFailures > 0
+    ) {
+      logger.error(
+        'Account deletion media cleanup incomplete',
+        {
+          failed_asset_count:
+            mediaCleanupFailures,
+          requestId:
+            req.requestId,
+        },
+      );
+    }
+
+    return res.status(200).json({
+      success: true,
+      code: 'ACCOUNT_DELETED',
+      message:
+        'Your AgentPro account has been permanently deleted.',
+      data: {
+        media_cleanup_pending:
+          mediaCleanupFailures > 0,
+        retained_record_categories: [
+          'financial',
+          'transaction',
+          'fraud_prevention',
+          'security',
+          'audit',
+        ],
+      },
+    });
+  } catch (error) {
+    logger.error(
+      'Account deletion error:',
+      error,
+    );
+
+    return res.status(500).json({
+      success: false,
+      code:
+        'ACCOUNT_DELETION_FAILED',
+      message:
+        'Your account could not be deleted. Please try again.',
+    });
   }
 };
 

@@ -246,6 +246,17 @@ describe("Personal trial grant engine", () => {
 
     const client = clientFromHandlers([
       () => ({ rows: [] }),
+      (sql, params) => {
+        expect(sql).toContain(
+          "claim_type = 'installation'",
+        );
+
+        expect(params[0]).toMatch(
+          /^[0-9a-f]{64}$/,
+        );
+
+        return { rows: [] };
+      },
       () => ({ rows: [] }),
       () => ({
         rows: [{ id: entitlementId }],
@@ -258,9 +269,13 @@ describe("Personal trial grant engine", () => {
         };
       },
       (sql, params) => {
-        expect(sql).toContain("personal_trial_identity_claims");
+        expect(sql).toContain(
+          "personal_trial_identity_claims"
+        );
 
-        expect(params[1]).toBe("installation");
+        expect(params[1]).toBe(
+          "installation"
+        );
 
         return { rows: [] };
       },

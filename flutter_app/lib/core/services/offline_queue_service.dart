@@ -534,6 +534,126 @@ class OfflineQueueService {
     return identity == null ? 0 : pendingCount(identity);
   }
 
+  static bool _belongsToUser(Map<String, dynamic> transaction, String userId) {
+    final ownerUserId = _normalizeOwnerValue(transaction['owner_user_id']);
+
+    return ownerUserId != null && ownerUserId == userId;
+  }
+
+  static List<Map<String, dynamic>> getUnresolvedTransactionsForUser(
+    Map<String, dynamic> user,
+  ) {
+    final identity = identityFromUser(user);
+
+    if (identity == null) {
+      return const [];
+    }
+
+    final transactions = _box.values
+        .map((raw) => jsonDecode(raw as String) as Map<String, dynamic>)
+        .where(
+          (transaction) =>
+              transaction['synced'] != true &&
+              _belongsToUser(transaction, identity.userId),
+        )
+        .toList();
+
+    transactions.sort((a, b) {
+      final aQueued = DateTime.tryParse(a['queued_at']?.toString() ?? '');
+
+      final bQueued = DateTime.tryParse(b['queued_at']?.toString() ?? '');
+
+      if (aQueued == null && bQueued == null) {
+        return 0;
+      }
+
+      if (aQueued == null) {
+        return 1;
+      }
+
+      if (bQueued == null) {
+        return -1;
+      }
+
+      return aQueued.compareTo(bQueued);
+    });
+
+    return transactions;
+  }
+
+  static int unresolvedCountForUser(Map<String, dynamic> user) =>
+      getUnresolvedTransactionsForUser(user).length;
+
+  static bool hasActiveSyncForUser(Map<String, dynamic> user) {
+    final identity = identityFromUser(user);
+
+    if (identity == null) {
+      return false;
+    }
+
+    final prefix = '${identity.userId}|';
+
+    return _activeSyncs.keys.any((key) => key.startsWith(prefix));
+  }
+
+  static Future<void> purgeDeletedAccountData(Map<String, dynamic> user) async {
+    final identity = identityFromUser(user);
+
+    if (identity == null) {
+      return;
+    }
+
+    if (unresolvedCountForUser(user) > 0) {
+      throw StateError(
+        'Unresolved offline transactions must be synchronized before account deletion.',
+      );
+    }
+
+    if (hasActiveSyncForUser(user)) {
+      throw StateError('Offline synchronization is still running.');
+    }
+
+    final userId = identity.userId;
+
+    final queueKeys = <dynamic>[];
+
+    for (final key in _box.keys.toList()) {
+      final raw = _box.get(key);
+
+      if (raw is! String) {
+        continue;
+      }
+
+      try {
+        final decoded = jsonDecode(raw);
+
+        if (decoded is! Map) {
+          continue;
+        }
+
+        final transaction = Map<String, dynamic>.from(decoded);
+
+        if (_belongsToUser(transaction, userId)) {
+          queueKeys.add(key);
+        }
+      } catch (_) {}
+    }
+
+    if (queueKeys.isNotEmpty) {
+      await _box.deleteAll(queueKeys);
+    }
+
+    final personalOwnerMarker = 'user:$userId';
+
+    final personalCacheKeys = _templateBox.keys
+        .where((key) => key.toString().contains(personalOwnerMarker))
+        .toList();
+
+    if (personalCacheKeys.isNotEmpty) {
+      await _templateBox.deleteAll(personalCacheKeys);
+    }
+  }
+
   static String providerLabel(String? provider) {
     return switch (provider) {
       'mtn' => 'MTN',

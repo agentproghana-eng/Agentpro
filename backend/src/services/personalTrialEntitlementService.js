@@ -186,6 +186,7 @@ async function assessPersonalTrialEligibility({
   userId,
   phone,
   phoneVerifiedAt,
+  installationId = null,
   simIccid = null,
   pepper,
 }) {
@@ -213,6 +214,17 @@ async function assessPersonalTrialEligibility({
       : hashPersonalTrialIdentity({
           claimType: "sim_iccid",
           value: simIccid,
+          pepper,
+        });
+
+  const installationClaim =
+    installationId === null ||
+    installationId === undefined ||
+    String(installationId).trim().length === 0
+      ? null
+      : hashPersonalTrialIdentity({
+          claimType: "installation",
+          value: installationId,
           pepper,
         });
 
@@ -257,6 +269,36 @@ async function assessPersonalTrialEligibility({
       return {
         eligible: false,
         reason: TrialDecisionReason.TRIAL_ALREADY_USED,
+        phoneClaim,
+        simClaim,
+      };
+    }
+  }
+
+  if (installationClaim) {
+    const durableInstallationHistory =
+      await client.query(
+        `SELECT e.id
+           FROM personal_trial_identity_claims c
+           INNER JOIN personal_trial_entitlements e
+             ON e.id = c.entitlement_id
+          WHERE c.claim_type = 'installation'
+            AND c.claim_hash = $1
+            AND c.claim_version = $2
+          LIMIT 1`,
+        [
+          installationClaim.claimHash,
+          installationClaim.claimVersion,
+        ],
+      );
+
+    if (
+      durableInstallationHistory.rows.length > 0
+    ) {
+      return {
+        eligible: false,
+        reason:
+          TrialDecisionReason.TRIAL_ALREADY_USED,
         phoneClaim,
         simClaim,
       };
@@ -325,6 +367,7 @@ async function grantPersonalTrial({
     userId,
     phone,
     phoneVerifiedAt,
+    installationId,
     simIccid,
     pepper,
   });

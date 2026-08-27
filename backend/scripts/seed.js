@@ -7,7 +7,8 @@
  * Creates:
  * 1. Superuser account
  * 2. Default USSD templates for MTN, Telecel, AT Money
- * 3. Default commission rule
+ * Commission rules are intentionally not seeded.
+ * They must be configured explicitly by provider and transaction type.
  *
  * Run: node scripts/seed.js
  */
@@ -23,7 +24,10 @@ async function seed() {
 
   await seedSuperuser();
   await seedUSSDTemplates();
-  await seedDefaultCommissionRule();
+
+  logger.info(
+    'Commission rules are not auto-seeded; configure explicit provider/type rules in the Admin Portal.'
+  );
 
   logger.info('✅ Seed complete!');
   process.exit(0);
@@ -238,27 +242,6 @@ async function seedUSSDTemplates() {
 
   logger.info(`✅ USSD templates: ${created} created, ${updated} updated, ${templates.length - created - updated} skipped (customized)`);
   logger.warn('⚠️  USSD string patterns are UNVERIFIED PLACEHOLDERS. Test against live MTN/Telecel/AT menus before production use.');
-}
-
-// ── Default Commission Rule ───────────────────────────────────
-
-async function seedDefaultCommissionRule() {
-  const exists = await query(
-    'SELECT id FROM commission_rules WHERE company_id IS NULL AND provider IS NULL AND transaction_type IS NULL'
-  );
-  if (exists.rows.length > 0) {
-    logger.info('Default commission rule already exists');
-    return;
-  }
-
-  // Global bootstrap rate: 2%, capped at GH₵20 above GH₵1000. Full configured commission belongs to the agent.
-  await query(
-    `INSERT INTO commission_rules
-       (rate_percent, threshold_amount, cap_amount, provider_share_percent, effective_from, is_active)
-     VALUES (0.0200, 1000.00, 20.00, 0.00, CURRENT_DATE, TRUE)`
-  );
-
-  logger.info('✅ Default commission rule created (2% rate, GH₵20 cap above GH₵1000)');
 }
 
 seed().catch(err => {
