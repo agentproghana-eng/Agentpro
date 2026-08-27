@@ -232,37 +232,106 @@ List<QuickActionPreference> normalizePersonalQuickActionPreferences({
     (item) => item.actionKey == 'send_money_cross_network',
   );
 
-  // Personal mode presents one Transfer Money action when both
-  // underlying network variants are available. The Personal transaction
-  // screen decides which concrete transaction type is required.
-  if (!hasSameNetwork || !hasOtherNetwork) {
-    return visible
-        .take(9)
-        .toList()
-        .asMap()
-        .entries
-        .map((entry) => entry.value.copyWith(position: entry.key))
-        .toList();
-  }
-
   final normalized = <QuickActionPreference>[];
+
   var transferMoneyInserted = false;
+  var airtimeInserted = false;
+  var dataInserted = false;
+  var mashupInserted = false;
 
   for (final preference in visible) {
-    final isTransferMoney = preference.actionKey == 'send_money_same_network' ||
-        preference.actionKey == 'send_money_cross_network';
+    final actionKey = preference.actionKey.trim();
 
-    if (isTransferMoney) {
+    final isRawTransferVariant = actionKey == 'send_money_same_network' ||
+        actionKey == 'send_money_cross_network';
+
+    if (isRawTransferVariant && hasSameNetwork && hasOtherNetwork) {
       if (!transferMoneyInserted) {
         normalized.add(
           preference.copyWith(
             actionKey: 'send_money',
             customName: 'Transfer Money',
+            clearBundleCategory: true,
+            clearRecipientMode: true,
           ),
         );
         transferMoneyInserted = true;
       }
 
+      continue;
+    }
+
+    if (actionKey == 'send_money') {
+      if (transferMoneyInserted) {
+        continue;
+      }
+
+      final existingName = preference.customName?.trim();
+
+      normalized.add(
+        preference.copyWith(
+          customName: existingName == null || existingName.isEmpty
+              ? 'Transfer Money'
+              : existingName,
+          clearBundleCategory: true,
+          clearRecipientMode: true,
+        ),
+      );
+
+      transferMoneyInserted = true;
+      continue;
+    }
+
+    if (actionKey == 'buy_airtime') {
+      if (airtimeInserted) {
+        continue;
+      }
+
+      normalized.add(
+        preference.copyWith(
+          clearBundleCategory: true,
+          clearRecipientMode: true,
+        ),
+      );
+
+      airtimeInserted = true;
+      continue;
+    }
+
+    if (actionKey == 'buy_data') {
+      if (dataInserted) {
+        continue;
+      }
+
+      normalized.add(
+        preference.copyWith(
+          clearBundleCategory: true,
+          clearRecipientMode: true,
+        ),
+      );
+
+      dataInserted = true;
+      continue;
+    }
+
+    if (actionKey == 'buy_mashup') {
+      if (mashupInserted) {
+        continue;
+      }
+
+      final existingName = preference.customName?.trim();
+
+      normalized.add(
+        preference.copyWith(
+          customName: existingName == null || existingName.isEmpty
+              ? 'MashUp'
+              : existingName,
+          clearBundleCategory: true,
+          clearRecipientMode: true,
+        ),
+      );
+
+      mashupInserted = true;
       continue;
     }
 

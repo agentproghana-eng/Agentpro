@@ -114,24 +114,66 @@ class _QuickActionCustomizationScreenState
   List<_QuickActionChoice> get _availableChoices {
     final choices = <_QuickActionChoice>[];
 
+    if (_isSubscriberRole) {
+      final hasSameNetwork = _availableDefinitions.any(
+        (definition) => definition.type == 'send_money_same_network',
+      );
+
+      final hasOtherNetwork = _availableDefinitions.any(
+        (definition) => definition.type == 'send_money_cross_network',
+      );
+
+      var transferAdded = false;
+
+      for (final definition in _availableDefinitions) {
+        final type = definition.type;
+
+        final isTransferVariant = type == 'send_money_same_network' ||
+            type == 'send_money_cross_network';
+
+        if (isTransferVariant) {
+          if (hasSameNetwork && hasOtherNetwork) {
+            if (!transferAdded) {
+              choices.add(
+                _QuickActionChoice(
+                  definition: QuickActionCatalogDefinition(
+                    provider: definition.provider,
+                    type: 'send_money',
+                    displayLabel: 'Transfer Money',
+                    quickActionGroup: 'Transfer Money',
+                  ),
+                ),
+              );
+
+              transferAdded = true;
+            }
+
+            continue;
+          }
+
+          choices.add(_QuickActionChoice(definition: definition));
+          continue;
+        }
+
+        choices.add(_QuickActionChoice(definition: definition));
+      }
+
+      return choices;
+    }
+
     for (final definition in _availableDefinitions) {
-      // Keep the normal generic entry so existing behaviour remains
-      // available even when a transaction also has detailed flow variants.
       choices.add(_QuickActionChoice(definition: definition));
 
       for (final variant in definition.variants) {
         final canonicalBundle =
             (variant.bundleCategory ?? '').trim().toLowerCase();
 
-        // MTN MashUp page1/page2 are historical flow identities.
-        // Live validation established that allocation digits 1-5 are
-        // accepted directly, so page2 must not create duplicate-looking
-        // Quick Actions. Keep page1 as the canonical selectable identity.
         if (definition.provider == 'mtn' &&
             definition.type == 'buy_mashup' &&
             canonicalBundle.contains('_page2_')) {
           continue;
         }
+
         final hasBundle = (variant.bundleCategory ?? '').trim().isNotEmpty;
 
         final hasRecipient = (variant.recipientMode ?? '').trim().isNotEmpty;
@@ -159,6 +201,15 @@ class _QuickActionCustomizationScreenState
   }
 
   QuickActionCatalogDefinition? _definitionFor(String type) {
+    if (_isSubscriberRole && type == 'send_money') {
+      return QuickActionCatalogDefinition(
+        provider: _provider,
+        type: 'send_money',
+        displayLabel: 'Transfer Money',
+        quickActionGroup: 'Transfer Money',
+      );
+    }
+
     return _catalog?.definitionFor(_provider, type);
   }
 
@@ -166,9 +217,7 @@ class _QuickActionCustomizationScreenState
     final definitions = _catalog?.definitionsFor(provider) ??
         const <QuickActionCatalogDefinition>[];
 
-    return definitions
-        .take(9)
-        .toList()
+    final raw = definitions
         .asMap()
         .entries
         .map(
@@ -177,6 +226,18 @@ class _QuickActionCustomizationScreenState
             position: entry.key,
           ),
         )
+        .toList();
+
+    final normalized = _isSubscriberRole
+        ? normalizePersonalQuickActionPreferences(preferences: raw)
+        : raw;
+
+    return normalized
+        .take(9)
+        .toList()
+        .asMap()
+        .entries
+        .map((entry) => entry.value.copyWith(position: entry.key))
         .toList();
   }
 
@@ -276,7 +337,7 @@ class _QuickActionCustomizationScreenState
         items.sort((a, b) => a.position.compareTo(b.position));
 
         final normalizedItems = widget.isPersonal
-            ? items
+            ? normalizePersonalQuickActionPreferences(preferences: items)
             : normalizeBusinessQuickActionPreferences(
                 provider: provider,
                 preferences: items,
@@ -339,23 +400,29 @@ class _QuickActionCustomizationScreenState
       (item) => item.identityKey == choice.identityKey,
     );
 
-    setState(() {
-      if (existingIndex >= 0) {
-        selected.removeAt(existingIndex);
-      } else {
-        if (selected.length >= 9) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('A 3×3 grid can contain at most 9 actions.'),
-            ),
-          );
-          return;
-        }
-
-        selected.add(choice.preferenceAt(selected.length));
+    if (existingIndex >= 0) {
+      selected.removeAt(existingIndex);
+    } else {
+      if (selected.length >= 9) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('A 3×3 grid can contain at most 9 actions.'),
+          ),
+        );
+        return;
       }
 
-      _preferences[_provider] = selected
+      selected.add(choice.preferenceAt(selected.length));
+    }
+
+    final normalized = _isSubscriberRole
+        ? normalizePersonalQuickActionPreferences(preferences: selected)
+        : selected;
+
+    setState(() {
+      _preferences[_provider] = normalized
+          .take(9)
+          .toList()
           .asMap()
           .entries
           .map((entry) => entry.value.copyWith(position: entry.key))
@@ -833,6 +900,16 @@ class _QuickActionCustomizationScreenState
   }
 
   String _choiceSubtitle(_QuickActionChoice choice) {
+    if (_isSubscriberRole) {
+      return switch (choice.definition.type) {
+        'send_money' => 'Same Network and Other Network',
+        'buy_airtime' => 'Choose the recipient when you open it',
+        'buy_data' => 'All active data options',
+        'buy_mashup' => 'All active MashUp options',
+        _ => 'Shortcut on your Subscriber dashboard',
+      };
+    }
+
     return _friendlyVariantLabel(
       recipientMode: choice.recipientMode,
       bundleCategory: choice.bundleCategory,
@@ -1359,11 +1436,13 @@ class _QuickActionCustomizationScreenState
     }
 
     return switch (choice.definition.type) {
+      'send_money' ||
       'send_money_same_network' ||
       'send_money_cross_network' =>
         'Transfer Money',
       'buy_airtime' => 'Buy Airtime',
-      'buy_data' || 'buy_mashup' => 'Buy Data',
+      'buy_data' => 'Buy Data',
+      'buy_mashup' => 'MashUp',
       _ => configuredGroup,
     };
   }
@@ -1374,6 +1453,7 @@ class _QuickActionCustomizationScreenState
     }
 
     return switch (choice.definition.type) {
+      'send_money' => 'Transfer Money',
       'send_money_same_network' => 'Same Network',
       'send_money_cross_network' => 'Other Network',
       'buy_mashup' => 'MashUp',

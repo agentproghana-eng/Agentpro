@@ -20,10 +20,7 @@ import 'ussd_flow_grouping.dart';
 class UssdFlowListScreen extends StatefulWidget {
   final bool isPersonal;
 
-  const UssdFlowListScreen({
-    super.key,
-    this.isPersonal = false,
-  });
+  const UssdFlowListScreen({super.key, this.isPersonal = false});
 
   @override
   State<UssdFlowListScreen> createState() => _UssdFlowListScreenState();
@@ -170,9 +167,7 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
     final result = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-        builder: (_) => UssdFlowEditorScreen(
-          apiBasePath: _basePath,
-        ),
+        builder: (_) => UssdFlowEditorScreen(apiBasePath: _basePath),
       ),
     );
 
@@ -183,8 +178,9 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
 
   Future<bool> _confirmDeactivate(Map<String, dynamic> flow) async {
     final provider = _providerLabel(flow['provider']?.toString() ?? '');
-    final transactionType =
-        _humanize(flow['transaction_type']?.toString() ?? '');
+    final transactionType = _humanize(
+      flow['transaction_type']?.toString() ?? '',
+    );
 
     return await showDialog<bool>(
           context: context,
@@ -225,9 +221,9 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Flow deactivated')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Flow deactivated')));
 
       await _load();
     } on DioException catch (e) {
@@ -237,10 +233,7 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
           'Failed to deactivate flow';
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: AppTheme.errorColor,
-        ),
+        SnackBar(content: Text(message), backgroundColor: AppTheme.errorColor),
       );
     } finally {
       if (mounted) {
@@ -260,16 +253,14 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
     try {
       await ApiClient.instance.patch(
         '$_basePath/$id',
-        data: const {
-          'is_active': true,
-        },
+        data: const {'is_active': true},
       );
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Flow reactivated')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Flow reactivated')));
 
       await _load();
     } on DioException catch (e) {
@@ -279,10 +270,7 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
           'Failed to reactivate flow';
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: AppTheme.errorColor,
-        ),
+        SnackBar(content: Text(message), backgroundColor: AppTheme.errorColor),
       );
     } finally {
       if (mounted) {
@@ -291,15 +279,9 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
     }
   }
 
-  Widget _statusBadge(
-    BuildContext context, {
-    required bool isActive,
-  }) {
+  Widget _statusBadge(BuildContext context, {required bool isActive}) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 7,
-        vertical: 3,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
         color: isActive
             ? context.appTileColor(const Color(0xFFE6F4F1))
@@ -326,10 +308,7 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
     );
   }
 
-  Widget _buildTrailing(
-    BuildContext context,
-    Map<String, dynamic> flow,
-  ) {
+  Widget _buildTrailing(BuildContext context, Map<String, dynamic> flow) {
     final isGlobal = _isGlobal(flow);
     final isActive = _isActive(flow);
     final id = flow['id']?.toString() ?? '';
@@ -338,10 +317,7 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _statusBadge(
-          context,
-          isActive: isActive,
-        ),
+        _statusBadge(context, isActive: isActive),
         const SizedBox(width: 2),
         if (isGlobal)
           Padding(
@@ -396,9 +372,7 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Custom USSD Flows'),
-      ),
+      appBar: AppBar(title: const Text('USSD Automations')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -419,7 +393,7 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
               : _flows.isEmpty
                   ? const Center(
                       child: Text(
-                        'No Custom USSD flows yet.\nTap + to create one.',
+                        'No USSD automations yet.\nTap + to create one.',
                         textAlign: TextAlign.center,
                       ),
                     )
@@ -439,39 +413,33 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
                               final group = groups[i];
 
                               final activeCount = group.flows
-                                  .where(
-                                    (flow) => _isActive(flow),
-                                  )
+                                  .where((flow) => _isActive(flow))
                                   .length;
 
                               final provider = _providerLabel(group.provider);
 
-                              final motherLabel = transactionTypeLabel(
-                                group.transactionType,
-                                group.provider,
-                              );
+                              final motherLabel = widget.isPersonal &&
+                                      group.transactionType == 'mashup'
+                                  ? 'MashUp'
+                                  : transactionTypeLabel(
+                                      group.transactionType,
+                                      group.provider,
+                                    );
 
                               final roleLabel = widget.isPersonal
                                   ? null
-                                  : ussdFlowRoleLabel(
-                                      group.simRole,
-                                    );
+                                  : ussdFlowRoleLabel(group.simRole);
 
                               return Card(
-                                margin: const EdgeInsets.only(
-                                  bottom: 8,
-                                ),
+                                margin: const EdgeInsets.only(bottom: 8),
                                 child: ExpansionTile(
-                                  key: PageStorageKey(
-                                    group.key,
-                                  ),
+                                  key: PageStorageKey(group.key),
                                   tilePadding: const EdgeInsets.symmetric(
                                     horizontal: 16,
                                     vertical: 3,
                                   ),
-                                  childrenPadding: const EdgeInsets.only(
-                                    bottom: 6,
-                                  ),
+                                  childrenPadding:
+                                      const EdgeInsets.only(bottom: 6),
                                   title: Row(
                                     children: [
                                       Expanded(
@@ -484,16 +452,12 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
                                         ),
                                       ),
                                       const SizedBox(width: 8),
-                                      _statusBadge(
-                                        context,
-                                        isActive: activeCount > 0,
-                                      ),
+                                      _statusBadge(context,
+                                          isActive: activeCount > 0),
                                     ],
                                   ),
                                   subtitle: Padding(
-                                    padding: const EdgeInsets.only(
-                                      top: 4,
-                                    ),
+                                    padding: const EdgeInsets.only(top: 4),
                                     child: Text(
                                       [
                                         if (roleLabel != null) roleLabel,
@@ -509,59 +473,51 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
                                   ),
                                   children: [
                                     const Divider(height: 1),
-                                    ...group.flows.map(
-                                      (flow) {
-                                        final isActive = _isActive(flow);
+                                    ...group.flows.map((flow) {
+                                      final isActive = _isActive(flow);
 
-                                        return ListTile(
-                                          contentPadding:
-                                              const EdgeInsets.fromLTRB(
-                                            18,
-                                            2,
-                                            8,
-                                            2,
+                                      return ListTile(
+                                        contentPadding:
+                                            const EdgeInsets.fromLTRB(
+                                          18,
+                                          2,
+                                          8,
+                                          2,
+                                        ),
+                                        leading: Icon(
+                                          Icons
+                                              .subdirectory_arrow_right_rounded,
+                                          size: 19,
+                                          color: context.appSecondaryText,
+                                        ),
+                                        title: Text(
+                                          ussdFlowVariantLabel(flow),
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 12.5,
+                                            color: isActive
+                                                ? context.appPrimaryText
+                                                : context.appSecondaryText,
                                           ),
-                                          leading: Icon(
-                                            Icons
-                                                .subdirectory_arrow_right_rounded,
-                                            size: 19,
-                                            color: context.appSecondaryText,
-                                          ),
-                                          title: Text(
-                                            ussdFlowVariantLabel(
-                                              flow,
-                                            ),
+                                        ),
+                                        subtitle: Padding(
+                                          padding:
+                                              const EdgeInsets.only(top: 3),
+                                          child: Text(
+                                            '${flow['dial_code'] ?? ''} · '
+                                            '${_executionModeLabel(flow)} · '
+                                            '${_scopeDescription(flow)} · '
+                                            '${_scopeLabel(flow)}',
                                             style: TextStyle(
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 12.5,
-                                              color: isActive
-                                                  ? context.appPrimaryText
-                                                  : context.appSecondaryText,
+                                              fontSize: 10.5,
+                                              color: context.appSecondaryText,
                                             ),
                                           ),
-                                          subtitle: Padding(
-                                            padding: const EdgeInsets.only(
-                                              top: 3,
-                                            ),
-                                            child: Text(
-                                              '${flow['dial_code'] ?? ''} · '
-                                              '${_executionModeLabel(flow)} · '
-                                              '${_scopeDescription(flow)} · '
-                                              '${_scopeLabel(flow)}',
-                                              style: TextStyle(
-                                                fontSize: 10.5,
-                                                color: context.appSecondaryText,
-                                              ),
-                                            ),
-                                          ),
-                                          trailing: _buildTrailing(
-                                            context,
-                                            flow,
-                                          ),
-                                          onTap: () => _openFlow(flow),
-                                        );
-                                      },
-                                    ),
+                                        ),
+                                        trailing: _buildTrailing(context, flow),
+                                        onTap: () => _openFlow(flow),
+                                      );
+                                    }),
                                   ],
                                 ),
                               );
@@ -573,10 +529,7 @@ class _UssdFlowListScreenState extends State<UssdFlowListScreen> {
       floatingActionButton: FloatingActionButton(
         onPressed: _createFlow,
         backgroundColor: AppTheme.secondaryColor,
-        child: const Icon(
-          Icons.add,
-          color: Colors.black,
-        ),
+        child: const Icon(Icons.add, color: Colors.black),
       ),
     );
   }

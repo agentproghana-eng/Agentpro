@@ -56,7 +56,7 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
     'send_money_cross_network': 'Transfer Money · Other Network',
     'buy_airtime': 'Buy Airtime',
     'buy_data': 'Buy Data',
-    'buy_mashup': 'Buy Data · MashUp',
+    'buy_mashup': 'MashUp',
     'check_momo_balance': 'Check MoMo Balance',
     'check_airtime_balance': 'Check Airtime Balance',
     'withdraw_cash': 'Withdraw Cash',
@@ -173,10 +173,7 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
       return value.toInt();
     }
 
-    return int.tryParse(
-          value?.toString() ?? '',
-        ) ??
-        0;
+    return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
   double get _summarySuccessRate {
@@ -186,10 +183,7 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
       return value.toDouble();
     }
 
-    return double.tryParse(
-          value?.toString() ?? '',
-        ) ??
-        0;
+    return double.tryParse(value?.toString() ?? '') ?? 0;
   }
 
   Future<void> _loadActivitySummary() async {
@@ -667,10 +661,7 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
   }) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 5,
-          vertical: 9,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 9),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.07),
           borderRadius: BorderRadius.circular(10),
@@ -729,19 +720,14 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
               const Expanded(
                 child: Text(
                   'Activity Summary',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
                 ),
               ),
               if (_loadingSummary)
                 const SizedBox(
                   width: 16,
                   height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                  ),
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
             ],
           ),
@@ -749,10 +735,7 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
           if (summary == null && _loadingSummary)
             Text(
               'Loading matching activity...',
-              style: TextStyle(
-                fontSize: 11,
-                color: context.appSecondaryText,
-              ),
+              style: TextStyle(fontSize: 11, color: context.appSecondaryText),
             )
           else if (summary == null)
             Row(
