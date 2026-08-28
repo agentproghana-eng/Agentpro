@@ -1,0 +1,17 @@
+{
+  "name": "Intellicore System",
+  "short_name": "Intellicore",
+  "description": "Technology for Better Business",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f5f8f7",
+  "theme_color": "#006b5e",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

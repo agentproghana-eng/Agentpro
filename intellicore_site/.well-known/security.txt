@@ -1,0 +1,4 @@
+Contact: mailto:support@intellicoresystem.com
+Canonical: https://intellicoresystem.com/.well-known/security.txt
+Preferred-Languages: en
+Expires: 2027-08-28T23:59:59Z
