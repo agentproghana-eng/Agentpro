@@ -1,4 +1,4 @@
-# Agent Pro Ghana ProGuard Rules
+# AgentPro ProGuard Rules
 
 # Flutter
 -keep class io.flutter.** { *; }

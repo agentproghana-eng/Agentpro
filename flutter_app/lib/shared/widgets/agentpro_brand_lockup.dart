@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_constants.dart';
 import '../theme/app_theme.dart';
 
-/// Reusable AgentPro Ghana identity.
+/// Reusable AgentPro identity.
 ///
 /// Brand system:
 /// - Deep teal = primary identity

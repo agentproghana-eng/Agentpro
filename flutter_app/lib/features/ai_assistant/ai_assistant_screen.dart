@@ -34,7 +34,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   void _addWelcome() {
     _messages.add(const _ChatMessage(
       role: 'assistant',
-      content: 'Akwaaba! 👋 I\'m your Agent Pro Ghana AI Assistant.\n\n'
+      content: 'Akwaaba! 👋 I\'m your AgentPro AI Assistant.\n\n'
           'I can help you with:\n'
           '• Processing Mobile Money transactions\n'
           '• Understanding your float and commissions\n'

@@ -237,7 +237,7 @@ async function generateTransactionReceipt(transaction) {
       doc.rect(0, 0, doc.page.width, 60).fill(COLORS.primary);
       try { doc.image(LOGO_PATH, 20, 8, { height: 24 }); } catch (e) { logger.warn('Logo image not found, skipping:', e.message); }
       doc.fillColor('white').fontSize(14).font('Helvetica-Bold')
-        .text('Agent Pro Ghana', 50, 15);
+        .text('AgentPro', 50, 15);
       doc.fontSize(8).font('Helvetica')
         .text('Transaction Receipt', 50, 33);
       doc.fillColor(COLORS.text);
@@ -273,9 +273,9 @@ async function generateTransactionReceipt(transaction) {
       doc.moveTo(20, doc.page.height - 40).lineTo(doc.page.width - 20, doc.page.height - 40)
         .strokeColor(COLORS.light).stroke();
       doc.fontSize(7).fillColor(COLORS.muted).font('Helvetica')
-        .text('Thank you for using Agent Pro Ghana',
+        .text('Thank you for using AgentPro',
           20, doc.page.height - 32, { align: 'center' });
-      doc.text('support@agentproghana.com', { align: 'center' });
+      doc.text('support@intellicoresystem.com', { align: 'center' });
 
       doc.end();
     });
@@ -627,7 +627,7 @@ async function generateTransactionReportExcel({
   title,
 }) {
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'Agent Pro Ghana';
+  workbook.creator = 'AgentPro';
   workbook.created = new Date();
 
   const sheet = workbook.addWorksheet('Transactions', {
@@ -811,7 +811,7 @@ async function generateCommissionReportPDF({ commissions, summary, title, groupB
     doc.rect(0, 0, doc.page.width, 70).fill(COLORS.primary);
     try { doc.image(LOGO_PATH, 15, 15, { height: 40 }); } catch (e) { logger.warn('Logo image not found, skipping:', e.message); }
     doc.fillColor(COLORS.secondary).fontSize(18).font('Helvetica-Bold')
-      .text('Agent Pro Ghana', 40, 15);
+      .text('AgentPro', 40, 15);
     doc.fillColor('white').fontSize(11).font('Helvetica')
       .text(title || 'Provider Commission Report', 40, 35);
     doc.fontSize(9).text(`Generated: ${dateTimeStr(new Date())}`, 40, 52);
@@ -931,7 +931,7 @@ async function generateCommissionReportPDF({ commissions, summary, title, groupB
 
 async function generateCommissionReportExcel({ commissions, summary, title, groupBy }) {
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'Agent Pro Ghana';
+  workbook.creator = 'AgentPro';
   workbook.created = new Date();
 
   const sheet = workbook.addWorksheet('Commissions', {
@@ -939,7 +939,7 @@ async function generateCommissionReportExcel({ commissions, summary, title, grou
   });
 
   sheet.mergeCells('A1:E1');
-  sheet.getCell('A1').value = title || 'Agent Pro Ghana — Provider Commission Report';
+  sheet.getCell('A1').value = title || 'AgentPro — Provider Commission Report';
   sheet.getCell('A1').font = { size: 14, bold: true, color: { argb: 'FF006B5E' } };
   sheet.getCell('A1').alignment = { horizontal: 'center' };
   sheet.mergeCells('A2:E2');
@@ -1011,7 +1011,7 @@ async function generatePersonalTransactionReportPDF({ transactions, summary, tit
     doc.rect(0, 0, doc.page.width, 70).fill(COLORS.primary);
     try { doc.image(LOGO_PATH, 15, 15, { height: 40 }); } catch (e) { logger.warn('Logo image not found, skipping:', e.message); }
     doc.fillColor(COLORS.secondary).fontSize(18).font('Helvetica-Bold')
-      .text('Agent Pro Ghana', 40, 15);
+      .text('AgentPro', 40, 15);
     doc.fillColor('white').fontSize(11).font('Helvetica')
       .text(title || 'My Transaction Report', 40, 35);
     doc.fontSize(9).text(`Generated: ${dateTimeStr(new Date())}`, 40, 52);

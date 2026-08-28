@@ -4,21 +4,21 @@ class AppConstants {
   // ── API ──────────────────────────────────────────────────────
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://agentpro-api-izi3.onrender.com/api/v1',
+    defaultValue: 'https://api.agentpro.intellicoresystem.com/api/v1',
   );
 
   // For local development:
   // static const String apiBaseUrl = 'http://10.0.2.2:3000/v1';
 
   // ── App Info ─────────────────────────────────────────────────
-  static const String appName = 'Agent Pro Ghana';
+  static const String appName = 'AgentPro';
   static const String appTagline = 'One App. Every Business.';
   static const String appVersion = '2.0.0';
-  static const String supportEmail = 'support@agentproghana.com';
+  static const String supportEmail = 'support@intellicoresystem.com';
   static const String supportPhone = '0207438990';
   static const String supportWhatsAppNumber = '233207438990';
   static const String supportHours = 'Mon - Fri, 8:00 AM - 5:00 PM';
-  static const String websiteUrl = 'https://agentproghana.com';
+  static const String websiteUrl = 'https://intellicoresystem.com';
 
   // ── MoMo Providers ───────────────────────────────────────────
   static const Map<String, String> providerNames = {
@@ -75,7 +75,7 @@ class AppConstants {
   // ── Security ──────────────────────────────────────────────────
   /// This message must be shown whenever anyone asks for a MoMo PIN
   static const String pinSecurityMessage =
-      'Agent Pro Ghana never asks for your MoMo PIN. '
+      'AgentPro never asks for your MoMo PIN. '
       'Enter your PIN only on the official network USSD screen.';
 
   static const String pinWarningMessage =

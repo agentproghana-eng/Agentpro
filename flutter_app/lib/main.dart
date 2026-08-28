@@ -241,7 +241,7 @@ class _AgentProAppState extends State<AgentProApp> {
     return BlocProvider.value(
       value: authBloc,
       child: MaterialApp.router(
-        title: 'Agent Pro Ghana',
+        title: 'AgentPro',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
@@ -308,7 +308,7 @@ class _CompromisedDeviceApp extends StatelessWidget {
                   ),
                   SizedBox(height: 16),
                   Text(
-                    'Agent Pro Ghana cannot run on a rooted or '
+                    'AgentPro cannot run on a rooted or '
                     'compromised device.\n\n'
                     'This policy protects your financial data and '
                     'mobile money transactions.',

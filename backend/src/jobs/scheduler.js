@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Scheduled Jobs for Agent Pro Ghana
+ * Scheduled Jobs for AgentPro
  *
  * Run with: node src/jobs/scheduler.js
  * Or import into server.js to start automatically

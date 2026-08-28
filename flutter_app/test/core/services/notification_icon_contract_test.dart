@@ -26,7 +26,7 @@ void main() {
 
     expect(manifest, contains('android:resource="@drawable/ic_notification"'));
 
-    expect(icon, contains('AgentPro Ghana notification icon'));
+    expect(icon, contains('AgentPro notification icon'));
 
     expect(icon, contains('android:fillColor="@android:color/white"'));
 

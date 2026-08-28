@@ -1,12 +1,12 @@
 {
   "info": {
-    "name": "Agent Pro Ghana API",
-    "description": "Complete API collection for Agent Pro Ghana v2.0",
+    "name": "AgentPro API",
+    "description": "Complete API collection for AgentPro v2.0",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "version": "2.0.0"
   },
   "variable": [
-    { "key": "base_url", "value": "https://api.agentproghana.com/v1" },
+    { "key": "base_url", "value": "https://api.agentpro.intellicoresystem.com/v1" },
     { "key": "access_token", "value": "" },
     { "key": "refresh_token", "value": "" },
     { "key": "company_id", "value": "" },
@@ -72,7 +72,7 @@
             "url": { "raw": "{{base_url}}/auth/login" },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"admin@agentproghana.com\",\n  \"password\": \"ChangeMe123!\"\n}"
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"ChangeMe123!\"\n}"
             }
           }
         },

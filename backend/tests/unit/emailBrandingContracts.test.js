@@ -124,7 +124,7 @@ describe(
         expect(
           payload.html,
         ).toContain(
-          'Intellicore Technology',
+          'Intellicore System',
         );
 
         expect(

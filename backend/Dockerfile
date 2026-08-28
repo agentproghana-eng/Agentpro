@@ -1,4 +1,4 @@
-# Agent Pro Ghana Backend — Production Dockerfile
+# AgentPro Backend — Production Dockerfile
 FROM node:20-alpine AS base
 
 # Security: run as non-root

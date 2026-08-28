@@ -67,7 +67,7 @@ class SupportScreen extends StatelessWidget {
         scheme: 'mailto',
         path: address,
         queryParameters: {
-          'subject': 'Agent Pro Ghana Support',
+          'subject': 'AgentPro Support',
         },
       ),
       fallbackMessage: 'Please email us at $address.',
@@ -265,7 +265,7 @@ class SupportScreen extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'For questions about Agent Pro Ghana itself',
+                  'For questions about AgentPro itself',
                   style: TextStyle(
                     fontSize: 11,
                     color: context.appSecondaryText,

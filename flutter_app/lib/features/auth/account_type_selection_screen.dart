@@ -23,7 +23,7 @@ class AccountTypeSelectionScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('How will you use Agent Pro Ghana?',
+            const Text('How will you use AgentPro?',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 24),
             _AccountTypeCard(

@@ -355,7 +355,7 @@ function verifyTotp(
 function buildOtpAuthUri({
   secret,
   accountName,
-  issuer = 'AgentPro Ghana',
+  issuer = 'AgentPro',
 }) {
   normalizeBase32Secret(secret);
 

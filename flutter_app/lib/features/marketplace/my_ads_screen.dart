@@ -66,7 +66,7 @@ class _MyAdsScreenState extends State<MyAdsScreen> {
                       icon: Icons.storefront_outlined,
                       title: 'No ads yet',
                       subtitle:
-                          'Post your first ad to reach customers on Agent Pro Ghana.',
+                          'Post your first ad to reach customers on AgentPro.',
                       actionLabel: 'Post an Ad',
                       onAction: () => context.push('/marketplace/post'),
                     )

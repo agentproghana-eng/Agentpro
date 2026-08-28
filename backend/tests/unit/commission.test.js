@@ -1,5 +1,5 @@
 // ============================================================
-// Unit Tests — Agent Pro Ghana Backend
+// Unit Tests — AgentPro Backend
 // ============================================================
 
 const { calculateCommission } = require('../../src/services/commissionService');

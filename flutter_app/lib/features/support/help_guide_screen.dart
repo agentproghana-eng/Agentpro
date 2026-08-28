@@ -253,9 +253,9 @@ final List<HelpSection> _helpSections = [
               'MTN Personal users call 100. MTN Agent SIM users call 114. Telecel users call 100. AT Money users call 100.',
         ),
         HelpItem(
-          question: 'How do I reach Agent Pro Ghana support?',
+          question: 'How do I reach AgentPro support?',
           answer:
-              'Email support@agentproghana.com, call 0207438990, or message on WhatsApp — all available from the Support screen.',
+              'Email support@intellicoresystem.com, call 0207438990, or message on WhatsApp — all available from the Support screen.',
         ),
         HelpItem(
           question: 'What are the support hours?',
