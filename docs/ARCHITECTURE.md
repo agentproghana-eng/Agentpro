@@ -167,7 +167,7 @@ admin_portal/
 
 ## API Design Conventions
 
-- Base URL: `https://api.agentpro.intellicoresystem.com/v1`
+- Base URL: `https://api.agentpro.intellicoresystem.com/api/v1`
 - All responses: `{ success: bool, data: {}, message: string, meta: {} }`
 - Auth: `Authorization: Bearer <JWT>`
 - Pagination: `?page=1&limit=20`

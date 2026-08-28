@@ -227,7 +227,7 @@ PostgreSQL  Redis
 
 ## API Conventions
 
-- **Base URL**: `https://api.agentpro.intellicoresystem.com/v1`
+- **Base URL**: `https://api.agentpro.intellicoresystem.com/api/v1`
 - **Auth**: `Authorization: Bearer <access_token>`
 - **Response format**:
 ```json
