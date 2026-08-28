@@ -540,7 +540,7 @@ mpRouter.get('/dashboard', async (req, res) => {
            INNER JOIN advertisements a
              ON a.id = ar.advertisement_id
            LEFT JOIN users u
-             ON u.id = ar.user_id
+             ON u.id = ar.rated_by
            WHERE a.posted_by = $1
          ) activity
          ORDER BY occurred_at DESC
