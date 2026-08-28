@@ -47,7 +47,7 @@ npm install
 npm run dev   # http://localhost:5173
 ```
 
-The dev server proxies `/api` to `http://localhost:3000/v1` automatically (see `vite.config.js`), so no manual URL edits are needed for local development. For production builds, set `VITE_API_URL` per `.env.example`.
+The dev server proxies `/api` to `http://localhost:3000/api/v1` automatically (see `vite.config.js`), so no manual URL edits are needed for local development. For production builds, set `VITE_API_URL` per `.env.example`.
 
 Log in with the same superuser credentials.
 
@@ -61,7 +61,7 @@ cp android/local.properties.example android/local.properties
 flutter pub get
 ```
 
-For local backend testing, edit `lib/core/constants/app_constants.dart` and `lib/core/api/api_client.dart`, changing the base URL to `http://10.0.2.2:3000/v1` (Android emulator's alias for your host machine's localhost).
+For local backend testing, edit `lib/core/constants/app_constants.dart` and `lib/core/api/api_client.dart`, changing the base URL to `http://10.0.2.2:3000/api/v1` (Android emulator's alias for your host machine's localhost).
 
 You'll also need a real `google-services.json` from a Firebase project (see `docs/DEPLOYMENT.md` step 1.1) placed at `android/app/google-services.json` — without it, the build fails. For a quick local run without push notifications, you can use the dummy JSON from `.github/workflows/ci.yml` as a stub.
 

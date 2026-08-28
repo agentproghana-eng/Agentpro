@@ -6,7 +6,7 @@
     "version": "2.0.0"
   },
   "variable": [
-    { "key": "base_url", "value": "https://api.agentpro.intellicoresystem.com/v1" },
+    { "key": "base_url", "value": "https://api.agentpro.intellicoresystem.com/api/v1" },
     { "key": "access_token", "value": "" },
     { "key": "refresh_token", "value": "" },
     { "key": "company_id", "value": "" },

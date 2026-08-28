@@ -33,9 +33,9 @@ info:
     url: https://intellicoresystem.com
 
 servers:
-  - url: https://api.agentpro.intellicoresystem.com/v1
+  - url: https://api.agentpro.intellicoresystem.com/api/v1
     description: Production
-  - url: http://localhost:3000/v1
+  - url: http://localhost:3000/api/v1
     description: Local development
 
 tags:

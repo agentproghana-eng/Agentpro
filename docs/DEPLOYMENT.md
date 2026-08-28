@@ -142,7 +142,7 @@ flutter pub get
 ### 5.2 Update API URL (if needed)
 Edit `lib/core/constants/app_constants.dart`:
 ```dart
-static const String apiBaseUrl = 'https://api.agentpro.intellicoresystem.com/v1';
+static const String apiBaseUrl = 'https://api.agentpro.intellicoresystem.com/api/v1';
 ```
 
 ### 5.3 Generate Android signing keystore
