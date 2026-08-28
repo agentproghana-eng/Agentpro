@@ -43,7 +43,7 @@ exports.getSubscription = async (req, res) => {
         subscription: result.rows[0],
         payment_instructions: {
           merchant_number: config.rows[0]?.value || '',
-          merchant_name: 'Agent Pro Ghana',
+          merchant_name: 'AgentPro',
           amount: billing.amount,
           currency: 'GHS',
           note: `Pay GH₵${billing.amount.toFixed(2)} via MTN MoMo (${billing.paidSeats} paid seat${billing.paidSeats !== 1 ? 's' : ''}, ${billing.freeSeats} free), then submit your transaction reference below.`,

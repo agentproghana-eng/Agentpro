@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * Agent Pro Ghana — Database Seed Script
+ * AgentPro — Database Seed Script
  *
  * Creates:
  * 1. Superuser account
@@ -36,9 +36,9 @@ async function seed() {
 // ── Superuser ─────────────────────────────────────────────────
 
 async function seedSuperuser() {
-  const email = process.env.SUPERUSER_EMAIL || 'admin@agentproghana.com';
+  const email = process.env.SUPERUSER_EMAIL || 'admin@example.com';
   const password = process.env.SUPERUSER_PASSWORD || 'ChangeMe123!';
-  const firstName = process.env.SUPERUSER_FIRST_NAME || 'Agent Pro';
+  const firstName = process.env.SUPERUSER_FIRST_NAME || 'AgentPro';
   const lastName = process.env.SUPERUSER_LAST_NAME || 'Admin';
 
   const existing = await query('SELECT id FROM users WHERE email = $1', [email]);

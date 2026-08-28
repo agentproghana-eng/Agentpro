@@ -147,7 +147,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _openPrivacyPolicy() async {
     final uri = Uri.parse(
-      'https://admin.agentproghana.com/privacy-policy/',
+      'https://admin.agentpro.intellicoresystem.com/privacy-policy/',
     );
 
     try {
@@ -240,7 +240,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _SettingsTile(
                   icon: Icons.person_add_outlined,
                   title: 'Add Personal Account',
-                  subtitle: 'Use Agent Pro Ghana for your own transactions too',
+                  subtitle: 'Use AgentPro for your own transactions too',
                   onTap: () =>
                       context.push('/settings/add-personal-capability'),
                 ),

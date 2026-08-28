@@ -104,7 +104,7 @@ class NotificationService {
   static StreamSubscription<String>? _tokenRefreshSubscription;
 
   static const _channelId = 'agentpro_notifications';
-  static const _channelName = 'Agent Pro Ghana';
+  static const _channelName = 'AgentPro';
   static const _channelDesc =
       'Transactions, float alerts, and subscription updates';
 

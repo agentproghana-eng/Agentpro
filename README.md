@@ -1,4 +1,4 @@
-# Agent Pro Ghana 🇬🇭
+# AgentPro 🇬🇭
 ### One App. Every Business.
 
 **Version:** 2.0.0 | **Status:** Launch Hardening & Production Validation | **Confidential**
@@ -19,7 +19,7 @@ Supported providers: **MTN Mobile Money · Telecel Cash · AT Money**
 
 ## Current Launch Status — 21 August 2026
 
-Agent Pro Ghana is in **pre-public-launch hardening and production validation**.
+AgentPro is in **pre-public-launch hardening and production validation**.
 
 ### ✅ Production-critical items completed
 
@@ -142,7 +142,7 @@ Before running, set up accounts and get credentials for:
    - Download `google-services.json` → `flutter_app/android/app/`
 3. **Cloudinary** — [cloudinary.com](https://cloudinary.com)
 4. **Render** — current production backend hosting
-5. **Domain** — agentproghana.com (for production)
+5. **Domain** — intellicoresystem.com (for production)
 
 ---
 
@@ -227,7 +227,7 @@ PostgreSQL  Redis
 
 ## API Conventions
 
-- **Base URL**: `https://api.agentproghana.com/v1`
+- **Base URL**: `https://api.agentpro.intellicoresystem.com/v1`
 - **Auth**: `Authorization: Bearer <access_token>`
 - **Response format**:
 ```json
@@ -256,10 +256,10 @@ PostgreSQL  Redis
 
 ## Support
 
-- Technical: dev@agentproghana.com
-- User support: support@agentproghana.com
-- Admin portal: admin.agentproghana.com
+- Technical: support@intellicoresystem.com
+- User support: support@intellicoresystem.com
+- Admin portal: admin.agentpro.intellicoresystem.com
 
 ---
 
-*Agent Pro Ghana — Version 2.0 | Developer-Ready | Confidential*
+*AgentPro — Version 2.0 | Developer-Ready | Confidential*

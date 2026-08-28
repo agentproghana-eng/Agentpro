@@ -1,4 +1,4 @@
-# Agent Pro Ghana — System Architecture
+# AgentPro — System Architecture
 Version 2.0 | Confidential
 
 ---
@@ -7,7 +7,7 @@ Version 2.0 | Confidential
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    AGENT PRO GHANA                          │
+│                    AgentPro                          │
 ├──────────────────┬──────────────────┬───────────────────────┤
 │  Flutter App     │  Admin Portal    │  External Services    │
 │  (Android)       │  (Web React)     │                       │
@@ -24,7 +24,7 @@ Version 2.0 | Confidential
          ▼                  ▼
 ┌─────────────────────────────────────────────────────────────┐
 │              Node.js + Express.js REST API                  │
-│              api.agentproghana.com                          │
+│              api.agentpro.intellicoresystem.com                          │
 ├─────────────────────────────────────────────────────────────┤
 │  Auth    │  Users   │  Transactions │  Float  │  Reports    │
 │  Module  │  Module  │  Module       │  Module │  Module     │
@@ -167,7 +167,7 @@ admin_portal/
 
 ## API Design Conventions
 
-- Base URL: `https://api.agentproghana.com/v1`
+- Base URL: `https://api.agentpro.intellicoresystem.com/v1`
 - All responses: `{ success: bool, data: {}, message: string, meta: {} }`
 - Auth: `Authorization: Bearer <JWT>`
 - Pagination: `?page=1&limit=20`

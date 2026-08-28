@@ -515,7 +515,7 @@ class AppRouter {
           path: '/unsupported-account',
           builder: (_, __) => const AppRouteErrorScreen(
             message: 'This account role is not supported by the mobile app. '
-                'Please contact Agent Pro Ghana support.',
+                'Please contact AgentPro support.',
             location: '/unsupported-account',
             showBackButton: false,
           ),

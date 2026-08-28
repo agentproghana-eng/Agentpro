@@ -487,7 +487,7 @@ exports.createUser = async (req, res) => {
     // Fetch company name once, used by both email and SMS notifications
     // below. Wrapped defensively - a failure here should not prevent the
     // 201 response, since user creation itself already succeeded.
-    let companyName = "Agent Pro Ghana";
+    let companyName = "AgentPro";
     try {
       const companyResult = await query(
         "SELECT name FROM companies WHERE id = $1",
@@ -933,7 +933,7 @@ exports.reactivateStaffMember = async (req, res, existingUserId, fields) => {
       return reactivatedUser;
     });
 
-    let companyName = "Agent Pro Ghana";
+    let companyName = "AgentPro";
     try {
       const companyResult = await query(
         "SELECT name FROM companies WHERE id = $1",

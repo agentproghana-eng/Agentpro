@@ -53,7 +53,7 @@ async function sendSMS(to, message) {
 
 async function sendRegistrationApprovedSMS(phone, firstName, companyName) {
   return sendSMS(phone,
-    `Agent Pro Ghana: Hi ${firstName}, your ${companyName} account is now active! Your 30-day free trial has started. Log in to get started.`
+    `AgentPro: Hi ${firstName}, your ${companyName} account is now active! Your 30-day free trial has started. Log in to get started.`
   );
 }
 
@@ -65,25 +65,25 @@ async function sendNewEmployeeSMS(
 ) {
   return sendSMS(
     phone,
-    `Agent Pro Ghana: Hi ${firstName}, your ${role} account at ${companyName} is ready. Check your email for the secure password setup link. The link expires in 1 hour. If it does not arrive, use Forgot Password in the app.`
+    `AgentPro: Hi ${firstName}, your ${role} account at ${companyName} is ready. Check your email for the secure password setup link. The link expires in 1 hour. If it does not arrive, use Forgot Password in the app.`
   );
 }
 
 async function sendSubscriptionRenewalSMS(phone, firstName, amount, expiryDate) {
   return sendSMS(phone,
-    `Agent Pro Ghana: Payment of GHS ${amount} received. Your subscription is active until ${expiryDate}. Thank you!`
+    `AgentPro: Payment of GHS ${amount} received. Your subscription is active until ${expiryDate}. Thank you!`
   );
 }
 
 async function sendAdPaymentConfirmedSMS(phone, firstName, adTitle) {
   return sendSMS(phone,
-    `Agent Pro Ghana: Payment received for your Business Hub ad "${adTitle}". It is now live!`
+    `AgentPro: Payment received for your Business Hub ad "${adTitle}". It is now live!`
   );
 }
 
 async function sendPasswordResetSMS(phone, firstName) {
   return sendSMS(phone,
-    `Agent Pro Ghana: Hi ${firstName}, a password reset was requested for your account. Check your email for the reset link. If this was not you, ignore this message.`
+    `AgentPro: Hi ${firstName}, a password reset was requested for your account. Check your email for the reset link. If this was not you, ignore this message.`
   );
 }
 

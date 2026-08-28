@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
-  // AgentPro Ghana — premium teal + gold identity.
+  // AgentPro — premium teal + gold identity.
   static const Color primaryColor = Color(0xFF00695C); // AgentPro Deep Teal
   static const Color primaryDeep = Color(0xFF004D40);
   static const Color primaryLight = Color(0xFF4FD1C5);

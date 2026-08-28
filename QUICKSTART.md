@@ -1,4 +1,4 @@
-# Agent Pro Ghana — Quickstart
+# AgentPro — Quickstart
 
 This gets a fresh clone of the repo running locally end to end. For full production deployment, see `docs/DEPLOYMENT.md`. For what's actually solid vs. placeholder in this build, see `STATUS.md` — read that before deciding what to trust.
 
@@ -37,7 +37,7 @@ npm run dev                # http://localhost:3000
 
 Verify: `curl http://localhost:3000/health` → should return `"database": "healthy", "redis": "healthy"`.
 
-Login as the seeded superuser using `SUPERUSER_EMAIL` / `SUPERUSER_PASSWORD` from your `.env` (defaults: `admin@agentproghana.com` / `ChangeMe123!`).
+Login as the seeded superuser using `SUPERUSER_EMAIL` / `SUPERUSER_PASSWORD` from your `.env` (defaults: `admin@example.com` / `ChangeMe123!`).
 
 ## 2. Admin Portal (2 min)
 
@@ -100,4 +100,4 @@ The MVP (Phase 1, per `README.md`) is functionally complete. Natural next steps:
 - **Admin portal shows network errors**: API base URL still points to production; update for local dev
 
 ---
-*Agent Pro Ghana v2.0*
+*AgentPro v2.0*

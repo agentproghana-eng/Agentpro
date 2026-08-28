@@ -368,7 +368,7 @@ void main() {
 
   group('Security Rules', () {
     test('PIN security constant is correctly defined', () {
-      const pinMessage = 'Agent Pro Ghana never asks for your MoMo PIN. '
+      const pinMessage = 'AgentPro never asks for your MoMo PIN. '
           'Enter your PIN only on the official network USSD screen.';
       expect(pinMessage.toLowerCase().contains('never'), isTrue);
       expect(pinMessage.toLowerCase().contains('pin'), isTrue);

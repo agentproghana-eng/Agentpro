@@ -28,7 +28,7 @@ void main() {
       expect(
         settings,
         contains(
-          'https://admin.agentproghana.com/privacy-policy/',
+          'https://admin.agentpro.intellicoresystem.com/privacy-policy/',
         ),
       );
 
@@ -57,12 +57,12 @@ void main() {
 
       expect(
         normalized,
-        contains('intellicore technology'),
+        contains('intellicore system'),
       );
 
       expect(
         normalized,
-        contains('support@agentproghana.com'),
+        contains('support@intellicoresystem.com'),
       );
     });
 

@@ -476,7 +476,7 @@ function LoginPage() {
           text-gray-900
         "
       >
-        Agent Pro Ghana
+        AgentPro
       </h1>
 
       <p
@@ -684,7 +684,7 @@ function LoginPage() {
               "
             >
               {enrolling
-                ? 'Add AgentPro Ghana to your authenticator app, then enter the current six-digit code.'
+                ? 'Add AgentPro to your authenticator app, then enter the current six-digit code.'
                 : 'Enter the current six-digit code from your authenticator app.'}
             </p>
           </div>
@@ -999,7 +999,7 @@ function LoginPage() {
                 focus:ring-2
                 focus:ring-primary
               "
-              placeholder="admin@agentproghana.com"
+              placeholder="admin@example.com"
             />
           </div>
 
@@ -1126,7 +1126,7 @@ function Layout({ children }) {
           <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-500 hover:text-gray-700">
             ☰
           </button>
-          <h1 className="text-lg font-semibold text-gray-800">Agent Pro Ghana — Admin</h1>
+          <h1 className="text-lg font-semibold text-gray-800">AgentPro — Admin</h1>
           <div className="ml-auto flex items-center gap-2">
             <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full">● Live</span>
           </div>
@@ -1214,7 +1214,7 @@ function DashboardPage() {
             Platform Overview
           </h2>
           <p className="mt-1 text-sm text-gray-500">
-            Current operational status across Agent Pro Ghana.
+            Current operational status across AgentPro.
           </p>
         </div>
 

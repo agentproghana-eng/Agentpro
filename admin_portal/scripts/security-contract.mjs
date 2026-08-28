@@ -183,14 +183,14 @@ assert(
 
 assert(
   accountDeletion.includes(
-    'mailto:support@agentproghana.com',
+    'mailto:support@intellicoresystem.com',
   ),
   'Public deletion page must provide an actionable deletion-request pathway',
 );
 
 assert(
   accountDeletion.includes(
-    'support@agentproghana.com',
+    'support@intellicoresystem.com',
   ),
   'Public deletion page must display the support deletion address',
 );
@@ -262,14 +262,14 @@ assert(
 
 assert(
   normalizedPrivacyPolicy.includes(
-    'Intellicore Technology',
+    'Intellicore System',
   ),
   'Privacy policy must identify the AgentPro operator',
 );
 
 assert(
   normalizedPrivacyPolicy.includes(
-    'support@agentproghana.com',
+    'support@intellicoresystem.com',
   ),
   'Privacy policy must provide a privacy contact',
 );
@@ -430,7 +430,7 @@ assert(
 
 assert(
   envExample.includes(
-    'https://api.agentproghana.com/api/v1',
+    'https://api.agentpro.intellicoresystem.com/api/v1',
   ),
   'Production API URL must use /api/v1',
 );

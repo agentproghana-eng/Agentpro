@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * Agent Pro Ghana — Database Migration Runner
+ * AgentPro — Database Migration Runner
  * Run: node scripts/migrate.js
  *
  * Applies all pending SQL migration files in order.

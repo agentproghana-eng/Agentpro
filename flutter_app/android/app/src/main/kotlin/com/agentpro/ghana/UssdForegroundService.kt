@@ -50,7 +50,7 @@ class UssdForegroundService : Service() {
         super.onCreate()
         createChannelIfNeeded()
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Agent Pro Ghana")
+            .setContentTitle("AgentPro")
             .setContentText("Processing your transaction — please wait")
             .setSmallIcon(applicationInfo.icon)
             .setOngoing(true)

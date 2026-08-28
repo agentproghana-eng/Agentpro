@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
-  title: Agent Pro Ghana API
+  title: AgentPro API
   description: |
-    REST API for Agent Pro Ghana — One App. Every Mobile Money Business.
+    REST API for AgentPro — One App. Every Mobile Money Business.
 
     ## Authentication
     All protected endpoints require a Bearer JWT token in the Authorization header:
@@ -28,12 +28,12 @@ info:
 
   version: 2.0.0
   contact:
-    name: Agent Pro Ghana Support
-    email: dev@agentproghana.com
-    url: https://agentproghana.com
+    name: AgentPro Support
+    email: support@intellicoresystem.com
+    url: https://intellicoresystem.com
 
 servers:
-  - url: https://api.agentproghana.com/v1
+  - url: https://api.agentpro.intellicoresystem.com/v1
     description: Production
   - url: http://localhost:3000/v1
     description: Local development

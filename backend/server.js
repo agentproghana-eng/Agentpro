@@ -468,7 +468,7 @@ if (process.env.NODE_ENV !== 'test') {
     }
 
     httpServer = app.listen(PORT, '0.0.0.0', () => {
-      logger.info(`🚀 Agent Pro Ghana API running on port ${PORT}`);
+      logger.info(`🚀 AgentPro API running on port ${PORT}`);
       logger.info(`📊 Environment: ${process.env.NODE_ENV}`);
     });
   } catch (error) {

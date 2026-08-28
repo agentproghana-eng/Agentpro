@@ -340,7 +340,7 @@ async function sendSubscriptionReminder(companyId, daysLeft) {
   return sendToMultiple(userIds, {
     type: 'subscription_reminder',
     title: `⏰ Subscription Expires in ${daysLeft} Day${daysLeft > 1 ? 's' : ''}`,
-    body: 'Renew your Agent Pro Ghana Business Plan to keep processing transactions.',
+    body: 'Renew your AgentPro Business Plan to keep processing transactions.',
     data: { days_left: String(daysLeft) },
   });
 }
@@ -349,7 +349,7 @@ async function sendSubscriptionSuspended(companyId) {
   return sendToCompany(companyId, {
     type: 'subscription_suspended',
     title: '🔴 Subscription Suspended',
-    body: 'Your Agent Pro Ghana subscription has been suspended. Please renew to resume operations.',
+    body: 'Your AgentPro subscription has been suspended. Please renew to resume operations.',
     data: {},
   });
 }

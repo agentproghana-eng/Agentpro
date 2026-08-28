@@ -1928,7 +1928,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                       Expanded(
                         child: Text(
                           'You will enter your MoMo PIN only on the official network USSD screen. '
-                          'Agent Pro Ghana never asks for your PIN.',
+                          'AgentPro never asks for your PIN.',
                           style: TextStyle(
                             fontSize: 12,
                             color: context.isDarkMode

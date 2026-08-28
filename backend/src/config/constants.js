@@ -54,7 +54,7 @@ module.exports = {
   },
 
   // Security
-  PIN_WARNING: 'Agent Pro Ghana NEVER requests, stores, or transmits a MoMo PIN.',
+  PIN_WARNING: 'AgentPro NEVER requests, stores, or transmits a MoMo PIN.',
 
   // Default values (overridden by system_config table)
   DEFAULTS: {

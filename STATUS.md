@@ -1,4 +1,4 @@
-# Agent Pro Ghana — Project Status Report
+# AgentPro — Project Status Report
 Generated at end of build session | For whoever picks this up next
 
 ---

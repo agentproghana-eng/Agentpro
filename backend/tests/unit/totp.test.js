@@ -166,7 +166,7 @@ describe(
         );
 
         expect(uri).toContain(
-          'issuer=AgentPro%20Ghana',
+          'issuer=AgentPro',
         );
 
         expect(uri).toContain(

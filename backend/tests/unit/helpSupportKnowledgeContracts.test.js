@@ -111,7 +111,7 @@ describe('Help and Support knowledge contracts', () => {
     );
 
     expect(source).toContain(
-      'Do not discuss how Agent Pro Ghana was built or implemented',
+      'Do not discuss how AgentPro was built or implemented',
     );
 
     expect(source).toContain(

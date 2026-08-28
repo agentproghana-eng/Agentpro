@@ -29,7 +29,7 @@ exports.getSubscription = async (req, res) => {
         subscription: result.rows[0],
         payment_instructions: {
           merchant_number: config.rows[0]?.value || '',
-          merchant_name: 'Agent Pro Ghana',
+          merchant_name: 'AgentPro',
           amount: 5.00,
           currency: 'GHS',
           note: 'Pay GH₵5.00 via MTN MoMo, then submit your transaction reference below.',
