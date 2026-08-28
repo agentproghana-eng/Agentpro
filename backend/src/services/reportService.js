@@ -280,7 +280,11 @@ async function generateTransactionReceipt(transaction) {
       doc.end();
     });
 
-    return Buffer.concat(buffers);
+    const pdfBuffer = Buffer.concat(buffers);
+    const receiptFilename =
+      `receipt-${transaction.reference || transaction.id}`;
+
+    return await uploadPDF(pdfBuffer, receiptFilename);
   } catch (error) {
     logger.error('Receipt generation error:', error);
     return null;

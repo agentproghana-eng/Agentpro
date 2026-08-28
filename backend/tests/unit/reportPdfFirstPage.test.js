@@ -2,8 +2,10 @@ jest.mock('../../src/config/database', () => ({
   query: jest.fn(),
 }));
 
+const mockUploadPDF = jest.fn();
+
 jest.mock('../../src/config/cloudinary', () => ({
-  uploadPDF: jest.fn(),
+  uploadPDF: (...args) => mockUploadPDF(...args),
 }));
 
 jest.mock('../../src/utils/logger', () => ({
@@ -17,6 +19,7 @@ jest.mock('../../src/utils/logger', () => ({
 const ExcelJS = require('exceljs');
 
 const {
+  generateTransactionReceipt,
   generateTransactionReportPDF,
   generateTransactionReportExcel,
   generatePersonalTransactionReportPDF,
@@ -26,6 +29,58 @@ function pdfPageCount(buffer) {
   const source = buffer.toString('latin1');
   return (source.match(/\/Type \/Page\b/g) || []).length;
 }
+
+describe('transaction receipt delivery', () => {
+  beforeEach(() => {
+    mockUploadPDF.mockReset();
+  });
+
+  test('uploads receipt bytes and returns the Cloudinary URL', async () => {
+    const receiptUrl =
+      'https://res.cloudinary.com/test/raw/upload/receipt.pdf';
+
+    mockUploadPDF.mockResolvedValue(receiptUrl);
+
+    const result = await generateTransactionReceipt({
+      id: 'transaction-1',
+      reference: 'APG-TEST-RECEIPT',
+      status: 'success',
+      amount: 25,
+      transaction_type: 'cash_in',
+      provider: 'mtn',
+      network_reference: 'NETWORK-123',
+      customer_phone: '0240000000',
+      created_at: '2026-08-28T00:00:00.000Z',
+    });
+
+    expect(result).toBe(receiptUrl);
+    expect(Buffer.isBuffer(result)).toBe(false);
+    expect(mockUploadPDF).toHaveBeenCalledTimes(1);
+
+    const [pdfBuffer, filename] =
+      mockUploadPDF.mock.calls[0];
+
+    expect(Buffer.isBuffer(pdfBuffer)).toBe(true);
+    expect(pdfBuffer.length).toBeGreaterThan(0);
+    expect(filename).toBe(
+      'receipt-APG-TEST-RECEIPT'
+    );
+  });
+
+  test('does not upload a receipt for a non-success outcome', async () => {
+    const result = await generateTransactionReceipt({
+      id: 'transaction-2',
+      reference: 'APG-PENDING',
+      status: 'pending_confirmation',
+      amount: 25,
+      transaction_type: 'cash_in',
+      provider: 'mtn',
+    });
+
+    expect(result).toBeNull();
+    expect(mockUploadPDF).not.toHaveBeenCalled();
+  });
+});
 
 describe('report PDF first-page layout', () => {
   test('Business transaction report starts on page one', async () => {
