@@ -78,14 +78,28 @@ void main() {
       expect(
         serviceSource,
         contains(
-          'Network/server failure falls through',
+          'static Future<List<dynamic>?> _fetchServerPurposes()',
         ),
       );
 
       expect(
         serviceSource,
         contains(
-          'last trusted identity-bound local assignment',
+          'if (serverPurposes == null)',
+        ),
+      );
+
+      expect(
+        serviceSource,
+        contains(
+          'return trustedCached;',
+        ),
+      );
+
+      expect(
+        serviceSource,
+        contains(
+          'cachedRoleForSlot(',
         ),
       );
     },
