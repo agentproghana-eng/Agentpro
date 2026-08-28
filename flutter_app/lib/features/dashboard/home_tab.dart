@@ -319,23 +319,12 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
 
     try {
       final sims = await SimCardService.getSimCards();
-      final trustedRoles = <int, String>{};
 
-      for (final sim in sims) {
-        final role = await SimRoleAssignmentService.roleForSlot(
-          sim.slot,
-          refreshFromServer: true,
-          simIccid: sim.iccid,
-          simSubscriptionId: sim.subscriptionId,
-          provider: sim.network,
-        );
-
-        if (role == null) {
-          continue;
-        }
-
-        trustedRoles[sim.slot] = role;
-      }
+      final trustedRoles =
+          await SimRoleAssignmentService.rolesForSims(
+        sims,
+        refreshFromServer: true,
+      );
 
       if (mounted) {
         setState(() {

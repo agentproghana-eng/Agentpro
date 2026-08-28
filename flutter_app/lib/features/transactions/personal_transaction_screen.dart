@@ -559,25 +559,19 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         detected = await SimCardService.getSimCards();
       }
 
-      final supported = <SimCard>[];
+      final supportedDetected = detected
+          .where((sim) => sim.isMoMoSupported)
+          .toList();
 
-      for (final sim in detected) {
-        if (sim.isMoMoSupported == false) {
-          continue;
-        }
+      final purposes =
+          await SimRoleAssignmentService.rolesForSims(
+        supportedDetected,
+        refreshFromServer: true,
+      );
 
-        final purpose = await SimRoleAssignmentService.roleForSlot(
-          sim.slot,
-          refreshFromServer: true,
-          simIccid: sim.iccid,
-          simSubscriptionId: sim.subscriptionId,
-          provider: sim.network,
-        );
-
-        if (purpose == 'subscriber') {
-          supported.add(sim);
-        }
-      }
+      final supported = supportedDetected
+          .where((sim) => purposes[sim.slot] == 'subscriber')
+          .toList();
 
       supported.sort((a, b) => a.slot.compareTo(b.slot));
 

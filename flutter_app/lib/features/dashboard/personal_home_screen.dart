@@ -575,25 +575,19 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
 
       if (!mounted) return;
 
-      final personalSims = <SimCard>[];
+      final supportedDetected = detected
+          .where((sim) => sim.isMoMoSupported)
+          .toList();
 
-      for (final sim in detected) {
-        if (sim.isMoMoSupported == false) {
-          continue;
-        }
+      final purposes =
+          await SimRoleAssignmentService.rolesForSims(
+        supportedDetected,
+        refreshFromServer: true,
+      );
 
-        final purpose = await SimRoleAssignmentService.roleForSlot(
-          sim.slot,
-          refreshFromServer: true,
-          simIccid: sim.iccid,
-          simSubscriptionId: sim.subscriptionId,
-          provider: sim.network,
-        );
-
-        if (purpose == 'subscriber') {
-          personalSims.add(sim);
-        }
-      }
+      final personalSims = supportedDetected
+          .where((sim) => purposes[sim.slot] == 'subscriber')
+          .toList();
 
       personalSims.sort(
         (a, b) => a.slot.compareTo(b.slot),

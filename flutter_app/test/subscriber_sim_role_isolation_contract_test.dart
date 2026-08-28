@@ -18,30 +18,35 @@ void main() {
     'open_shift_screen.dart',
   ).readAsStringSync();
 
+  final simRoleService = File(
+    'lib/core/services/'
+    'sim_role_assignment_service.dart',
+  ).readAsStringSync();
+
   test(
     'Personal Home accepts only verified Subscriber SIMs',
     () {
       expect(
         personalHome,
         contains(
-          'SimRoleAssignmentService.roleForSlot',
+          'SimRoleAssignmentService.rolesForSims',
         ),
       );
 
       expect(
         personalHome,
         contains(
-          "purpose == 'subscriber'",
+          "purposes[sim.slot] == 'subscriber'",
         ),
       );
 
       expect(
-        personalHome,
+        simRoleService,
         contains('simIccid: sim.iccid'),
       );
 
       expect(
-        personalHome,
+        simRoleService,
         contains(
           'simSubscriptionId: sim.subscriptionId',
         ),
@@ -55,19 +60,19 @@ void main() {
       expect(
         personalTransaction,
         contains(
-          'SimRoleAssignmentService.roleForSlot',
+          'SimRoleAssignmentService.rolesForSims',
         ),
       );
 
       expect(
         personalTransaction,
         contains(
-          "purpose == 'subscriber'",
+          "purposes[sim.slot] == 'subscriber'",
         ),
       );
 
       expect(
-        personalTransaction,
+        simRoleService,
         contains(
           'provider: sim.network',
         ),

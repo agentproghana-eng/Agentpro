@@ -18,26 +18,38 @@ void main() {
       expect(
         homeSource,
         contains(
-          'SimRoleAssignmentService.roleForSlot',
+          'SimRoleAssignmentService.rolesForSims',
         ),
       );
 
       expect(
         homeSource,
+        contains(
+          'refreshFromServer: true',
+        ),
+      );
+
+      final roleService = File(
+        'lib/core/services/'
+        'sim_role_assignment_service.dart',
+      ).readAsStringSync();
+
+      expect(
+        roleService,
         contains(
           'simIccid: sim.iccid',
         ),
       );
 
       expect(
-        homeSource,
+        roleService,
         contains(
           'simSubscriptionId: sim.subscriptionId',
         ),
       );
 
       expect(
-        homeSource,
+        roleService,
         contains(
           'provider: sim.network',
         ),

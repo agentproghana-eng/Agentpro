@@ -11,6 +11,11 @@ void main() {
     'lib/features/dashboard/personal_home_screen.dart',
   ).readAsStringSync();
 
+  final simRoleServiceSource = File(
+    'lib/core/services/'
+    'sim_role_assignment_service.dart',
+  ).readAsStringSync();
+
   final quickActionPreferenceSource = File(
     'lib/features/ussd_settings/quick_action_preference.dart',
   ).readAsStringSync();
@@ -196,26 +201,26 @@ void main() {
     expect(
       transactionSource,
       contains(
-        'SimRoleAssignmentService.roleForSlot',
+        'SimRoleAssignmentService.rolesForSims',
       ),
     );
 
     expect(
       transactionSource,
       contains(
-        "purpose == 'subscriber'",
+        "purposes[sim.slot] == 'subscriber'",
       ),
     );
 
     expect(
-      transactionSource,
+      simRoleServiceSource,
       contains(
         'simIccid: sim.iccid',
       ),
     );
 
     expect(
-      transactionSource,
+      simRoleServiceSource,
       contains(
         'simSubscriptionId: sim.subscriptionId',
       ),

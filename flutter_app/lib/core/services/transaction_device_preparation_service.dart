@@ -117,7 +117,12 @@ class TransactionDevicePreparationService {
     onStatus?.call('Detecting SIM card...');
 
     try {
-      final simCards = await SimCardService.getSimCards();
+      // This is the final physical-SIM verification before a money-moving
+      // operation. Always refresh from Android here rather than relying on
+      // the short-lived Home/navigation snapshot.
+      final simCards = await SimCardService.getSimCards(
+        forceRefresh: true,
+      );
 
       final providerSims =
           simCards.where((sim) => sim.network == provider).toList();

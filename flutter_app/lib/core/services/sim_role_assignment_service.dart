@@ -1,6 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/api_client.dart';
+import 'sim_card_service.dart';
 import '../../shared/models/sim_role.dart';
 
 class SimRoleAssignmentService {
@@ -120,6 +121,165 @@ class SimRoleAssignmentService {
     return canonical.isEmpty ? null : canonical;
   }
 
+  static Future<List<dynamic>?> _fetchServerPurposes() async {
+    try {
+      final response = await ApiClient.instance.get(
+        '/user-sim-purposes',
+      );
+
+      final responseData = response.data;
+      final data =
+          responseData is Map ? responseData['data'] : null;
+
+      return data is List ? data : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<String?> _resolveRole({
+    required int slot,
+    required String? trustedCached,
+    required List<dynamic>? serverPurposes,
+    String? simIccid,
+    int? simSubscriptionId,
+    String? provider,
+  }) async {
+    if (serverPurposes == null) {
+      return trustedCached;
+    }
+
+    for (final item in serverPurposes) {
+      if (item is! Map) {
+        continue;
+      }
+
+      final rawSlot = item['sim_slot'];
+
+      final parsedSlot = rawSlot is int
+          ? rawSlot
+          : int.tryParse(
+              rawSlot?.toString() ?? '',
+            );
+
+      if (parsedSlot != slot) {
+        continue;
+      }
+
+      final purpose = canonicalSimPurpose(
+        item['purpose']?.toString(),
+      );
+
+      if (purpose.isEmpty) {
+        return trustedCached;
+      }
+
+      final requestedProvider = _canonicalProvider(
+        provider,
+      );
+
+      final storedProvider = _canonicalProvider(
+        item['provider']?.toString(),
+      );
+
+      if (requestedProvider.isNotEmpty &&
+          storedProvider.isNotEmpty &&
+          requestedProvider != storedProvider) {
+        return trustedCached;
+      }
+
+      final requestedIccid = _normalizedIccid(
+        simIccid,
+      );
+
+      final storedIccid = _normalizedIccid(
+        item['sim_iccid']?.toString(),
+      );
+
+      var serverIdentityTrusted = false;
+
+      if (requestedIccid.isNotEmpty &&
+          storedIccid.isNotEmpty) {
+        if (requestedIccid == storedIccid) {
+          serverIdentityTrusted = true;
+        } else {
+          // Same slot, different physical SIM.
+          // Never inherit the old role.
+          return trustedCached;
+        }
+      } else if (trustedCached == null) {
+        // Without an ICCID match, only an already identity-bound local
+        // assignment can establish trust.
+        return null;
+      } else {
+        serverIdentityTrusted = true;
+      }
+
+      if (serverIdentityTrusted) {
+        await cacheRoleForSlot(
+          slot: slot,
+          role: purpose,
+          simIccid: simIccid,
+          simSubscriptionId: simSubscriptionId,
+          provider: provider,
+        );
+
+        return purpose;
+      }
+    }
+
+    return trustedCached;
+  }
+
+  /// Resolve roles for several physical SIMs using a single server request.
+  ///
+  /// This is intentionally request-scoped rather than stored in a global
+  /// response cache: /user-sim-purposes belongs to the current authenticated
+  /// user, so its response must never survive into another account/session.
+  static Future<Map<int, String>> rolesForSims(
+    Iterable<SimCard> sims, {
+    bool refreshFromServer = true,
+  }) async {
+    final simList = sims.toList();
+
+    final cachedRoles = <int, String?>{};
+
+    await Future.wait(
+      simList.map(
+        (sim) async {
+          cachedRoles[sim.slot] = await cachedRoleForSlot(
+            sim.slot,
+            simIccid: sim.iccid,
+            simSubscriptionId: sim.subscriptionId,
+            provider: sim.network,
+          );
+        },
+      ),
+    );
+
+    final serverPurposes =
+        refreshFromServer ? await _fetchServerPurposes() : null;
+
+    final resolved = <int, String>{};
+
+    for (final sim in simList) {
+      final role = await _resolveRole(
+        slot: sim.slot,
+        trustedCached: cachedRoles[sim.slot],
+        serverPurposes: serverPurposes,
+        simIccid: sim.iccid,
+        simSubscriptionId: sim.subscriptionId,
+        provider: sim.network,
+      );
+
+      if (role != null) {
+        resolved[sim.slot] = role;
+      }
+    }
+
+    return resolved;
+  }
+
   static Future<String?> roleForSlot(
     int slot, {
     bool refreshFromServer = true,
@@ -134,101 +294,17 @@ class SimRoleAssignmentService {
       provider: provider,
     );
 
-    if (refreshFromServer) {
-      try {
-        final response = await ApiClient.instance.get(
-          '/user-sim-purposes',
-        );
+    final serverPurposes =
+        refreshFromServer ? await _fetchServerPurposes() : null;
 
-        final responseData = response.data;
-
-        final data = responseData is Map ? responseData['data'] : null;
-
-        if (data is List) {
-          for (final item in data) {
-            if (item is Map) {
-              final rawSlot = item['sim_slot'];
-
-              final parsedSlot = rawSlot is int
-                  ? rawSlot
-                  : int.tryParse(
-                      rawSlot?.toString() ?? '',
-                    );
-
-              if (parsedSlot == slot) {
-                final purpose = canonicalSimPurpose(
-                  item['purpose']?.toString(),
-                );
-
-                if (purpose.isEmpty) {
-                  return trustedCached;
-                }
-
-                final requestedProvider = _canonicalProvider(
-                  provider,
-                );
-
-                final storedProvider = _canonicalProvider(
-                  item['provider']?.toString(),
-                );
-
-                if (requestedProvider.isNotEmpty && storedProvider.isNotEmpty) {
-                  if (requestedProvider == storedProvider) {
-                    // Provider identity agrees.
-                  } else {
-                    return trustedCached;
-                  }
-                }
-
-                final requestedIccid = _normalizedIccid(
-                  simIccid,
-                );
-
-                final storedIccid = _normalizedIccid(
-                  item['sim_iccid']?.toString(),
-                );
-
-                var serverIdentityTrusted = false;
-
-                if (requestedIccid.isNotEmpty && storedIccid.isNotEmpty) {
-                  if (requestedIccid == storedIccid) {
-                    serverIdentityTrusted = true;
-                  } else {
-                    // Same slot, different physical
-                    // SIM. Never inherit the old role.
-                    return trustedCached;
-                  }
-                } else if (trustedCached == null) {
-                  // Without an ICCID match, only an
-                  // already identity-bound local
-                  // assignment can establish trust.
-                  return null;
-                } else {
-                  serverIdentityTrusted = true;
-                }
-
-                if (serverIdentityTrusted) {
-                  await cacheRoleForSlot(
-                    slot: slot,
-                    role: purpose,
-                    simIccid: simIccid,
-                    simSubscriptionId: simSubscriptionId,
-                    provider: provider,
-                  );
-
-                  return purpose;
-                }
-              }
-            }
-          }
-        }
-      } catch (_) {
-        // Network/server failure falls through
-        // to the last trusted identity-bound local assignment.
-      }
-    }
-
-    return trustedCached;
+    return _resolveRole(
+      slot: slot,
+      trustedCached: trustedCached,
+      serverPurposes: serverPurposes,
+      simIccid: simIccid,
+      simSubscriptionId: simSubscriptionId,
+      provider: provider,
+    );
   }
 
   static Future<String> businessRoleForSlot(

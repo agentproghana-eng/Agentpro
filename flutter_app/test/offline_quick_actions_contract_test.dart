@@ -76,24 +76,29 @@ void main() {
         expect(
           purposes,
           contains(
-            'SimRoleAssignmentService.roleForSlot',
+            'SimRoleAssignmentService.rolesForSims',
           ),
         );
 
+        final roleService = _read(
+          'lib/core/services/'
+          'sim_role_assignment_service.dart',
+        );
+
         expect(
-          purposes,
+          roleService,
           contains('simIccid: sim.iccid'),
         );
 
         expect(
-          purposes,
+          roleService,
           contains(
             'simSubscriptionId: sim.subscriptionId',
           ),
         );
 
         expect(
-          purposes,
+          roleService,
           contains('provider: sim.network'),
         );
 
@@ -141,22 +146,29 @@ void main() {
         expect(
           simLoad,
           contains(
-            'SimRoleAssignmentService.roleForSlot',
+            'SimRoleAssignmentService.rolesForSims',
           ),
         );
 
         expect(
           simLoad,
-          contains("purpose == 'subscriber'"),
+          contains(
+            "purposes[sim.slot] == 'subscriber'",
+          ),
+        );
+
+        final roleService = _read(
+          'lib/core/services/'
+          'sim_role_assignment_service.dart',
         );
 
         expect(
-          simLoad,
+          roleService,
           contains('simIccid: sim.iccid'),
         );
 
         expect(
-          simLoad,
+          roleService,
           contains(
             'simSubscriptionId: sim.subscriptionId',
           ),

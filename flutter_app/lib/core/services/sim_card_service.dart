@@ -10,20 +10,105 @@ import 'package:flutter/services.dart';
 class SimCardService {
   static const _channel = MethodChannel('com.agentpro.ghana/sim');
 
-  /// Get all active SIM cards with their network identification
-  static Future<List<SimCard>> getSimCards() async {
+  // SIM discovery crosses the Flutter -> Android platform-channel boundary.
+  // Home can ask for the same SIM information from several independent
+  // loaders at almost the same time, so share one in-flight native lookup.
+  //
+  // A successful snapshot is kept only briefly. This is long enough for
+  // adjacent Home/navigation work to avoid duplicate native calls, but short
+  // enough that normal use quickly observes SIM insertion/removal changes.
+  static const Duration _snapshotTtl = Duration(seconds: 2);
+  static List<SimCard>? _snapshot;
+  static DateTime? _snapshotExpiresAt;
+  static Future<List<SimCard>>? _inFlightLookup;
+
+  /// Get all active SIM cards with their network identification.
+  ///
+  /// [forceRefresh] bypasses the short-lived snapshot. Callers that are at
+  /// the final money-moving verification boundary can therefore require a
+  /// fresh Android observation instead of trusting a UI warm-path snapshot.
+  static Future<List<SimCard>> getSimCards({
+    bool forceRefresh = false,
+  }) async {
+    final now = DateTime.now();
+
+    if (!forceRefresh &&
+        _snapshot != null &&
+        _snapshotExpiresAt != null &&
+        now.isBefore(_snapshotExpiresAt!)) {
+      return List<SimCard>.unmodifiable(_snapshot!);
+    }
+
+    // Security-sensitive callers explicitly asking for a fresh observation
+    // must not join an ordinary Home/navigation lookup that may already be
+    // in flight. Cross the Android boundary again for that verification.
+    if (forceRefresh) {
+      final sims = await _loadSimCardsFromAndroid();
+
+      if (sims.isNotEmpty) {
+        _snapshot = List<SimCard>.unmodifiable(sims);
+        _snapshotExpiresAt = DateTime.now().add(_snapshotTtl);
+      } else {
+        invalidateSnapshot();
+      }
+
+      return List<SimCard>.unmodifiable(sims);
+    }
+
+    final inFlight = _inFlightLookup;
+
+    if (inFlight != null) {
+      return inFlight;
+    }
+
+    final lookup = _loadSimCardsFromAndroid();
+    _inFlightLookup = lookup;
+
+    try {
+      final sims = await lookup;
+
+      // Do not cache an empty observation. Several existing screens retry
+      // SIM discovery after a short delay because Android can transiently
+      // report no subscriptions while telephony state is settling.
+      if (sims.isNotEmpty) {
+        _snapshot = List<SimCard>.unmodifiable(sims);
+        _snapshotExpiresAt = DateTime.now().add(_snapshotTtl);
+      } else {
+        invalidateSnapshot();
+      }
+
+      return List<SimCard>.unmodifiable(sims);
+    } finally {
+      if (identical(_inFlightLookup, lookup)) {
+        _inFlightLookup = null;
+      }
+    }
+  }
+
+  static Future<List<SimCard>> _loadSimCardsFromAndroid() async {
     try {
       final result = await _channel.invokeMethod<List>('getSimCards');
-      if (result == null) return [];
+
+      if (result == null) return const <SimCard>[];
+
       return result
           .map((e) => SimCard.fromMap(Map<String, dynamic>.from(e as Map)))
           .toList();
     } on PlatformException catch (e) {
       if (e.code == 'PERMISSION_DENIED') {
-        throw SimPermissionException('READ_PHONE_STATE permission required');
+        throw SimPermissionException(
+          'READ_PHONE_STATE permission required',
+        );
       }
-      return [];
+
+      return const <SimCard>[];
     }
+  }
+
+  /// Drop the warm UI snapshot after an explicit SIM-related change.
+  static void invalidateSnapshot() {
+    _snapshot = null;
+    _snapshotExpiresAt = null;
   }
 
   /// Find which SIM slot a provider is on.
