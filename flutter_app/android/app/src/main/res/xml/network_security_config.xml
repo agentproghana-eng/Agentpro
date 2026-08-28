@@ -1,25 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Network Security Configuration for AgentPro
-    Enforces HTTPS-only connections and certificate pinning for the API.
-    Debug builds allow cleartext for local development.
+    Network Security Configuration for AgentPro.
+    Enforces HTTPS-only production connections using Android's trusted
+    system certificate authorities.
+    Local development endpoints may use cleartext traffic.
 -->
 <network-security-config>
 
-    <!-- Production API: enforce HTTPS + certificate pinning -->
+    <!-- Production API: enforce HTTPS with system CA validation -->
     <domain-config cleartextTrafficPermitted="false">
         <domain includeSubdomains="true">api.agentpro.intellicoresystem.com</domain>
 
-        <!-- Certificate pinning
-             Replace these with your actual certificate SHA-256 hashes from:
-             openssl s_client -connect api.agentpro.intellicoresystem.com:443 | openssl x509 -noout -fingerprint -sha256
+        <!--
+            TLS is validated against Android's trusted system CA store.
+
+            Certificate pinning is intentionally not used because the
+            production API is hosted behind Render-managed TLS. Render
+            automatically renews certificates and may use different trusted
+            certificate authorities, so static application pins could cause
+            production outages during normal certificate rotation.
         -->
-        <pin-set expiration="2026-01-01">
-            <!-- Primary certificate pin (replace with actual) -->
-            <pin digest="SHA-256">AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</pin>
-            <!-- Backup pin (replace with actual) -->
-            <pin digest="SHA-256">BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=</pin>
-        </pin-set>
     </domain-config>
 
     <!-- Cloudinary: HTTPS only -->
