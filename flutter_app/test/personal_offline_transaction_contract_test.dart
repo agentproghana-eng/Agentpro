@@ -221,7 +221,7 @@ void main() {
         expect(
           load,
           contains(
-            "purpose == 'subscriber'",
+            "purposes[sim.slot] == 'subscriber'",
           ),
         );
 

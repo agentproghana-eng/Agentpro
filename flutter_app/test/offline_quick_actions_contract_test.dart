@@ -175,7 +175,7 @@ void main() {
         );
 
         expect(
-          simLoad,
+          roleService,
           contains('provider: sim.network'),
         );
       },
