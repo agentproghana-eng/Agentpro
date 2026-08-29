@@ -36,8 +36,13 @@ void main() {
         ),
       );
 
+      final disclosureSource = disclosure.replaceAll(
+        RegExp(r"'\\s*'"),
+        '',
+      );
+
       expect(
-        disclosure,
+        disclosureSource,
         contains(
           'processed only on this device',
         ),

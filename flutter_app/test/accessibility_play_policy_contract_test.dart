@@ -26,35 +26,54 @@ void main() {
       expect(
         disclosureSource,
         contains(
-          'text and interactive controls in the active USSD dialog',
+          'AgentPro uses Android Accessibility only for USSD '
+          'transactions you start.',
         ),
       );
 
       expect(
         disclosureSource,
         contains(
-          'Raw USSD screen text is processed only in memory',
+          'It reads the active USSD menu and enters the non-PIN '
+          'transaction details you already provided.',
         ),
       );
 
       expect(
         disclosureSource,
         contains(
-          'It is not uploaded to AgentPro servers',
+          'Your Mobile Money PIN is never read, stored, or entered by '
+          'AgentPro.',
         ),
       );
 
       expect(
         disclosureSource,
         contains(
-          'never stores or auto-enters your Mobile Money PIN',
+          'USSD screen content is processed only on this device during '
+          'the active session and is cleared when the session ends.',
         ),
       );
 
       expect(
         disclosureSource,
         contains(
-          'By tapping Continue to Settings, you consent',
+          'Only the transaction outcome is returned to AgentPro.',
+        ),
+      );
+
+      expect(
+        disclosureSource,
+        contains(
+          'You can turn this access off anytime in Android Settings.',
+        ),
+      );
+
+      expect(
+        disclosureSource,
+        contains(
+          'Tap Continue to Settings to enable USSD Automation, or '
+          'Not Now to leave it off.',
         ),
       );
 
@@ -92,21 +111,34 @@ void main() {
         enabledIndex,
       );
 
-      final settingsIndex = source.indexOf(
-        'accessEngine.openAccessibilitySettings()',
-        disclosureIndex,
-      );
-
-      expect(enabledIndex, greaterThanOrEqualTo(0));
-      expect(disclosureIndex, greaterThan(enabledIndex));
-      expect(settingsIndex, greaterThan(disclosureIndex));
-
       final declineIndex = source.indexOf(
         'if (!consented)',
         disclosureIndex,
       );
 
+      final guideCallIndex = source.indexOf(
+        'enabled = await _guideAccessibilitySetup(',
+        declineIndex,
+      );
+
+      final guideDefinitionIndex = source.indexOf(
+        'Future<bool> _guideAccessibilitySetup(',
+      );
+
+      final settingsRoundTripIndex = source.indexOf(
+        'accessEngine.openAccessibilitySettings,',
+        guideDefinitionIndex,
+      );
+
+      expect(enabledIndex, greaterThanOrEqualTo(0));
+      expect(disclosureIndex, greaterThan(enabledIndex));
       expect(declineIndex, greaterThan(disclosureIndex));
+      expect(guideCallIndex, greaterThan(declineIndex));
+      expect(guideDefinitionIndex, greaterThanOrEqualTo(0));
+      expect(
+        settingsRoundTripIndex,
+        greaterThan(guideDefinitionIndex),
+      );
       expect(
         source,
         contains(
