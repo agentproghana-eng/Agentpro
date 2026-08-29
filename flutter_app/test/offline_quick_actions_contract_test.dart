@@ -36,7 +36,7 @@ void main() {
 
       final load = _slice(
         source,
-        'Future<void> _loadQuickActions() async',
+        'Future<void> _loadQuickActions({',
         'Future<void> _loadSimPurposes() async',
       );
 
@@ -123,7 +123,7 @@ void main() {
 
         final actions = _slice(
           source,
-          'Future<void> _loadQuickActions() async',
+          'Future<void> _loadQuickActions({',
           'QuickActionCatalogDefinition? _quickActionDefinition',
         );
 

@@ -62,14 +62,18 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
     super.dispose();
   }
 
-  // Fires when a screen pushed on top of this one (e.g. Settings >
-  // SIM Purpose) gets popped, so a saved purpose change is reflected
-  // immediately instead of requiring an app restart to take effect.
+  // Returning to Home must not rediscover physical SIMs or refetch
+  // Quick Actions. Hardware identity remains warm for UI purposes while
+  // SIM purpose and Quick Actions are rehydrated from their local caches.
+  // The final transaction boundary performs its own fresh Android SIM check.
   @override
   void didPopNext() {
-    _loadSimPurposes();
-    _loadQuickActions();
-    _loadSimMap();
+    unawaited(_loadSimPurposes());
+    unawaited(
+      _loadQuickActions(
+        allowNetwork: false,
+      ),
+    );
   }
 
   @override
@@ -100,7 +104,9 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
     }
   }
 
-  Future<void> _loadQuickActions() async {
+  Future<void> _loadQuickActions({
+    bool allowNetwork = true,
+  }) async {
     const cacheKey = 'dashboard_quick_actions';
 
     Map<String, List<QuickActionPreference>> parseProfile(dynamic raw) {
@@ -226,6 +232,22 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
       setState(() {});
     }
 
+    // Navigation returns are cache-only. The dashboard already has a
+    // durable snapshot and must not refetch Quick Actions simply because
+    // another page was popped. Initial loading still uses the network.
+    if (!allowNetwork) {
+      if (mounted) {
+        setState(() {
+          _agentQuickActionCatalogResolved =
+              _agentQuickActionCatalog != null;
+          _personalQuickActionCatalogResolved =
+              _personalQuickActionCatalog != null;
+        });
+      }
+
+      return;
+    }
+
     try {
       final response = await ApiClient.instance.get('/users/me/quick-actions');
 
@@ -310,35 +332,62 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
     ]);
   }
 
-  Future<void> _loadSimPurposes() async {
-    if (mounted) {
-      setState(() {
-        _simPurposesResolved = false;
-      });
-    }
-
+  Future<void> _refreshSimPurposesFromServer(
+    List<SimCard> sims,
+  ) async {
     try {
-      final sims = await SimCardService.getSimCards();
-
-      final trustedRoles =
+      final refreshedRoles =
           await SimRoleAssignmentService.rolesForSims(
         sims,
         refreshFromServer: true,
       );
 
-      if (mounted) {
-        setState(() {
-          _simPurposes = trustedRoles;
-          _simPurposesResolved = true;
-        });
-      }
+      if (!mounted) return;
+
+      setState(() {
+        _simPurposes = refreshedRoles;
+        _simPurposesResolved = true;
+      });
     } catch (_) {
-      if (mounted) {
-        setState(() {
-          _simPurposes = {};
-          _simPurposesResolved = true;
-        });
-      }
+      // A failed background refresh must never erase a previously
+      // identity-bound local role. Offline Home stays usable.
+    }
+  }
+
+  Future<void> _loadSimPurposes() async {
+    try {
+      final sims = await SimCardService.getSimCards();
+
+      // Render trusted identity-bound local roles immediately.
+      // SimRoleAssignmentService never uses the retired slot-only cache,
+      // so a replacement SIM cannot inherit another SIM's role.
+      final cachedRoles =
+          await SimRoleAssignmentService.rolesForSims(
+        sims,
+        refreshFromServer: false,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _simPurposes = cachedRoles;
+        _simPurposesResolved = true;
+      });
+
+      // Network reconciliation is best-effort and never blocks Home.
+      unawaited(
+        _refreshSimPurposesFromServer(
+          sims,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+
+      // Keep any already-rendered trusted role instead of converting a
+      // transient Android/network problem into "no role".
+      setState(() {
+        _simPurposesResolved = true;
+      });
     }
   }
 

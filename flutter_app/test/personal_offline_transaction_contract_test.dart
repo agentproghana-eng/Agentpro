@@ -241,7 +241,7 @@ void main() {
         final preload = _slice(
           personalHomeSource,
           'Future<void> _preloadPersonalQuickActionFlows',
-          'Future<void> _loadQuickActions() async',
+          'Future<void> _loadQuickActions({',
         );
 
         expect(
