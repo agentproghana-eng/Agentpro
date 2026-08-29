@@ -15,27 +15,18 @@ Future<bool> showUssdAccessibilityDisclosure(
       title: const Text('USSD Automation Access'),
       content: const SingleChildScrollView(
         child: Text(
-          'AgentPro uses Android Accessibility Service only for a '
-          'USSD automation that you start.\n\n'
-          'What it accesses: text and interactive controls in the '
-          'active USSD dialog. This can include network menu prompts, '
-          'numbers or IDs and amounts shown by the provider, and the '
-          'final transaction result.\n\n'
-          'How it is used: AgentPro processes that USSD screen content '
-          'on this device to recognize the current menu and enter the '
-          'non-PIN transaction details you already provided. Raw USSD '
-          'screen text is processed only in memory during the active '
-          'session and is cleared when the session ends. It is not '
-          'uploaded to AgentPro servers or used for advertising or '
-          'profiling. Only the automation outcome, such as success, '
-          'failure, or pending confirmation, is returned to the '
-          'AgentPro transaction flow.\n\n'
-          'PIN protection: AgentPro never stores or auto-enters your '
-          'Mobile Money PIN. When the PIN prompt is reached, automated '
-          'input stops and you enter the PIN yourself.\n\n'
-          'By tapping Continue to Settings, you consent to this use of '
-          'Accessibility Service. You can choose Not Now and continue '
-          'without enabling USSD automation.',
+          'AgentPro uses Android Accessibility only for USSD '
+          'transactions you start. It reads the active USSD menu and '
+          'enters the non-PIN transaction details you already '
+          'provided.\n\n'
+          'Your Mobile Money PIN is never read, stored, or entered by '
+          'AgentPro. USSD screen content is processed only on this '
+          'device during the active session and is cleared when the '
+          'session ends. Only the transaction outcome is returned to '
+          'AgentPro.\n\n'
+          'You can turn this access off anytime in Android Settings.\n\n'
+          'Tap Continue to Settings to enable USSD Automation, or '
+          'Not Now to leave it off.',
         ),
       ),
       actions: [

@@ -562,6 +562,10 @@ class UssdAccessibilityEngine {
     await _channel.invokeMethod('openAccessibilitySettings');
   }
 
+  Future<void> openAppSettings() async {
+    await _channel.invokeMethod('openAppSettings');
+  }
+
   /// Opens a provider's real USSD menu without starting the Accessibility
   /// automation service. Used for Free Personal transactions, where AgentPro
   /// may select the correct SIM but must not navigate the menu automatically.
