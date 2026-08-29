@@ -2,15 +2,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
-/// Free-tier-only banner shown at the bottom of Personal Home, per
-/// spec (~1/8 screen height, hence AdSize.largeBanner at 320x100
-/// rather than the smaller standard 320x50 banner). Uses Google's
-/// public TEST ad unit ID for now - MUST be replaced with a real ad
-/// unit ID from an actual AdMob console before any real launch,
-/// alongside the App ID already set in AndroidManifest.xml. Fails
-/// silently (renders nothing) if the ad can't load, rather than
-/// showing a broken placeholder - a failed ad load shouldn't visibly
-/// break the screen around it.
+/// Free-tier-only banner shown at the bottom of Personal Home.
+/// Debug/profile development uses Google's public test banner ID,
+/// while release builds use AgentPro's production AdMob banner unit.
+/// Failed ad loads render nothing so advertising never breaks the
+/// surrounding Personal Home experience.
 class PersonalAdBanner extends StatefulWidget {
   const PersonalAdBanner({super.key});
   @override
@@ -21,8 +17,15 @@ class _PersonalAdBannerState extends State<PersonalAdBanner> {
   BannerAd? _bannerAd;
   bool _isLoaded = false;
 
-  // Google's public TEST banner ad unit ID for Android.
-  static const _testAdUnitId = 'ca-app-pub-3940256099942544/6300978111';
+  static const _testAdUnitId =
+      'ca-app-pub-3940256099942544/6300978111';
+  static const _productionAdUnitId =
+      'ca-app-pub-9807693896377158/7201843290';
+
+  static String get _adUnitId =>
+      const bool.fromEnvironment('dart.vm.product')
+          ? _productionAdUnitId
+          : _testAdUnitId;
 
   @override
   void initState() {
@@ -32,7 +35,7 @@ class _PersonalAdBannerState extends State<PersonalAdBanner> {
 
   void _loadAd() {
     _bannerAd = BannerAd(
-      adUnitId: _testAdUnitId,
+      adUnitId: _adUnitId,
       size: AdSize.largeBanner,
       request: const AdRequest(),
       listener: BannerAdListener(
