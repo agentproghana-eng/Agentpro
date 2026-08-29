@@ -17,7 +17,11 @@ class SimCardService {
   // A successful snapshot is kept only briefly. This is long enough for
   // adjacent Home/navigation work to avoid duplicate native calls, but short
   // enough that normal use quickly observes SIM insertion/removal changes.
-  static const Duration _snapshotTtl = Duration(seconds: 2);
+  // UI/navigation callers may safely reuse this observation.
+  // Money-moving execution never relies on this TTL: the final
+  // transaction preparation boundary explicitly requests
+  // forceRefresh: true from Android.
+  static const Duration _snapshotTtl = Duration(minutes: 5);
   static List<SimCard>? _snapshot;
   static DateTime? _snapshotExpiresAt;
   static Future<List<SimCard>>? _inFlightLookup;

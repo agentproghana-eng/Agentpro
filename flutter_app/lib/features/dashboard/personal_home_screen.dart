@@ -72,7 +72,16 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
 
   @override
   void didPopNext() {
-    unawaited(_refreshPersonalContext());
+    // Keep Home warm when returning from a transaction/settings screen.
+    // SIM discovery uses the local warm snapshot and Quick Actions hydrate
+    // from cache only; only recent activity may require a normal refresh.
+    unawaited(_loadSimMap());
+    unawaited(
+      _loadQuickActions(
+        allowNetwork: false,
+      ),
+    );
+    unawaited(_loadRecent());
   }
 
   Future<void> _refreshPersonalContext() async {
@@ -247,7 +256,9 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
     }
   }
 
-  Future<void> _loadQuickActions() async {
+  Future<void> _loadQuickActions({
+    bool allowNetwork = true,
+  }) async {
     Map<String, List<QuickActionPreference>> parseProfile(dynamic raw) {
       final parsed = <String, List<QuickActionPreference>>{};
 
@@ -335,6 +346,12 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
 
         setState(() {});
       }
+    }
+
+    // Returning from another page must keep the already-rendered
+    // Quick Actions stable. Durable/cache hydration above is enough.
+    if (!allowNetwork) {
+      return;
     }
 
     QuickActionCatalog? freshCatalog;
@@ -579,10 +596,21 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
           .where((sim) => sim.isMoMoSupported)
           .toList();
 
+      // Personal Home is local-first. A previously verified role is
+      // identity-bound and safe to use while offline.
       final purposes =
           await SimRoleAssignmentService.rolesForSims(
         supportedDetected,
-        refreshFromServer: true,
+        refreshFromServer: false,
+      );
+
+      // Reconcile the cache silently when connectivity exists. Do not make
+      // Home wait for the server and do not turn network loss into SIM loss.
+      unawaited(
+        SimRoleAssignmentService.rolesForSims(
+          supportedDetected,
+          refreshFromServer: true,
+        ),
       );
 
       final personalSims = supportedDetected

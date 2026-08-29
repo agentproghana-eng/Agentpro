@@ -43,7 +43,7 @@ void main() {
 
     expect(
       simService,
-      contains('_snapshotTtl = Duration(seconds: 2)'),
+      contains('_snapshotTtl = Duration(minutes: 5)'),
     );
   });
 
