@@ -200,6 +200,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
   // asking the user what the network reported.
   Completer<void>? _manualDialResumeCompleter;
   bool _manualDialSawBackground = false;
+  Completer<void>? _settingsResumeCompleter;
+  bool _settingsSawBackground = false;
 
   @override
   void initState() {
@@ -220,21 +222,42 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final completer = _manualDialResumeCompleter;
-    if (completer == null) return;
-
     if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused) {
-      _manualDialSawBackground = true;
+      if (_manualDialResumeCompleter != null) {
+        _manualDialSawBackground = true;
+      }
+
+      if (_settingsResumeCompleter != null) {
+        _settingsSawBackground = true;
+      }
+
       return;
     }
 
-    if (state == AppLifecycleState.resumed && _manualDialSawBackground) {
+    if (state != AppLifecycleState.resumed) {
+      return;
+    }
+
+    final manualCompleter = _manualDialResumeCompleter;
+
+    if (manualCompleter != null && _manualDialSawBackground) {
       _manualDialResumeCompleter = null;
       _manualDialSawBackground = false;
 
-      if (!completer.isCompleted) {
-        completer.complete();
+      if (!manualCompleter.isCompleted) {
+        manualCompleter.complete();
+      }
+    }
+
+    final settingsCompleter = _settingsResumeCompleter;
+
+    if (settingsCompleter != null && _settingsSawBackground) {
+      _settingsResumeCompleter = null;
+      _settingsSawBackground = false;
+
+      if (!settingsCompleter.isCompleted) {
+        settingsCompleter.complete();
       }
     }
   }
@@ -1077,6 +1100,96 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     await _reportResult(transactionId, result);
   }
 
+  Future<void> _waitForAndroidSettingsRoundTrip(
+    Future<void> Function() openSettings,
+  ) async {
+    final completer = Completer<void>();
+
+    _settingsResumeCompleter = completer;
+    _settingsSawBackground = false;
+
+    try {
+      await openSettings();
+      await completer.future;
+    } finally {
+      if (identical(_settingsResumeCompleter, completer)) {
+        _settingsResumeCompleter = null;
+        _settingsSawBackground = false;
+      }
+    }
+  }
+
+  Future<bool> _showRestrictedSettingHelp() async {
+    if (!mounted) return false;
+
+    final openAppInfo = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Accessibility is still off'),
+        content: const Text(
+          'If Android shows “Restricted setting”, open AgentPro App info, '
+          'tap ⋮, choose Allow restricted settings, then return here.\n\n'
+          'AgentPro cannot change this Android security setting for you.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop(false);
+            },
+            child: const Text('Not Now'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop(true);
+            },
+            child: const Text('Open AgentPro App Info'),
+          ),
+        ],
+      ),
+    );
+
+    return openAppInfo == true;
+  }
+
+  Future<bool> _guideAccessibilitySetup(
+    UssdAccessibilityEngine accessEngine,
+  ) async {
+    await _waitForAndroidSettingsRoundTrip(
+      accessEngine.openAccessibilitySettings,
+    );
+
+    if (!mounted) return false;
+
+    if (await accessEngine.isServiceEnabled()) {
+      return true;
+    }
+
+    final openAppInfo = await _showRestrictedSettingHelp();
+
+    if (!mounted || !openAppInfo) {
+      return false;
+    }
+
+    await _waitForAndroidSettingsRoundTrip(
+      accessEngine.openAppSettings,
+    );
+
+    if (!mounted) return false;
+
+    // Returning from App Info means the user has had the opportunity to
+    // approve Android's own "Allow restricted settings" control. AgentPro
+    // still cannot grant Accessibility itself, so reopen the system
+    // Accessibility screen for the final user-controlled switch.
+    await _waitForAndroidSettingsRoundTrip(
+      accessEngine.openAccessibilitySettings,
+    );
+
+    if (!mounted) return false;
+
+    return accessEngine.isServiceEnabled();
+  }
+
   Future<void> _startAccessibilityAutomation(
     String transactionId,
     Map<String, String> automationParams,
@@ -1108,7 +1221,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
     final accessEngine = UssdAccessibilityEngine();
 
-    final enabled = await accessEngine.isServiceEnabled();
+    var enabled = await accessEngine.isServiceEnabled();
 
     if (!enabled) {
       if (!mounted) return;
@@ -1137,20 +1250,18 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         return;
       }
 
-      const reason = 'Enable AgentPro USSD Automation in Android Accessibility '
-          'Settings, then return to AgentPro and start the transaction '
-          'again. No USSD request was sent.';
-
-      setState(() => _simWarning = reason);
-
       try {
-        await accessEngine.openAccessibilitySettings();
+        enabled = await _guideAccessibilitySetup(
+          accessEngine,
+        );
       } catch (_) {
         const settingsReason =
-            'AgentPro could not open Android Accessibility Settings. '
+            'AgentPro could not open the required Android Settings screen. '
             'No USSD request was sent.';
 
-        setState(() => _simWarning = settingsReason);
+        if (mounted) {
+          setState(() => _simWarning = settingsReason);
+        }
 
         await _reportResult(
           transactionId,
@@ -1164,16 +1275,29 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         return;
       }
 
-      await _reportResult(
-        transactionId,
-        const USSDResult(
-          outcome: USSDStatus.failed,
-          failureReason: reason,
-          sessionLog: [],
-        ),
-      );
+      if (!mounted) return;
 
-      return;
+      if (!enabled) {
+        const reason =
+            'USSD automation was not enabled. No USSD request was sent.';
+
+        setState(() => _simWarning = reason);
+
+        await _reportResult(
+          transactionId,
+          const USSDResult(
+            outcome: USSDStatus.failed,
+            failureReason: reason,
+            sessionLog: [],
+          ),
+        );
+
+        return;
+      }
+
+      // Accessibility is now enabled. Continue this same transaction;
+      // do not force the user to restart it.
+      setState(() => _simWarning = null);
     }
 
     _accessibilityProgressSubscription?.cancel();

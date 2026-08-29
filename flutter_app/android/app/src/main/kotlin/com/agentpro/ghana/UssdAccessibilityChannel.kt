@@ -57,6 +57,10 @@ class UssdAccessibilityChannel(
                 openAccessibilitySettings()
                 result.success(null)
             }
+            "openAppSettings" -> {
+                openAppSettings()
+                result.success(null)
+            }
             "dialManual" -> dialManual(call, result)
             "startAutomation" -> startAutomation(call, result)
             "cancelAutomation" -> {
@@ -79,6 +83,15 @@ class UssdAccessibilityChannel(
 
     private fun openAccessibilitySettings() {
         val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+    }
+
+    private fun openAppSettings() {
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.parse("package:${context.packageName}")
+        )
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
     }
