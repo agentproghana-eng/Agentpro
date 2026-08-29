@@ -79,13 +79,12 @@
         android:hardwareAccelerated="true"
         android:windowSoftInputMode="adjustResize">
 
-        <!-- AdMob App ID - THIS IS GOOGLE'S PUBLIC TEST APP ID, safe to
-             ship during development but shows test ads only. Replace
-             with the real App ID from your own AdMob console before
-             any real launch, or ad serving will never generate revenue. -->
+        <!-- Google Mobile Ads production App ID for AgentPro.
+             Banner requests use Google's official test ad unit
+             in non-release Flutter builds. -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713"/>
+            android:value="ca-app-pub-9807693896377158~4084725360"/>
 
         <!-- Flutter activity -->
         <activity
