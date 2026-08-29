@@ -37,7 +37,7 @@ void main() {
       );
 
       final disclosureSource = disclosure.replaceAll(
-        RegExp(r"'\\s*'"),
+        RegExp(r"'\s*'"),
         '',
       );
 
