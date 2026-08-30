@@ -341,27 +341,38 @@ h3 {
 }
 
 .agentpro-logo {
-  width: 50px;
-  height: 50px;
+  width: 52px;
+  height: 52px;
   display: grid;
   place-items: center;
+  flex: 0 0 auto;
+  overflow: hidden;
   border-radius: 16px;
-  background: var(--gold-bright);
-  color: var(--teal-deep);
-  font-size: 1.2rem;
-  font-weight: 900;
+  background: white;
 }
 
-.preview-top > div:last-child {
+.agentpro-logo img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+}
+
+.agentpro-preview-brand {
+  min-width: 0;
   display: grid;
+  gap: 4px;
 }
 
-.preview-top strong {
-  font-size: 1.08rem;
+.agentpro-wordmark {
+  width: min(170px, 100%);
+  height: auto;
+  display: block;
+  object-fit: contain;
+  object-position: left center;
 }
 
-.preview-top span {
-  margin-top: 2px;
+.agentpro-preview-brand span {
   color: rgba(255, 255, 255, 0.65);
   font-size: 0.78rem;
 }
@@ -1025,5 +1036,114 @@ h3 {
   *::before,
   *::after {
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* AgentPro web brand lockup */
+.preview-top {
+  width: 100%;
+  padding-bottom: 18px;
+}
+
+.agentpro-web-lockup {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.97);
+}
+
+.agentpro-web-shield {
+  width: 86px;
+  height: 86px;
+  flex: 0 0 86px;
+  display: block;
+  object-fit: contain;
+}
+
+.agentpro-web-copy {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  align-content: center;
+}
+
+.agentpro-web-name {
+  line-height: 0.95;
+  white-space: nowrap;
+  font-size: clamp(2rem, 5vw, 2.65rem);
+  font-weight: 850;
+  letter-spacing: -0.055em;
+}
+
+.agentpro-agent {
+  color: var(--teal);
+}
+
+.agentpro-pro {
+  color: var(--gold);
+}
+
+.agentpro-web-tagline {
+  color: #33413e;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+@media (max-width: 620px) {
+  .agentpro-web-lockup {
+    gap: 12px;
+    padding: 12px 14px;
+  }
+
+  .agentpro-web-shield {
+    width: 78px;
+    height: 78px;
+    flex-basis: 78px;
+  }
+
+  .agentpro-web-name {
+    font-size: clamp(1.75rem, 7vw, 2.2rem);
+  }
+
+  .agentpro-web-tagline {
+    font-size: 0.7rem;
+  }
+}
+
+/* Enlarge shield artwork while preserving full tip */
+.agentpro-web-shield-frame {
+  width: 88px;
+  height: 88px;
+  flex: 0 0 88px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.agentpro-web-shield {
+  width: 88px;
+  height: 88px;
+  max-width: none;
+  display: block;
+  object-fit: contain;
+  transform: scale(2.65);
+  transform-origin: center;
+}
+
+@media (max-width: 620px) {
+  .agentpro-web-shield-frame {
+    width: 82px;
+    height: 82px;
+    flex-basis: 82px;
+  }
+
+  .agentpro-web-shield {
+    width: 82px;
+    height: 82px;
+    transform: scale(2.65);
   }
 }
