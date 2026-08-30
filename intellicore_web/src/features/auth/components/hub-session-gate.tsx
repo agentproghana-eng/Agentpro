@@ -2,37 +2,33 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  ArrowRight,
-  Building2,
-  Loader2,
-  LogOut,
-  ShieldCheck,
-} from "lucide-react";
+import { Loader2, ShieldCheck } from "lucide-react";
 
-type User = {
-  first_name?: string | null;
-  last_name?: string | null;
-  email?: string | null;
-  company_name?: string | null;
-  role?: string | null;
-};
+import type { AgentProUser } from "@/features/auth/types";
+import {
+  BusinessHubView,
+  CommunityHubView,
+  PortalOverview,
+} from "@/features/portal/components/portal-content";
+import {
+  PortalShell,
+  type PortalSection,
+} from "@/features/portal/components/portal-shell";
+
+type PortalUser = Partial<AgentProUser>;
 
 type MeResponse = {
   success?: boolean;
   message?: string;
-  data?: {
-    user?: User;
-    first_name?: string | null;
-    last_name?: string | null;
-    email?: string | null;
-    company_name?: string | null;
-    role?: string | null;
-  } | null;
-  user?: User;
+  data?:
+    | (PortalUser & {
+        user?: PortalUser;
+      })
+    | null;
+  user?: PortalUser;
 };
 
-function extractUser(body: MeResponse): User | null {
+function extractUser(body: MeResponse): PortalUser | null {
   if (body.data?.user) {
     return body.data.user;
   }
@@ -54,7 +50,7 @@ function extractUser(body: MeResponse): User | null {
 async function requestSession(): Promise<
   | {
       kind: "authenticated";
-      user: User;
+      user: PortalUser;
     }
   | {
       kind: "unauthorized";
@@ -109,8 +105,12 @@ async function requestSession(): Promise<
   };
 }
 
-export function HubSessionGate() {
-  const [user, setUser] = useState<User | null>(null);
+type Props = {
+  section?: PortalSection;
+};
+
+export function HubSessionGate({ section = "overview" }: Props) {
+  const [user, setUser] = useState<PortalUser | null>(null);
 
   const [loading, setLoading] = useState(true);
 
@@ -126,7 +126,11 @@ export function HubSessionGate() {
         }
 
         if (result.kind === "unauthorized") {
-          window.location.replace("/login?next=/hub");
+          window.location.replace(
+            `/login?next=${
+              section === "overview" ? "/hub" : `/hub/${section}`
+            }`,
+          );
 
           return;
         }
@@ -155,7 +159,7 @@ export function HubSessionGate() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [section]);
 
   function retrySession() {
     setLoading(true);
@@ -164,7 +168,11 @@ export function HubSessionGate() {
     void requestSession()
       .then((result) => {
         if (result.kind === "unauthorized") {
-          window.location.replace("/login?next=/hub");
+          window.location.replace(
+            `/login?next=${
+              section === "overview" ? "/hub" : `/hub/${section}`
+            }`,
+          );
 
           return;
         }
@@ -242,67 +250,22 @@ export function HubSessionGate() {
     );
   }
 
-  const displayName =
-    [user?.first_name, user?.last_name].filter(Boolean).join(" ").trim() ||
-    user?.email ||
-    "AgentPro user";
+  if (!user) {
+    return null;
+  }
 
   return (
-    <main className="ic-hub-entry">
-      <header className="ic-hub-entry-header">
-        <Link href="/">Intellicore</Link>
+    <PortalShell
+      user={user}
+      activeSection={section}
+      loggingOut={loading}
+      onLogout={logout}
+    >
+      {section === "community" && <CommunityHubView user={user} />}
 
-        <button type="button" onClick={logout} disabled={loading}>
-          <LogOut size={16} />
-          Sign out
-        </button>
-      </header>
+      {section === "business" && <BusinessHubView user={user} />}
 
-      <section className="ic-hub-entry-main">
-        <div>
-          <p className="ic-eyebrow">AgentPro web</p>
-
-          <h1>Welcome, {displayName}.</h1>
-
-          <p>
-            Your secure AgentPro web session is active. Community Hub and
-            Business Hub will use this authenticated workspace.
-          </p>
-        </div>
-
-        <aside className="ic-hub-entry-panel">
-          <span>
-            <ShieldCheck size={18} />
-            Session verified
-          </span>
-
-          {user?.company_name && (
-            <div>
-              <small>Current business</small>
-
-              <strong>
-                <Building2 size={17} />
-                {user.company_name}
-              </strong>
-            </div>
-          )}
-
-          {user?.role && (
-            <div>
-              <small>Account role</small>
-
-              <strong>{user.role.replaceAll("_", " ")}</strong>
-            </div>
-          )}
-
-          <p>The complete AgentPro portal shell is the next build stage.</p>
-
-          <Link href="/agentpro">
-            AgentPro overview
-            <ArrowRight size={15} />
-          </Link>
-        </aside>
-      </section>
-    </main>
+      {section === "overview" && <PortalOverview user={user} />}
+    </PortalShell>
   );
 }

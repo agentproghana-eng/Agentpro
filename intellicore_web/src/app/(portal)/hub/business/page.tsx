@@ -4,15 +4,16 @@ import { HubSessionGate } from "@/features/auth/components/hub-session-gate";
 import { requirePortalSessionPresence } from "@/features/auth/server/portal-presence";
 
 export const metadata: Metadata = {
-  title: "AgentPro Hub",
+  title: "Business Hub",
+  description: "Your authenticated AgentPro Business Hub workspace.",
   robots: {
     index: false,
     follow: false,
   },
 };
 
-export default async function HubPage() {
-  await requirePortalSessionPresence("/hub");
+export default async function BusinessHubPage() {
+  await requirePortalSessionPresence("/hub/business");
 
-  return <HubSessionGate section="overview" />;
+  return <HubSessionGate section="business" />;
 }
