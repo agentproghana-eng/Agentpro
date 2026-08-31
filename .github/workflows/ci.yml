@@ -222,6 +222,37 @@ jobs:
           name: admin-portal-dist
           path: admin_portal/dist/
 
+  # ── Intellicore Web Build ─────────────────────────────────
+  intellicore-web-build:
+    name: Intellicore Web Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: intellicore_web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: intellicore_web
+        run: npm ci
+
+      - name: Lint Intellicore web
+        working-directory: intellicore_web
+        run: npm run lint
+
+      - name: Build Intellicore web
+        working-directory: intellicore_web
+        env:
+          AGENTPRO_API_BASE_URL: https://agentpro-api-izi3.onrender.com
+          NEXT_PUBLIC_SITE_URL: https://intellicoresystem.com
+          NEXT_PUBLIC_SUPPORT_EMAIL: support@intellicoresystem.com
+        run: npm run build
+
   # ── Flutter Build ─────────────────────────────────────────
   flutter-build:
     name: Flutter Android Build
