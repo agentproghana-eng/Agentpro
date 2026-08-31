@@ -79,6 +79,7 @@ router.delete(
 );
 
 router.get("/", agentPostController.listFeed);
+router.get("/:post_id", agentPostController.getPost);
 router.post("/", requireActiveSubscription, upload.single("audio"), agentPostController.createPost);
 router.post("/:post_id/save", enhancementController.savePost);
 router.delete("/:post_id/save", enhancementController.unsavePost);

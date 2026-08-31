@@ -3,17 +3,15 @@ import {
   ArrowRight,
   BriefcaseBusiness,
   Building2,
-  CheckCircle2,
   ClipboardList,
   FileBarChart,
-  MapPin,
-  MessageSquareText,
   ShieldCheck,
   UserRoundCog,
   UsersRound,
 } from "lucide-react";
 
 import type { AgentProUser } from "@/features/auth/types";
+import { CommunityHub } from "@/features/community/components/community-hub";
 
 type Props = {
   user: Partial<AgentProUser>;
@@ -61,8 +59,8 @@ export function PortalOverview({ user }: Props) {
             <h2>Community Hub</h2>
 
             <p>
-              Discover services, connect with nearby professionals and manage
-              community service requests.
+              Join Agent Community conversations or access your Personal
+              Community based on your AgentPro account.
             </p>
           </div>
 
@@ -143,114 +141,8 @@ export function PortalOverview({ user }: Props) {
   );
 }
 
-const serviceJourney = [
-  "Requested",
-  "Providers Found",
-  "Offers Received",
-  "Provider Selected",
-  "In Progress",
-  "Completed",
-  "Reviewed",
-];
-
 export function CommunityHubView({ user }: Props) {
-  return (
-    <>
-      <section className="ic-portal-hero">
-        <p className="ic-eyebrow">AgentPro Community</p>
-
-        <h1>Community Hub</h1>
-
-        <p>
-          A trusted workspace for finding local services, responding to requests
-          and building useful professional connections.
-        </p>
-      </section>
-
-      <section className="ic-portal-highlight">
-        <div>
-          <span className="ic-portal-feature-icon">
-            <MapPin size={22} />
-          </span>
-
-          <div>
-            <p className="ic-eyebrow">Service discovery</p>
-
-            <h2>Connect by service and location.</h2>
-
-            <p>
-              Community service discovery will prioritize relevant providers
-              while protecting sensitive location details.
-            </p>
-          </div>
-        </div>
-
-        <span className="ic-portal-status">Foundation</span>
-      </section>
-
-      <section className="ic-portal-section">
-        <div className="ic-portal-section-heading">
-          <div>
-            <p className="ic-eyebrow">Request journey</p>
-
-            <h2>One clear service lifecycle.</h2>
-          </div>
-
-          <p>
-            Every request follows a consistent status model from discovery
-            through review.
-          </p>
-        </div>
-
-        <ol className="ic-service-journey">
-          {serviceJourney.map((status, index) => (
-            <li key={status}>
-              <span>{index + 1}</span>
-
-              <strong>{status}</strong>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      <section className="ic-portal-grid ic-portal-grid-three">
-        <article className="ic-portal-mini-card">
-          <MessageSquareText size={20} />
-
-          <h3>Service requests</h3>
-
-          <p>Request help and track responses from suitable providers.</p>
-
-          <span>Coming next</span>
-        </article>
-
-        <article className="ic-portal-mini-card">
-          <UsersRound size={20} />
-
-          <h3>Professional communities</h3>
-
-          <p>Join communities around trades, professions and services.</p>
-
-          <span>Coming next</span>
-        </article>
-
-        <article className="ic-portal-mini-card">
-          <CheckCircle2 size={20} />
-
-          <h3>Trusted completion</h3>
-
-          <p>Complete and review work inside a consistent request journey.</p>
-
-          <span>Coming next</span>
-        </article>
-      </section>
-
-      <p className="ic-portal-context-note">
-        Signed in as{" "}
-        <strong>{user.first_name || user.email || "AgentPro member"}</strong>.
-      </p>
-    </>
-  );
+  return <CommunityHub user={user} />;
 }
 
 export function BusinessHubView({ user }: Props) {

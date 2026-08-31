@@ -3,6 +3,8 @@ const { query, withTransaction } = require("../config/database");
 const { logger } = require("../utils/logger");
 const { uploadAudio } = require("../config/cloudinary");
 
+const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+
 // Swapped from Anthropic to Google's free-tier Gemini API - same
 // reason as aiController.js's chat assistant (billing issue on the
 // Anthropic key). This is a single-shot YES/NO classification, so no
@@ -243,6 +245,127 @@ exports.listFeed = async (req, res) => {
 };
 
 
+
+
+async function isAgentPostVisibleToUser(postId, userId) {
+  const result = await query(
+    `SELECT p.id
+     FROM agent_posts p
+     WHERE p.id = $1
+       AND (
+         p.status = 'active'
+         OR (
+           p.status = 'pending_review'
+           AND p.author_id = $2
+         )
+       )
+       AND NOT EXISTS (
+         SELECT 1
+         FROM agent_community_blocks block
+         WHERE block.blocker_id = $2
+           AND block.blocked_user_id = p.author_id
+       )
+     LIMIT 1`,
+    [postId, userId]
+  );
+
+  return result.rows.length > 0;
+}
+
+exports.getPost = async (req, res) => {
+  const { post_id } = req.params;
+
+  if (!UUID_PATTERN.test(post_id || "")) {
+    return res.status(404).json({
+      success: false,
+      message: "Post not found",
+    });
+  }
+
+  try {
+    const result = await query(
+      `SELECT
+         p.*,
+         u.first_name,
+         u.last_name,
+         u.role,
+
+         EXISTS (
+           SELECT 1
+           FROM agent_saved_posts saved
+           WHERE saved.post_id = p.id
+             AND saved.user_id = $1
+         ) AS is_saved,
+
+         (
+           SELECT json_object_agg(reaction_type, cnt)
+           FROM (
+             SELECT
+               reaction_type,
+               COUNT(*)::int AS cnt
+             FROM agent_post_likes
+             WHERE post_id = p.id
+             GROUP BY reaction_type
+           ) reaction_summary
+         ) AS reaction_counts,
+
+         (
+           SELECT COUNT(*)::int
+           FROM agent_post_comments comment
+           WHERE comment.post_id = p.id
+         ) AS comment_count,
+
+         (
+           SELECT reaction_type
+           FROM agent_post_likes reaction
+           WHERE reaction.post_id = p.id
+             AND reaction.user_id = $1
+         ) AS my_reaction
+
+       FROM agent_posts p
+       INNER JOIN users u
+         ON u.id = p.author_id
+
+       WHERE p.id = $2
+       AND (
+         p.status = 'active'
+         OR (
+           p.status = 'pending_review'
+           AND p.author_id = $1
+         )
+       )
+       AND NOT EXISTS (
+         SELECT 1
+         FROM agent_community_blocks block
+         WHERE block.blocker_id = $1
+           AND block.blocked_user_id = p.author_id
+       )
+
+       LIMIT 1`,
+      [req.user.id, post_id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Post not found",
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: result.rows[0],
+    });
+  } catch (error) {
+    logger.error("Get post error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch post",
+    });
+  }
+};
+
 const VALID_REACTIONS = ["like", "love", "laugh", "wow", "sad", "pray", "dislike"];
 
 exports.toggleLike = async (req, res) => {
@@ -285,6 +408,24 @@ exports.toggleCommentReaction = async (req, res) => {
     return res.status(400).json({ success: false, message: "Invalid reaction type" });
   }
   try {
+    const comment = await query(
+      "SELECT post_id FROM agent_post_comments WHERE id = $1 LIMIT 1",
+      [comment_id]
+    );
+
+    if (
+      comment.rows.length === 0 ||
+      !(await isAgentPostVisibleToUser(
+        comment.rows[0].post_id,
+        req.user.id
+      ))
+    ) {
+      return res.status(404).json({
+        success: false,
+        message: "Comment not found"
+      });
+    }
+
     const existing = await query(
       "SELECT id, reaction_type FROM agent_post_comment_reactions WHERE comment_id = $1 AND user_id = $2",
       [comment_id, req.user.id]
@@ -315,6 +456,13 @@ exports.toggleCommentReaction = async (req, res) => {
 exports.listComments = async (req, res) => {
   const { post_id } = req.params;
   try {
+    if (!(await isAgentPostVisibleToUser(post_id, req.user.id))) {
+      return res.status(404).json({
+        success: false,
+        message: "Post not found"
+      });
+    }
+
     const result = await query(
       `SELECT c.*, u.first_name, u.last_name, u.role,
               (SELECT json_object_agg(reaction_type, cnt) FROM (
@@ -350,6 +498,13 @@ exports.addComment = async (req, res) => {
   }
 
   try {
+    if (!(await isAgentPostVisibleToUser(post_id, req.user.id))) {
+      return res.status(404).json({
+        success: false,
+        message: "Post not found"
+      });
+    }
+
     if (parent_comment_id) {
       const parent = await query(
         "SELECT id FROM agent_post_comments WHERE id = $1 AND post_id = $2",

@@ -21,10 +21,14 @@ export function safePortalReturnPath(value: string | null | undefined): string {
       return "/hub";
     }
 
-    if (
-      resolved.pathname !== "/hub" &&
-      !resolved.pathname.startsWith("/hub/")
-    ) {
+    const isPortalPath =
+      resolved.pathname === "/hub" || resolved.pathname.startsWith("/hub/");
+
+    const isMarketplacePath =
+      resolved.pathname === "/marketplace" ||
+      resolved.pathname.startsWith("/marketplace/");
+
+    if (!isPortalPath && !isMarketplacePath) {
       return "/hub";
     }
 

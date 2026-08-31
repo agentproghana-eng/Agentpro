@@ -27,6 +27,7 @@ const upload = multer({
 router.use(authenticate, requirePersonalAccount);
 
 router.get('/feed', personalCommunityController.listFeed);
+router.get('/posts/:post_id', personalCommunityController.getPost);
 router.post('/posts', requirePaidPersonalPlan, upload.single('audio'), personalCommunityController.createPost);
 router.post('/posts/:post_id/react', personalCommunityController.toggleLike);
 router.get('/posts/:post_id/comments', personalCommunityController.listComments);

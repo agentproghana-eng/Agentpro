@@ -7,7 +7,126 @@ const { query } = require('../config/database');
 const { uploadFile } = require('../config/cloudinary');
 const { logger } = require('../utils/logger');
 
-mpRouter.use(authenticate);
+const UUID_PATH_SEGMENT =
+  '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}';
+
+const publicMarketplaceReadPatterns = [
+  /^\/$/,
+  /^\/categories$/,
+  /^\/featured-sellers$/,
+  new RegExp(`^/sellers/${UUID_PATH_SEGMENT}$`),
+  new RegExp(`^/${UUID_PATH_SEGMENT}$`),
+];
+
+function isPublicMarketplaceRead(req) {
+  return (
+    req.method === 'GET' &&
+    publicMarketplaceReadPatterns.some(
+      (pattern) => pattern.test(req.path)
+    )
+  );
+}
+
+// Marketplace discovery is public, but a valid AgentPro session is used
+// when supplied so owner-specific listing behavior remains available.
+// Missing credentials are allowed only for the explicitly allowlisted
+// read routes above. Invalid/revoked credentials still fail closed.
+function marketplaceAccess(req, res, next) {
+  if (!isPublicMarketplaceRead(req)) {
+    return authenticate(req, res, next);
+  }
+
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader) {
+    return next();
+  }
+
+  return authenticate(req, res, next);
+}
+
+const PUBLIC_AD_FIELDS = [
+  'id',
+  'category_id',
+  'title',
+  'description',
+  'price',
+  'currency',
+  'location',
+  'image_urls',
+  'video_url',
+  'published_at',
+  'expires_at',
+  'views_count',
+  'category_name',
+  'seller_id',
+  'seller_first_name',
+  'seller_last_name',
+  'seller_profile_image_url',
+  'company_name',
+  'company_logo_url',
+  'seller_verified',
+  'is_verified',
+  'is_featured',
+  'avg_rating',
+  'rating_count',
+  'seller_average_rating',
+  'seller_review_count',
+  'is_owner',
+];
+
+const PUBLIC_SELLER_FIELDS = [
+  'seller_id',
+  'first_name',
+  'last_name',
+  'profile_image_url',
+  'company_name',
+  'company_logo_url',
+  'is_verified',
+  'active_ad_count',
+  'average_rating',
+  'review_count',
+];
+
+const PUBLIC_FEATURED_SELLER_FIELDS = [
+  'seller_id',
+  'first_name',
+  'last_name',
+  'profile_image_url',
+  'company_name',
+  'company_logo_url',
+  'active_ad_count',
+  'average_rating',
+  'review_count',
+];
+
+function pickPublicFields(value, fields) {
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  return fields.reduce((safe, field) => {
+    if (Object.prototype.hasOwnProperty.call(value, field)) {
+      safe[field] = value[field];
+    }
+
+    return safe;
+  }, {});
+}
+
+function publicAd(ad) {
+  return pickPublicFields(ad, PUBLIC_AD_FIELDS);
+}
+
+function publicSeller(seller) {
+  return pickPublicFields(seller, PUBLIC_SELLER_FIELDS);
+}
+
+function publicFeaturedSeller(seller) {
+  return pickPublicFields(seller, PUBLIC_FEATURED_SELLER_FIELDS);
+}
+
+mpRouter.use(marketplaceAccess);
 
 // Ad photos: memoryStorage (buffer piped straight to Cloudinary, no
 // local disk writes), image MIME types only, capped at 5MB each and
@@ -222,7 +341,7 @@ mpRouter.get('/', async (req, res) => {
 
     res.json({
       success: true,
-      data: data.rows,
+      data: data.rows.map(publicAd),
       meta: {
         page: parsedPage,
         limit: parsedLimit,
@@ -1345,7 +1464,7 @@ mpRouter.get('/featured-sellers', async (req, res) => {
 
     res.json({
       success: true,
-      data: result.rows,
+      data: result.rows.map(publicFeaturedSeller),
     });
   } catch (e) {
     logger.error('GET /marketplace/featured-sellers error:', e);
@@ -1437,8 +1556,8 @@ mpRouter.get('/sellers/:seller_id', async (req, res) => {
     res.json({
       success: true,
       data: {
-        seller: sellerResult.rows[0],
-        advertisements: adsResult.rows,
+        seller: publicSeller(sellerResult.rows[0]),
+        advertisements: adsResult.rows.map(publicAd),
       },
     });
   } catch (e) {
@@ -1520,17 +1639,24 @@ mpRouter.get('/:ad_id', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Ad not found' });
     }
     const ad = result.rows[0];
-    ad.is_owner = ad.posted_by === req.user.id;
+    const viewerId = req.user?.id || null;
+    const isOwner = viewerId !== null && ad.posted_by === viewerId;
+
+    ad.is_owner = isOwner;
 
     // Owners can always view their own ad regardless of status.
-    // Anyone else can only view it once it's actually published.
-    if (ad.posted_by !== req.user.id && ad.status !== 'active') {
-      return res.status(403).json({ success: false, message: 'Access denied' });
+    // Anonymous and other authenticated viewers can only see active ads.
+    if (!isOwner && ad.status !== 'active') {
+      return res.status(404).json({
+        success: false,
+        message: 'Ad not found',
+      });
     }
-    // Only count third-party views, not the owner checking their own
-    // listing - otherwise a seller refreshing their own ad would
-    // inflate the number they're using to judge its performance.
-    if (ad.posted_by !== req.user.id) {
+
+    // Keep authenticated third-party view deduplication exactly as before.
+    // Anonymous browsing does not manufacture a user identity or persist
+    // IP/device information merely for view analytics.
+    if (viewerId !== null && !isOwner) {
       Promise.all([
         query(
           'UPDATE advertisements SET views_count = views_count + 1 WHERE id = $1',
@@ -1547,12 +1673,16 @@ mpRouter.get('/:ad_id', async (req, res) => {
                AND viewed_by = $2
                AND viewed_at >= NOW() - INTERVAL '30 minutes'
            )`,
-          [req.params.ad_id, req.user.id]
+          [req.params.ad_id, viewerId]
         ),
       ]).catch(() => {});
       // View analytics are non-blocking and must not prevent the ad from loading.
     }
-    res.json({ success: true, data: ad });
+
+    res.json({
+      success: true,
+      data: isOwner ? ad : publicAd(ad),
+    });
   } catch (e) { res.status(500).json({ success: false, message: 'Failed to fetch ad' }); }
 });
 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Loader2, ShieldCheck } from "lucide-react";
 
 import type { AgentProUser } from "@/features/auth/types";
+import { CommunityPostDetail } from "@/features/community/components/community-post-detail";
 import {
   BusinessHubView,
   CommunityHubView,
@@ -107,9 +108,18 @@ async function requestSession(): Promise<
 
 type Props = {
   section?: PortalSection;
+  returnPath?: string;
+  communityPost?: {
+    kind: "agent" | "personal";
+    postId: string;
+  };
 };
 
-export function HubSessionGate({ section = "overview" }: Props) {
+export function HubSessionGate({
+  section = "overview",
+  returnPath,
+  communityPost,
+}: Props) {
   const [user, setUser] = useState<PortalUser | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -127,9 +137,10 @@ export function HubSessionGate({ section = "overview" }: Props) {
 
         if (result.kind === "unauthorized") {
           window.location.replace(
-            `/login?next=${
-              section === "overview" ? "/hub" : `/hub/${section}`
-            }`,
+            `/login?next=${encodeURIComponent(
+              returnPath ??
+                (section === "overview" ? "/hub" : `/hub/${section}`),
+            )}`,
           );
 
           return;
@@ -159,7 +170,7 @@ export function HubSessionGate({ section = "overview" }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [section]);
+  }, [returnPath, section]);
 
   function retrySession() {
     setLoading(true);
@@ -169,9 +180,10 @@ export function HubSessionGate({ section = "overview" }: Props) {
       .then((result) => {
         if (result.kind === "unauthorized") {
           window.location.replace(
-            `/login?next=${
-              section === "overview" ? "/hub" : `/hub/${section}`
-            }`,
+            `/login?next=${encodeURIComponent(
+              returnPath ??
+                (section === "overview" ? "/hub" : `/hub/${section}`),
+            )}`,
           );
 
           return;
@@ -261,7 +273,16 @@ export function HubSessionGate({ section = "overview" }: Props) {
       loggingOut={loading}
       onLogout={logout}
     >
-      {section === "community" && <CommunityHubView user={user} />}
+      {section === "community" &&
+        (communityPost ? (
+          <CommunityPostDetail
+            user={user}
+            kind={communityPost.kind}
+            postId={communityPost.postId}
+          />
+        ) : (
+          <CommunityHubView user={user} />
+        ))}
 
       {section === "business" && <BusinessHubView user={user} />}
 
