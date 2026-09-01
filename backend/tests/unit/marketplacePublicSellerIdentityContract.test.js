@@ -36,8 +36,12 @@ describe('marketplace public seller identity contract', () => {
 
   test('item detail exposes buyer versus owner context and seller reputation', () => {
     expect(source).toContain(
-      'ad.is_owner = ad.posted_by === req.user.id;'
+      'const viewerId = req.user?.id || null;'
     );
+    expect(source).toContain(
+      'const isOwner = viewerId !== null && ad.posted_by === viewerId;'
+    );
+    expect(source).toContain('ad.is_owner = isOwner;');
     expect(source).toContain('AS seller_average_rating');
     expect(source).toContain('AS seller_review_count');
     expect(source).toMatch(

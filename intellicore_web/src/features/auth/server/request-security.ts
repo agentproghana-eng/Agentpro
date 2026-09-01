@@ -2,37 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 const MAX_AUTH_BODY_BYTES = 64 * 1024;
 
-export function validateAuthMutation(
+export function validateSameOriginMutation(
   request: NextRequest,
+  label = "Request",
 ): NextResponse | null {
-  const contentType = request.headers.get("content-type") ?? "";
-
-  if (!contentType.toLowerCase().startsWith("application/json")) {
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Expected application/json.",
-      },
-      {
-        status: 415,
-      },
-    );
-  }
-
-  const contentLength = Number(request.headers.get("content-length") ?? "0");
-
-  if (Number.isFinite(contentLength) && contentLength > MAX_AUTH_BODY_BYTES) {
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Authentication request is too large.",
-      },
-      {
-        status: 413,
-      },
-    );
-  }
-
   const fetchSite = request.headers.get("sec-fetch-site");
 
   if (fetchSite === "cross-site") {
@@ -40,7 +13,7 @@ export function validateAuthMutation(
       {
         success: false,
         code: "CROSS_SITE_REQUEST_REJECTED",
-        message: "Cross-site authentication requests are not allowed.",
+        message: `Cross-site ${label.toLowerCase()} requests are not allowed.`,
       },
       {
         status: 403,
@@ -64,7 +37,7 @@ export function validateAuthMutation(
           {
             success: false,
             code: "ORIGIN_MISMATCH",
-            message: "Authentication request origin was rejected.",
+            message: `${label} request origin was rejected.`,
           },
           {
             status: 403,
@@ -76,7 +49,7 @@ export function validateAuthMutation(
         {
           success: false,
           code: "INVALID_ORIGIN",
-          message: "Authentication request origin was rejected.",
+          message: `${label} request origin was rejected.`,
         },
         {
           status: 403,
@@ -86,6 +59,55 @@ export function validateAuthMutation(
   }
 
   return null;
+}
+
+export function validateJsonMutation(
+  request: NextRequest,
+  label = "Request",
+  maxBodyBytes = MAX_AUTH_BODY_BYTES,
+): NextResponse | null {
+  const contentType = request.headers.get("content-type") ?? "";
+
+  if (!contentType.toLowerCase().startsWith("application/json")) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Expected application/json.",
+      },
+      {
+        status: 415,
+      },
+    );
+  }
+
+  const contentLength = Number(request.headers.get("content-length") ?? "0");
+
+  if (
+    Number.isFinite(contentLength) &&
+    contentLength > maxBodyBytes
+  ) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: `${label} request is too large.`,
+      },
+      {
+        status: 413,
+      },
+    );
+  }
+
+  return validateSameOriginMutation(request, label);
+}
+
+export function validateAuthMutation(
+  request: NextRequest,
+): NextResponse | null {
+  return validateJsonMutation(
+    request,
+    "Authentication",
+    MAX_AUTH_BODY_BYTES,
+  );
 }
 
 export async function readJson(request: NextRequest) {

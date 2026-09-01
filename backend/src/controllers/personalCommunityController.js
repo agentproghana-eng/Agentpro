@@ -3,6 +3,8 @@ const { logger } = require('../utils/logger');
 const { detectAdvertisement } = require('./agentPostController');
 const { uploadAudio } = require('../config/cloudinary');
 
+const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+
 // Fully separate from the Agent Community per spec - own tables
 // (personal_posts, personal_post_likes, personal_post_comments,
 // personal_post_comment_reactions), never shared. Structurally mirrors
@@ -72,15 +74,116 @@ exports.listFeed = async (req, res) => {
               (SELECT reaction_type FROM personal_post_likes l WHERE l.post_id = p.id AND l.user_id = $1) as my_reaction
        FROM personal_posts p
        JOIN users u ON u.id = p.author_id
-       WHERE p.status = $2 OR p.status = $4 OR (p.status = $3 AND p.author_id = $1)
+       WHERE p.status = $2 OR (p.status = $3 AND p.author_id = $1)
        ORDER BY p.created_at DESC
-       LIMIT $5 OFFSET $6`,
-      [req.user.id, "active", "pending_review", "removed", parseInt(limit), offset]
+       LIMIT $4 OFFSET $5`,
+      [req.user.id, "active", "pending_review", parseInt(limit), offset]
     );
     res.json({ success: true, data: result.rows });
   } catch (error) {
     logger.error("List personal feed error:", error);
     res.status(500).json({ success: false, message: "Failed to fetch feed" });
+  }
+};
+
+
+
+async function isPersonalPostVisibleToUser(postId, userId) {
+  const result = await query(
+    `SELECT p.id
+     FROM personal_posts p
+     WHERE p.id = $1
+       AND (
+         p.status = 'active'
+         OR (
+           p.status = 'pending_review'
+           AND p.author_id = $2
+         )
+       )
+     LIMIT 1`,
+    [postId, userId]
+  );
+
+  return result.rows.length > 0;
+}
+
+exports.getPost = async (req, res) => {
+  const { post_id } = req.params;
+
+  if (!UUID_PATTERN.test(post_id || "")) {
+    return res.status(404).json({
+      success: false,
+      message: "Post not found",
+    });
+  }
+
+  try {
+    const result = await query(
+      `SELECT
+         p.*,
+         u.first_name,
+         u.last_name,
+
+         (
+           SELECT json_object_agg(reaction_type, cnt)
+           FROM (
+             SELECT
+               reaction_type,
+               COUNT(*)::int AS cnt
+             FROM personal_post_likes
+             WHERE post_id = p.id
+             GROUP BY reaction_type
+           ) reaction_summary
+         ) AS reaction_counts,
+
+         (
+           SELECT COUNT(*)::int
+           FROM personal_post_comments comment
+           WHERE comment.post_id = p.id
+         ) AS comment_count,
+
+         (
+           SELECT reaction_type
+           FROM personal_post_likes reaction
+           WHERE reaction.post_id = p.id
+             AND reaction.user_id = $1
+         ) AS my_reaction
+
+       FROM personal_posts p
+       INNER JOIN users u
+         ON u.id = p.author_id
+
+       WHERE p.id = $2
+       AND (
+         p.status = 'active'
+         OR (
+           p.status = 'pending_review'
+           AND p.author_id = $1
+         )
+       )
+
+       LIMIT 1`,
+      [req.user.id, post_id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Post not found",
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: result.rows[0],
+    });
+  } catch (error) {
+    logger.error("Get personal post error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch post",
+    });
   }
 };
 
@@ -125,6 +228,24 @@ exports.toggleCommentReaction = async (req, res) => {
     return res.status(400).json({ success: false, message: "Invalid reaction type" });
   }
   try {
+    const comment = await query(
+      "SELECT post_id FROM personal_post_comments WHERE id = $1 LIMIT 1",
+      [comment_id]
+    );
+
+    if (
+      comment.rows.length === 0 ||
+      !(await isPersonalPostVisibleToUser(
+        comment.rows[0].post_id,
+        req.user.id
+      ))
+    ) {
+      return res.status(404).json({
+        success: false,
+        message: "Comment not found"
+      });
+    }
+
     const existing = await query(
       "SELECT id, reaction_type FROM personal_post_comment_reactions WHERE comment_id = $1 AND user_id = $2",
       [comment_id, req.user.id]
@@ -153,6 +274,13 @@ exports.toggleCommentReaction = async (req, res) => {
 exports.listComments = async (req, res) => {
   const { post_id } = req.params;
   try {
+    if (!(await isPersonalPostVisibleToUser(post_id, req.user.id))) {
+      return res.status(404).json({
+        success: false,
+        message: "Post not found"
+      });
+    }
+
     const result = await query(
       `SELECT c.*, u.first_name, u.last_name,
               (SELECT json_object_agg(reaction_type, cnt) FROM (
@@ -189,6 +317,13 @@ exports.addComment = async (req, res) => {
   }
 
   try {
+    if (!(await isPersonalPostVisibleToUser(post_id, req.user.id))) {
+      return res.status(404).json({
+        success: false,
+        message: "Post not found"
+      });
+    }
+
     if (parent_comment_id) {
       const parent = await query(
         "SELECT id FROM personal_post_comments WHERE id = $1 AND post_id = $2",
