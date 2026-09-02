@@ -216,7 +216,13 @@ function ListingCard({ ad }: { ad: MarketplaceAdvertisement }) {
   );
 }
 
-export function MarketplaceBrowse() {
+type MarketplaceBrowseProps = {
+  basePath?: string;
+};
+
+export function MarketplaceBrowse({
+  basePath = "/marketplace",
+}: MarketplaceBrowseProps = {}) {
   const [filters, setFilters] = useState<Filters>(() => parseInitialFilters());
   const [applied, setApplied] = useState<Filters>(() => parseInitialFilters());
   const [page, setPage] = useState(() => parseInitialPage());
@@ -336,9 +342,9 @@ export function MarketplaceBrowse() {
     window.history.replaceState(
       null,
       "",
-      query ? `/marketplace?${query}` : "/marketplace",
+      query ? `${basePath}?${query}` : basePath,
     );
-  }, [applied, page]);
+  }, [applied, basePath, page]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
