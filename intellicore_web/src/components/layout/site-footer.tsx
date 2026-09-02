@@ -1,18 +1,18 @@
 import Link from "next/link";
 
+import { AgentProBrand } from "@/components/brand/agentpro-brand";
 import { footerNavigation, siteConfig } from "@/config/site";
-import { IntellicoreBrand } from "@/components/brand/intellicore-brand";
 
 export function SiteFooter() {
   return (
     <footer className="ic-footer">
       <div className="ic-shell ic-footer-grid">
         <div className="ic-footer-brand">
-          <IntellicoreBrand />
+          <AgentProBrand />
 
           <p>
-            Building intelligent systems that make businesses more connected,
-            efficient and resilient.
+            Marketplace, business tools and communities for everyday commerce
+            across Ghana.
           </p>
         </div>
 
@@ -30,9 +30,9 @@ export function SiteFooter() {
       </div>
 
       <div className="ic-shell ic-footer-bottom">
-        <span>© {new Date().getFullYear()} Intellicore Systems.</span>
+        <span>© {new Date().getFullYear()} AgentPro Ghana.</span>
 
-        <span>AgentPro is a product of Intellicore Systems.</span>
+        <span>AgentPro is a product of Coreintel Systems.</span>
 
         <a href={`mailto:${siteConfig.supportEmail}`}>
           {siteConfig.supportEmail}

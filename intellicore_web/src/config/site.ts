@@ -1,13 +1,17 @@
 export const siteConfig = {
-  name: "Intellicore Systems",
-  shortName: "Intellicore",
+  name: "AgentPro Ghana",
+  shortName: "AgentPro",
   description:
-    "Intellicore Systems builds intelligent digital platforms that help businesses operate, transact, connect, grow and serve their communities.",
+    "AgentPro Ghana is a marketplace and connected business platform for products, services, communities, transactions and business tools.",
   url:
     process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ??
-    "https://intellicoresystem.com",
+    "https://agentproghana.com",
   supportEmail:
-    process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "support@intellicoresystem.com",
+    process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "support@agentproghana.com",
+  company: {
+    name: "Coreintel Systems",
+    url: "https://coreintelsystem.com",
+  },
   agentPro: {
     name: "AgentPro",
     tagline: "One App. Every Business.",
@@ -15,40 +19,33 @@ export const siteConfig = {
 } as const;
 
 export const primaryNavigation = [
-  { label: "Home", href: "/" },
-  { label: "AgentPro", href: "/agentpro" },
-  { label: "Solutions", href: "/solutions" },
+  { label: "Marketplace", href: "/" },
   { label: "Community", href: "/community" },
   { label: "Business Hub", href: "/business-hub" },
-  { label: "Marketplace", href: "/marketplace" },
+  { label: "AgentPro", href: "/agentpro" },
 ] as const;
 
 export const companyNavigation = [
-  { label: "About", href: "/about" },
-  { label: "Partners", href: "/partners" },
-  { label: "Resources", href: "/resources" },
   { label: "Security", href: "/security" },
+  { label: "Help", href: "/resources#help" },
   { label: "Contact", href: "/contact" },
 ] as const;
 
 export const footerNavigation = {
-  Product: [
+  Marketplace: [
+    { label: "Browse Marketplace", href: "/" },
+    { label: "All Listings", href: "/marketplace" },
+    { label: "Sign In to Post", href: "/login" },
+  ],
+  AgentPro: [
     { label: "AgentPro", href: "/agentpro" },
-    { label: "Community Hub", href: "/community" },
     { label: "Business Hub", href: "/business-hub" },
-    { label: "Marketplace", href: "/marketplace" },
+    { label: "My AgentPro", href: "/hub" },
   ],
-  Company: [
-    { label: "About", href: "/about" },
-    { label: "Partners", href: "/partners" },
-    { label: "Careers", href: "/about#careers" },
-    { label: "Contact", href: "/contact" },
-  ],
-  Resources: [
-    { label: "Help Center", href: "/resources#help" },
-    { label: "Blog", href: "/resources#blog" },
+  Community: [
+    { label: "Community", href: "/community" },
     { label: "Security", href: "/security" },
-    { label: "Privacy", href: "/privacy" },
+    { label: "Help Center", href: "/resources#help" },
   ],
   Legal: [
     { label: "Privacy Policy", href: "/privacy" },
@@ -60,16 +57,11 @@ export const footerNavigation = {
 
 export const publicSitemapRoutes = [
   "",
+  "/marketplace",
   "/agentpro",
-  "/solutions",
   "/community",
   "/business-hub",
-  "/marketplace",
-  "/about",
-  "/partners",
-  "/resources",
   "/security",
-  "/contact",
   "/privacy",
   "/terms",
   "/cookies",

@@ -4,28 +4,30 @@ import { siteConfig } from "@/config/site";
 
 import "./globals.css";
 
+const defaultTitle =
+  "AgentPro Ghana | Marketplace, Business & Community";
+
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
   title: {
-    default:
-      "Intellicore Systems | Technology Built for the Way Business Works",
-    template: "%s | Intellicore Systems",
+    default: defaultTitle,
+    template: "%s | AgentPro Ghana",
   },
   description: siteConfig.description,
-  applicationName: "Intellicore Systems",
+  applicationName: "AgentPro",
   alternates: {
     canonical: "/",
   },
   openGraph: {
     type: "website",
-    siteName: "Intellicore Systems",
-    title: "Intellicore Systems | Technology Built for the Way Business Works",
+    siteName: "AgentPro Ghana",
+    title: defaultTitle,
     description: siteConfig.description,
     url: "/",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Intellicore Systems | Technology Built for the Way Business Works",
+    title: defaultTitle,
     description: siteConfig.description,
   },
   robots: {
@@ -34,23 +36,33 @@ export const metadata: Metadata = {
   },
 };
 
-const organizationSchema = {
+const platformSchema = {
   "@context": "https://schema.org",
-  "@type": "Organization",
-  name: "Intellicore Systems",
-  url: siteConfig.url,
-  description: siteConfig.description,
-  brand: {
-    "@type": "Brand",
-    name: "Intellicore Systems",
-  },
-  owns: {
-    "@type": "SoftwareApplication",
-    name: "AgentPro",
-    applicationCategory: "BusinessApplication",
-    description:
-      "An integrated business operating platform from Intellicore Systems.",
-  },
+  "@graph": [
+    {
+      "@type": "WebSite",
+      name: "AgentPro Ghana",
+      url: siteConfig.url,
+      description: siteConfig.description,
+      publisher: {
+        "@type": "Organization",
+        name: siteConfig.company.name,
+        url: siteConfig.company.url,
+      },
+    },
+    {
+      "@type": "SoftwareApplication",
+      name: "AgentPro",
+      applicationCategory: "BusinessApplication",
+      description:
+        "A connected marketplace and business operating platform for Ghana.",
+      provider: {
+        "@type": "Organization",
+        name: siteConfig.company.name,
+        url: siteConfig.company.url,
+      },
+    },
+  ],
 };
 
 export default function RootLayout({
@@ -66,7 +78,7 @@ export default function RootLayout({
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify(organizationSchema),
+            __html: JSON.stringify(platformSchema),
           }}
         />
       </body>
