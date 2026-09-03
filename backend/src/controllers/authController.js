@@ -2075,33 +2075,47 @@ exports.resetPassword = async (req, res) => {
   const { user_id, token, new_password } = req.body;
 
   try {
-    const result = await query(
-      `SELECT * FROM password_reset_tokens
-       WHERE user_id = $1 AND used_at IS NULL AND expires_at > NOW()
-       ORDER BY created_at DESC LIMIT 1`,
-      [user_id]
+    // Hash before acquiring the reset-token row lock so bcrypt does not
+    // unnecessarily extend the PostgreSQL critical section.
+    const passwordHash = await bcrypt.hash(
+      new_password,
+      parseInt(process.env.BCRYPT_ROUNDS) || 12
     );
 
-    if (result.rows.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid or expired reset link. Please request a new one.'
-      });
-    }
+    const resetResult = await withTransaction(async (client) => {
+      // Serialize concurrent attempts to consume the same reset credential.
+      const result = await client.query(
+        `SELECT *
+         FROM password_reset_tokens
+         WHERE user_id = $1
+           AND used_at IS NULL
+           AND expires_at > NOW()
+         ORDER BY created_at DESC
+         LIMIT 1
+         FOR UPDATE`,
+        [user_id]
+      );
 
-    const storedToken = result.rows[0];
-    const tokenValid = await bcrypt.compare(token, storedToken.token_hash);
+      if (result.rows.length === 0) {
+        return {
+          success: false,
+          reason: 'INVALID_OR_EXPIRED'
+        };
+      }
 
-    if (!tokenValid) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid reset token'
-      });
-    }
+      const storedToken = result.rows[0];
+      const tokenValid = await bcrypt.compare(
+        token,
+        storedToken.token_hash
+      );
 
-    const passwordHash = await bcrypt.hash(new_password, parseInt(process.env.BCRYPT_ROUNDS) || 12);
+      if (!tokenValid) {
+        return {
+          success: false,
+          reason: 'INVALID_TOKEN'
+        };
+      }
 
-    await withTransaction(async (client) => {
       await client.query(
         `UPDATE users
          SET password_hash = $1,
@@ -2112,16 +2126,44 @@ exports.resetPassword = async (req, res) => {
          WHERE id = $2`,
         [passwordHash, user_id]
       );
-      await client.query(
-        'UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1',
+
+      const consumeResult = await client.query(
+        `UPDATE password_reset_tokens
+         SET used_at = NOW()
+         WHERE id = $1
+           AND used_at IS NULL`,
         [storedToken.id]
       );
-      // Revoke all refresh tokens
+
+      if (consumeResult.rowCount !== 1) {
+        const error = new Error(
+          'Password reset token was not consumed'
+        );
+        error.code = 'PASSWORD_RESET_TOKEN_CONSUME_CONFLICT';
+        throw error;
+      }
+
       await client.query(
-        'UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1',
+        'UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL',
         [user_id]
       );
+
+      return { success: true };
     });
+
+    if (!resetResult.success) {
+      if (resetResult.reason === 'INVALID_OR_EXPIRED') {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid or expired reset link. Please request a new one.'
+        });
+      }
+
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid reset token'
+      });
+    }
 
     await auditLog({
       userId: user_id,
@@ -2132,11 +2174,17 @@ exports.resetPassword = async (req, res) => {
       requestId: req.requestId
     });
 
-    res.json({ success: true, message: 'Password reset successfully. Please login with your new password.' });
+    res.json({
+      success: true,
+      message: 'Password reset successfully. Please login with your new password.'
+    });
 
   } catch (error) {
     logger.error('Password reset error:', error);
-    res.status(500).json({ success: false, message: 'Failed to reset password' });
+    res.status(500).json({
+      success: false,
+      message: 'Failed to reset password'
+    });
   }
 };
 
