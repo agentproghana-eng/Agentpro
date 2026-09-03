@@ -1,4 +1,5 @@
 import type { BackendEnvelope } from "@/features/auth/types";
+import { applyWebRateLimitIdentity } from "@/features/security/server/rate-limit-identity";
 
 const COMMUNITY_TIMEOUT_MS = 15_000;
 
@@ -81,6 +82,8 @@ export async function backendCommunityRequest(
   if (options.userAgent) {
     headers.set("user-agent", options.userAgent.slice(0, 500));
   }
+
+  await applyWebRateLimitIdentity(headers);
 
   const response = await fetch(communityEndpoint(path), {
     method: options.method ?? "GET",

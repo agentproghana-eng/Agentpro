@@ -1,3 +1,5 @@
+import { applyWebRateLimitIdentity } from "@/features/security/server/rate-limit-identity";
+
 const MARKETPLACE_TIMEOUT_MS = 15_000;
 
 export type MarketplaceBackendEnvelope = {
@@ -97,6 +99,8 @@ export async function backendMarketplaceRequest(
   if (options.userAgent) {
     headers.set("user-agent", options.userAgent.slice(0, 500));
   }
+
+  await applyWebRateLimitIdentity(headers);
 
   const response = await fetch(marketplaceEndpoint(path), {
     method: options.method ?? "GET",

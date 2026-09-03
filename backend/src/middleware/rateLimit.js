@@ -6,6 +6,12 @@ const RedisRateLimitStore =
     '../services/redisRateLimitStore'
   );
 
+const {
+  rateLimitIdentityKey,
+} = require(
+  './rateLimitIdentity'
+);
+
 function sharedStore(prefix) {
   if (
     process.env.NODE_ENV === 'test'
@@ -34,6 +40,8 @@ function createLimiter({
       success: false,
       message,
     },
+    keyGenerator:
+      rateLimitIdentityKey,
     passOnStoreError,
   };
 
