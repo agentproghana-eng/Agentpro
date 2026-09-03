@@ -2011,38 +2011,69 @@ exports.requestPasswordReset = async (req, res) => {
   const { email } = req.body;
 
   try {
-    const result = await query(
-      'SELECT id, first_name, email, phone FROM users WHERE email = $1',
+    const lookup = await query(
+      'SELECT id FROM users WHERE email = $1',
       [email.toLowerCase()]
     );
 
-    // Always return success (don't reveal if email exists)
-    if (result.rows.length === 0) {
+    // Always return success (don't reveal if email exists).
+    if (lookup.rows.length === 0) {
       return res.json({
         success: true,
         message: 'If that email is registered, you will receive a password reset link shortly.'
       });
     }
 
-    const user = result.rows[0];
-    const resetToken = require('crypto').randomBytes(32).toString('hex');
+    // Prepare the credential before taking the database row lock so bcrypt
+    // work does not unnecessarily extend the transaction or lock duration.
+    const resetToken = crypto.randomBytes(32).toString('hex');
     const tokenHash = await bcrypt.hash(resetToken, 8);
     const expiresAt = new Date(Date.now() + 3600 * 1000); // 1 hour
+    const userId = lookup.rows[0].id;
 
-    // Invalidate existing tokens
-    await query(
-      'UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL',
-      [user.id]
-    );
+    const issuance = await withTransaction(async (client) => {
+      // Lock the stable user row so all reset/setup-token replacement paths
+      // serialize on the same per-user database row.
+      const result = await client.query(
+        `SELECT id, first_name, email, phone
+         FROM users
+         WHERE id = $1
+           AND email = $2
+         FOR UPDATE`,
+        [userId, email.toLowerCase()]
+      );
 
-    // Store new token
-    await query(
-      'INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)',
-      [user.id, tokenHash, expiresAt]
-    );
+      // The account may have changed or disappeared between lookup and lock.
+      if (result.rows.length === 0) {
+        return null;
+      }
 
-    // Send email - wrapped defensively so a notification failure does
-    // not turn into a 500 for the whole password-reset request
+      const user = result.rows[0];
+
+      await client.query(
+        'UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL',
+        [user.id]
+      );
+
+      await client.query(
+        'INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)',
+        [user.id, tokenHash, expiresAt]
+      );
+
+      return { user };
+    });
+
+    if (!issuance) {
+      return res.json({
+        success: true,
+        message: 'If that email is registered, you will receive a password reset link shortly.'
+      });
+    }
+
+    const { user } = issuance;
+
+    // Notifications remain post-commit. Delivery failure must not roll back
+    // the securely issued database credential.
     const resetUrl = `${process.env.APP_URL}/reset-password?token=${resetToken}&uid=${user.id}`;
     try {
       await sendPasswordResetEmail(user.email, user.first_name, resetUrl);
