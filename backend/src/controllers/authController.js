@@ -178,41 +178,34 @@ function respondPersonalVerificationError(res, error) {
 
 // ─── Business Owner Registration ─────────────────────────────
 
+function respondBusinessRegistrationSubmitted(res) {
+  return res.status(201).json({
+    success: true,
+    message: 'Registration submitted. Your account is pending approval. You will be notified once approved.'
+  });
+}
+
 exports.register = async (req, res) => {
   const {
     company_name,
-    registration_number,
     company_phone,
     company_email,
     first_name,
     last_name,
     phone,
     email,
-    password,
-    ghana_card_number
+    password
   } = req.body;
 
   try {
-    // Check email uniqueness
-    const existing = await query(
-      'SELECT id FROM users WHERE email = $1',
-      [email.toLowerCase()]
-    );
-    if (existing.rows.length > 0) {
-      return res.status(409).json({
-        success: false,
-        message: 'An account with this email already exists'
-      });
-    }
-
     const passwordHash = await bcrypt.hash(password, parseInt(process.env.BCRYPT_ROUNDS) || 12);
 
     await withTransaction(async (client) => {
       // Create company
       const companyResult = await client.query(
-        `INSERT INTO companies (name, registration_number, phone, email, status)
-         VALUES ($1, $2, $3, $4, 'pending') RETURNING id`,
-        [company_name, registration_number, company_phone, company_email || email]
+        `INSERT INTO companies (name, phone, email, status)
+         VALUES ($1, $2, $3, 'pending') RETURNING id`,
+        [company_name, company_phone, company_email || email]
       );
       const companyId = companyResult.rows[0].id;
 
@@ -220,10 +213,10 @@ exports.register = async (req, res) => {
       const userResult = await client.query(
         `INSERT INTO users (
           company_id, role, first_name, last_name, email,
-          phone, password_hash, ghana_card_number, status
-        ) VALUES ($1, 'business_owner', $2, $3, $4, $5, $6, $7, 'pending')
+          phone, password_hash, status
+        ) VALUES ($1, 'business_owner', $2, $3, $4, $5, $6, 'pending')
         RETURNING id, email, role, status`,
-        [companyId, first_name, last_name, email.toLowerCase(), phone, passwordHash, ghana_card_number]
+        [companyId, first_name, last_name, email.toLowerCase(), phone, passwordHash]
       );
       const user = userResult.rows[0];
 
@@ -250,14 +243,16 @@ exports.register = async (req, res) => {
       logger.info('New Business Owner registration submitted');
     });
 
-    res.status(201).json({
-      success: true,
-      message: 'Registration submitted. Your account is pending approval. You will be notified once approved.'
-    });
+    return respondBusinessRegistrationSubmitted(res);
 
   } catch (error) {
+    if (error?.code === '23505') {
+      logger.info('Duplicate business registration suppressed');
+      return respondBusinessRegistrationSubmitted(res);
+    }
+
     logger.error('Registration error:', error);
-    res.status(500).json({ success: false, message: 'Registration failed. Please try again.' });
+    return res.status(500).json({ success: false, message: 'Registration failed. Please try again.' });
   }
 };
 

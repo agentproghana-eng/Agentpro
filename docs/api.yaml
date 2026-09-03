@@ -255,9 +255,6 @@ paths:
                 company_name:
                   type: string
                   example: Kwame MoMo Services
-                registration_number:
-                  type: string
-                  example: GH-BUS-123456
                 first_name:
                   type: string
                   example: Kwame
@@ -274,8 +271,6 @@ paths:
                   type: string
                   minLength: 8
                   example: SecurePass123
-                ghana_card_number:
-                  type: string
       responses:
         '201':
           description: Registration submitted — pending superuser approval
@@ -283,8 +278,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
-        '409':
-          description: Email already registered
         '422':
           description: Validation error
 
