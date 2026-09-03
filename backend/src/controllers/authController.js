@@ -89,6 +89,11 @@ function getRefreshTokenExpiry() {
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 }
 
+// Precomputed bcrypt credential used only to equalize password-verification
+// work when a login email does not exist. It must never authenticate a user.
+const LOGIN_DUMMY_PASSWORD_HASH =
+  '$2b$12$aqbxgu6Uo3qgDdhEOGX8IeAp1dCCjCttgK2cA.lt/s2MQxdrKMv2K';
+
 const PERSONAL_VERIFICATION_CODES = new Set([
   "PHONE_VERIFICATION_RESEND_TOO_SOON",
   "PHONE_VERIFICATION_RATE_LIMITED",
@@ -772,50 +777,75 @@ exports.login = async (req, res) => {
       [email.toLowerCase()]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(401).json({ success: false, message: 'Invalid email or password' });
-    }
+    const user = result.rows[0] || null;
 
-    const user = result.rows[0];
+    // Always perform bcrypt verification, including when the email does not
+    // exist, so account existence is not exposed by skipping password work.
+    const comparisonHash =
+      user?.password_hash ||
+      LOGIN_DUMMY_PASSWORD_HASH;
 
-    // Check lockout
-    if (user.locked_until && new Date(user.locked_until) > new Date()) {
-      const minutesLeft = Math.ceil((new Date(user.locked_until) - new Date()) / 60000);
-      return res.status(423).json({
-        success: false,
-        message: `Account locked. Try again in ${minutesLeft} minute(s).`
-      });
-    }
-
-    // Verify password
-    const passwordValid = await bcrypt.compare(password, user.password_hash);
-    if (!passwordValid) {
-      const maxAttempts = 5;
-      const lockMinutes = 30;
-
-      // Increment in PostgreSQL itself so concurrent failed logins cannot
-      // overwrite one another with the same application-computed value.
-      // PostgreSQL remains authoritative for account lockout state.
-      await query(
-        `UPDATE users
-         SET login_attempts = login_attempts + 1,
-             locked_until = CASE
-               WHEN login_attempts + 1 >= $1
-               THEN NOW() + ($2 * INTERVAL '1 minute')
-               ELSE locked_until
-             END
-         WHERE id = $3
-         RETURNING login_attempts, locked_until`,
-        [
-          maxAttempts,
-          lockMinutes,
-          user.id,
-        ]
+    const passwordValid =
+      await bcrypt.compare(
+        password,
+        comparisonHash
       );
+
+    const now = new Date();
+
+    const lockedUntil =
+      user?.locked_until
+        ? new Date(user.locked_until)
+        : null;
+
+    const isLocked =
+      lockedUntil instanceof Date &&
+      !Number.isNaN(lockedUntil.getTime()) &&
+      lockedUntil > now;
+
+    if (!user || !passwordValid) {
+      // Preserve the existing atomic PostgreSQL failed-attempt counter for
+      // real, currently-unlocked accounts. Locked accounts and nonexistent
+      // accounts both return the same generic credential failure.
+      if (user && !isLocked) {
+        const maxAttempts = 5;
+        const lockMinutes = 30;
+
+        await query(
+          `UPDATE users
+           SET login_attempts = login_attempts + 1,
+               locked_until = CASE
+                 WHEN login_attempts + 1 >= $1
+                 THEN NOW() + ($2 * INTERVAL '1 minute')
+                 ELSE locked_until
+               END
+           WHERE id = $3
+           RETURNING login_attempts, locked_until`,
+          [
+            maxAttempts,
+            lockMinutes,
+            user.id,
+          ]
+        );
+      }
 
       return res.status(401).json({
         success: false,
         message: 'Invalid email or password'
+      });
+    }
+
+    // Only disclose lockout state after the caller has demonstrated knowledge
+    // of the correct password for the account.
+    if (isLocked) {
+      const minutesLeft =
+        Math.ceil(
+          (lockedUntil - now) / 60000
+        );
+
+      return res.status(423).json({
+        success: false,
+        message: `Account locked. Try again in ${minutesLeft} minute(s).`
       });
     }
 
