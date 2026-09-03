@@ -48,9 +48,9 @@ Version 2.0 | Confidential
 ### 1.4 Domain Setup (production)
 1. Register `intellicoresystem.com`
 2. Add DNS records:
-   - `api.agentpro.intellicoresystem.com` → Railway/Render backend URL
+   - `api.agentpro.intellicoresystem.com` → Render backend service
    - `admin.agentpro.intellicoresystem.com` → Admin portal hosting URL
-3. SSL is auto-managed by Railway/Render via Let's Encrypt
+3. SSL is auto-managed by Render for configured custom domains
 
 ---
 
@@ -73,7 +73,7 @@ audit_logs, ai_conversations, ai_messages, ussd_templates, system_config, ...
 
 ---
 
-## Step 3 — Backend Deployment (Railway)
+## Step 3 — Backend Deployment (Render)
 
 ### 3.1 Local development
 ```bash
@@ -92,15 +92,16 @@ npm run seed
 # Creates: superuser account + USSD templates + default commission rule
 ```
 
-### 3.3 Deploy to Railway
-1. Install Railway CLI: `npm install -g @railway/cli`
-2. Login: `railway login`
-3. Create project: `railway init`
-4. Add PostgreSQL plugin: Railway dashboard → Add Plugin → PostgreSQL
-5. Add Redis plugin: Railway dashboard → Add Plugin → Redis
-6. Set environment variables in Railway dashboard (copy from `.env.example`)
-7. Deploy: `railway up`
+### 3.3 Deploy to Render
+1. Create or select the AgentPro backend web service in Render
+2. Connect the AgentPro GitHub repository
+3. Set the backend root/build/start configuration required by the service
+4. Connect the production Render PostgreSQL database using its internal connection
+5. Configure Redis using the production Redis service or configured Redis provider
+6. Set production environment variables in the Render service
+7. Deploy the current production branch/commit
 8. Set custom domain: `api.agentpro.intellicoresystem.com`
+9. Verify the deployment is healthy before directing production traffic to it
 
 ### 3.4 Verify deployment
 ```bash
@@ -122,7 +123,7 @@ npm run build
 Deploy `dist/` to:
 - **Netlify**: drag & drop or `netlify deploy --dir=dist`
 - **Vercel**: `vercel --prod`
-- **Railway Static**: add as static service
+- **Render Static Site**: deploy the built `dist/` directory as a static site
 
 Set custom domain: `admin.agentpro.intellicoresystem.com`
 
@@ -249,21 +250,27 @@ See `backend/.env.example` for the complete list. Critical ones:
 
 ### Health checks
 - API: `GET https://api.agentpro.intellicoresystem.com/health`
-- Database: Monitored via Railway dashboard
+- Database: Monitored via Render dashboard
 - Errors: Firebase Crashlytics (mobile app)
 
 ### Logs
-- Backend logs: Railway → Logs tab
+- Backend logs: Render service logs
 - Audit logs: Admin portal → Audit Logs
 - App crashes: Firebase Crashlytics dashboard
 
 ### Backups
-- Railway PostgreSQL: automatic daily backups (7-day retention on free, 30-day on paid)
-- Enable point-in-time recovery for production
+- Production database: Render PostgreSQL on a paid plan
+- Point-in-time recovery must remain enabled and available
+- Create periodic logical exports from the Render PostgreSQL recovery page
+- Download logical exports off-platform and retain their SHA-256 checksums
+- Validate exports with archive integrity checks and `pg_restore -l`
+- Periodically perform an isolated restore drill into a non-production PostgreSQL instance
+- Restore drills must never overwrite the production database
+- Record the restore result, restored object/table counts, and any required extensions
 
 ### Scaling
-- Backend: Railway auto-scales on Pro plan
-- Database: Upgrade PostgreSQL plan as transaction volume grows
+- Backend: Scale the Render service as production traffic grows
+- Database: Upgrade the Render PostgreSQL compute plan as transaction volume grows
 - Redis: Monitor memory usage; upgrade if approaching limits
 
 ---
@@ -275,7 +282,7 @@ See `backend/.env.example` for the complete list. Critical ones:
 - [ ] Certificate pinning hashes updated with production cert
 - [ ] `agent_pro_momo_number` set correctly in System Config
 - [ ] USSD templates verified against actual network flows
-- [ ] `NODE_ENV=production` in Railway environment
+- [ ] `NODE_ENV=production` in Render environment
 - [ ] Firebase security rules reviewed
 - [ ] Play Store app signed with secure keystore (stored safely)
 - [ ] Cloudinary upload preset restricted appropriately
