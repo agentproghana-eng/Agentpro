@@ -353,17 +353,6 @@ exports.registerPersonal = async (req, res) => {
   } = req.body;
 
   try {
-    const existing = await query("SELECT id FROM users WHERE email = $1", [
-      email.toLowerCase(),
-    ]);
-
-    if (existing.rows.length > 0) {
-      return res.status(409).json({
-        success: false,
-        message: "An account with this email already exists",
-      });
-    }
-
     const passwordHash = await bcrypt.hash(
       password,
       parseInt(process.env.BCRYPT_ROUNDS) || 12,
