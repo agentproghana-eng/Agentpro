@@ -43,10 +43,9 @@ router.post(
   [
     body("phone").trim().notEmpty().withMessage("Phone number is required"),
     body("installation_id")
-      .optional({
-        nullable: true,
-        checkFalsy: true,
-      })
+      .notEmpty()
+      .withMessage("Installation identity is required")
+      .bail()
       .isUUID()
       .withMessage("Invalid installation identity"),
     body("sim_iccid")
@@ -81,10 +80,9 @@ router.post(
       .withMessage("Verification code must be exactly 6 digits"),
     body("phone").trim().notEmpty().withMessage("Phone number is required"),
     body("installation_id")
-      .optional({
-        nullable: true,
-        checkFalsy: true,
-      })
+      .notEmpty()
+      .withMessage("Installation identity is required")
+      .bail()
       .isUUID()
       .withMessage("Invalid installation identity"),
     body("sim_iccid")
@@ -125,10 +123,9 @@ router.post(
       .isLength({ min: 40, max: 200 })
       .withMessage("Verified phone token is required"),
     body("installation_id")
-      .optional({
-        nullable: true,
-        checkFalsy: true,
-      })
+      .notEmpty()
+      .withMessage("Installation identity is required")
+      .bail()
       .isUUID()
       .withMessage("Invalid installation identity"),
     body("sim_iccid")
@@ -164,10 +161,9 @@ router.post(
       })
       .withMessage("Valid verified phone token is required"),
     body("installation_id")
-      .optional({
-        nullable: true,
-        checkFalsy: true,
-      })
+      .notEmpty()
+      .withMessage("Installation identity is required")
+      .bail()
       .isUUID()
       .withMessage("Invalid installation identity"),
     body("sim_iccid")
