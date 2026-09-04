@@ -3,6 +3,7 @@ const express = require('express');
 const mpRouter = express.Router();
 const multer = require('multer');
 const { authenticate, authorize } = require('../middleware/auth');
+const { uploadLimiter } = require('../middleware/rateLimit');
 const { query } = require('../config/database');
 const { uploadFile } = require('../config/cloudinary');
 const { logger } = require('../utils/logger');
@@ -1691,7 +1692,7 @@ mpRouter.get('/:ad_id', async (req, res) => {
 // ignored by multer's array limit rather than erroring, which is the
 // right behavior here (better to accept the first 3 than reject the
 // whole submission over an agent picking a 4th photo).
-mpRouter.post('/', upload.array('images', 3), async (req, res) => {
+mpRouter.post('/', uploadLimiter, upload.array('images', 3), async (req, res) => {
   const { title, description, price, category_id, location, contact_phone } = req.body;
   try {
     const feeConfig = await query("SELECT value FROM system_config WHERE key = 'ad_fee_percent'");

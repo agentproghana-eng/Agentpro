@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const personalCommunityController = require('../controllers/personalCommunityController');
 const { authenticate, requirePersonalAccount, requirePaidPersonalPlan } = require('../middleware/auth');
+const { uploadLimiter } = require('../middleware/rateLimit');
 
 // Same multer config as Agent's agentPost.routes.js exactly: memory
 // storage (buffer piped straight to Cloudinary, no local disk writes),
@@ -28,10 +29,10 @@ router.use(authenticate, requirePersonalAccount);
 
 router.get('/feed', personalCommunityController.listFeed);
 router.get('/posts/:post_id', personalCommunityController.getPost);
-router.post('/posts', requirePaidPersonalPlan, upload.single('audio'), personalCommunityController.createPost);
+router.post('/posts', requirePaidPersonalPlan, uploadLimiter, upload.single('audio'), personalCommunityController.createPost);
 router.post('/posts/:post_id/react', personalCommunityController.toggleLike);
 router.get('/posts/:post_id/comments', personalCommunityController.listComments);
-router.post('/posts/:post_id/comments', requirePaidPersonalPlan, upload.single('audio'), personalCommunityController.addComment);
+router.post('/posts/:post_id/comments', requirePaidPersonalPlan, uploadLimiter, upload.single('audio'), personalCommunityController.addComment);
 router.post('/comments/:comment_id/react', personalCommunityController.toggleCommentReaction);
 
 module.exports = router;
