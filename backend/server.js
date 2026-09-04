@@ -10,6 +10,9 @@ const { logger, sanitizeRequestPath } = require('./src/utils/logger');
 const { connectDB, closeDB } = require('./src/config/database');
 const { connectRedis, closeRedis } = require('./src/config/redis');
 const { initFirebase } = require('./src/config/firebase');
+const {
+  validateProductionSecurityEnv,
+} = require('./src/config/securityEnv');
 const errorHandler = require('./src/middleware/errorHandler');
 const { apiLimiter } = require('./src/middleware/rateLimit');
 
@@ -404,6 +407,8 @@ function installShutdownHandlers() {
 
 async function startServer() {
   try {
+    validateProductionSecurityEnv();
+
     logger.info('Backend telemetry: privacy-safe local logging enabled');
 
     // Connect to PostgreSQL
