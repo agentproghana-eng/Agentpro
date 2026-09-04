@@ -241,7 +241,7 @@ describe("Personal trial grant engine", () => {
     expect(result.reason).toBe(TrialDecisionReason.TRIAL_ALREADY_USED);
   });
 
-  test("secondary installation claim does not replace phone claim", async () => {
+  test("concurrent same-installation claim loses safely", async () => {
     const entitlementId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
     const client = clientFromHandlers([
@@ -269,13 +269,27 @@ describe("Personal trial grant engine", () => {
         };
       },
       (sql, params) => {
+        expect(sql).toContain("ON CONFLICT");
+        expect(sql).toContain("RETURNING id");
+        expect(params[1]).toBe("installation");
+
+        return { rows: [] };
+      },
+      (sql, params) => {
         expect(sql).toContain(
-          "personal_trial_identity_claims"
+          "DELETE FROM personal_trial_identity_claims",
         );
 
-        expect(params[1]).toBe(
-          "installation"
+        expect(params).toEqual([entitlementId]);
+
+        return { rows: [] };
+      },
+      (sql, params) => {
+        expect(sql).toContain(
+          "DELETE FROM personal_trial_entitlements",
         );
+
+        expect(params).toEqual([entitlementId]);
 
         return { rows: [] };
       },
@@ -291,7 +305,11 @@ describe("Personal trial grant engine", () => {
       pepper,
     });
 
-    expect(result.granted).toBe(true);
+    expect(result).toEqual({
+      granted: false,
+      reason: TrialDecisionReason.TRIAL_ALREADY_USED,
+      expiresAt: null,
+    });
   });
 });
 

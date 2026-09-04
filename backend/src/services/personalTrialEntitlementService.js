@@ -498,7 +498,7 @@ async function grantPersonalTrial({
   });
 
   for (const claim of optionalClaims) {
-    await client.query(
+    const optionalClaimResult = await client.query(
       `INSERT INTO personal_trial_identity_claims (
          entitlement_id,
          claim_type,
@@ -511,9 +511,30 @@ async function grantPersonalTrial({
          claim_hash,
          claim_version
        )
-       DO NOTHING`,
+       DO NOTHING
+       RETURNING id`,
       [entitlementId, claim.claimType, claim.claimHash, claim.claimVersion],
     );
+
+    if (optionalClaimResult.rows.length === 0) {
+      await client.query(
+        `DELETE FROM personal_trial_identity_claims
+          WHERE entitlement_id = $1`,
+        [entitlementId],
+      );
+
+      await client.query(
+        `DELETE FROM personal_trial_entitlements
+          WHERE id = $1`,
+        [entitlementId],
+      );
+
+      return {
+        granted: false,
+        reason: TrialDecisionReason.TRIAL_ALREADY_USED,
+        expiresAt: null,
+      };
+    }
   }
 
   return {
