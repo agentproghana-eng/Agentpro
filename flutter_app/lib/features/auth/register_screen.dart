@@ -15,7 +15,6 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _companyNameCtrl = TextEditingController();
-  final _regNumberCtrl = TextEditingController();
   final _firstNameCtrl = TextEditingController();
   final _lastNameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
@@ -32,7 +31,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     try {
       await ApiClient.instance.post('/auth/register', data: {
         'company_name': _companyNameCtrl.text.trim(),
-        'registration_number': _regNumberCtrl.text.trim(),
         'company_phone': _companyPhoneCtrl.text.trim(),
         'first_name': _firstNameCtrl.text.trim(),
         'last_name': _lastNameCtrl.text.trim(),
@@ -137,12 +135,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   label: 'Company / Business Name',
                   prefixIcon: Icons.business,
                   validator: (v) => v!.isEmpty ? 'Required' : null,
-                ),
-                const SizedBox(height: 14),
-                AppTextField(
-                  controller: _regNumberCtrl,
-                  label: 'Ghana Card / Business Reg. Number',
-                  prefixIcon: Icons.badge_outlined,
                 ),
                 const SizedBox(height: 14),
                 AppTextField(
@@ -285,7 +277,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   void dispose() {
     for (final c in [
       _companyNameCtrl,
-      _regNumberCtrl,
       _firstNameCtrl,
       _lastNameCtrl,
       _emailCtrl,

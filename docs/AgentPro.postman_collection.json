@@ -43,7 +43,7 @@
             "url": { "raw": "{{base_url}}/auth/register" },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"company_name\": \"Kwame MoMo Services\",\n  \"registration_number\": \"GH-BUS-001\",\n  \"first_name\": \"Kwame\",\n  \"last_name\": \"Mensah\",\n  \"email\": \"kwame@test.com\",\n  \"phone\": \"0241234567\",\n  \"password\": \"SecurePass123\",\n  \"ghana_card_number\": \"GHA-123456789-0\"\n}"
+              "raw": "{\n  \"company_name\": \"Kwame MoMo Services\",\n  \"first_name\": \"Kwame\",\n  \"last_name\": \"Mensah\",\n  \"email\": \"kwame@test.com\",\n  \"phone\": \"0241234567\",\n  \"password\": \"SecurePass123\"\n}"
             }
           }
         },
