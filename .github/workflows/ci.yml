@@ -193,7 +193,51 @@ jobs:
         # no in-range update resolves either without a breaking major
         # version bump (checked via npm outdated - both already at the
         # newest version their current semver range allows).
-        run: npm audit --omit=dev --audit-level=critical
+        run: |
+          set -euo pipefail
+
+          MAX_ATTEMPTS=3
+
+          for ATTEMPT in $(seq 1 "$MAX_ATTEMPTS"); do
+            echo "Security audit attempt $ATTEMPT/$MAX_ATTEMPTS"
+
+            set +e
+            AUDIT_OUTPUT="$(
+              npm audit --omit=dev --audit-level=critical 2>&1
+            )"
+            AUDIT_STATUS=$?
+            set -e
+
+            printf '%s\n' "$AUDIT_OUTPUT"
+
+            if [ "$AUDIT_STATUS" -eq 0 ]; then
+              echo "SECURITY_AUDIT=PASS"
+              exit 0
+            fi
+
+            # Retry only when npm could not obtain a valid audit result
+            # because of a transient registry/network/service failure.
+            if printf '%s\n' "$AUDIT_OUTPUT" | grep -Eqi               '503 Service Unavailable|502 Bad Gateway|504 Gateway Timeout|429 Too Many Requests|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|audit endpoint returned an error'; then
+
+              if [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; then
+                BACKOFF=$((ATTEMPT * 15))
+                echo "Transient npm audit service failure."
+                echo "Retrying in ${BACKOFF}s..."
+                sleep "$BACKOFF"
+                continue
+              fi
+
+              echo "SECURITY_AUDIT_SERVICE_UNAVAILABLE=FAIL"
+              exit "$AUDIT_STATUS"
+            fi
+
+            # A valid npm audit failure, including a real critical
+            # vulnerability finding, must fail closed immediately.
+            echo "SECURITY_AUDIT_FINDING=FAIL"
+            exit "$AUDIT_STATUS"
+          done
+
+          exit 1
       - name: Full audit report (informational only, does not fail the build)
         working-directory: backend
         if: always()
