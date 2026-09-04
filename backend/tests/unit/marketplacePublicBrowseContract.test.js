@@ -268,7 +268,7 @@ describe("Marketplace public browse contract", () => {
     }
 
     expect(source).toMatch(
-      /mpRouter\.post\(\s*["']\/["'],\s*upload\.array\(\s*["']images["'],\s*3\s*\)/,
+      /mpRouter\.post\(\s*["']\/["'],\s*uploadLimiter,\s*upload\.array\(\s*["']images["'],\s*3\s*\)/,
     );
   });
 });

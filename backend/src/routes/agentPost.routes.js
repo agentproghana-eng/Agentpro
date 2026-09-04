@@ -4,6 +4,7 @@ const multer = require("multer");
 const agentPostController = require("../controllers/agentPostController");
 const enhancementController = require("../controllers/agentCommunityEnhancementController");
 const { authenticate, authorize, requireActiveSubscription } = require("../middleware/auth");
+const { uploadLimiter } = require("../middleware/rateLimit");
 
 // Voice notes: memoryStorage (no local disk writes - the buffer is
 // piped straight to Cloudinary), capped at 10MB (a few minutes of
@@ -80,7 +81,7 @@ router.delete(
 
 router.get("/", agentPostController.listFeed);
 router.get("/:post_id", agentPostController.getPost);
-router.post("/", requireActiveSubscription, upload.single("audio"), agentPostController.createPost);
+router.post("/", requireActiveSubscription, uploadLimiter, upload.single("audio"), agentPostController.createPost);
 router.post("/:post_id/save", enhancementController.savePost);
 router.delete("/:post_id/save", enhancementController.unsavePost);
 router.post("/:post_id/report", enhancementController.reportPost);
@@ -95,7 +96,7 @@ router.delete(
 router.delete("/:post_id", agentPostController.deletePost);
 router.post("/:post_id/like", requireActiveSubscription, agentPostController.toggleLike);
 router.get("/:post_id/comments", agentPostController.listComments);
-router.post("/:post_id/comments", requireActiveSubscription, upload.single("audio"), agentPostController.addComment);
+router.post("/:post_id/comments", requireActiveSubscription, uploadLimiter, upload.single("audio"), agentPostController.addComment);
 router.post(
   "/comments/:comment_id/react",
   requireActiveSubscription,

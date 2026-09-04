@@ -161,3 +161,22 @@ exports.aiLimiter =
 
     passOnStoreError: false,
   });
+
+exports.uploadLimiter =
+  createLimiter({
+    windowMs:
+      5 * 60 * 1000,
+
+    max: 10,
+
+    message:
+      'Too many upload requests. Please wait a few minutes and try again.',
+
+    prefix:
+      'agentpro:rate-limit:upload:',
+
+    // Upload endpoints allocate memory buffers and can trigger external
+    // Cloudinary work. Fail closed if the shared limiter store is
+    // unavailable rather than allowing an unbounded expensive path.
+    passOnStoreError: false,
+  });
