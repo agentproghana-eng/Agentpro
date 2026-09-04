@@ -4,7 +4,7 @@
   "description": "AgentPro - Mobile Money Super App Backend",
   "main": "server.js",
   "scripts": {
-    "start": "npm run migrate && node server.js",
+    "start": "node scripts/render-start.js",
     "dev": "nodemon server.js",
     "migrate": "node scripts/migrate.js",
     "seed": "node scripts/seed.js",
