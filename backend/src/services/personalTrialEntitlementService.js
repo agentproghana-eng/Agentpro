@@ -6,6 +6,7 @@ const PERSONAL_TRIAL_DAYS = 7;
 const TrialDecisionReason = Object.freeze({
   ELIGIBLE: "ELIGIBLE",
   PHONE_VERIFICATION_REQUIRED: "PHONE_VERIFICATION_REQUIRED",
+  INSTALLATION_REQUIRED: "INSTALLATION_REQUIRED",
   TRIAL_ALREADY_USED: "TRIAL_ALREADY_USED",
 });
 
@@ -361,6 +362,18 @@ async function grantPersonalTrial({
   now = new Date(),
 }) {
   const client = requireDbClient(dbClient);
+
+  if (
+    installationId === null ||
+    installationId === undefined ||
+    String(installationId).trim().length === 0
+  ) {
+    return {
+      granted: false,
+      reason: TrialDecisionReason.INSTALLATION_REQUIRED,
+      expiresAt: null,
+    };
+  }
 
   const decision = await assessPersonalTrialEligibility({
     dbClient: client,

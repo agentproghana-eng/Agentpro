@@ -135,6 +135,7 @@ describe("Personal trial grant engine", () => {
     const client = clientFromHandlers([
       () => ({ rows: [] }),
       () => ({ rows: [] }),
+      () => ({ rows: [] }),
       (sql, params) => {
         expect(sql).toContain("INSERT INTO personal_trial_entitlements");
 
@@ -157,6 +158,14 @@ describe("Personal trial grant engine", () => {
           rows: [{ id: "phone-claim" }],
         };
       },
+      (sql, params) => {
+        expect(sql).toContain("INSERT INTO personal_trial_identity_claims");
+        expect(params[1]).toBe("installation");
+
+        return {
+          rows: [{ id: "installation-claim" }],
+        };
+      },
     ]);
 
     const now = new Date("2026-08-25T07:00:00.000Z");
@@ -167,6 +176,7 @@ describe("Personal trial grant engine", () => {
       source: "registration",
       phone: "0551234567",
       phoneVerifiedAt: verifiedAt,
+      installationId: "11111111-2222-4333-8444-555555555555",
       pepper,
       now,
     });
@@ -182,6 +192,7 @@ describe("Personal trial grant engine", () => {
     const entitlementId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
     const client = clientFromHandlers([
+      () => ({ rows: [] }),
       () => ({ rows: [] }),
       () => ({ rows: [] }),
       () => ({
@@ -207,6 +218,7 @@ describe("Personal trial grant engine", () => {
       source: "registration",
       phone: "0241234567",
       phoneVerifiedAt: verifiedAt,
+      installationId: "11111111-2222-4333-8444-555555555555",
       pepper,
     });
 
@@ -219,6 +231,7 @@ describe("Personal trial grant engine", () => {
 
   test("same account entitlement conflict denies another grant", async () => {
     const client = clientFromHandlers([
+      () => ({ rows: [] }),
       () => ({ rows: [] }),
       () => ({ rows: [] }),
       (sql) => {
@@ -234,6 +247,7 @@ describe("Personal trial grant engine", () => {
       source: "personal_capability",
       phone: "0201234567",
       phoneVerifiedAt: verifiedAt,
+      installationId: "11111111-2222-4333-8444-555555555555",
       pepper,
     });
 
@@ -376,6 +390,7 @@ describe("SIM ICCID trial-abuse defense", () => {
       () => ({ rows: [] }),
       () => ({ rows: [] }),
       () => ({ rows: [] }),
+      () => ({ rows: [] }),
       () => ({
         rows: [{ id: entitlementId }],
       }),
@@ -409,6 +424,7 @@ describe("SIM ICCID trial-abuse defense", () => {
       source: "registration",
       phone: "0541234567",
       phoneVerifiedAt: verifiedAt,
+      installationId: "11111111-2222-4333-8444-555555555555",
       simIccid: "8923301234567890123",
       pepper,
     });
