@@ -36,6 +36,12 @@ describe('HTTP database migration execution boundary', () => {
     'migrate.js',
   );
 
+  const renderStartScript = read(
+    'backend',
+    'scripts',
+    'render-start.js',
+  );
+
   const packageJson = JSON.parse(
     read('backend', 'package.json'),
   );
@@ -79,8 +85,26 @@ describe('HTTP database migration execution boundary', () => {
       'node scripts/migrate.js',
     );
 
-    expect(packageJson.scripts.start).toContain(
-      'npm run migrate',
+    expect(packageJson.scripts.start).toBe(
+      'node scripts/render-start.js',
+    );
+
+    expect(renderStartScript).toContain(
+      "['scripts/migrate.js']",
+    );
+
+    expect(renderStartScript).toContain(
+      "['server.js']",
+    );
+
+    expect(
+      renderStartScript.indexOf(
+        "['scripts/migrate.js']",
+      ),
+    ).toBeLessThan(
+      renderStartScript.indexOf(
+        "['server.js']",
+      ),
     );
   });
 });
