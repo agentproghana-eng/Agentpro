@@ -4,6 +4,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
+  ArrowRight,
   BadgeCheck,
   Bookmark,
   CheckCircle2,
@@ -521,6 +522,17 @@ export function MarketplaceDetail({ adId }: Props) {
                 </span>
               </div>
             </div>
+
+            {ad.seller_id && (
+              <Link
+                href={`/marketplace/sellers/${ad.seller_id}`}
+                className="ic-market-storefront-link"
+              >
+                <Store size={17} />
+                View seller storefront
+                <ArrowRight size={16} />
+              </Link>
+            )}
 
             {ad.is_owner ? (
               <div className="ic-market-owner-note">
