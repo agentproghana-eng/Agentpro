@@ -60,23 +60,11 @@ export async function publicMarketplaceRequest(
   const refreshed = await refreshAccessToken(refreshToken, userAgent);
 
   if (!refreshed.ok) {
-    if (refreshed.status === 401) {
-      return {
-        ...(await backendMarketplaceRequest(path, {
-          userAgent,
-        })),
-        clearSession: true,
-      };
-    }
-
     return {
-      ok: false,
-      status: refreshed.status,
-      body: {
-        success: false,
-        code: refreshed.code,
-        message: refreshed.message,
-      },
+      ...(await backendMarketplaceRequest(path, {
+        userAgent,
+      })),
+      clearSession: refreshed.status === 401,
     };
   }
 
