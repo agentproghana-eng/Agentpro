@@ -210,7 +210,24 @@ export function extractRecoveryCodes(
   return values.length > 0 ? values : undefined;
 }
 
-const refreshFlights = new Map<string, Promise<RefreshResult>>();
+type RefreshFlightRegistry = Map<string, Promise<RefreshResult>>;
+
+const REFRESH_FLIGHTS_SYMBOL = Symbol.for(
+  "agentpro.web.auth.refreshFlights.v1",
+);
+
+function refreshFlightRegistry(): RefreshFlightRegistry {
+  const processGlobal = globalThis as typeof globalThis & {
+    [REFRESH_FLIGHTS_SYMBOL]?: RefreshFlightRegistry;
+  };
+
+  processGlobal[REFRESH_FLIGHTS_SYMBOL] ??= new Map<
+    string,
+    Promise<RefreshResult>
+  >();
+
+  return processGlobal[REFRESH_FLIGHTS_SYMBOL];
+}
 
 function refreshFlightKey(refreshToken: string): string {
   return createHash("sha256").update(refreshToken).digest("hex");
@@ -275,6 +292,7 @@ export function refreshAccessToken(
   userAgent?: string | null,
 ): Promise<RefreshResult> {
   const key = refreshFlightKey(refreshToken);
+  const refreshFlights = refreshFlightRegistry();
   const existing = refreshFlights.get(key);
 
   if (existing) {
