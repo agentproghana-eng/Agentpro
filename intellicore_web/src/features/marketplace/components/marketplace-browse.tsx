@@ -14,6 +14,7 @@ import {
   SlidersHorizontal,
   Star,
   Store,
+  X,
 } from "lucide-react";
 
 import type {
@@ -336,6 +337,93 @@ function MarketplaceHomeSection({
   );
 }
 
+type MarketplaceCollectionSheetProps = {
+  title: string;
+  subtitle: string;
+  ads: MarketplaceAdvertisement[];
+  savedIds: Set<string>;
+  savingIds: Set<string>;
+  onToggleSaved: (adId: string) => void;
+  onClose: () => void;
+};
+
+function MarketplaceCollectionSheet({
+  title,
+  subtitle,
+  ads,
+  savedIds,
+  savingIds,
+  onToggleSaved,
+  onClose,
+}: MarketplaceCollectionSheetProps) {
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+
+    const previousOverflow = document.body.style.overflow;
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="ic-market-collection-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <section
+        className="ic-market-collection-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ic-market-collection-title"
+      >
+        <div className="ic-market-collection-handle" aria-hidden="true" />
+
+        <header className="ic-market-collection-header">
+          <div>
+            <h2 id="ic-market-collection-title">{title}</h2>
+            <p>{subtitle}</p>
+          </div>
+
+          <button
+            type="button"
+            className="ic-market-collection-close"
+            onClick={onClose}
+            aria-label={`Close ${title}`}
+          >
+            <X size={20} aria-hidden="true" />
+          </button>
+        </header>
+
+        <div className="ic-market-collection-grid">
+          {ads.map((ad) => (
+            <ListingCard
+              key={ad.id}
+              ad={ad}
+              saved={savedIds.has(ad.id)}
+              saving={savingIds.has(ad.id)}
+              onToggleSaved={onToggleSaved}
+            />
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 type MarketplaceBrowseProps = {
   basePath?: string;
 };
@@ -367,6 +455,11 @@ export function MarketplaceBrowse({
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [savedIds, setSavedIds] = useState<Set<string>>(() => new Set());
   const [savingIds, setSavingIds] = useState<Set<string>>(() => new Set());
+  const [collectionSheet, setCollectionSheet] = useState<{
+    title: string;
+    subtitle: string;
+    ads: MarketplaceAdvertisement[];
+  } | null>(null);
 
   const hasDiscoveryFilters =
     Boolean(applied.search.trim()) ||
@@ -1020,6 +1113,14 @@ export function MarketplaceBrowse({
                     savedIds={savedIds}
                     savingIds={savingIds}
                     onToggleSaved={toggleSaved}
+                    onViewAll={() =>
+                      setCollectionSheet({
+                        title: "Recommended for You",
+                        subtitle:
+                          "Suggestions based on your marketplace activity",
+                        ads: recommended,
+                      })
+                    }
                   />
                 )}
 
@@ -1031,6 +1132,13 @@ export function MarketplaceBrowse({
                     savedIds={savedIds}
                     savingIds={savingIds}
                     onToggleSaved={toggleSaved}
+                    onViewAll={() =>
+                      setCollectionSheet({
+                        title: "Recently Viewed",
+                        subtitle: "Advertisements you opened recently",
+                        ads: recentlyViewed,
+                      })
+                    }
                   />
                 )}
               </div>
@@ -1189,6 +1297,18 @@ export function MarketplaceBrowse({
           </div>
         </div>
       </section>
+
+      {collectionSheet && (
+        <MarketplaceCollectionSheet
+          title={collectionSheet.title}
+          subtitle={collectionSheet.subtitle}
+          ads={collectionSheet.ads}
+          savedIds={savedIds}
+          savingIds={savingIds}
+          onToggleSaved={toggleSaved}
+          onClose={() => setCollectionSheet(null)}
+        />
+      )}
     </main>
   );
 }
