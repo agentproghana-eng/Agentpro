@@ -1,16 +1,33 @@
+import { cookies } from "next/headers";
 import Link from "next/link";
 
 import { AgentProBrand } from "@/components/brand/agentpro-brand";
 import { ButtonLink } from "@/components/ui/button-link";
+import { authCookies } from "@/features/auth/config";
 
-const navigation = [
-  { label: "Marketplace", href: "/" },
-  { label: "Community", href: "/community" },
-  { label: "Business Hub", href: "/business-hub" },
-  { label: "AgentPro", href: "/agentpro" },
-] as const;
+export async function SiteHeader() {
+  const store = await cookies();
 
-export function SiteHeader() {
+  const hasSession =
+    Boolean(store.get(authCookies.access)?.value) ||
+    Boolean(store.get(authCookies.refresh)?.value);
+
+  const navigation = [
+    { label: "Marketplace", href: "/" },
+    {
+      label: "Community",
+      href: hasSession ? "/hub/community" : "/community",
+    },
+    {
+      label: "Business Hub",
+      href: hasSession ? "/hub/business" : "/business-hub",
+    },
+    { label: "AgentPro", href: "/agentpro" },
+  ] as const;
+
+  const sessionHref = hasSession ? "/hub" : "/login";
+  const sessionLabel = hasSession ? "My Hub" : "Sign In";
+
   return (
     <header className="ic-header">
       <div className="ic-shell ic-header-inner">
@@ -25,8 +42,8 @@ export function SiteHeader() {
         </nav>
 
         <div className="ic-header-actions">
-          <Link className="ic-sign-in" href="/login">
-            Sign In
+          <Link className="ic-sign-in" href={sessionHref}>
+            {sessionLabel}
           </Link>
 
           <ButtonLink href="/login">Post Ad</ButtonLink>
@@ -46,7 +63,7 @@ export function SiteHeader() {
               </Link>
             ))}
 
-            <Link href="/login">Sign In</Link>
+            <Link href={sessionHref}>{sessionLabel}</Link>
 
             <Link className="ic-mobile-primary" href="/login">
               Post Ad
