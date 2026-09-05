@@ -28,6 +28,29 @@ export type MarketplaceAdvertisement = {
   is_owner?: boolean | null;
 };
 
+export type MarketplaceSeller = {
+  seller_id: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  profile_image_url?: string | null;
+  company_name?: string | null;
+  company_logo_url?: string | null;
+  is_verified?: boolean | null;
+  active_ad_count?: number | null;
+  average_rating?: number | null;
+  review_count?: number | null;
+};
+
+export type MarketplaceSellerStorefrontResponse = {
+  success?: boolean;
+  code?: string;
+  message?: string;
+  data?: {
+    seller?: MarketplaceSeller;
+    advertisements?: MarketplaceAdvertisement[];
+  };
+};
+
 export type MarketplaceCategory = {
   id: string;
   name: string;
