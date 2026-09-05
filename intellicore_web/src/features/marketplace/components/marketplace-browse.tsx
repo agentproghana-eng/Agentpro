@@ -2,9 +2,11 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   BadgeCheck,
+  Bookmark,
   ChevronLeft,
   ChevronRight,
   MapPin,
@@ -19,6 +21,7 @@ import type {
   MarketplaceCategory,
   MarketplaceCategoryResponse,
   MarketplaceListResponse,
+  MarketplaceSavedStatusResponse,
 } from "@/features/marketplace/types";
 
 type Filters = {
@@ -109,6 +112,15 @@ function imageUrl(ad: MarketplaceAdvertisement) {
   return typeof first === "string" && first.trim() ? first : null;
 }
 
+const SORT_LABELS: Record<string, string> = {
+  newest: "Newest",
+  oldest: "Oldest",
+  most_viewed: "Most Viewed",
+  highest_rated: "Highest Rated",
+  price_low: "Price: Low to High",
+  price_high: "Price: High to Low",
+};
+
 function buildQuery(filters: Filters, page: number) {
   const params = new URLSearchParams();
 
@@ -149,70 +161,178 @@ function buildQuery(filters: Filters, page: number) {
   return params;
 }
 
-function ListingCard({ ad }: { ad: MarketplaceAdvertisement }) {
+type MarketplaceSavedIdsResponse = {
+  success?: boolean;
+  data?: string[];
+};
+
+type ListingCardProps = {
+  ad: MarketplaceAdvertisement;
+  saved: boolean;
+  saving: boolean;
+  onToggleSaved: (adId: string) => void;
+};
+
+function ListingCard({ ad, saved, saving, onToggleSaved }: ListingCardProps) {
   const image = imageUrl(ad);
   const rating = Number(ad.avg_rating ?? 0);
   const ratingCount = Number(ad.rating_count ?? 0);
   const verified = Boolean(ad.seller_verified ?? ad.is_verified);
+  const isOwner = Boolean(ad.is_owner);
 
   return (
-    <Link href={`/marketplace/${ad.id}`} className="ic-market-card">
-      <div
-        className={`ic-market-card-image${image ? " has-image" : ""}`}
-        style={image ? { backgroundImage: `url("${image}")` } : undefined}
-        role={image ? "img" : undefined}
-        aria-label={image ? ad.title : undefined}
-      >
-        {!image && <Store size={30} aria-hidden="true" />}
+    <article className="ic-market-card-shell">
+      <Link href={`/marketplace/${ad.id}`} className="ic-market-card">
+        <div
+          className={`ic-market-card-image${image ? " has-image" : ""}`}
+          style={image ? { backgroundImage: `url("${image}")` } : undefined}
+          role={image ? "img" : undefined}
+          aria-label={image ? ad.title : undefined}
+        >
+          {!image && <Store size={30} aria-hidden="true" />}
 
-        {ad.category_name && (
-          <span className="ic-market-category-chip">{ad.category_name}</span>
-        )}
-      </div>
+          {ad.category_name && (
+            <span className="ic-market-category-chip">{ad.category_name}</span>
+          )}
+        </div>
 
-      <div className="ic-market-card-body">
-        <div className="ic-market-card-heading">
-          <div>
-            <h2>{ad.title}</h2>
+        <div className="ic-market-card-body">
+          <div className="ic-market-card-heading">
+            <div>
+              <h2>{ad.title}</h2>
 
-            <strong>{money(ad.price, ad.currency)}</strong>
+              <strong>{money(ad.price, ad.currency)}</strong>
+            </div>
+
+            <ArrowRight size={18} aria-hidden="true" />
           </div>
 
-          <ArrowRight size={18} aria-hidden="true" />
-        </div>
+          {ad.location && (
+            <p className="ic-market-location">
+              <MapPin size={15} aria-hidden="true" />
+              {ad.location}
+            </p>
+          )}
 
-        {ad.location && (
-          <p className="ic-market-location">
-            <MapPin size={15} aria-hidden="true" />
-            {ad.location}
+          <p className="ic-market-description">
+            {ad.description?.trim() ||
+              "Open this listing to view more details."}
           </p>
-        )}
 
-        <p className="ic-market-description">
-          {ad.description?.trim() || "Open this listing to view more details."}
-        </p>
+          <div className="ic-market-card-footer">
+            <span className="ic-market-seller">
+              {sellerName(ad)}
 
-        <div className="ic-market-card-footer">
-          <span className="ic-market-seller">
-            {sellerName(ad)}
+              {verified && (
+                <BadgeCheck
+                  size={16}
+                  aria-label="Verified AgentPro seller"
+                  className="ic-market-verified"
+                />
+              )}
+            </span>
 
-            {verified && (
-              <BadgeCheck
-                size={16}
-                aria-label="Verified AgentPro seller"
-                className="ic-market-verified"
-              />
-            )}
-          </span>
-
-          <span className="ic-market-rating">
-            <Star size={15} aria-hidden="true" />
-            {rating > 0 ? rating.toFixed(1) : "New"}
-            {ratingCount > 0 && <small>({ratingCount})</small>}
-          </span>
+            <span className="ic-market-rating">
+              <Star size={15} aria-hidden="true" />
+              {rating > 0 ? rating.toFixed(1) : "New"}
+              {ratingCount > 0 && <small>({ratingCount})</small>}
+            </span>
+          </div>
         </div>
+      </Link>
+
+      {!isOwner && (
+        <button
+          type="button"
+          className={`ic-market-save${saved ? " is-saved" : ""}`}
+          onClick={() => onToggleSaved(ad.id)}
+          disabled={saving}
+          aria-pressed={saved}
+          aria-label={saved ? `Unsave ${ad.title}` : `Save ${ad.title}`}
+        >
+          <Bookmark
+            size={18}
+            fill={saved ? "currentColor" : "none"}
+            aria-hidden="true"
+          />
+        </button>
+      )}
+    </article>
+  );
+}
+
+type MarketplaceHomeSectionProps = {
+  title: string;
+  subtitle: string;
+  ads: MarketplaceAdvertisement[];
+  savedIds: Set<string>;
+  savingIds: Set<string>;
+  onToggleSaved: (adId: string) => void;
+  loading?: boolean;
+  onViewAll?: () => void;
+};
+
+function MarketplaceHomeSection({
+  title,
+  subtitle,
+  ads,
+  savedIds,
+  savingIds,
+  onToggleSaved,
+  loading = false,
+  onViewAll,
+}: MarketplaceHomeSectionProps) {
+  if (!loading && ads.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="ic-market-home-section">
+      <div className="ic-market-home-heading">
+        <div>
+          <h2>{title}</h2>
+          <p>{subtitle}</p>
+        </div>
+
+        {onViewAll && ads.length > 0 && (
+          <button type="button" onClick={onViewAll}>
+            View All
+            <ArrowRight size={16} aria-hidden="true" />
+          </button>
+        )}
       </div>
-    </Link>
+
+      {loading ? (
+        <div className="ic-market-home-grid" aria-busy="true">
+          {Array.from({ length: 4 }, (_, index) => (
+            <div
+              className="ic-market-card ic-market-card-skeleton"
+              key={index}
+              aria-hidden="true"
+            >
+              <div className="ic-market-card-image" />
+              <div className="ic-market-card-body">
+                <span />
+                <span />
+                <span />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="ic-market-home-grid">
+          {ads.map((ad) => (
+            <ListingCard
+              key={ad.id}
+              ad={ad}
+              saved={savedIds.has(ad.id)}
+              saving={savingIds.has(ad.id)}
+              onToggleSaved={onToggleSaved}
+            />
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -223,6 +343,8 @@ type MarketplaceBrowseProps = {
 export function MarketplaceBrowse({
   basePath = "/marketplace",
 }: MarketplaceBrowseProps = {}) {
+  const router = useRouter();
+
   const [filters, setFilters] = useState<Filters>(() => parseInitialFilters());
   const [applied, setApplied] = useState<Filters>(() => parseInitialFilters());
   const [page, setPage] = useState(() => parseInitialPage());
@@ -233,6 +355,77 @@ export function MarketplaceBrowse({
   const [loading, setLoading] = useState(true);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [topRated, setTopRated] = useState<MarketplaceAdvertisement[]>([]);
+  const [trending, setTrending] = useState<MarketplaceAdvertisement[]>([]);
+  const [recommended, setRecommended] = useState<MarketplaceAdvertisement[]>(
+    [],
+  );
+  const [recentlyViewed, setRecentlyViewed] = useState<
+    MarketplaceAdvertisement[]
+  >([]);
+  const [homeSectionsLoading, setHomeSectionsLoading] = useState(false);
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [savedIds, setSavedIds] = useState<Set<string>>(() => new Set());
+  const [savingIds, setSavingIds] = useState<Set<string>>(() => new Set());
+
+  const hasDiscoveryFilters =
+    Boolean(applied.search.trim()) ||
+    Boolean(applied.categoryId) ||
+    Boolean(applied.location.trim()) ||
+    Boolean(applied.minPrice) ||
+    Boolean(applied.maxPrice) ||
+    Boolean(applied.minRating) ||
+    applied.sort !== "newest";
+
+  const showMarketplaceHome = !hasDiscoveryFilters && page === 1;
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadSavedIds() {
+      try {
+        const response = await fetch("/api/marketplace/saved/ids", {
+          cache: "no-store",
+        });
+
+        if (!active) {
+          return;
+        }
+
+        if (response.status === 401) {
+          setAuthenticated(false);
+          setSavedIds(new Set());
+          return;
+        }
+
+        const body = (await response.json()) as MarketplaceSavedIdsResponse;
+
+        if (!active) {
+          return;
+        }
+
+        if (response.ok && Array.isArray(body.data)) {
+          setAuthenticated(true);
+          setSavedIds(
+            new Set(
+              body.data.filter(
+                (value): value is string =>
+                  typeof value === "string" && value.length > 0,
+              ),
+            ),
+          );
+        }
+      } catch {
+        // Public marketplace browsing remains available if hydration fails.
+      }
+    }
+
+    void loadSavedIds();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -329,6 +522,69 @@ export function MarketplaceBrowse({
   }, [applied, page]);
 
   useEffect(() => {
+    if (!showMarketplaceHome) {
+      return;
+    }
+
+    let active = true;
+
+    async function readListings(
+      url: string,
+      authenticated = false,
+    ): Promise<MarketplaceAdvertisement[]> {
+      try {
+        const response = await fetch(url, {
+          cache: "no-store",
+        });
+
+        if (authenticated && response.status === 401) {
+          return [];
+        }
+
+        if (!response.ok) {
+          return [];
+        }
+
+        const body = (await response.json()) as MarketplaceListResponse;
+
+        return Array.isArray(body.data) ? body.data : [];
+      } catch {
+        return [];
+      }
+    }
+
+    async function loadHomeSections() {
+      setHomeSectionsLoading(true);
+
+      const [topRatedResult, trendingResult, recommendedResult, recentResult] =
+        await Promise.all([
+          readListings("/api/marketplace?sort=highest_rated&limit=8"),
+          readListings("/api/marketplace?sort=most_viewed&limit=8"),
+          readListings("/api/marketplace/recommendations?limit=8", true),
+          readListings("/api/marketplace/recently-viewed?limit=8", true),
+        ]);
+
+      if (!active) {
+        return;
+      }
+
+      setTopRated(
+        topRatedResult.filter((ad) => Number(ad.rating_count ?? 0) > 0),
+      );
+      setTrending(trendingResult);
+      setRecommended(recommendedResult);
+      setRecentlyViewed(recentResult);
+      setHomeSectionsLoading(false);
+    }
+
+    void loadHomeSections();
+
+    return () => {
+      active = false;
+    };
+  }, [showMarketplaceHome]);
+
+  useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
@@ -352,11 +608,160 @@ export function MarketplaceBrowse({
     setApplied(filters);
   }
 
+  function loginForMarketplace() {
+    const next = `${window.location.pathname}${window.location.search}`;
+
+    router.push(`/login?next=${encodeURIComponent(next)}`);
+  }
+
+  async function toggleSaved(adId: string) {
+    if (authenticated === false) {
+      loginForMarketplace();
+      return;
+    }
+
+    if (savingIds.has(adId)) {
+      return;
+    }
+
+    const wasSaved = savedIds.has(adId);
+
+    setSavingIds((current) => {
+      const next = new Set(current);
+      next.add(adId);
+      return next;
+    });
+
+    setSavedIds((current) => {
+      const next = new Set(current);
+
+      if (wasSaved) {
+        next.delete(adId);
+      } else {
+        next.add(adId);
+      }
+
+      return next;
+    });
+
+    try {
+      const response = await fetch(`/api/marketplace/${adId}/save`, {
+        method: wasSaved ? "DELETE" : "POST",
+      });
+
+      if (response.status === 401) {
+        setAuthenticated(false);
+
+        setSavedIds((current) => {
+          const next = new Set(current);
+
+          if (wasSaved) {
+            next.add(adId);
+          } else {
+            next.delete(adId);
+          }
+
+          return next;
+        });
+
+        loginForMarketplace();
+        return;
+      }
+
+      let body: MarketplaceSavedStatusResponse;
+
+      try {
+        body = (await response.json()) as MarketplaceSavedStatusResponse;
+      } catch {
+        body = {
+          success: false,
+        };
+      }
+
+      if (!response.ok) {
+        setSavedIds((current) => {
+          const next = new Set(current);
+
+          if (wasSaved) {
+            next.add(adId);
+          } else {
+            next.delete(adId);
+          }
+
+          return next;
+        });
+
+        return;
+      }
+
+      setSavedIds((current) => {
+        const next = new Set(current);
+
+        if (body.data?.is_saved === true) {
+          next.add(adId);
+        } else {
+          next.delete(adId);
+        }
+
+        return next;
+      });
+    } catch {
+      setSavedIds((current) => {
+        const next = new Set(current);
+
+        if (wasSaved) {
+          next.add(adId);
+        } else {
+          next.delete(adId);
+        }
+
+        return next;
+      });
+    } finally {
+      setSavingIds((current) => {
+        const next = new Set(current);
+        next.delete(adId);
+        return next;
+      });
+    }
+  }
+
   function resetFilters() {
     setFilters(EMPTY_FILTERS);
     setApplied(EMPTY_FILTERS);
     setPage(1);
   }
+
+  function applySort(sort: string) {
+    const next = {
+      ...EMPTY_FILTERS,
+      sort,
+    };
+
+    setFilters(next);
+    setApplied(next);
+    setPage(1);
+  }
+
+  const specialListingIds = new Set(
+    [...topRated, ...trending, ...recommended, ...recentlyViewed].map(
+      (ad) => ad.id,
+    ),
+  );
+
+  const latestAds = showMarketplaceHome
+    ? ads.filter((ad) => !specialListingIds.has(ad.id))
+    : ads;
+
+  const activeFilterCount =
+    Number(Boolean(applied.search.trim())) +
+    Number(Boolean(applied.categoryId)) +
+    Number(Boolean(applied.location.trim())) +
+    Number(Boolean(applied.minPrice)) +
+    Number(Boolean(applied.maxPrice)) +
+    Number(Boolean(applied.minRating));
+
+  const sortLabel = SORT_LABELS[applied.sort] ?? "Newest";
 
   const pageCount = Math.max(Math.ceil(total / Math.max(limit, 1)), 1);
 
@@ -372,15 +777,9 @@ export function MarketplaceBrowse({
         <div className="ic-shell">
           <p className="ic-eyebrow">AgentPro Marketplace</p>
 
-          <h1>
-            Find what you need.
-            <span> Connect with trusted sellers.</span>
-          </h1>
+          <h1>Find what you need.</h1>
 
-          <p>
-            Browse AgentPro listings publicly. Sign in only when you want to
-            save a listing or contact a seller privately.
-          </p>
+          <p>Products, services and businesses across Ghana.</p>
 
           <form className="ic-market-search" onSubmit={submit}>
             <label className="ic-market-search-main">
@@ -395,7 +794,7 @@ export function MarketplaceBrowse({
                     search: event.target.value,
                   }))
                 }
-                placeholder="Search products, services or businesses"
+                placeholder="Search products, services or location"
                 aria-label="Search Marketplace"
               />
             </label>
@@ -424,6 +823,53 @@ export function MarketplaceBrowse({
           </form>
         </div>
       </section>
+
+      {!categoriesLoading && categories.length > 0 && (
+        <section
+          className="ic-market-categories"
+          aria-label="Marketplace categories"
+        >
+          <div className="ic-shell">
+            <div className="ic-market-category-list">
+              <button
+                type="button"
+                className={!filters.categoryId ? "is-active" : undefined}
+                onClick={() => {
+                  const next = { ...filters, categoryId: "" };
+                  setFilters(next);
+                  setApplied(next);
+                  setPage(1);
+                }}
+              >
+                All
+              </button>
+
+              {categories.map((category) => (
+                <button
+                  key={category.id}
+                  type="button"
+                  className={
+                    filters.categoryId === String(category.id)
+                      ? "is-active"
+                      : undefined
+                  }
+                  onClick={() => {
+                    const next = {
+                      ...filters,
+                      categoryId: String(category.id),
+                    };
+                    setFilters(next);
+                    setApplied(next);
+                    setPage(1);
+                  }}
+                >
+                  {category.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="ic-market-body">
         <div className="ic-shell ic-market-layout">
@@ -526,10 +972,78 @@ export function MarketplaceBrowse({
           </aside>
 
           <div className="ic-market-results">
+            {!showMarketplaceHome && (
+              <div className="ic-market-active-filters">
+                <span>
+                  {activeFilterCount}{" "}
+                  {activeFilterCount === 1 ? "filter" : "filters"} applied ·{" "}
+                  {sortLabel}
+                </span>
+
+                {(activeFilterCount > 0 || applied.sort !== "newest") && (
+                  <button type="button" onClick={resetFilters}>
+                    Clear all
+                  </button>
+                )}
+              </div>
+            )}
+
+            {showMarketplaceHome && !error && (
+              <div className="ic-market-home-sections">
+                <MarketplaceHomeSection
+                  title="Top Rated"
+                  subtitle="Popular items with strong buyer reviews"
+                  ads={topRated.slice(0, 4)}
+                  savedIds={savedIds}
+                  savingIds={savingIds}
+                  onToggleSaved={toggleSaved}
+                  loading={homeSectionsLoading}
+                  onViewAll={() => applySort("highest_rated")}
+                />
+
+                <MarketplaceHomeSection
+                  title="Trending Now"
+                  subtitle="Items getting the most attention"
+                  ads={trending.slice(0, 4)}
+                  savedIds={savedIds}
+                  savingIds={savingIds}
+                  onToggleSaved={toggleSaved}
+                  loading={homeSectionsLoading}
+                  onViewAll={() => applySort("most_viewed")}
+                />
+
+                {recommended.length > 0 && (
+                  <MarketplaceHomeSection
+                    title="Recommended for You"
+                    subtitle="Suggestions based on your browsing"
+                    ads={recommended.slice(0, 4)}
+                    savedIds={savedIds}
+                    savingIds={savingIds}
+                    onToggleSaved={toggleSaved}
+                  />
+                )}
+
+                {recentlyViewed.length > 0 && (
+                  <MarketplaceHomeSection
+                    title="Recently Viewed"
+                    subtitle="Continue exploring items you opened"
+                    ads={recentlyViewed.slice(0, 4)}
+                    savedIds={savedIds}
+                    savingIds={savingIds}
+                    onToggleSaved={toggleSaved}
+                  />
+                )}
+              </div>
+            )}
+
             <div className="ic-market-results-toolbar">
               <div>
-                <p className="ic-eyebrow">Discover</p>
-                <h2>Marketplace listings</h2>
+                <p className="ic-eyebrow">
+                  {showMarketplaceHome ? "Discover" : "Results"}
+                </p>
+                <h2>
+                  {showMarketplaceHome ? "Latest Ads" : "Marketplace listings"}
+                </h2>
                 <span>{resultLabel}</span>
               </div>
 
@@ -555,11 +1069,11 @@ export function MarketplaceBrowse({
                   }}
                 >
                   <option value="newest">Newest</option>
-                  <option value="highest_rated">Highest rated</option>
-                  <option value="most_viewed">Most viewed</option>
-                  <option value="price_low">Price: low to high</option>
-                  <option value="price_high">Price: high to low</option>
                   <option value="oldest">Oldest</option>
+                  <option value="most_viewed">Most Viewed</option>
+                  <option value="highest_rated">Highest Rated</option>
+                  <option value="price_low">Price: Low to High</option>
+                  <option value="price_high">Price: High to Low</option>
                 </select>
               </label>
             </div>
@@ -569,7 +1083,7 @@ export function MarketplaceBrowse({
                 className="ic-market-state ic-market-state-error"
                 role="alert"
               >
-                <strong>Listings could not be loaded.</strong>
+                <strong>Could not load advertisements</strong>
                 <p>{error}</p>
                 <button
                   type="button"
@@ -603,22 +1117,38 @@ export function MarketplaceBrowse({
               </div>
             )}
 
-            {!error && !loading && ads.length === 0 && (
-              <div className="ic-market-state">
-                <Store size={28} aria-hidden="true" />
-                <strong>No listings match these filters.</strong>
-                <p>Try a wider search, another location or fewer filters.</p>
-                <button type="button" onClick={resetFilters}>
-                  Clear filters
-                </button>
-              </div>
-            )}
+            {!error &&
+              !loading &&
+              latestAds.length === 0 &&
+              (!showMarketplaceHome || ads.length === 0) && (
+                <div className="ic-market-state">
+                  <Store size={28} aria-hidden="true" />
+                  <strong>No advertisements found</strong>
+                  <p>
+                    {showMarketplaceHome
+                      ? "New advertisements will appear here."
+                      : "Try changing or clearing your search and filters."}
+                  </p>
 
-            {!error && !loading && ads.length > 0 && (
+                  {!showMarketplaceHome && (
+                    <button type="button" onClick={resetFilters}>
+                      Clear filters
+                    </button>
+                  )}
+                </div>
+              )}
+
+            {!error && !loading && latestAds.length > 0 && (
               <>
                 <div className="ic-market-grid">
-                  {ads.map((ad) => (
-                    <ListingCard key={ad.id} ad={ad} />
+                  {latestAds.map((ad) => (
+                    <ListingCard
+                      key={ad.id}
+                      ad={ad}
+                      saved={savedIds.has(ad.id)}
+                      saving={savingIds.has(ad.id)}
+                      onToggleSaved={toggleSaved}
+                    />
                   ))}
                 </div>
 
