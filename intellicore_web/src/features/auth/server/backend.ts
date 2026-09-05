@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type { BackendEnvelope, RefreshResult } from "@/features/auth/types";
 import { applyWebRateLimitIdentity } from "@/features/security/server/rate-limit-identity";
 
@@ -72,6 +74,7 @@ export async function backendAuthRequest(
     body?: unknown;
     accessToken?: string;
     userAgent?: string | null;
+    rateLimitKeyMaterial?: string;
   } = {},
 ) {
   const headers = new Headers({
@@ -90,7 +93,9 @@ export async function backendAuthRequest(
     headers.set("user-agent", options.userAgent.slice(0, 500));
   }
 
-  await applyWebRateLimitIdentity(headers);
+  await applyWebRateLimitIdentity(headers, {
+    serverKeyMaterial: options.rateLimitKeyMaterial,
+  });
 
   const response = await fetch(authEndpoint(path), {
     method: options.method ?? "GET",
@@ -205,7 +210,13 @@ export function extractRecoveryCodes(
   return values.length > 0 ? values : undefined;
 }
 
-export async function refreshAccessToken(
+const refreshFlights = new Map<string, Promise<RefreshResult>>();
+
+function refreshFlightKey(refreshToken: string): string {
+  return createHash("sha256").update(refreshToken).digest("hex");
+}
+
+async function performRefreshAccessToken(
   refreshToken: string,
   userAgent?: string | null,
 ): Promise<RefreshResult> {
@@ -216,6 +227,7 @@ export async function refreshAccessToken(
         refresh_token: refreshToken,
       },
       userAgent,
+      rateLimitKeyMaterial: refreshToken,
     });
 
     if (!result.ok) {
@@ -256,6 +268,30 @@ export async function refreshAccessToken(
       message: "Authentication is temporarily unavailable.",
     };
   }
+}
+
+export function refreshAccessToken(
+  refreshToken: string,
+  userAgent?: string | null,
+): Promise<RefreshResult> {
+  const key = refreshFlightKey(refreshToken);
+  const existing = refreshFlights.get(key);
+
+  if (existing) {
+    return existing;
+  }
+
+  const flight = performRefreshAccessToken(refreshToken, userAgent).finally(
+    () => {
+      if (refreshFlights.get(key) === flight) {
+        refreshFlights.delete(key);
+      }
+    },
+  );
+
+  refreshFlights.set(key, flight);
+
+  return flight;
 }
 
 const sensitiveKeys = new Set([
