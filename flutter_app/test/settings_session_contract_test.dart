@@ -725,6 +725,94 @@ void main() {
     );
 
     test(
+      'late 401 reuses a newer access token before starting another refresh',
+      () {
+        final source = _readSource(
+          'lib/core/api/api_client.dart',
+        );
+
+        final interceptor = _slice(
+          source,
+          'onError: (DioException error, handler) async {',
+          'static Future<void> _invalidateSession()',
+        );
+
+        final failedAuthorizationIndex = interceptor.indexOf(
+          "request.headers['Authorization']?.toString()",
+        );
+
+        final latestTokenIndex = interceptor.indexOf(
+          'final latestAccessToken =',
+        );
+
+        final tokenComparisonIndex = interceptor.indexOf(
+          'failedAuthorization != latestAuthorization',
+        );
+
+        final retryIndex = interceptor.indexOf(
+          'final response = await dio.fetch(request);',
+        );
+
+        final refreshIndex = interceptor.indexOf(
+          'final refreshOutcome = '
+          'await _refreshTokenWithOutcome();',
+        );
+
+        expect(
+          failedAuthorizationIndex,
+          greaterThanOrEqualTo(0),
+          reason:
+              'The interceptor must remember which access token actually received the 401.',
+        );
+
+        expect(
+          latestTokenIndex,
+          greaterThan(failedAuthorizationIndex),
+          reason:
+              'A failed request must compare its token with the latest durable session token.',
+        );
+
+        expect(
+          tokenComparisonIndex,
+          greaterThan(latestTokenIndex),
+          reason:
+              'A late 401 must detect when another request already refreshed the session.',
+        );
+
+        expect(
+          retryIndex,
+          greaterThan(tokenComparisonIndex),
+          reason:
+              'A late 401 should retry once with the newer token.',
+        );
+
+        expect(
+          refreshIndex,
+          greaterThan(retryIndex),
+          reason:
+              'The newer-token retry must happen before another refresh exchange is considered.',
+        );
+
+        expect(
+          RegExp(
+            r"request\.headers\['Authorization'\]\s*=\s*"
+            r'latestAuthorization;',
+          ).hasMatch(interceptor),
+          isTrue,
+        );
+
+        expect(
+          interceptor,
+          contains(
+            "request.extra['auth_refresh_retried'] = true",
+          ),
+          reason:
+              'Generation-aware recovery must preserve the one-retry guard.',
+        );
+      },
+    );
+
+    test(
       'automatic refresh invalidates only terminal session rejection',
       () {
         final source = _readSource(

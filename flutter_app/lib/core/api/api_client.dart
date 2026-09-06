@@ -171,6 +171,34 @@ class ApiClient {
               !isAuthRequest) {
             request.extra['auth_refresh_retried'] = true;
 
+            final failedAuthorization =
+                request.headers['Authorization']?.toString();
+
+            final latestAccessToken =
+                await StorageService.getAccessToken();
+
+            final latestAuthorization =
+                latestAccessToken == null || latestAccessToken.isEmpty
+                    ? null
+                    : 'Bearer $latestAccessToken';
+
+            // Another request may already have refreshed the session while
+            // this request was in flight. If the failed request used an older
+            // token, retry once with the newer stored token instead of
+            // launching another refresh request.
+            if (latestAuthorization != null &&
+                failedAuthorization != latestAuthorization) {
+              request.headers['Authorization'] =
+                  latestAuthorization;
+
+              try {
+                final response = await dio.fetch(request);
+                return handler.resolve(response);
+              } on DioException catch (retryError) {
+                return handler.next(retryError);
+              }
+            }
+
             final refreshOutcome = await _refreshTokenWithOutcome();
 
             if (refreshOutcome == TokenRefreshOutcome.refreshed) {

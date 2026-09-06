@@ -173,16 +173,34 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
     try {
       if (_showHomeSections) {
-        final responses = await Future.wait([
-          _cachedMarketplaceGet(
-            'marketplace:home:latest',
-            '/marketplace',
-            queryParameters: {
-              'sort': 'newest',
-              'limit': 20,
-            },
-            forceRefresh: forceRefresh,
-          ),
+        // The main feed is the only critical Marketplace request.
+        //
+        // Do not make the entire Business Hub depend on personalized
+        // sections such as recommendations, recently viewed, or saved IDs.
+        // Those requests can legitimately fail during session recovery or a
+        // short backend interruption while the public Marketplace is still
+        // usable.
+        final rawLatest = await _cachedMarketplaceGet(
+          'marketplace:home:latest',
+          '/marketplace',
+          queryParameters: {
+            'sort': 'newest',
+            'limit': 20,
+          },
+          forceRefresh: forceRefresh,
+        );
+
+        if (!mounted) return;
+
+        setState(() {
+          _ads = _mapAds(rawLatest);
+          _loading = false;
+          _error = null;
+        });
+
+        // Secondary sections are best-effort. Their failure must never blank
+        // an already usable Marketplace feed.
+        final secondaryResponses = await Future.wait<dynamic>([
           _cachedMarketplaceGet(
             'marketplace:home:top-rated',
             '/marketplace',
@@ -191,7 +209,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               'limit': 8,
             },
             forceRefresh: forceRefresh,
-          ),
+          ).catchError((_) => null),
           _cachedMarketplaceGet(
             'marketplace:home:trending',
             '/marketplace',
@@ -200,52 +218,59 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
               'limit': 8,
             },
             forceRefresh: forceRefresh,
-          ),
+          ).catchError((_) => null),
           _cachedMarketplaceGet(
             'marketplace:home:recommendations',
             '/marketplace/recommendations',
             queryParameters: {'limit': 8},
             forceRefresh: forceRefresh,
-          ),
+          ).catchError((_) => null),
           _cachedMarketplaceGet(
             'marketplace:home:recently-viewed',
             '/marketplace/recently-viewed',
             queryParameters: {'limit': 8},
             forceRefresh: forceRefresh,
-          ),
+          ).catchError((_) => null),
           _cachedMarketplaceGet(
             'marketplace:saved-ids',
             '/marketplace/saved/ids',
             ttl: const Duration(minutes: 1),
             forceRefresh: forceRefresh,
-          ),
+          ).catchError((_) => null),
         ]);
-
-        final rawLatest = responses[0];
-        final rawTopRated = responses[1];
-        final rawTrending = responses[2];
-        final rawRecommendations = responses[3];
-        final rawRecentlyViewed = responses[4];
-        final rawSavedIds = responses[5];
 
         if (!mounted) return;
 
+        final rawTopRated = secondaryResponses[0];
+        final rawTrending = secondaryResponses[1];
+        final rawRecommendations = secondaryResponses[2];
+        final rawRecentlyViewed = secondaryResponses[3];
+        final rawSavedIds = secondaryResponses[4];
+
         setState(() {
-          _ads = _mapAds(rawLatest);
-          _topRatedAds = _mapAds(rawTopRated);
-          _trendingAds = _mapAds(rawTrending);
-          _recommendedAds = _mapAds(rawRecommendations);
-          _recentlyViewedAds = _mapAds(rawRecentlyViewed);
+          if (rawTopRated != null) {
+            _topRatedAds = _mapAds(rawTopRated);
+          }
 
-          _savedIds
-            ..clear()
-            ..addAll(
-              rawSavedIds is List
-                  ? rawSavedIds.map((id) => id.toString())
-                  : const <String>[],
-            );
+          if (rawTrending != null) {
+            _trendingAds = _mapAds(rawTrending);
+          }
 
-          _loading = false;
+          if (rawRecommendations != null) {
+            _recommendedAds = _mapAds(rawRecommendations);
+          }
+
+          if (rawRecentlyViewed != null) {
+            _recentlyViewedAds = _mapAds(rawRecentlyViewed);
+          }
+
+          if (rawSavedIds is List) {
+            _savedIds
+              ..clear()
+              ..addAll(
+                rawSavedIds.map((id) => id.toString()),
+              );
+          }
         });
 
         return;
@@ -285,15 +310,22 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
       if (!mounted) return;
 
       setState(() {
-        _error =
-            e.response?.data?['message'] ?? 'Failed to load advertisements.';
+        // Preserve an already rendered Marketplace feed during transient
+        // session/network recovery instead of replacing useful content with
+        // a full-screen error.
+        if (_ads.isEmpty) {
+          _error =
+              e.response?.data?['message'] ?? 'Failed to load advertisements.';
+        }
         _loading = false;
       });
     } catch (_) {
       if (!mounted) return;
 
       setState(() {
-        _error = 'Failed to load advertisements.';
+        if (_ads.isEmpty) {
+          _error = 'Failed to load advertisements.';
+        }
         _loading = false;
       });
     }
