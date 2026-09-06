@@ -44,6 +44,7 @@ export async function publicMarketplaceRequest(
     const first = await backendMarketplaceRequest(path, {
       accessToken,
       userAgent,
+      rateLimitKeyMaterial: refreshToken,
     });
 
     if (first.status !== 401) {
@@ -63,6 +64,7 @@ export async function publicMarketplaceRequest(
     return {
       ...(await backendMarketplaceRequest(path, {
         userAgent,
+        rateLimitKeyMaterial: refreshToken,
       })),
       clearSession: refreshed.status === 401,
     };
@@ -71,6 +73,7 @@ export async function publicMarketplaceRequest(
   const retry = await backendMarketplaceRequest(path, {
     accessToken: refreshed.accessToken,
     userAgent,
+    rateLimitKeyMaterial: refreshToken,
   });
 
   return {
@@ -115,6 +118,7 @@ export async function authenticatedMarketplaceRequest(
       body: options.body,
       accessToken,
       userAgent,
+      rateLimitKeyMaterial: refreshToken,
     });
 
     if (first.status !== 401) {
@@ -161,6 +165,7 @@ export async function authenticatedMarketplaceRequest(
     body: options.body,
     accessToken,
     userAgent,
+    rateLimitKeyMaterial: refreshToken,
   });
 
   return {
