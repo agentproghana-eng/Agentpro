@@ -48,6 +48,14 @@ function extractUser(body: MeResponse): PortalUser | null {
   return null;
 }
 
+const SESSION_RETRY_DELAYS_MS = [750, 1500] as const;
+
+function wait(milliseconds: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, milliseconds);
+  });
+}
+
 async function requestSession(): Promise<
   | {
       kind: "authenticated";
@@ -61,49 +69,58 @@ async function requestSession(): Promise<
       message: string;
     }
 > {
-  const controller = new AbortController();
+  for (let attempt = 0; ; attempt += 1) {
+    const controller = new AbortController();
 
-  const timeout = window.setTimeout(() => controller.abort(), 12_000);
+    const timeout = window.setTimeout(() => controller.abort(), 12_000);
 
-  let response: Response;
+    let response: Response;
 
-  try {
-    response = await fetch("/api/auth/me", {
-      cache: "no-store",
-      signal: controller.signal,
-    });
-  } finally {
-    window.clearTimeout(timeout);
-  }
+    try {
+      response = await fetch("/api/auth/me", {
+        cache: "no-store",
+        signal: controller.signal,
+      });
+    } finally {
+      window.clearTimeout(timeout);
+    }
 
-  if (response.status === 401) {
+    if (response.status === 401) {
+      return {
+        kind: "unauthorized",
+      };
+    }
+
+    const body = (await response.json()) as MeResponse;
+
+    const retryable = response.status === 502 || response.status === 503;
+
+    if (retryable && attempt < SESSION_RETRY_DELAYS_MS.length) {
+      await wait(SESSION_RETRY_DELAYS_MS[attempt]);
+      continue;
+    }
+
+    if (!response.ok) {
+      return {
+        kind: "error",
+        message: body.message ?? "Unable to load your AgentPro session.",
+      };
+    }
+
+    const sessionUser = extractUser(body);
+
+    if (!sessionUser) {
+      return {
+        kind: "error",
+        message: "AgentPro returned an incomplete session profile.",
+      };
+    }
+
     return {
-      kind: "unauthorized",
+      kind: "authenticated",
+      user: sessionUser,
     };
   }
-
-  const body = (await response.json()) as MeResponse;
-
-  if (!response.ok) {
-    return {
-      kind: "error",
-      message: body.message ?? "Unable to load your AgentPro session.",
-    };
-  }
-
-  const sessionUser = extractUser(body);
-
-  if (!sessionUser) {
-    return {
-      kind: "error",
-      message: "AgentPro returned an incomplete session profile.",
-    };
-  }
-
-  return {
-    kind: "authenticated",
-    user: sessionUser,
-  };
 }
 
 type Props = {
