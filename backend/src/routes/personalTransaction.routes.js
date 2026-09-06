@@ -42,6 +42,11 @@ const PERSONAL_SEND_MONEY_TYPES = new Set([
   'send_money_cross_network',
 ]);
 
+const PERSONAL_CROSS_NETWORK_SELECTIONS = new Map([
+  ['mtn', new Set(['1', '2', '3', '4', '5', '6'])],
+  ['telecel', new Set(['1', '2', '3', '4'])],
+]);
+
 const normalizedString = (value) =>
   typeof value === 'string' ? value.trim() : '';
 
@@ -208,7 +213,9 @@ router.post('/', [
         ) ||
         (
           payload?.provider === 'telecel' &&
-          payload?.transaction_type === 'send_money_same_network'
+          PERSONAL_SEND_MONEY_TYPES.has(
+            payload?.transaction_type,
+          )
         ),
       'Reference is required for this Send Money transaction',
     ),
@@ -232,14 +239,28 @@ router.post('/', [
   ),
 
   body('selections_in_order').custom((value, { req }) => {
+    const provider =
+      normalizedString(req.body.provider).toLowerCase();
+
+    const allowedSelections =
+      PERSONAL_CROSS_NETWORK_SELECTIONS.get(provider);
+
     if (
-      req.body.provider === 'mtn' &&
       req.body.transaction_type ===
-        'send_money_cross_network'
+        'send_money_cross_network' &&
+      allowedSelections
     ) {
       if (!Array.isArray(value) || value.length !== 1) {
         throw new Error(
-          'Recipient network selection is required for MTN cross-network Send Money',
+          `Recipient network selection is required for ${provider} cross-network Send Money`,
+        );
+      }
+
+      const selection = normalizedString(value[0]);
+
+      if (!allowedSelections.has(selection)) {
+        throw new Error(
+          `Recipient network selection is invalid for ${provider} cross-network Send Money`,
         );
       }
     }

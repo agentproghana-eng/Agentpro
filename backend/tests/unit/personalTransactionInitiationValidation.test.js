@@ -235,6 +235,69 @@ describe('Personal transaction initiation validation', () => {
   );
 
   test(
+    'Telecel cross-network Send Money requires reference',
+    async () => {
+      await expectRejected(
+        {
+          provider: 'telecel',
+          transaction_type: 'send_money_cross_network',
+          amount: 10,
+          recipient_phone: '0240000000',
+          selections_in_order: ['1'],
+        },
+        'notes',
+      );
+    },
+  );
+
+  test(
+    'Telecel cross-network Send Money requires recipient network selection',
+    async () => {
+      await expectRejected(
+        {
+          provider: 'telecel',
+          transaction_type: 'send_money_cross_network',
+          amount: 10,
+          recipient_phone: '0240000000',
+          notes: 'Family',
+        },
+        'selections_in_order',
+      );
+    },
+  );
+
+  test(
+    'Telecel cross-network rejects an unverified network digit',
+    async () => {
+      await expectRejected(
+        {
+          provider: 'telecel',
+          transaction_type: 'send_money_cross_network',
+          amount: 10,
+          recipient_phone: '0240000000',
+          notes: 'Family',
+          selections_in_order: ['5'],
+        },
+        'selections_in_order',
+      );
+    },
+  );
+
+  test(
+    'valid Telecel cross-network Send Money reaches controller',
+    async () => {
+      await expectAccepted({
+        provider: 'telecel',
+        transaction_type: 'send_money_cross_network',
+        amount: 10,
+        recipient_phone: '0240000000',
+        notes: 'Family',
+        selections_in_order: ['1'],
+      });
+    },
+  );
+
+  test(
     'MTN Airtime requires recipient mode',
     async () => {
       await expectRejected(
