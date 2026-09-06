@@ -794,11 +794,11 @@ void main() {
         );
 
         expect(
-          interceptor,
-          contains(
-            "request.headers['Authorization'] = "
-            'latestAuthorization',
-          ),
+          RegExp(
+            r"request\.headers\['Authorization'\]\s*=\s*"
+            r'latestAuthorization;',
+          ).hasMatch(interceptor),
+          isTrue,
         );
 
         expect(

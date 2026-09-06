@@ -45,7 +45,7 @@ void main() {
     'Business Hub keeps the critical feed independent from secondary sections',
     () {
       final latestIndex = source.indexOf(
-        "final rawLatest = await _cachedMarketplaceGet(",
+        'final rawLatest = await _cachedMarketplaceGet(',
       );
 
       final renderLatestIndex = source.indexOf(
