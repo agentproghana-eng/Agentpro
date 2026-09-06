@@ -255,9 +255,21 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
 
   bool get _isUnifiedSendMoney => widget.transactionType == 'send_money';
 
+  bool get _isTelecelUnifiedSendMoney =>
+      _isUnifiedSendMoney && widget.provider == 'telecel';
+
+  bool get _requiresSendMoneyModeChoice =>
+      _isUnifiedSendMoney && !_isTelecelUnifiedSendMoney;
+
   String get _effectiveTransactionType {
     if (!_isUnifiedSendMoney) {
       return widget.transactionType;
+    }
+
+    // Only Telecel same-network Personal Send Money was recovered.
+    // Never manufacture an unverified Telecel cross-network request.
+    if (_isTelecelUnifiedSendMoney) {
+      return 'send_money_same_network';
     }
 
     return switch (_sendMoneyMode) {
@@ -315,7 +327,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   bool get _isDataBundle => widget.transactionType == 'buy_data';
 
   bool get _needsAmount {
-    if (_isUnifiedSendMoney && _sendMoneyMode == null) {
+    if (_requiresSendMoneyModeChoice && _sendMoneyMode == null) {
       return false;
     }
 
@@ -324,7 +336,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   }
 
   bool get _needsPhone {
-    if (_isUnifiedSendMoney && _sendMoneyMode == null) {
+    if (_requiresSendMoneyModeChoice && _sendMoneyMode == null) {
       return false;
     }
 
@@ -342,12 +354,17 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         'send_money_cross_network',
       ].contains(_effectiveTransactionType);
 
-  bool get _referenceRequired =>
-      widget.provider == 'mtn' &&
-      [
-        'send_money_same_network',
-        'send_money_cross_network',
-      ].contains(_effectiveTransactionType);
+  bool get _referenceRequired {
+    final type = _effectiveTransactionType;
+
+    return (widget.provider == 'mtn' &&
+            [
+              'send_money_same_network',
+              'send_money_cross_network',
+            ].contains(type)) ||
+        (widget.provider == 'telecel' &&
+            type == 'send_money_same_network');
+  }
 
   bool get _needsTillNumber => widget.transactionType == 'withdraw_cash';
 
@@ -376,6 +393,18 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       if (c.id == _bundleCategory) return c;
     }
     return null;
+  }
+
+  List<DataBundleCategory> get _availableDataBundleCategories {
+    if (widget.provider != 'telecel') {
+      return kDataBundleCategories;
+    }
+
+    // Only the historical Telecel Personal Daily flow was recovered.
+    // Do not offer categories without a verified executable flow.
+    return kDataBundleCategories
+        .where((category) => category.id == 'daily')
+        .toList(growable: false);
   }
 
   List<String> _computeSelections() {
@@ -1285,7 +1314,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       key: _formKey,
       child: ListView(
         children: [
-          if (_isUnifiedSendMoney) ...[
+          if (_requiresSendMoneyModeChoice) ...[
             DropdownButtonFormField<String>(
               initialValue: _sendMoneyMode,
               decoration: const InputDecoration(
@@ -2170,7 +2199,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           mainAxisSpacing: 12,
           crossAxisSpacing: 12,
           childAspectRatio: 1.3,
-          children: kDataBundleCategories.map((cat) {
+          children: _availableDataBundleCategories.map((cat) {
             return InkWell(
               onTap: () => _selectCategory(cat.id),
               borderRadius: BorderRadius.circular(12),
