@@ -82,6 +82,7 @@ export async function backendMarketplaceRequest(
     body?: unknown;
     accessToken?: string;
     userAgent?: string | null;
+    rateLimitKeyMaterial?: string;
   } = {},
 ) {
   const headers = new Headers({
@@ -100,7 +101,9 @@ export async function backendMarketplaceRequest(
     headers.set("user-agent", options.userAgent.slice(0, 500));
   }
 
-  await applyWebRateLimitIdentity(headers);
+  await applyWebRateLimitIdentity(headers, {
+    serverKeyMaterial: options.rateLimitKeyMaterial,
+  });
 
   const response = await fetch(marketplaceEndpoint(path), {
     method: options.method ?? "GET",
