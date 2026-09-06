@@ -32,7 +32,7 @@ void main() {
     expect(form, greaterThanOrEqualTo(0));
 
     final network = transactionSource.indexOf(
-      'if (_isMtnCrossNetwork)',
+      'if (_isCrossNetwork)',
       form,
     );
 
@@ -85,7 +85,7 @@ void main() {
     );
 
     final genericNetwork = transactionSource.indexOf(
-      'if (_isMtnCrossNetwork)',
+      'if (_isCrossNetwork)',
       form,
     );
 

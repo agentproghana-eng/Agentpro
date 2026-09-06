@@ -54,14 +54,41 @@ describe('Telecel Personal recovered USSD flows', () => {
     );
   });
 
-  test('requires a reference for Telecel same-network Send Money', () => {
-    expect(route).toContain(
+  test('requires a reference for all verified Telecel Send Money modes', () => {
+    const referenceStart = route.indexOf(
+      "body('notes').custom("
+    );
+
+    const referenceEnd = route.indexOf(
+      "body('merchant_id').custom(",
+      referenceStart,
+    );
+
+    expect(referenceStart).toBeGreaterThanOrEqual(0);
+    expect(referenceEnd).toBeGreaterThan(referenceStart);
+
+    const referenceValidation = route.substring(
+      referenceStart,
+      referenceEnd,
+    );
+
+    expect(referenceValidation).toContain(
       "payload?.provider === 'telecel'"
     );
-    expect(route).toContain(
-      "payload?.transaction_type === 'send_money_same_network'"
+
+    expect(referenceValidation).toContain(
+      'PERSONAL_SEND_MONEY_TYPES.has('
     );
+
     expect(route).toContain(
+      "'send_money_same_network'"
+    );
+
+    expect(route).toContain(
+      "'send_money_cross_network'"
+    );
+
+    expect(referenceValidation).toContain(
       'Reference is required for this Send Money transaction'
     );
   });

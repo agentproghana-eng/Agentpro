@@ -250,26 +250,23 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     '6': 'GhanaPay',
   };
 
+  static const Map<String, String> _telecelCrossNetworkOptions = {
+    '1': 'MTN',
+    '2': 'ATMoney',
+    '3': 'G-Money',
+    '4': 'GhanaPay',
+  };
+
   String? _crossNetworkSelection;
   String? _sendMoneyMode;
 
   bool get _isUnifiedSendMoney => widget.transactionType == 'send_money';
 
-  bool get _isTelecelUnifiedSendMoney =>
-      _isUnifiedSendMoney && widget.provider == 'telecel';
-
-  bool get _requiresSendMoneyModeChoice =>
-      _isUnifiedSendMoney && !_isTelecelUnifiedSendMoney;
+  bool get _requiresSendMoneyModeChoice => _isUnifiedSendMoney;
 
   String get _effectiveTransactionType {
     if (!_isUnifiedSendMoney) {
       return widget.transactionType;
-    }
-
-    // Only Telecel same-network Personal Send Money was recovered.
-    // Never manufacture an unverified Telecel cross-network request.
-    if (_isTelecelUnifiedSendMoney) {
-      return 'send_money_same_network';
     }
 
     return switch (_sendMoneyMode) {
@@ -282,6 +279,18 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   bool get _isMtnCrossNetwork =>
       widget.provider == 'mtn' &&
       _effectiveTransactionType == 'send_money_cross_network';
+
+  bool get _isTelecelCrossNetwork =>
+      widget.provider == 'telecel' &&
+      _effectiveTransactionType == 'send_money_cross_network';
+
+  bool get _isCrossNetwork =>
+      _isMtnCrossNetwork || _isTelecelCrossNetwork;
+
+  Map<String, String> get _crossNetworkOptions =>
+      _isTelecelCrossNetwork
+          ? _telecelCrossNetworkOptions
+          : _mtnCrossNetworkOptions;
 
   bool get _isMtnAirtime =>
       widget.provider == 'mtn' && widget.transactionType == 'buy_airtime';
@@ -357,13 +366,12 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   bool get _referenceRequired {
     final type = _effectiveTransactionType;
 
-    return (widget.provider == 'mtn' &&
+    return ((widget.provider == 'mtn' ||
+                widget.provider == 'telecel') &&
             [
               'send_money_same_network',
               'send_money_cross_network',
-            ].contains(type)) ||
-        (widget.provider == 'telecel' &&
-            type == 'send_money_same_network');
+            ].contains(type));
   }
 
   bool get _needsTillNumber => widget.transactionType == 'withdraw_cash';
@@ -1035,7 +1043,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       if (selectedSim.iccid.isNotEmpty) 'sim_iccid': selectedSim.iccid,
       'sim_slot': selectedSim.slot,
       'sim_subscription_id': selectedSim.subscriptionId,
-      if (_isMtnCrossNetwork && _crossNetworkSelection != null)
+      if (_isCrossNetwork && _crossNetworkSelection != null)
         'selections_in_order': <String>[_crossNetworkSelection!],
     };
 
@@ -1336,8 +1344,8 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
                 setState(() {
                   _sendMoneyMode = value;
 
-                  // Network selection only belongs to the MTN
-                  // cross-network variant.
+                  // A transfer-mode change invalidates any destination
+                  // network selected for the previous mode.
                   _crossNetworkSelection = null;
                 });
               },
@@ -1401,15 +1409,16 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
               const SizedBox(height: 14),
             ],
           ],
-          if (_isMtnCrossNetwork) ...[
+          if (_isCrossNetwork) ...[
             DropdownButtonFormField<String>(
               initialValue: _crossNetworkSelection,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Recipient Network',
-                prefixIcon: Icon(Icons.cell_tower_outlined),
-                helperText: 'Choose the destination network shown by MTN',
+                prefixIcon: const Icon(Icons.cell_tower_outlined),
+                helperText:
+                    'Choose the destination network shown by $_providerLabel',
               ),
-              items: _mtnCrossNetworkOptions.entries
+              items: _crossNetworkOptions.entries
                   .map(
                     (entry) => DropdownMenuItem<String>(
                       value: entry.key,
