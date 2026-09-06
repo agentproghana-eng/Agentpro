@@ -200,11 +200,17 @@ router.post('/', [
   body('notes').custom(
     requireNonBlankWhen(
       (payload) =>
-        payload?.provider === 'mtn' &&
-        PERSONAL_SEND_MONEY_TYPES.has(
-          payload?.transaction_type,
+        (
+          payload?.provider === 'mtn' &&
+          PERSONAL_SEND_MONEY_TYPES.has(
+            payload?.transaction_type,
+          )
+        ) ||
+        (
+          payload?.provider === 'telecel' &&
+          payload?.transaction_type === 'send_money_same_network'
         ),
-      'Reference is required for MTN Send Money',
+      'Reference is required for this Send Money transaction',
     ),
   ),
 
