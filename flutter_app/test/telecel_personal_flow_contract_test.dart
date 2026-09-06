@@ -8,54 +8,101 @@ void main() {
   ).readAsStringSync();
 
   group('Telecel Personal flow UI contract', () {
-    test('unified Telecel Transfer Money resolves only to same network', () {
-      expect(
-        source,
-        contains(
-          "bool get _isTelecelUnifiedSendMoney =>",
-        ),
-      );
+    test(
+      'unified Telecel Transfer Money supports Same and Other Network',
+      () {
+        expect(
+          source,
+          contains(
+            'bool get _requiresSendMoneyModeChoice => _isUnifiedSendMoney;',
+          ),
+        );
 
-      expect(
-        source,
-        contains(
-          "_isUnifiedSendMoney && widget.provider == 'telecel'",
-        ),
-      );
+        expect(
+          source,
+          contains(
+            "'same_network' => 'send_money_same_network'",
+          ),
+        );
 
-      expect(
-        source,
-        contains(
-          "if (_isTelecelUnifiedSendMoney) {",
-        ),
-      );
+        expect(
+          source,
+          contains(
+            "'other_network' => 'send_money_cross_network'",
+          ),
+        );
 
-      expect(
-        source,
-        contains(
-          "return 'send_money_same_network';",
-        ),
-      );
+        expect(
+          source,
+          contains(
+            'bool get _isTelecelCrossNetwork =>',
+          ),
+        );
 
-      expect(
-        source,
-        contains(
-          "if (_requiresSendMoneyModeChoice) ...[",
-        ),
-      );
-    });
+        expect(
+          source,
+          contains(
+            "widget.provider == 'telecel'",
+          ),
+        );
 
-    test('requires reference for Telecel same-network Send Money', () {
-      expect(
-        source,
-        contains("widget.provider == 'telecel'"),
-      );
+        expect(
+          source,
+          isNot(
+            contains('_isTelecelUnifiedSendMoney'),
+          ),
+        );
 
-      expect(
-        source,
-        contains("type == 'send_money_same_network'"),
-      );
-    });
+        expect(
+          source,
+          contains(
+            'if (_requiresSendMoneyModeChoice) ...[',
+          ),
+        );
+      },
+    );
+
+    test(
+      'requires reference for both verified Telecel Send Money modes',
+      () {
+        final start = source.indexOf(
+          'bool get _referenceRequired',
+        );
+
+        final end = source.indexOf(
+          'bool get _needsTillNumber',
+          start,
+        );
+
+        expect(start, greaterThanOrEqualTo(0));
+        expect(end, greaterThan(start));
+
+        final referenceContract = source.substring(
+          start,
+          end,
+        );
+
+        expect(
+          referenceContract,
+          contains("widget.provider == 'telecel'"),
+        );
+
+        expect(
+          referenceContract,
+          contains("'send_money_same_network'"),
+        );
+
+        expect(
+          referenceContract,
+          contains("'send_money_cross_network'"),
+        );
+
+        expect(
+          referenceContract,
+          contains('.contains(type)'),
+        );
+      },
+    );
 
     test('offers only recovered Daily category for Telecel Buy Data', () {
       expect(
