@@ -60,6 +60,8 @@ function fingerprint(body) {
     amount: normalizeAmount(body.amount),
     recipient_phone: normalizeString(body.recipient_phone),
     merchant_id: normalizeString(body.merchant_id),
+    bank_name: normalizeString(body.bank_name),
+    account_number: normalizeString(body.account_number),
     notes: normalizeString(body.notes),
     sim_iccid: normalizedIccid,
     sim_slot: normalizeInteger(body.sim_slot),
@@ -230,6 +232,59 @@ describe('Personal transaction initiation idempotency', () => {
       }),
     );
   });
+
+  test(
+    'bank transfer rejects operation-ID reuse when account number changes',
+    async () => {
+      const originalReq = makeReq({
+        provider: 'telecel',
+        transaction_type: 'send_money_to_bank',
+        amount: 25,
+        recipient_phone: '',
+        merchant_id: '',
+        bank_name: 'GT Bank',
+        account_number: '0123456789012',
+        notes: 'Transfer',
+        bundle_category: '',
+        recipient_mode: '',
+        selections_in_order: ['3', '2'],
+      });
+
+      const retryReq = makeReq({
+        provider: 'telecel',
+        transaction_type: 'send_money_to_bank',
+        amount: 25,
+        recipient_phone: '',
+        merchant_id: '',
+        bank_name: 'GT Bank',
+        account_number: '0123456789013',
+        notes: 'Transfer',
+        bundle_category: '',
+        recipient_mode: '',
+        selections_in_order: ['3', '2'],
+      });
+
+      const res = makeRes();
+
+      mockQuery.mockResolvedValueOnce({
+        rows: [existingFor(originalReq)],
+      });
+
+      await controller.initiateTransaction(retryReq, res);
+
+      expect(mockQuery).toHaveBeenCalledTimes(1);
+      expect(mockAuditLog).not.toHaveBeenCalled();
+
+      expect(res.status).toHaveBeenCalledWith(409);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          code: 'CLIENT_OPERATION_CONFLICT',
+        }),
+      );
+    },
+  );
 
   test('unresolved SIM replay conflicts when fallback identity changes', async () => {
     const originalReq = makeReq({

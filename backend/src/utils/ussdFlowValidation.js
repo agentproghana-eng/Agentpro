@@ -1,6 +1,7 @@
 const VALID_FLOW_ACTIONS = Object.freeze([
   'send_digit',
   'send_customer_phone',
+  'send_account_number',
   'send_amount',
   'send_operator_id',
   'send_reference',

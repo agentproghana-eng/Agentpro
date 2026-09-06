@@ -20,6 +20,7 @@ const Map<String, String> kPersonalTransactionLabels = {
   'send_money': 'Transfer Money',
   'send_money_same_network': 'Transfer Money · Same Network',
   'send_money_cross_network': 'Transfer Money · Other Network',
+  'send_money_to_bank': 'Send Money to Bank',
   'buy_airtime': 'Buy Airtime',
   'buy_data': 'Buy Data',
   'buy_mashup': 'MashUp',
@@ -226,6 +227,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   final _phoneCtrl = TextEditingController();
   final _referenceCtrl = TextEditingController();
   final _tillNumberCtrl = TextEditingController();
+  final _accountNumberCtrl = TextEditingController();
   final _flexiAmountCtrl = TextEditingController();
   bool _loading = false;
 
@@ -257,8 +259,46 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     '4': 'GhanaPay',
   };
 
+  static const Map<String, List<String>> _telecelBankSelections = {
+    'Access Bank': ['1', '1'],
+    'ADB': ['1', '2'],
+    'ADVANS GHANA S&L': ['1', '3'],
+    'Absa': ['1', '4'],
+    'Bank of Africa': ['1', '5'],
+    'CAL Bank': ['1', '6'],
+    'CBG': ['1', '7'],
+    'ARB Apex Bank': ['1', '8'],
+    'Affinity': ['1', '9'],
+    'Adehyeman S&L': ['1', '10'],
+    'Best Point': ['1', '11'],
+    'Ecobank': ['2', '1'],
+    'Fidelity': ['2', '2'],
+    'First Atlantic Bank': ['2', '3'],
+    'First National Bank': ['2', '4'],
+    'FirstBank Ghana': ['2', '8'],
+    'GCB Bank': ['3', '1'],
+    'GT Bank': ['3', '2'],
+    'NIB': ['3', '3'],
+    'Prudential': ['3', '4'],
+    'Republic': ['3', '5'],
+    'OmniBSIC': ['3', '6'],
+    'GHL Bank': ['3', '7'],
+    'Opportunity International S&L': ['3', '8'],
+    'Letshego': ['3', '9'],
+    'IT Consortium': ['3', '10'],
+    'Stanchart': ['4', '1'],
+    'Stanbic': ['4', '2'],
+    'UBA': ['4', '3'],
+    'UMB': ['4', '4'],
+    'Zenith': ['4', '5'],
+    'Services Integrity Savings & Loans': ['4', '6'],
+    'SG-GH': ['4', '7'],
+    'Sinapi Aba Savings and Loans': ['4', '8'],
+  };
+
   String? _crossNetworkSelection;
   String? _sendMoneyMode;
+  String? _selectedBankName;
 
   bool get _isUnifiedSendMoney => widget.transactionType == 'send_money';
 
@@ -287,10 +327,37 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   bool get _isCrossNetwork =>
       _isMtnCrossNetwork || _isTelecelCrossNetwork;
 
+  bool get _isTelecelBankTransfer =>
+      widget.provider == 'telecel' &&
+      _effectiveTransactionType == 'send_money_to_bank';
+
   Map<String, String> get _crossNetworkOptions =>
       _isTelecelCrossNetwork
           ? _telecelCrossNetworkOptions
           : _mtnCrossNetworkOptions;
+
+  List<String>? get _transactionSelectionsInOrder {
+    if (_isTelecelBankTransfer) {
+      final bankName = _selectedBankName;
+
+      if (bankName == null) {
+        return null;
+      }
+
+      final selections = _telecelBankSelections[bankName];
+
+      return selections == null
+          ? null
+          : List<String>.from(selections);
+    }
+
+    if (_isCrossNetwork &&
+        _crossNetworkSelection != null) {
+      return <String>[_crossNetworkSelection!];
+    }
+
+    return null;
+  }
 
   bool get _isMtnAirtime =>
       widget.provider == 'mtn' && widget.transactionType == 'buy_airtime';
@@ -349,6 +416,10 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       return false;
     }
 
+    if (_isTelecelBankTransfer) {
+      return false;
+    }
+
     if (_isMtnAirtime) {
       return _recipientMode == 'other';
     }
@@ -361,6 +432,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   bool get _needsReference => [
         'send_money_same_network',
         'send_money_cross_network',
+        'send_money_to_bank',
       ].contains(_effectiveTransactionType);
 
   bool get _referenceRequired {
@@ -371,7 +443,9 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
             [
               'send_money_same_network',
               'send_money_cross_network',
-            ].contains(type));
+            ].contains(type)) ||
+        (widget.provider == 'telecel' &&
+            type == 'send_money_to_bank');
   }
 
   bool get _needsTillNumber => widget.transactionType == 'withdraw_cash';
@@ -693,6 +767,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     _phoneCtrl.dispose();
     _referenceCtrl.dispose();
     _tillNumberCtrl.dispose();
+    _accountNumberCtrl.dispose();
     _flexiAmountCtrl.dispose();
     super.dispose();
   }
@@ -803,6 +878,17 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
 
       final isOffline = connectivity.isEmpty ||
           connectivity.every((result) => result == ConnectivityResult.none);
+
+      // Offline Personal initiation stores request_fields for later sync.
+      // Never put a raw bank account number into that persistent queue.
+      if (isOffline &&
+          transactionType == 'send_money_to_bank') {
+        _showPersonalStartFailure(
+          'Send Money to Bank requires an internet connection so your '
+          'bank account number is not stored in AgentPro offline data.',
+        );
+        return null;
+      }
 
       Map<String, dynamic> transaction;
 
@@ -1030,10 +1116,18 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
 
     final reference = _referenceCtrl.text.trim();
     final transactionType = _effectiveTransactionType;
+    final bankName = _selectedBankName;
+    final accountNumber = _accountNumberCtrl.text.trim();
+    final selectionsInOrder =
+        _transactionSelectionsInOrder;
 
     final baseRequestFields = <String, dynamic>{
       'provider': widget.provider,
       'transaction_type': transactionType,
+      if (_isTelecelBankTransfer && bankName != null)
+        'bank_name': bankName,
+      if (_isTelecelBankTransfer)
+        'account_number': accountNumber,
       if (_isMtnAirtime && _recipientMode != null)
         'recipient_mode': _recipientMode,
       if (_needsAmount) 'amount': double.tryParse(_amountCtrl.text.trim()),
@@ -1043,8 +1137,8 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       if (selectedSim.iccid.isNotEmpty) 'sim_iccid': selectedSim.iccid,
       'sim_slot': selectedSim.slot,
       'sim_subscription_id': selectedSim.subscriptionId,
-      if (_isCrossNetwork && _crossNetworkSelection != null)
-        'selections_in_order': <String>[_crossNetworkSelection!],
+      if (selectionsInOrder != null)
+        'selections_in_order': selectionsInOrder,
     };
 
     final requestFields = await _withStableClientOperation(baseRequestFields);
@@ -1351,6 +1445,48 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
               },
               validator: (value) =>
                   value == null ? 'Choose how to transfer money' : null,
+            ),
+            const SizedBox(height: 14),
+          ],
+          if (_isTelecelBankTransfer) ...[
+            DropdownButtonFormField<String>(
+              initialValue: _selectedBankName,
+              decoration: const InputDecoration(
+                labelText: 'Bank Name',
+                prefixIcon: Icon(Icons.account_balance_outlined),
+                helperText: 'Choose the receiving bank',
+              ),
+              items: _telecelBankSelections.keys
+                  .map(
+                    (bankName) => DropdownMenuItem<String>(
+                      value: bankName,
+                      child: Text(bankName),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                setState(() {
+                  _selectedBankName = value;
+                });
+              },
+              validator: (value) =>
+                  value == null ? 'Bank name is required' : null,
+            ),
+            const SizedBox(height: 14),
+            AppTextField(
+              controller: _accountNumberCtrl,
+              label: 'Account Number',
+              keyboardType: TextInputType.number,
+              prefixIcon: Icons.numbers_outlined,
+              validator: (v) {
+                final value = (v ?? '').trim();
+
+                if (!RegExp(r'^\d{6,20}$').hasMatch(value)) {
+                  return 'Enter a valid account number';
+                }
+
+                return null;
+              },
             ),
             const SizedBox(height: 14),
           ],

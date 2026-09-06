@@ -59,6 +59,10 @@ const buildPersonalOperationFingerprint = (body) => {
       body.recipient_phone
     ),
     merchant_id: normalizePersonalOperationString(body.merchant_id),
+    bank_name: normalizePersonalOperationString(body.bank_name),
+    account_number: normalizePersonalOperationString(
+      body.account_number
+    ),
     notes: normalizePersonalOperationString(body.notes),
     sim_iccid: normalizedIccid,
     sim_slot: normalizePersonalOperationInteger(body.sim_slot),
@@ -116,6 +120,7 @@ const sendPersonalIdempotentReplay = ({
       recipient_phone: requestBody.recipient_phone || '',
       payment_reference: requestBody.notes || '',
       merchant_id: requestBody.merchant_id || '',
+      account_number: requestBody.account_number || '',
     },
     idempotent_replay: true,
   },
@@ -133,6 +138,7 @@ exports.initiateTransaction = async (req, res) => {
     amount,
     recipient_phone,
     merchant_id,
+    account_number,
     sim_iccid,
     sim_slot,
     notes,
@@ -407,6 +413,7 @@ exports.initiateTransaction = async (req, res) => {
           // identifier code) - reuses the existing send_merchant_id
           // action rather than inventing a parallel mechanism.
           merchant_id: merchant_id || '',
+          account_number: account_number || '',
         },
       },
     });

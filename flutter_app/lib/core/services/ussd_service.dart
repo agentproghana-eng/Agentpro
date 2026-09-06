@@ -612,6 +612,7 @@ class UssdAccessibilityEngine {
     String? operatorId,
     String? reference,
     String? merchantId,
+    String? accountNumber,
     int? simSlot,
     String? dialCode,
     List<Map<String, dynamic>>? steps,
@@ -642,6 +643,7 @@ class UssdAccessibilityEngine {
         if (operatorId != null) 'operator_id': operatorId,
         if (reference != null) 'reference': reference,
         if (merchantId != null) 'merchant_id': merchantId,
+        if (accountNumber != null) 'account_number': accountNumber,
         if (simSlot != null) 'sim_slot': simSlot,
         if (dialCode != null) 'dial_code': dialCode,
         if (steps != null) 'steps': steps,
@@ -696,6 +698,7 @@ class UssdAccessibilityEngine {
         'MISSING_CUSTOMER_PHONE',
         'MISSING_AMOUNT',
         'MISSING_REFERENCE',
+        'INVALID_ACCOUNT_NUMBER',
         'MISSING_SELECTION',
         'MISSING_OPERATOR_ID',
         'MISSING_DIAL_CODE',
@@ -717,6 +720,8 @@ class UssdAccessibilityEngine {
             'This USSD flow requires a customer phone number.',
           'MISSING_AMOUNT' => 'This USSD flow requires an amount.',
           'MISSING_REFERENCE' => 'This USSD flow requires a reference.',
+          'INVALID_ACCOUNT_NUMBER' =>
+            'This USSD flow requires a valid bank account number.',
           'MISSING_SELECTION' =>
             'This USSD flow is missing a required menu selection.',
           'MISSING_OPERATOR_ID' =>

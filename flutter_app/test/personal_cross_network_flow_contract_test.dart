@@ -119,18 +119,45 @@ void main() {
       );
     });
 
-    test('passes the selected network digit to native flow execution', () {
-      expect(
+    test('passes the selected network digit through transaction selections', () {
+      final selectionHelper = sourceSlice(
         source,
-        contains(
-          'if (_isCrossNetwork && _crossNetworkSelection != null)',
-        ),
+        'List<String>? get _transactionSelectionsInOrder {',
+        'bool get _isMtnAirtime =>',
+      );
+
+      expect(
+        selectionHelper,
+        contains('if (_isCrossNetwork &&'),
+      );
+
+      expect(
+        selectionHelper,
+        contains('_crossNetworkSelection != null'),
+      );
+
+      expect(
+        selectionHelper,
+        contains('return <String>[_crossNetworkSelection!];'),
       );
 
       expect(
         source,
         contains(
-          "'selections_in_order': <String>[_crossNetworkSelection!]",
+          'final selectionsInOrder =\n'
+          '        _transactionSelectionsInOrder;',
+        ),
+      );
+
+      expect(
+        source,
+        contains('if (selectionsInOrder != null)'),
+      );
+
+      expect(
+        source,
+        contains(
+          "'selections_in_order': selectionsInOrder",
         ),
       );
     });

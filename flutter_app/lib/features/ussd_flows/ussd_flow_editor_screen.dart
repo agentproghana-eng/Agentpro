@@ -79,6 +79,7 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
   final _actions = const [
     {'value': 'send_digit', 'label': 'Send Digit'},
     {'value': 'send_customer_phone', 'label': 'Send Customer Phone'},
+    {'value': 'send_account_number', 'label': 'Send Account Number'},
     {'value': 'send_amount', 'label': 'Send Amount'},
     {'value': 'send_operator_id', 'label': 'Send Operator ID'},
     {'value': 'send_reference', 'label': 'Send Reference'},

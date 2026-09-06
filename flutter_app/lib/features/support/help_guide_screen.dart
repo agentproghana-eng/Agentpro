@@ -225,7 +225,15 @@ final List<HelpSection> _helpSections = [
         HelpItem(
           question: 'What actions can a step use?',
           answer:
-              'send_digit / send_literal — types a fixed value from action_value (e.g. a menu number). send_customer_phone, send_amount, send_operator_id, send_reference, send_merchant_id — automatically types that value from the transaction itself, no action_value needed. auto_confirm_once — sends a fixed action_value exactly once, right after the PIN. pin_prompt — stops automation completely and hands the screen to the agent for real PIN entry.',
+              'send_digit / send_literal — types a fixed value from '
+              'action_value (e.g. a menu number). send_customer_phone, '
+              'send_account_number, send_amount, send_operator_id, '
+              'send_reference, send_merchant_id — automatically types that '
+              'value from the transaction itself, no action_value needed. '
+              'send_selection — uses the next validated dynamic menu '
+              'selection supplied by the transaction. pin_prompt — stops '
+              'automation completely and hands the screen to the user for '
+              'real PIN entry.',
         ),
         HelpItem(
           question: 'What does a flow need to save successfully?',

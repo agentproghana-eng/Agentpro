@@ -1880,7 +1880,7 @@ export function USSDTemplatesPage() {
 // Cash In/Out/Send Money, Telecel Deposit, Telecel Airtime, and MTN
 // Balance Enquiry actually run.
 
-const VALID_FLOW_ACTIONS = ['send_digit', 'send_customer_phone', 'send_amount', 'send_operator_id', 'send_reference', 'send_merchant_id', 'send_literal', 'pin_prompt', 'auto_confirm_once'];
+const VALID_FLOW_ACTIONS = ['send_digit', 'send_customer_phone', 'send_account_number', 'send_amount', 'send_operator_id', 'send_reference', 'send_merchant_id', 'send_selection', 'send_literal', 'pin_prompt', 'auto_confirm_once'];
 const VALUE_REQUIRED_FLOW_ACTIONS = ['send_digit', 'send_literal', 'auto_confirm_once'];
 
 // Mirrors the backend's validateFlowSteps exactly - this is a UX
@@ -2134,9 +2134,11 @@ export function FlowsPage() {
               </div>
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-700">
                 💡 <strong>Actions:</strong> <code>send_digit</code>/<code>send_literal</code> type
-                a fixed <code>action_value</code>. <code>send_customer_phone</code>, <code>send_amount</code>,{' '}
-                <code>send_operator_id</code>, <code>send_reference</code>, <code>send_merchant_id</code> type
-                the transaction's own value automatically. <code>auto_confirm_once</code> sends a
+                a fixed <code>action_value</code>. <code>send_customer_phone</code>, <code>send_account_number</code>,{' '}
+                <code>send_amount</code>, <code>send_operator_id</code>, <code>send_reference</code>,{' '}
+                <code>send_merchant_id</code> type the transaction's own value automatically.{' '}
+                <code>send_selection</code> uses the transaction's next validated dynamic menu selection.{' '}
+                <code>auto_confirm_once</code> sends a
                 fixed value exactly once, after the PIN.
               </div>
               {validationError && (
