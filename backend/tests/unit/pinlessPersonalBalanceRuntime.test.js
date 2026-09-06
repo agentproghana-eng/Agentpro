@@ -71,6 +71,43 @@ const globalPulseFlow = (overrides = {}) => ({
 });
 
 
+const telecelBalanceSteps = [
+  {
+    match_all: ['main ac:'],
+    action: 'await_user_selection',
+    action_value: null,
+  },
+];
+
+const globalTelecelBalanceFlow = (overrides = {}) => ({
+  id: '55555555-5555-4555-8555-555555555555',
+  provider: 'telecel',
+  transaction_type: 'check_airtime_balance',
+  dial_code: '*124#',
+  success_markers: ['internet bundle:'],
+  failure_markers: [],
+  owner_user_id: null,
+  company_id: null,
+  is_active: true,
+  ...overrides,
+});
+
+const makeTelecelBalanceRequest = ({
+  plan = 'free',
+} = {}) => ({
+  query: {
+    provider: 'telecel',
+    transaction_type: 'check_airtime_balance',
+  },
+  user: {
+    id: '22222222-2222-4222-8222-222222222222',
+  },
+  personalSubscription: {
+    plan,
+    expires_at: null,
+  },
+});
+
 const airtimeDataSteps = [
   {
     match_all: ['proceed to buy bundle'],
@@ -292,6 +329,179 @@ describe('PIN-less Personal runtime flow safety', () => {
       const res = makeResponse();
 
       await resolveFlow(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(409);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          code: 'USSD_FLOW_INVALID_CONFIGURATION',
+        }),
+      );
+    },
+  );
+
+  test(
+    'resolver accepts exact Global Telecel *124# balance shape',
+    async () => {
+      query
+        .mockResolvedValueOnce({
+          rows: [globalTelecelBalanceFlow()],
+        })
+        .mockResolvedValueOnce({
+          rows: telecelBalanceSteps,
+        });
+
+      const res = makeResponse();
+
+      await resolveFlow(
+        makeTelecelBalanceRequest(),
+        res,
+      );
+
+      expect(res.status).not.toHaveBeenCalled();
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            provider: 'telecel',
+            transaction_type:
+              'check_airtime_balance',
+            dial_code: '*124#',
+            steps: telecelBalanceSteps,
+          }),
+        }),
+      );
+    },
+  );
+
+  test(
+    'resolver rejects Telecel *124# with a writable step',
+    async () => {
+      query
+        .mockResolvedValueOnce({
+          rows: [globalTelecelBalanceFlow()],
+        })
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              match_all: ['main ac:'],
+              action: 'send_digit',
+              action_value: '1',
+            },
+          ],
+        });
+
+      const res = makeResponse();
+
+      await resolveFlow(
+        makeTelecelBalanceRequest(),
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(409);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          code: 'USSD_FLOW_INVALID_CONFIGURATION',
+        }),
+      );
+    },
+  );
+
+  test(
+    'resolver rejects a different Telecel PIN-less dial code',
+    async () => {
+      query
+        .mockResolvedValueOnce({
+          rows: [
+            globalTelecelBalanceFlow({
+              dial_code: '*125#',
+            }),
+          ],
+        })
+        .mockResolvedValueOnce({
+          rows: telecelBalanceSteps,
+        });
+
+      const res = makeResponse();
+
+      await resolveFlow(
+        makeTelecelBalanceRequest(),
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(409);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          code: 'USSD_FLOW_INVALID_CONFIGURATION',
+        }),
+      );
+    },
+  );
+
+  test(
+    'resolver never grants Telecel PIN-less exception to Personal override',
+    async () => {
+      query
+        .mockResolvedValueOnce({
+          rows: [
+            globalTelecelBalanceFlow({
+              owner_user_id:
+                '22222222-2222-4222-8222-222222222222',
+            }),
+          ],
+        })
+        .mockResolvedValueOnce({
+          rows: telecelBalanceSteps,
+        });
+
+      const res = makeResponse();
+
+      await resolveFlow(
+        makeTelecelBalanceRequest({
+          plan: 'paid',
+        }),
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(409);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          code: 'USSD_FLOW_INVALID_CONFIGURATION',
+        }),
+      );
+    },
+  );
+
+  test(
+    'resolver never grants Telecel PIN-less exception to company flow',
+    async () => {
+      query
+        .mockResolvedValueOnce({
+          rows: [
+            globalTelecelBalanceFlow({
+              company_id:
+                '44444444-4444-4444-8444-444444444444',
+            }),
+          ],
+        })
+        .mockResolvedValueOnce({
+          rows: telecelBalanceSteps,
+        });
+
+      const res = makeResponse();
+
+      await resolveFlow(
+        makeTelecelBalanceRequest(),
+        res,
+      );
 
       expect(res.status).toHaveBeenCalledWith(409);
 

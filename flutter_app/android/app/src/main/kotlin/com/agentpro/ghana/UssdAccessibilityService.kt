@@ -21,14 +21,11 @@ import java.security.MessageDigest
  * Accessibility Service.
  *
  * CRITICAL SECURITY RULE: this service NEVER reads, stores, or
- * auto-enters the agent's MoMo PIN. Once the screen text matches the
- * PIN-prompt signature, all automated input stops completely - the
- * agent must tap and type into the same system dialog themselves. The
- * one exception is a post-PIN non-sensitive confirmation step (e.g.
- * Telecel's "Press 1 to confirm or 0 to cancel") - not sensitive (no
- * secret involved, just a yes/no on an amount already shown on screen),
- * so automation resumes just long enough to auto-press once, then
- * stops permanently.
+ * auto-enters the user's PIN. Once the screen text matches the
+ * PIN-prompt signature, all automated writes stop completely.
+ * AgentPro may continue observing provider screens for a terminal
+ * outcome, but it never submits text, digits, clicks, or confirmations
+ * after the PIN boundary.
  *
  * STATE MACHINE - MTN (confirmed via real device screenshots, July 2026):
  * 1. "MainMenuAgent ... 3) Cash In"      -> send "3" (Cash In) or "2" (Cash Out)
@@ -46,8 +43,8 @@ import java.security.MessageDigest
  * 3. "Enter amount"                      -> send amount
  * 4. "Enter Operator ID"                 -> send operatorId (agent-specific, saved in Settings)
  * 5. "Enter PIN:"                        -> STOP. Report pinPromptReached.
- * 6. "...Press 1 to confirm or 0 to cancel:" -> auto-send "1" (NOT sensitive - see above)
- * 7. Final screen (success/failure text) -> report result.
+ * 6. Any later provider confirmation/result -> observe only. No write.
+ * 7. Final screen (success/failure text) -> report result when recognizable.
  *
  * GENERIC INTERPRETER (added alongside the above, never replacing it):
  * When pendingProvider/pendingTransactionType don't match any hardcoded
@@ -114,6 +111,13 @@ class UssdAccessibilityService : AccessibilityService() {
         @Volatile var pendingFailureMarkers: List<String>? = null
         @Volatile var pendingSelections: Map<String, String>? = null
 
+        // Static configured matchers for a provider menu that AgentPro has
+        // deliberately handed to the user. While these markers remain on
+        // screen, the generic interpreter performs no writes and mismatch
+        // telemetry is suppressed. No user-entered value is retained here.
+        @Volatile private var awaitingUserSelectionMatchers:
+            List<String>? = null
+
         // Registered by UssdAccessibilityChannel so this OS-instantiated
         // service can report progress back to Flutter.
         var listener: UssdAccessibilityListener? = null
@@ -159,6 +163,7 @@ class UssdAccessibilityService : AccessibilityService() {
             lastMismatchAt = 0L
             lastMatchedScreenHash = null
             lastMatchedScreenAt = 0L
+            awaitingUserSelectionMatchers = null
 
             isSessionActive = true
             reachedPinPrompt = false
@@ -194,6 +199,7 @@ class UssdAccessibilityService : AccessibilityService() {
             lastMismatchAt = 0L
             lastMatchedScreenHash = null
             lastMatchedScreenAt = 0L
+            awaitingUserSelectionMatchers = null
         }
     }
 
@@ -603,6 +609,34 @@ class UssdAccessibilityService : AccessibilityService() {
         val steps = pendingSteps ?: return
         val normalizedScreen =
             normalizeUssdText(screenText)
+
+        // A configured await_user_selection step has already matched and
+        // advanced currentStepIndex. While that same provider menu remains
+        // visible, do absolutely nothing — even if the user takes a long
+        // time to read the current offers. This also prevents legitimate
+        // manual waiting from being misclassified as provider-menu drift.
+        //
+        // Once those menu markers disappear, the user has moved the USSD
+        // session forward and the normal state machine resumes immediately.
+        val awaitingMatchers = awaitingUserSelectionMatchers
+
+        if (awaitingMatchers != null) {
+            val stillOnAwaitedMenu =
+                awaitingMatchers.all { marker ->
+                    marker.isNotBlank() &&
+                        normalizedScreen.contains(
+                            normalizeUssdText(marker)
+                        )
+                }
+
+            if (stillOnAwaitedMenu) {
+                resetGenericFlowMismatchState()
+                return
+            }
+
+            awaitingUserSelectionMatchers = null
+        }
+
         // Only ever considers steps at or after currentStepIndex, and
         // advances past whichever step fires - critical because
         // matchAll conditions can be short, generic phrases (e.g.
@@ -628,6 +662,22 @@ class UssdAccessibilityService : AccessibilityService() {
                 resetGenericFlowMismatchState()
 
                 val completed = when (step.action) {
+                    "await_user_selection" -> {
+                        // Deliberately perform no Accessibility write.
+                        // The user owns this provider menu. Keep only its
+                        // configured static matchers so repeated events from
+                        // the same screen remain an indefinite safe wait.
+                        awaitingUserSelectionMatchers =
+                            step.matchAll.toList()
+
+                        Log.d(
+                            TAG,
+                            "Generic flow: waiting for manual provider selection"
+                        )
+
+                        true
+                    }
+
                     "send_digit", "send_literal" ->
                         step.actionValue?.let { respond(root, it) } ?: false
 

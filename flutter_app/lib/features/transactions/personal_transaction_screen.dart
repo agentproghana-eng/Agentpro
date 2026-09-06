@@ -25,7 +25,7 @@ const Map<String, String> kPersonalTransactionLabels = {
   'buy_data': 'Buy Data',
   'buy_mashup': 'MashUp',
   'check_momo_balance': 'Check MoMo Balance',
-  'check_airtime_balance': 'Check Airtime Balance',
+  'check_airtime_balance': 'Check Airtime & Data Balance',
   'withdraw_cash': 'Withdraw Cash',
 };
 
@@ -81,6 +81,13 @@ const List<DataBundleCategory> kDataBundleCategories = [
     Icons.nightlight_outlined,
   ),
 ];
+
+const DataBundleCategory kTelecelM4mCategory = DataBundleCategory(
+  'm4m_live',
+  'M4M Live Offers',
+  'Choose the current offer on Telecel',
+  Icons.local_offer_outlined,
+);
 
 const Map<String, List<DataBundleOption>> kDataBundleOptions = {
   'daily': [
@@ -471,9 +478,14 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   DataBundleOption? _flexiPayment;
 
   DataBundleCategory? get _categoryObj {
+    if (_bundleCategory == kTelecelM4mCategory.id) {
+      return kTelecelM4mCategory;
+    }
+
     for (final c in kDataBundleCategories) {
       if (c.id == _bundleCategory) return c;
     }
+
     return null;
   }
 
@@ -482,11 +494,17 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       return kDataBundleCategories;
     }
 
-    // Only the historical Telecel Personal Daily flow was recovered.
-    // Do not offer categories without a verified executable flow.
-    return kDataBundleCategories
+    final categories = kDataBundleCategories
         .where((category) => category.id == 'daily')
-        .toList(growable: false);
+        .toList();
+
+    // *530# is verified for the subscriber's own Telecel SIM.
+    // Do not invent an Other-recipient path that was not observed.
+    if (_recipientMode == 'self') {
+      categories.add(kTelecelM4mCategory);
+    }
+
+    return List<DataBundleCategory>.unmodifiable(categories);
   }
 
   List<String> _computeSelections() {
@@ -832,7 +850,11 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   void _selectCategory(String id) {
     setState(() {
       _bundleCategory = id;
-      if (id == 'flexi') {
+
+      if (id == 'm4m_live') {
+        _bundleChoice = null;
+        _dbStep = 'review';
+      } else if (id == 'flexi') {
         _dbStep = 'flexi_type';
       } else if (id == '2moorch') {
         _dbStep = 'moorch';
@@ -2571,6 +2593,27 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
             ],
           ),
         ),
+        if (_bundleCategory == 'm4m_live') ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: context.appSurface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: context.appDivider),
+            ),
+            child: Text(
+              'Telecel will show the current M4M offers. Choose the offer '
+              'and payment method on the network screen. Airtime requires '
+              'no PIN. Telecel Cash stops at the PIN screen for you to '
+              'enter the PIN manually.',
+              style: TextStyle(
+                fontSize: 12,
+                color: context.appSecondaryText,
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 24),
         AppButton(
           label: 'Start Transaction',

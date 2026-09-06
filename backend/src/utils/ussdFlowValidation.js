@@ -7,6 +7,7 @@ const VALID_FLOW_ACTIONS = Object.freeze([
   'send_reference',
   'send_merchant_id',
   'send_selection',
+  'await_user_selection',
   'send_literal',
   'pin_prompt',
   'auto_confirm_once',

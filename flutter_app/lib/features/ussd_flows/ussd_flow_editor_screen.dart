@@ -85,9 +85,13 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
     {'value': 'send_reference', 'label': 'Send Reference'},
     {'value': 'send_merchant_id', 'label': 'Send Merchant / Till ID'},
     {'value': 'send_selection', 'label': 'Send Dynamic Selection'},
+    {
+      'value': 'await_user_selection',
+      'label': 'Wait for User Selection (no input)',
+    },
     {'value': 'send_literal', 'label': 'Send Literal Text'},
     {'value': 'pin_prompt', 'label': 'PIN Prompt (stop here)'},
-    {'value': 'auto_confirm_once', 'label': 'Auto-Confirm Once (post-PIN)'},
+    {'value': 'auto_confirm_once', 'label': 'Legacy Auto-Confirm (disabled at runtime)'},
   ];
 
   bool get _isEditing => widget.existingFlow != null;

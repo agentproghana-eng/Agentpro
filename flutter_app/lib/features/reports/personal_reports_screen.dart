@@ -59,7 +59,7 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
     'buy_data': 'Buy Data',
     'buy_mashup': 'MashUp',
     'check_momo_balance': 'Check MoMo Balance',
-    'check_airtime_balance': 'Check Airtime Balance',
+    'check_airtime_balance': 'Check Airtime & Data Balance',
     'withdraw_cash': 'Withdraw Cash',
   };
 
