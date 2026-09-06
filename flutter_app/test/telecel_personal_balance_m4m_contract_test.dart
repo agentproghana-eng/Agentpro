@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:agentpro/features/ussd_flows/ussd_flow_draft_validation.dart';
+import 'package:agent_pro_ghana/features/ussd_flows/ussd_flow_draft_validation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
