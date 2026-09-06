@@ -50,6 +50,8 @@ String transactionTypeLabel(String type, String provider) {
       return 'Cash Out';
     case 'send_money':
       return 'Send Money';
+    case 'send_money_to_bank':
+      return 'Send Money to Bank';
     case 'merchant_payment':
       return 'Pay to Merchant';
     case 'pay_to_agent':

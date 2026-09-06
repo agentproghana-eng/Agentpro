@@ -47,6 +47,47 @@ const PERSONAL_CROSS_NETWORK_SELECTIONS = new Map([
   ['telecel', new Set(['1', '2', '3', '4'])],
 ]);
 
+const TELECEL_PERSONAL_BANK_SELECTIONS = new Map([
+  ['access bank', ['1', '1']],
+  ['adb', ['1', '2']],
+  ['advans ghana s&l', ['1', '3']],
+  ['absa', ['1', '4']],
+  ['bank of africa', ['1', '5']],
+  ['cal bank', ['1', '6']],
+  ['cbg', ['1', '7']],
+  ['arb apex bank', ['1', '8']],
+  ['affinity', ['1', '9']],
+  ['adehyeman s&l', ['1', '10']],
+  ['best point', ['1', '11']],
+  ['ecobank', ['2', '1']],
+  ['fidelity', ['2', '2']],
+  ['first atlantic bank', ['2', '3']],
+  ['first national bank', ['2', '4']],
+  ['firstbank ghana', ['2', '8']],
+  ['gcb bank', ['3', '1']],
+  ['gt bank', ['3', '2']],
+  ['nib', ['3', '3']],
+  ['prudential', ['3', '4']],
+  ['republic', ['3', '5']],
+  ['omnibsic', ['3', '6']],
+  ['ghl bank', ['3', '7']],
+  ['opportunity international s&l', ['3', '8']],
+  ['letshego', ['3', '9']],
+  ['it consortium', ['3', '10']],
+  ['stanchart', ['4', '1']],
+  ['stanbic', ['4', '2']],
+  ['uba', ['4', '3']],
+  ['umb', ['4', '4']],
+  ['zenith', ['4', '5']],
+  ['services integrity savings & loans', ['4', '6']],
+  ['sg-gh', ['4', '7']],
+  ['sinapi aba savings and loans', ['4', '8']],
+]);
+
+const isTelecelBankTransfer = (payload) =>
+  payload?.provider === 'telecel' &&
+  payload?.transaction_type === 'send_money_to_bank';
+
 const normalizedString = (value) =>
   typeof value === 'string' ? value.trim() : '';
 
@@ -171,6 +212,22 @@ router.post('/', [
     .withMessage('merchant_id must be a string')
     .trim(),
 
+  body('bank_name')
+    .optional({ nullable: true })
+    .isString()
+    .withMessage('bank_name must be a string')
+    .trim()
+    .isLength({ min: 1, max: 100 })
+    .withMessage('bank_name is invalid'),
+
+  body('account_number')
+    .optional({ nullable: true })
+    .isString()
+    .withMessage('account_number must be a string')
+    .trim()
+    .matches(/^\d{6,20}$/)
+    .withMessage('Account number must contain 6 to 20 digits'),
+
   body('notes')
     .optional({ nullable: true })
     .isString()
@@ -202,6 +259,20 @@ router.post('/', [
     ),
   ),
 
+  body('bank_name').custom(
+    requireNonBlankWhen(
+      isTelecelBankTransfer,
+      'Bank name is required for Send Money to Bank',
+    ),
+  ),
+
+  body('account_number').custom(
+    requireNonBlankWhen(
+      isTelecelBankTransfer,
+      'Account number is required for Send Money to Bank',
+    ),
+  ),
+
   body('notes').custom(
     requireNonBlankWhen(
       (payload) =>
@@ -213,8 +284,11 @@ router.post('/', [
         ) ||
         (
           payload?.provider === 'telecel' &&
-          PERSONAL_SEND_MONEY_TYPES.has(
-            payload?.transaction_type,
+          (
+            PERSONAL_SEND_MONEY_TYPES.has(
+              payload?.transaction_type,
+            ) ||
+            payload?.transaction_type === 'send_money_to_bank'
           )
         ),
       'Reference is required for this Send Money transaction',
@@ -241,6 +315,40 @@ router.post('/', [
   body('selections_in_order').custom((value, { req }) => {
     const provider =
       normalizedString(req.body.provider).toLowerCase();
+
+    if (isTelecelBankTransfer(req.body)) {
+      const bankName =
+        normalizedString(req.body.bank_name).toLowerCase();
+
+      const expectedSelections =
+        TELECEL_PERSONAL_BANK_SELECTIONS.get(bankName);
+
+      if (!expectedSelections) {
+        throw new Error(
+          'Bank name is not supported for Telecel Send Money to Bank',
+        );
+      }
+
+      if (!Array.isArray(value) || value.length !== 2) {
+        throw new Error(
+          'Bank routing selections are required for Telecel Send Money to Bank',
+        );
+      }
+
+      const actualSelections =
+        value.map(normalizedString);
+
+      if (
+        actualSelections[0] !== expectedSelections[0] ||
+        actualSelections[1] !== expectedSelections[1]
+      ) {
+        throw new Error(
+          'Bank routing selections do not match the selected Telecel bank',
+        );
+      }
+
+      return true;
+    }
 
     const allowedSelections =
       PERSONAL_CROSS_NETWORK_SELECTIONS.get(provider);

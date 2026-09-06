@@ -1322,6 +1322,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       operatorId: operatorId,
       reference: automationParams['payment_reference'],
       merchantId: automationParams['merchant_id'],
+      accountNumber: automationParams['account_number'],
       simSlot: simSlot,
       dialCode: dialCode,
       steps: steps,

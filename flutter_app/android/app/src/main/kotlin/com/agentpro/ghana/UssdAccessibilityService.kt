@@ -82,6 +82,7 @@ class UssdAccessibilityService : AccessibilityService() {
         @Volatile var pendingOperatorId: String? = null
         @Volatile var pendingReference: String? = null
         @Volatile var pendingMerchantId: String? = null
+        @Volatile var pendingAccountNumber: String? = null
         @Volatile var currentStepIndex: Int = 0
         @Volatile var isSessionActive: Boolean = false
         @Volatile var reachedPinPrompt: Boolean = false
@@ -126,6 +127,7 @@ class UssdAccessibilityService : AccessibilityService() {
             operatorId: String? = null,
             reference: String? = null,
             merchantId: String? = null,
+            accountNumber: String? = null,
             steps: List<FlowStep>? = null,
             selections: Map<String, String>? = null,
             successMarkers: List<String>? = null,
@@ -139,6 +141,7 @@ class UssdAccessibilityService : AccessibilityService() {
             pendingOperatorId = operatorId
             pendingReference = reference
             pendingMerchantId = merchantId
+            pendingAccountNumber = accountNumber
             pendingSteps = steps
             pendingSelections = selections
             currentStepIndex = 0
@@ -172,6 +175,7 @@ class UssdAccessibilityService : AccessibilityService() {
             pendingOperatorId = null
             pendingReference = null
             pendingMerchantId = null
+            pendingAccountNumber = null
             pendingSelections = null
             pendingSteps = null
             currentStepIndex = 0
@@ -642,6 +646,9 @@ class UssdAccessibilityService : AccessibilityService() {
                     "send_merchant_id" ->
                         pendingMerchantId?.let { respond(root, it) } ?: false
 
+                    "send_account_number" ->
+                        pendingAccountNumber?.let { respond(root, it) } ?: false
+
                     "send_selection" -> {
                         val digit = pendingSelections?.get(index.toString())
                         if (digit != null) {
@@ -697,8 +704,9 @@ class UssdAccessibilityService : AccessibilityService() {
     // submitted. Flow progression and one-shot confirmation state must only
     // advance after a true result.
     //
-    // Only ever called for pre-PIN menu digits, phone numbers, amounts,
-    // Operator ID, references, and selections. It is never called for PIN
+    // Only ever called for pre-PIN menu digits, phone numbers, account
+    // numbers, amounts, Operator ID, references, and selections.
+    // It is never called for PIN
     // entry or for any provider screen after the PIN boundary.
     private fun respond(root: AccessibilityNodeInfo, value: String): Boolean {
         val now = SystemClock.elapsedRealtime()

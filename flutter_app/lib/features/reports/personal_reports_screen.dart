@@ -54,6 +54,7 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
     'all': 'All Types',
     'send_money_same_network': 'Transfer Money · Same Network',
     'send_money_cross_network': 'Transfer Money · Other Network',
+    'send_money_to_bank': 'Send Money to Bank',
     'buy_airtime': 'Buy Airtime',
     'buy_data': 'Buy Data',
     'buy_mashup': 'MashUp',

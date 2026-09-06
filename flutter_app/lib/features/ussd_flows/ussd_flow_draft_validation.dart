@@ -90,6 +90,7 @@ String? _validateMarkerList(
 const List<String> kValidUssdFlowActions = [
   'send_digit',
   'send_customer_phone',
+  'send_account_number',
   'send_amount',
   'send_operator_id',
   'send_reference',

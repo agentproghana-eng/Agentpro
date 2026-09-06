@@ -298,6 +298,143 @@ describe('Personal transaction initiation validation', () => {
   );
 
   test(
+    'Telecel bank transfer requires bank name',
+    async () => {
+      await expectRejected(
+        {
+          provider: 'telecel',
+          transaction_type: 'send_money_to_bank',
+          amount: 5,
+          account_number: '0123456789012',
+          notes: 'Transfer',
+          selections_in_order: ['3', '2'],
+        },
+        'bank_name',
+      );
+    },
+  );
+
+  test(
+    'Telecel bank transfer requires account number',
+    async () => {
+      await expectRejected(
+        {
+          provider: 'telecel',
+          transaction_type: 'send_money_to_bank',
+          amount: 5,
+          bank_name: 'GT Bank',
+          notes: 'Transfer',
+          selections_in_order: ['3', '2'],
+        },
+        'account_number',
+      );
+    },
+  );
+
+  test(
+    'Telecel bank transfer rejects malformed account number',
+    async () => {
+      await expectRejected(
+        {
+          provider: 'telecel',
+          transaction_type: 'send_money_to_bank',
+          amount: 5,
+          bank_name: 'GT Bank',
+          account_number: '12ABC',
+          notes: 'Transfer',
+          selections_in_order: ['3', '2'],
+        },
+        'account_number',
+      );
+    },
+  );
+
+  test(
+    'Telecel bank transfer requires amount',
+    async () => {
+      await expectRejected(
+        {
+          provider: 'telecel',
+          transaction_type: 'send_money_to_bank',
+          bank_name: 'GT Bank',
+          account_number: '0123456789012',
+          notes: 'Transfer',
+          selections_in_order: ['3', '2'],
+        },
+        'amount',
+      );
+    },
+  );
+
+  test(
+    'Telecel bank transfer requires reference',
+    async () => {
+      await expectRejected(
+        {
+          provider: 'telecel',
+          transaction_type: 'send_money_to_bank',
+          amount: 5,
+          bank_name: 'GT Bank',
+          account_number: '0123456789012',
+          selections_in_order: ['3', '2'],
+        },
+        'notes',
+      );
+    },
+  );
+
+  test(
+    'Telecel bank transfer rejects unsupported bank name',
+    async () => {
+      await expectRejected(
+        {
+          provider: 'telecel',
+          transaction_type: 'send_money_to_bank',
+          amount: 5,
+          bank_name: 'Unverified Bank',
+          account_number: '0123456789012',
+          notes: 'Transfer',
+          selections_in_order: ['3', '2'],
+        },
+        'selections_in_order',
+      );
+    },
+  );
+
+  test(
+    'Telecel bank transfer rejects mismatched bank routing',
+    async () => {
+      await expectRejected(
+        {
+          provider: 'telecel',
+          transaction_type: 'send_money_to_bank',
+          amount: 5,
+          bank_name: 'GT Bank',
+          account_number: '0123456789012',
+          notes: 'Transfer',
+          selections_in_order: ['4', '2'],
+        },
+        'selections_in_order',
+      );
+    },
+  );
+
+  test(
+    'valid Telecel bank transfer reaches controller',
+    async () => {
+      await expectAccepted({
+        provider: 'telecel',
+        transaction_type: 'send_money_to_bank',
+        amount: 5,
+        bank_name: 'GT Bank',
+        account_number: '0123456789012',
+        notes: 'Transfer',
+        selections_in_order: ['3', '2'],
+      });
+    },
+  );
+
+  test(
     'MTN Airtime requires recipient mode',
     async () => {
       await expectRejected(
