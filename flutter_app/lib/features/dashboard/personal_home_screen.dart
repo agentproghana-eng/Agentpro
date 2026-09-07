@@ -680,11 +680,18 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
   void _startTransaction(String type) {
     final sim = _selectedSim;
 
-    if (_simMap != null && sim == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
+    if (sim == null) {
+      final messenger = ScaffoldMessenger.of(context);
+
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
         SnackBar(
-          content: Text(
-            'No Personal ${_providerLabel(_provider)} SIM is assigned.',
+          content: const Text(
+            'Assign a Personal SIM to use this action.',
+          ),
+          action: SnackBarAction(
+            label: 'Assign SIM',
+            onPressed: () => context.push('/settings/sim-purpose'),
           ),
         ),
       );
@@ -1024,14 +1031,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
                 slivers: [
                   const SliverToBoxAdapter(child: OfflineStatusBanner()),
                   SliverToBoxAdapter(
-                    child: noSimsDetected
-                        ? const DashboardEmptyState(
-                            icon: Icons.sim_card_outlined,
-                            title: 'No Personal SIM assigned',
-                            message: 'Assign a detected SIM to Personal in '
-                                'Settings > SIM Purpose.',
-                          )
-                        : _homeQuickActions.isEmpty
+                    child: _homeQuickActions.isEmpty
                             ? DashboardEmptyState(
                                 icon: Icons.grid_view_rounded,
                                 title: 'No quick actions available',
