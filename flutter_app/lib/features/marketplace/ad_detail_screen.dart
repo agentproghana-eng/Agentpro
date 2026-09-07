@@ -148,7 +148,13 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => _AdPaymentSheet(
         adId: widget.adId,
-        fee: double.tryParse(_ad?['publishing_fee']?.toString() ?? '0') ?? 0,
+        fee: double.tryParse(
+              (_ad?['amount_due'] ??
+                      _ad?['publishing_fee'])
+                  ?.toString() ??
+              '0',
+            ) ??
+            0,
         onSubmitted: _load,
       ),
     );
@@ -202,7 +208,15 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
     final price =
         ad['price'] == null ? null : double.tryParse(ad['price'].toString());
 
-    final fee = double.tryParse(ad['publishing_fee']?.toString() ?? '0') ?? 0;
+    final fee = double.tryParse(
+          (ad['amount_due'] ?? ad['publishing_fee'])
+                  ?.toString() ??
+              '0',
+        ) ??
+        0;
+
+    final paymentReferenceSubmitted =
+        ad['payment_reference_submitted'] == true;
 
     final images = normalizedMarketplaceImageUrls(
       ad['image_urls'],
@@ -529,15 +543,51 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
             _StatusExplainer(
               status: status,
               fee: fee,
+              paymentSubmitted:
+                  paymentReferenceSubmitted,
               expiresAt: ad['expires_at']?.toString(),
               rejectionReason: ad['rejection_reason']?.toString(),
             ),
-            if (status == 'pending_payment') ...[
+            if (status == 'pending_payment' &&
+                !paymentReferenceSubmitted) ...[
               const SizedBox(height: 20),
               AppButton(
                 label: 'Pay GH₵ ${fee.toStringAsFixed(2)} & Submit Reference',
                 icon: Icons.payment,
                 onPressed: _showPaymentSheet,
+              ),
+            ],
+            if (status == 'pending_payment' &&
+                paymentReferenceSubmitted) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppTheme.secondaryColor
+                      .withValues(alpha: 0.08),
+                  borderRadius:
+                      BorderRadius.circular(12),
+                  border: Border.all(
+                    color: AppTheme.secondaryColor
+                        .withValues(alpha: 0.28),
+                  ),
+                ),
+                child: const Row(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.hourglass_top,
+                      size: 20,
+                    ),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Payment reference submitted. AgentPro is verifying your payment; no further payment submission is required.',
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ],
@@ -1172,12 +1222,14 @@ class _MarketplaceEnquirySheetState extends State<_MarketplaceEnquirySheet> {
 class _StatusExplainer extends StatelessWidget {
   final String status;
   final double fee;
+  final bool paymentSubmitted;
   final String? expiresAt;
   final String? rejectionReason;
 
   const _StatusExplainer({
     required this.status,
     required this.fee,
+    this.paymentSubmitted = false,
     this.expiresAt,
     this.rejectionReason,
   });

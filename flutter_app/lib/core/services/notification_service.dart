@@ -24,6 +24,7 @@ int notificationIdForDeliveryKey(String deliveryKey) {
 String notificationRouteForType(
   String? type, {
   String? transactionId,
+  String? adId,
 }) {
   switch (type) {
     case 'transaction_success':
@@ -52,6 +53,18 @@ String notificationRouteForType(
     case 'personal_subscription_approved':
     case 'personal_subscription_rejected':
       return '/personal-subscription';
+
+    case 'ad_payment_required':
+    case 'ad_payment_confirmed':
+      final normalizedAdId =
+          adId?.trim();
+
+      if (normalizedAdId != null &&
+          normalizedAdId.isNotEmpty) {
+        return '/marketplace/ads/${Uri.encodeComponent(normalizedAdId)}';
+      }
+
+      return '/marketplace';
 
     case 'ad_approved':
     case 'ad_rejected':
@@ -259,6 +272,7 @@ class NotificationService {
       payload: notificationRouteForType(
         message.data['type']?.toString(),
         transactionId: message.data['transaction_id']?.toString(),
+        adId: message.data['ad_id']?.toString(),
       ),
     );
   }
@@ -283,11 +297,13 @@ class NotificationService {
   static void _onMessageOpenedApp(RemoteMessage message) {
     final type = message.data['type']?.toString();
     final transactionId = message.data['transaction_id']?.toString();
+    final adId = message.data['ad_id']?.toString();
 
     _queueNavigation(
       _routeForType(
         type,
         transactionId: transactionId,
+        adId: adId,
       ),
     );
   }
@@ -314,10 +330,12 @@ class NotificationService {
   static String _routeForType(
     String? type, {
     String? transactionId,
+    String? adId,
   }) {
     return notificationRouteForType(
       type,
       transactionId: transactionId,
+      adId: adId,
     );
   }
 

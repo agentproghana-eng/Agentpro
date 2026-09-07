@@ -354,20 +354,91 @@ async function sendSubscriptionSuspended(companyId) {
   });
 }
 
-async function sendAdNotification(userId, { type, adTitle }) {
+async function sendAdNotification(
+  userId,
+  {
+    type,
+    adTitle,
+    adId = null,
+    amount = null,
+  },
+  options = {}
+) {
+  const hasAmount =
+    amount !== null &&
+    amount !== undefined &&
+    String(amount).trim() !== '';
+
+  const parsedAmount =
+    hasAmount
+      ? Number(amount)
+      : null;
+
+  const amountLabel =
+    parsedAmount !== null &&
+    Number.isFinite(parsedAmount)
+      ? `GH₵${parsedAmount.toFixed(2)}`
+      : null;
+
   const messages = {
-    ad_approved: { title: '✅ Ad Approved', body: `Your ad "${adTitle}" has been approved and is now live.` },
-    ad_rejected: { title: '❌ Ad Rejected', body: `Your ad "${adTitle}" was not approved. Check the app for details.` },
-    ad_expiring: { title: '⏰ Ad Expiring Soon', body: `Your ad "${adTitle}" expires in 7 days. Renew to keep it active.` },
-    ad_expired: { title: '📢 Ad Expired', body: `Your ad "${adTitle}" has expired. Renew to repost.` },
+    ad_payment_required: {
+      title: '💳 Business Hub Payment Required',
+      body: amountLabel
+        ? `Your listing "${adTitle}" was approved. Pay ${amountLabel} to publish it.`
+        : `Your listing "${adTitle}" was approved. Open AgentPro to complete payment.`,
+    },
+    ad_payment_confirmed: {
+      title: '✅ Business Hub Payment Confirmed',
+      body: amountLabel
+        ? `Payment of ${amountLabel} for "${adTitle}" was confirmed. Your listing is now live.`
+        : `Payment for "${adTitle}" was confirmed. Your listing is now live.`,
+    },
+    ad_approved: {
+      title: '✅ Ad Approved',
+      body: `Your ad "${adTitle}" has been approved and is now live.`,
+    },
+    ad_rejected: {
+      title: '❌ Ad Rejected',
+      body: `Your ad "${adTitle}" was not approved. Check the app for details.`,
+    },
+    ad_expiring: {
+      title: '⏰ Ad Expiring Soon',
+      body: `Your ad "${adTitle}" expires in 7 days. Renew to keep it active.`,
+    },
+    ad_expired: {
+      title: '📢 Ad Expired',
+      body: `Your ad "${adTitle}" has expired. Renew to repost.`,
+    },
   };
 
   const msg = messages[type];
-  if (!msg) return;
 
-  return sendToUser(userId, { type, ...msg, data: { ad_title: adTitle } });
+  if (!msg) {
+    return;
+  }
+
+  const data = {
+    ad_title: adTitle,
+  };
+
+  if (adId) {
+    data.ad_id = String(adId);
+  }
+
+  if (Number.isFinite(parsedAmount)) {
+    data.amount = parsedAmount.toFixed(2);
+  }
+
+  return sendToUser(
+    userId,
+    {
+      type,
+      ...msg,
+      data,
+    },
+    options
+  );
 }
-
 
 // Sends a transient push notification without writing it to the
 // notifications table. Callers must never place passwords, PINs,
