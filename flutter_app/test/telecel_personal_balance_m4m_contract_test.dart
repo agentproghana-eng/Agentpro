@@ -112,7 +112,7 @@ void main() {
     );
   });
 
-  test('Telecel M4M is Self-only and has no fixed package list', () {
+  test('Telecel M4M is standalone and launches its direct Self flow', () {
     final transactionScreen = source(
       'lib/features/transactions/personal_transaction_screen.dart',
     );
@@ -129,14 +129,29 @@ void main() {
 
     expect(
       transactionScreen,
-      contains("if (_recipientMode == 'self')"),
+      contains('_isTelecelM4mQuickAction'),
     );
 
     expect(
       transactionScreen,
-      contains(
-        'categories.add(kTelecelM4mCategory)',
+      contains("_bundleCategory = kTelecelM4mCategory.id;"),
+    );
+
+    expect(
+      transactionScreen,
+      contains("_dbStep = 'review';"),
+    );
+
+    expect(
+      transactionScreen,
+      isNot(
+        contains('categories.add(kTelecelM4mCategory)'),
       ),
+    );
+
+    expect(
+      transactionScreen,
+      contains("? 'M4M'"),
     );
 
     expect(
