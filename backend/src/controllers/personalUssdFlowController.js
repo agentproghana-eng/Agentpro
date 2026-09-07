@@ -56,9 +56,25 @@ const isTrustedPinlessRuntimeFlow = (flow, steps = []) => {
   if (
     !flow ||
     flow.owner_user_id !== null ||
-    flow.company_id !== null ||
-    flow.provider !== 'mtn'
+    flow.company_id !== null
   ) {
+    return false;
+  }
+
+  if (
+    flow.provider === 'telecel' &&
+    flow.transaction_type === 'check_airtime_balance' &&
+    flow.dial_code === '*124#'
+  ) {
+    return (
+      steps.length === 1 &&
+      steps[0]?.action === 'await_user_selection' &&
+      Array.isArray(steps[0]?.match_all) &&
+      steps[0].match_all.includes('main ac:')
+    );
+  }
+
+  if (flow.provider !== 'mtn') {
     return false;
   }
 

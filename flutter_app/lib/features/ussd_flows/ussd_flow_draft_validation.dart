@@ -96,6 +96,7 @@ const List<String> kValidUssdFlowActions = [
   'send_reference',
   'send_merchant_id',
   'send_selection',
+  'await_user_selection',
   'send_literal',
   'pin_prompt',
   'auto_confirm_once',
@@ -144,8 +145,35 @@ bool isTrustedPinlessPersonalRuntimeFlow({
 
   if (provider != flowData['provider']?.toString() ||
       transactionType != flowData['transaction_type']?.toString() ||
-      dialCode != flowData['dial_code']?.toString() ||
-      provider != 'mtn') {
+      dialCode != flowData['dial_code']?.toString()) {
+    return false;
+  }
+
+  if (provider == 'telecel' &&
+      transactionType == 'check_airtime_balance' &&
+      dialCode == '*124#') {
+    final rawSteps = flowData['steps'];
+
+    if (rawSteps is! List || rawSteps.length != 1) {
+      return false;
+    }
+
+    final rawStep = rawSteps.first;
+
+    if (rawStep is! Map) {
+      return false;
+    }
+
+    final matchAll = rawStep['match_all'];
+
+    return rawStep['action']?.toString() == 'await_user_selection' &&
+        matchAll is List &&
+        matchAll
+            .map((value) => value.toString().trim().toLowerCase())
+            .contains('main ac:');
+  }
+
+  if (provider != 'mtn') {
     return false;
   }
 

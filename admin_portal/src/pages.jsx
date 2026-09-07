@@ -1880,7 +1880,7 @@ export function USSDTemplatesPage() {
 // Cash In/Out/Send Money, Telecel Deposit, Telecel Airtime, and MTN
 // Balance Enquiry actually run.
 
-const VALID_FLOW_ACTIONS = ['send_digit', 'send_customer_phone', 'send_account_number', 'send_amount', 'send_operator_id', 'send_reference', 'send_merchant_id', 'send_selection', 'send_literal', 'pin_prompt', 'auto_confirm_once'];
+const VALID_FLOW_ACTIONS = ['send_digit', 'send_customer_phone', 'send_account_number', 'send_amount', 'send_operator_id', 'send_reference', 'send_merchant_id', 'send_selection', 'await_user_selection', 'send_literal', 'pin_prompt', 'auto_confirm_once'];
 const VALUE_REQUIRED_FLOW_ACTIONS = ['send_digit', 'send_literal', 'auto_confirm_once'];
 
 // Mirrors the backend's validateFlowSteps exactly - this is a UX

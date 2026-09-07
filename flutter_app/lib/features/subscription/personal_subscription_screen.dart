@@ -474,7 +474,7 @@ class _PersonalSubscriptionScreenState extends State<PersonalSubscriptionScreen>
                         const SizedBox(height: 12),
                         for (final f in [
                           'Send Money, Buy Airtime/Data/Mash Up',
-                          'Check MoMo & Airtime Balance',
+                          'Check MoMo, Airtime & Data Balance',
                           'View & react to Personal Community posts',
                           'Browse & post in the Business Hub',
                         ])
