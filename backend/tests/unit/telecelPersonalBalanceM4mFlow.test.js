@@ -11,6 +11,10 @@ describe('Telecel Personal balance and M4M flow', () => {
     'migrations/113_seed_telecel_personal_balance_m4m.sql'
   );
 
+  const correction = read(
+    'migrations/116_telecel_m4m_preselected_payment.sql'
+  );
+
   const controller = read(
     'src/controllers/personalUssdFlowController.js'
   );
@@ -57,29 +61,38 @@ describe('Telecel Personal balance and M4M flow', () => {
     );
   });
 
-  test('M4M keeps live offers and payment choice user-controlled', () => {
+  test('M4M keeps the live offer manual and automates preselected payment', () => {
     expect(migration).toContain("'*530#'");
     expect(migration).toContain("'m4m_live'");
-    expect(migration).toContain("ARRAY['m4m']");
-    expect(migration).toContain("'1. airtime'");
-    expect(migration).toContain("'2. telecel cash'");
 
-    const m4mStart = migration.indexOf(
-      '-- TELECEL PERSONAL M4M LIVE OFFERS'
+    expect(correction).toContain("ARRAY['m4m']");
+    expect(correction).toContain("'1. airtime'");
+    expect(correction).toContain("'2. telecel cash'");
+
+    expect(correction).toContain(
+      "'await_user_selection'::ussd_flow_action"
     );
 
-    const m4m = migration.slice(m4mStart);
-
-    expect(m4m).not.toContain(
+    expect(correction).toContain(
       "'send_selection'::ussd_flow_action"
     );
 
-    expect(m4m).not.toContain(
+    expect(correction).not.toContain(
       "'send_digit'::ussd_flow_action"
     );
 
-    expect(m4m).not.toContain(
+    expect(correction).not.toContain(
       "'send_amount'::ussd_flow_action"
+    );
+
+    expect(
+      correction.indexOf(
+        "'await_user_selection'::ussd_flow_action"
+      )
+    ).toBeLessThan(
+      correction.indexOf(
+        "'send_selection'::ussd_flow_action"
+      )
     );
   });
 
@@ -103,32 +116,38 @@ describe('Telecel Personal balance and M4M flow', () => {
     expect(migration).not.toContain("'subscribed'");
   });
 
-  test('Telecel Cash branch has one strict manual PIN boundary', () => {
+  test('Telecel Cash branch keeps one strict manual PIN boundary', () => {
     const matches =
-      migration.match(/'pin_prompt'::ussd_flow_action/g) || [];
+      correction.match(/'pin_prompt'::ussd_flow_action/g) || [];
 
     expect(matches).toHaveLength(1);
 
-    expect(migration).toContain(
+    expect(correction).toContain(
       "'please enter your pin'"
     );
 
-    expect(migration).toContain(
+    expect(correction).toContain(
       "'amount:'"
     );
 
-    expect(migration).not.toContain(
+    expect(correction).not.toContain(
       "'auto_confirm_once'::ussd_flow_action"
     );
   });
 
-  test('three zero-write waits exist: balance plus two M4M menus', () => {
+  test('corrected M4M has one manual offer wait and one automated payment', () => {
     const waits =
-      migration.match(
+      correction.match(
         /'await_user_selection'::ussd_flow_action/g
       ) || [];
 
-    expect(waits).toHaveLength(3);
+    const automatedPayments =
+      correction.match(
+        /'send_selection'::ussd_flow_action/g
+      ) || [];
+
+    expect(waits).toHaveLength(1);
+    expect(automatedPayments).toHaveLength(1);
   });
 
   test('changing offer values are not embedded', () => {

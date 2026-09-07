@@ -89,6 +89,11 @@ const DataBundleCategory kTelecelM4mCategory = DataBundleCategory(
   Icons.local_offer_outlined,
 );
 
+const List<DataBundleOption> kTelecelM4mPayments = [
+  DataBundleOption('Airtime', '1'),
+  DataBundleOption('Telecel Cash', '2'),
+];
+
 const Map<String, List<DataBundleOption>> kDataBundleOptions = {
   'daily': [
     DataBundleOption('50MB — GHS 1', '1'),
@@ -482,6 +487,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   int _moorchBundlePage = 1;
   DataBundleOption? _flexiType;
   DataBundleOption? _flexiPayment;
+  DataBundleOption? _m4mPayment;
 
   DataBundleCategory? get _categoryObj {
     if (_bundleCategory == kTelecelM4mCategory.id) {
@@ -519,6 +525,12 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       // Flexi is always menu option 1, so its flow uses a static
       // send_digit step rather than consuming a dynamic selection.
       return const [];
+    }
+
+    if (_bundleCategory == 'm4m_live') {
+      return [
+        if (_m4mPayment != null) _m4mPayment!.digit,
+      ];
     }
 
     if (_bundleCategory == 'flexi') {
@@ -588,7 +600,8 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     if (_isTelecelM4mQuickAction && bundle == 'm4m_live') {
       _bundleCategory = kTelecelM4mCategory.id;
       _bundleChoice = null;
-      _dbStep = 'review';
+      _m4mPayment = null;
+      _dbStep = 'm4m_payment';
       return;
     }
 
@@ -862,7 +875,8 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
 
       if (id == 'm4m_live') {
         _bundleChoice = null;
-        _dbStep = 'review';
+        _m4mPayment = null;
+        _dbStep = 'm4m_payment';
       } else if (id == 'flexi') {
         _dbStep = 'flexi_type';
       } else if (id == '2moorch') {
@@ -2058,6 +2072,8 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         return _dbMtnFlexiAmountStep(context);
       case 'mtn_payment':
         return _dbMtnPaymentStep(context);
+      case 'm4m_payment':
+        return _dbM4mPaymentStep(context);
       case 'category':
         return _dbCategoryStep(context);
       case 'bundle':
@@ -2355,6 +2371,27 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     );
   }
 
+  Widget _dbM4mPaymentStep(BuildContext context) {
+    return _dbSimpleChoiceStep(
+      context,
+      title: 'M4M payment method',
+      subtitle:
+          'Choose how Telecel should charge after you select a live M4M offer.',
+      options: kTelecelM4mPayments,
+      onBack: () {
+        if (_isTelecelM4mQuickAction) {
+          context.pop();
+        } else {
+          setState(() => _dbStep = 'category');
+        }
+      },
+      onPick: (option) => setState(() {
+        _m4mPayment = option;
+        _dbStep = 'review';
+      }),
+    );
+  }
+
   Widget _dbCategoryStep(BuildContext context) {
     return ListView(
       children: [
@@ -2599,6 +2636,8 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
               if (_flexiType != null) _dbReviewRow('Type', _flexiType!.label),
               if (_flexiPayment != null)
                 _dbReviewRow('Payment', _flexiPayment!.label),
+              if (_m4mPayment != null)
+                _dbReviewRow('Payment', _m4mPayment!.label),
               if (_flexiAmountCtrl.text.trim().isNotEmpty)
                 _dbReviewRow('Amount', 'GHS ${_flexiAmountCtrl.text.trim()}'),
             ],
@@ -2615,9 +2654,10 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
             ),
             child: Text(
               'Telecel will show the current M4M offers. Choose the offer '
-              'and payment method on the network screen. Airtime requires '
-              'no PIN. Telecel Cash stops at the PIN screen for you to '
-              'enter the PIN manually.',
+              'on the network screen. AgentPro will then select the payment '
+              'method chosen above automatically. Airtime requires no PIN. '
+              'Telecel Cash stops at the PIN screen for you to enter the '
+              'PIN manually.',
               style: TextStyle(
                 fontSize: 12,
                 color: context.appSecondaryText,

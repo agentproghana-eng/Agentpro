@@ -139,7 +139,7 @@ void main() {
 
     expect(
       transactionScreen,
-      contains("_dbStep = 'review';"),
+      contains("_dbStep = 'm4m_payment';"),
     );
 
     expect(
@@ -165,16 +165,39 @@ void main() {
     );
   });
 
-  test('M4M UI explains live manual offer/payment selection', () {
+  test('M4M form preselects payment while live offer stays manual', () {
     final transactionScreen = source(
       'lib/features/transactions/personal_transaction_screen.dart',
     );
 
     expect(
       transactionScreen,
-      contains(
-        'Telecel will show the current M4M offers.',
-      ),
+      contains('kTelecelM4mPayments'),
+    );
+
+    expect(
+      transactionScreen,
+      contains("DataBundleOption('Airtime', '1')"),
+    );
+
+    expect(
+      transactionScreen,
+      contains("DataBundleOption('Telecel Cash', '2')"),
+    );
+
+    expect(
+      transactionScreen,
+      contains("case 'm4m_payment':"),
+    );
+
+    expect(
+      transactionScreen,
+      contains('_m4mPayment!.digit'),
+    );
+
+    expect(
+      transactionScreen,
+      contains("'selections_in_order': _computeSelections()"),
     );
 
     final normalizedM4mReviewSource = transactionScreen.replaceAll(
@@ -185,14 +208,26 @@ void main() {
     expect(
       normalizedM4mReviewSource,
       contains(
-        'Airtime requires no PIN.',
+        'Choose the offer on the network screen. '
+        'AgentPro will then select the payment method chosen above '
+        'automatically.',
       ),
     );
 
     expect(
+      normalizedM4mReviewSource,
+      contains('Airtime requires no PIN.'),
+    );
+
+    expect(
       transactionScreen,
-      contains(
-        'Telecel Cash stops at the PIN screen',
+      contains('Telecel Cash stops at the PIN screen'),
+    );
+
+    expect(
+      normalizedM4mReviewSource,
+      isNot(
+        contains('and payment method on the network screen'),
       ),
     );
   });
