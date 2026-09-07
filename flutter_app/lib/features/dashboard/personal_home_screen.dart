@@ -570,6 +570,77 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
     }
   }
 
+  bool get _isPersonalOnlyCustomer {
+    final authState = context.read<AuthBloc>().state;
+
+    return authState is AuthAuthenticated &&
+        authState.user['role'] == 'customer';
+  }
+
+  Future<Map<int, String>> _ensureCustomerSubscriberRoles(
+    List<SimCard> sims,
+    Map<int, String> currentRoles,
+  ) async {
+    if (!_isPersonalOnlyCustomer || sims.isEmpty) {
+      return currentRoles;
+    }
+
+    final alreadySubscriber = sims.every(
+      (sim) => currentRoles[sim.slot] == 'subscriber',
+    );
+
+    if (alreadySubscriber) {
+      return currentRoles;
+    }
+
+    try {
+      final installationId =
+          await StorageService.getOrCreateInstallationId();
+
+      final assignments = sims
+          .map(
+            (sim) => {
+              'sim_slot': sim.slot,
+              'sim_iccid': sim.iccid.isNotEmpty ? sim.iccid : null,
+              'installation_id': installationId,
+              'sim_subscription_id': sim.subscriptionId,
+              'provider': sim.network == 'unknown' ? null : sim.network,
+              'purpose': 'subscriber',
+            },
+          )
+          .toList();
+
+      // Establish the identity-bound role on the server first.
+      // Never trust a locally invented Subscriber assignment.
+      await ApiClient.instance.put(
+        '/user-sim-purposes',
+        data: {
+          'assignments': assignments,
+        },
+      );
+
+      // Only cache the role after the server has accepted the
+      // physical-SIM identity and canonical Subscriber purpose.
+      for (final sim in sims) {
+        await SimRoleAssignmentService.cacheRoleForSlot(
+          slot: sim.slot,
+          role: 'subscriber',
+          simIccid: sim.iccid,
+          simSubscriptionId: sim.subscriptionId,
+          provider: sim.network,
+        );
+      }
+
+      return {
+        for (final sim in sims) sim.slot: 'subscriber',
+      };
+    } catch (_) {
+      // First-time trust cannot be created offline. Keep the existing
+      // trusted roles and allow the next refresh to retry.
+      return currentRoles;
+    }
+  }
+
   // Mirrors the Agent Home tab's SIM-detection pattern exactly (retry
   // once if every provider comes back null, fall back to showing all
   // three tabs on any detection failure), plus one extra step: if this
@@ -598,10 +669,18 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
 
       // Personal Home is local-first. A previously verified role is
       // identity-bound and safe to use while offline.
-      final purposes =
+      var purposes =
           await SimRoleAssignmentService.rolesForSims(
         supportedDetected,
         refreshFromServer: false,
+      );
+
+      // A Personal-only account has exactly one valid operational SIM
+      // purpose: Subscriber. Establish that identity-bound assignment
+      // automatically so a new Personal user never defaults to Agent.
+      purposes = await _ensureCustomerSubscriberRoles(
+        supportedDetected,
+        purposes,
       );
 
       // Reconcile the cache silently when connectivity exists. Do not make
