@@ -463,6 +463,12 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   bool get _isMtnMashup =>
       widget.provider == 'mtn' && widget.transactionType == 'buy_mashup';
 
+  bool get _isTelecelM4mQuickAction =>
+      widget.provider == 'telecel' &&
+      widget.transactionType == 'buy_data' &&
+      widget.initialBundleCategory?.trim().toLowerCase() == 'm4m_live' &&
+      widget.initialRecipientMode?.trim().toLowerCase() == 'self';
+
   String _mashupStep = 'recipient_mode';
   MtnMashupTier? _mashupTier;
   DataBundleOption? _mashupAllocation;
@@ -498,12 +504,8 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         .where((category) => category.id == 'daily')
         .toList();
 
-    // *530# is verified for the subscriber's own Telecel SIM.
-    // Do not invent an Other-recipient path that was not observed.
-    if (_recipientMode == 'self') {
-      categories.add(kTelecelM4mCategory);
-    }
-
+    // M4M is intentionally excluded from generic Buy Data.
+    // It is exposed only through its dedicated M4M Quick Action.
     return List<DataBundleCategory>.unmodifiable(categories);
   }
 
@@ -582,6 +584,13 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     }
 
     final bundle = rawBundle.toLowerCase();
+
+    if (_isTelecelM4mQuickAction && bundle == 'm4m_live') {
+      _bundleCategory = kTelecelM4mCategory.id;
+      _bundleChoice = null;
+      _dbStep = 'review';
+      return;
+    }
 
     if (_isMtnDataBundle) {
       if (bundle.startsWith('flexi_')) {
@@ -1268,8 +1277,10 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final label = kPersonalTransactionLabels[widget.transactionType] ??
-        widget.transactionType;
+    final label = _isTelecelM4mQuickAction
+        ? 'M4M'
+        : kPersonalTransactionLabels[widget.transactionType] ??
+            widget.transactionType;
     final appBarLabel = switch (widget.transactionType) {
       'send_money_same_network' => 'Transfer Money',
       'send_money_cross_network' => 'Transfer Money',
