@@ -181,4 +181,64 @@ void main() {
       ),
     );
   });
+  test('Telecel Personal Quick Actions expose M4M and Balance', () {
+    final customization = source(
+      'lib/features/ussd_settings/quick_action_customization_screen.dart',
+    );
+
+    final preferences = source(
+      'lib/features/ussd_settings/quick_action_preference.dart',
+    );
+
+    final catalog = source(
+      'lib/features/ussd_settings/quick_action_catalog.dart',
+    );
+
+    expect(
+      customization,
+      contains("'m4m_live'"),
+    );
+
+    expect(
+      customization,
+      contains("displayLabel: 'M4M'"),
+    );
+
+    expect(
+      preferences,
+      contains("? 'M4M'"),
+    );
+
+    expect(
+      catalog,
+      contains("return 'Balance';"),
+    );
+  });
+
+  test('Telecel M4M Home tile preserves its exact flow variant', () {
+    final home = source(
+      'lib/features/dashboard/personal_home_screen.dart',
+    );
+
+    expect(
+      home,
+      contains("'bundle_category'"),
+    );
+
+    expect(
+      home,
+      contains("'recipient_mode'"),
+    );
+
+    expect(
+      home,
+      contains('preference.bundleCategory'),
+    );
+
+    expect(
+      home,
+      contains('preference.recipientMode'),
+    );
+  });
+
 }

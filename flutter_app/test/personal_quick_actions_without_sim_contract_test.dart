@@ -59,7 +59,7 @@ void main() {
     test('Quick Action execution still requires an assigned Personal SIM', () {
       final block = _methodBlock(
         source,
-        '  void _startTransaction(String type) {',
+        '  void _startTransaction(',
         '  Widget _buildFrozenSimIndicators(',
       );
 
@@ -112,7 +112,7 @@ void main() {
     test('SIM identity is still supplied to transaction navigation', () {
       final block = _methodBlock(
         source,
-        '  void _startTransaction(String type) {',
+        '  void _startTransaction(',
         '  Widget _buildFrozenSimIndicators(',
       );
 

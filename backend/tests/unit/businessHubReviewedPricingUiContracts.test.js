@@ -95,7 +95,7 @@ describe(
         );
 
         expect(flutterAd).toContain(
-          "Payment reference submitted"
+          "Manual payment Transaction ID submitted"
         );
       }
     );

@@ -283,6 +283,11 @@ String quickActionDisplayLabel({
   required String type,
   String? catalogLabel,
 }) {
+  if (provider.trim().toLowerCase() == 'telecel' &&
+      type.trim().toLowerCase() == 'check_airtime_balance') {
+    return 'Balance';
+  }
+
   final semanticLabel = transactionTypeLabel(type, provider);
   final genericLabel = _humanizeCatalogValue(type);
 

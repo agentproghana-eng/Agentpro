@@ -6,6 +6,10 @@ const {
   fulfillPaystackTransaction,
 } = require("../services/paystackSubscriptionService");
 
+const {
+  fulfillBusinessHubPaystackTransaction,
+} = require("../services/businessHubPaystackPaymentService");
+
 exports.handleWebhook = async (req, res) => {
   const signature = req.get("x-paystack-signature");
 
@@ -33,10 +37,24 @@ exports.handleWebhook = async (req, res) => {
   }
 
   try {
-    const result = await fulfillPaystackTransaction(event.data, {
-      source: "webhook",
-      actorUserId: null,
-    });
+    const reference = String(event?.data?.reference || "").trim();
+
+    const paymentKind = String(event?.data?.metadata?.payment_kind || "")
+      .trim()
+      .toLowerCase();
+
+    const isBusinessHubPayment =
+      paymentKind === "business_hub" || reference.startsWith("APG-BHUB-");
+
+    const result = isBusinessHubPayment
+      ? await fulfillBusinessHubPaystackTransaction(event.data, {
+          source: "webhook",
+          actorUserId: null,
+        })
+      : await fulfillPaystackTransaction(event.data, {
+          source: "webhook",
+          actorUserId: null,
+        });
 
     return res.status(200).json({
       success: true,

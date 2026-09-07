@@ -576,8 +576,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
                               Text(
                                 '2. To: ${instructions['merchant_number']} (${instructions['merchant_name']})',
                               ),
-                              const Text('3. Copy the transaction reference'),
-                              const Text('4. Submit the reference below'),
+                              const Text('3. Copy the transaction ID'),
+                              const Text('4. Submit the Transaction ID below'),
                             ],
                           ),
                         ),
@@ -611,7 +611,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           const Text(
-                            'Submit Manual Payment Reference',
+                            'Submit Manual Payment',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -621,7 +621,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
                           TextField(
                             controller: _refCtrl,
                             decoration: const InputDecoration(
-                              labelText: 'MTN MoMo Reference',
+                              labelText: 'Transaction ID',
                               border: OutlineInputBorder(),
                               prefixIcon: Icon(Icons.receipt),
                             ),
@@ -638,7 +638,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
                           ),
                           const SizedBox(height: 20),
                           AppButton(
-                            label: 'Submit Reference for Verification',
+                            label: 'Submit Transaction ID for Verification',
                             onPressed: _submitPayment,
                             isLoading: _submitting,
                           ),

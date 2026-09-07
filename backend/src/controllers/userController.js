@@ -1299,6 +1299,13 @@ function quickActionDisplayLabel(provider, transactionType, capabilityLabel) {
     return "Pay to Agent";
   }
 
+  if (
+    normalizedProvider === "telecel" &&
+    normalizedType === "check_airtime_balance"
+  ) {
+    return "Balance";
+  }
+
   const normalizedLabel = String(capabilityLabel || "").trim();
 
   return (

@@ -188,6 +188,7 @@ class QuickActionPreference {
       'fixed_page1_momo' => 'Bundles · MoMo',
       'fixed_page2_airtime' => 'More Bundles · Airtime',
       'fixed_page2_momo' => 'More Bundles · MoMo',
+      'm4m_live' => 'M4M',
       _ => normalized
           .split('_')
           .where((part) => part.isNotEmpty)
@@ -237,6 +238,7 @@ List<QuickActionPreference> normalizePersonalQuickActionPreferences({
   var transferMoneyInserted = false;
   var airtimeInserted = false;
   var dataInserted = false;
+  var m4mInserted = false;
   var mashupInserted = false;
 
   for (final preference in visible) {
@@ -295,6 +297,36 @@ List<QuickActionPreference> normalizePersonalQuickActionPreferences({
       );
 
       airtimeInserted = true;
+      continue;
+    }
+
+    final bundleCategory =
+        preference.bundleCategory?.trim().toLowerCase();
+
+    final recipientMode =
+        preference.recipientMode?.trim().toLowerCase();
+
+    final isTelecelM4mVariant =
+        actionKey == 'buy_data' &&
+        bundleCategory == 'm4m_live' &&
+        recipientMode == 'self';
+
+    if (isTelecelM4mVariant) {
+      if (m4mInserted) {
+        continue;
+      }
+
+      final existingName = preference.customName?.trim();
+
+      normalized.add(
+        preference.copyWith(
+          customName: existingName == null || existingName.isEmpty
+              ? 'M4M'
+              : existingName,
+        ),
+      );
+
+      m4mInserted = true;
       continue;
     }
 
