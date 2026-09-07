@@ -162,8 +162,13 @@ void main() {
       ),
     );
 
+    final normalizedM4mReviewSource = transactionScreen.replaceAll(
+      RegExp(r"'\s*'"),
+      '',
+    );
+
     expect(
-      transactionScreen,
+      normalizedM4mReviewSource,
       contains(
         'Airtime requires no PIN.',
       ),
