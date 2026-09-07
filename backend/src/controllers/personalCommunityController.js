@@ -56,6 +56,113 @@ exports.createPost = async (req, res) => {
   }
 };
 
+// ─── Superuser Moderation ───────────────────────────────────────
+//
+// Personal Community uses its own tables, so its moderation queue must
+// also be read and updated independently from Agent Community.
+
+exports.listPending = async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT
+         p.*,
+         u.first_name,
+         u.last_name,
+         u.email,
+         u.role
+       FROM personal_posts p
+       JOIN users u
+         ON u.id = p.author_id
+       WHERE p.status = $1
+       ORDER BY p.created_at ASC`,
+      ["pending_review"]
+    );
+
+    return res.json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (error) {
+    logger.error("List pending personal posts error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch pending Personal Community posts",
+    });
+  }
+};
+
+exports.moderatePost = async (req, res) => {
+  const { post_id } = req.params;
+  const { action, removed_reason } = req.body;
+
+  if (!UUID_PATTERN.test(post_id || "")) {
+    return res.status(404).json({
+      success: false,
+      message: "Pending post not found",
+    });
+  }
+
+  if (!["approve", "reject"].includes(action)) {
+    return res.status(422).json({
+      success: false,
+      message: "action must be approve or reject",
+    });
+  }
+
+  try {
+    const newStatus =
+      action === "approve" ? "active" : "removed";
+
+    const moderationReason =
+      action === "reject"
+        ? (removed_reason || "Rejected by administrator")
+        : null;
+
+    const result = await query(
+      `UPDATE personal_posts
+       SET
+         status = $1,
+         reviewed_by = $2,
+         reviewed_at = NOW(),
+         removed_reason = $3
+       WHERE id = $4
+         AND status = $5
+       RETURNING *`,
+      [
+        newStatus,
+        req.user.id,
+        moderationReason,
+        post_id,
+        "pending_review",
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Pending post not found",
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: result.rows[0],
+      message:
+        action === "approve"
+          ? "Personal Community post approved"
+          : "Personal Community post rejected",
+    });
+  } catch (error) {
+    logger.error("Moderate personal post error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to review Personal Community post",
+    });
+  }
+};
+
 // ─── List Feed (any Personal user - Free or Paid) ────────────────
 // Same visibility rule as the Agent side: active posts from everyone,
 // plus the requesting user's own pending_review posts.

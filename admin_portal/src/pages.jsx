@@ -748,6 +748,7 @@ export function CommunityModerationPage() {
   const [postStatusFilter, setPostStatusFilter] = useState('all');
   const [postTypeFilter, setPostTypeFilter] = useState('all');
   const [postSearch, setPostSearch] = useState('');
+  const [communityFilter, setCommunityFilter] = useState('all');
 
   const load = async () => {
     setLoading(true);
@@ -756,6 +757,7 @@ export function CommunityModerationPage() {
       const [
         reportResponse,
         pendingResponse,
+        personalPendingResponse,
         postsResponse,
         historyResponse,
       ] = await Promise.all([
@@ -763,6 +765,7 @@ export function CommunityModerationPage() {
           params: { status: 'pending' },
         }),
         API.get('/agent-posts/moderation/pending'),
+        API.get('/personal-community/moderation/pending'),
         API.get('/agent-posts/moderation/posts', {
           params: { limit: 100 },
         }),
@@ -777,7 +780,27 @@ export function CommunityModerationPage() {
           comment_reports: [],
         },
       );
-      setPendingPosts(pendingResponse.data.data || []);
+      const agentPending =
+        (pendingResponse.data.data || []).map((post) => ({
+          ...post,
+          community: 'agent',
+        }));
+
+      const personalPending =
+        (personalPendingResponse.data.data || []).map(
+          (post) => ({
+            ...post,
+            community: 'personal',
+          }),
+        );
+
+      setPendingPosts(
+        [...agentPending, ...personalPending].sort(
+          (left, right) =>
+            new Date(left.created_at).getTime() -
+            new Date(right.created_at).getTime(),
+        ),
+      );
       setAllPosts(postsResponse.data.data || []);
       setModerationHistory(historyResponse.data.data || []);
     } catch (error) {
@@ -847,10 +870,67 @@ export function CommunityModerationPage() {
     }
   };
 
+  const moderatePendingPost = async (
+    post,
+    action,
+  ) => {
+    setUpdatingId(post.id);
+
+    try {
+      if (post.community === 'personal') {
+        await API.patch(
+          `/personal-community/posts/${post.id}/moderate`,
+          {
+            action,
+            removed_reason:
+              action === 'reject'
+                ? 'Rejected by administrator'
+                : null,
+          },
+        );
+      } else {
+        await API.patch(
+          `/agent-posts/${post.id}/community-moderation`,
+          {
+            status:
+              action === 'approve'
+                ? 'active'
+                : 'removed',
+            reason:
+              action === 'approve'
+                ? 'Approved by administrator'
+                : 'Rejected by administrator',
+          },
+        );
+      }
+
+      toast.success(
+        action === 'approve'
+          ? 'Post approved'
+          : 'Post rejected',
+      );
+
+      await load();
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message ||
+          'Pending post could not be reviewed.',
+      );
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   const postReports = reports.post_reports || [];
   const commentReports = reports.comment_reports || [];
   const totalReports =
     postReports.length + commentReports.length;
+
+  const filteredPendingPosts = pendingPosts.filter(
+    (post) =>
+      communityFilter === 'all' ||
+      post.community === communityFilter,
+  );
 
   const filteredPosts = allPosts.filter((post) => {
     const matchesStatus =
@@ -876,7 +956,7 @@ export function CommunityModerationPage() {
     <div className="space-y-6">
       <PageHeader
         title="Community Moderation"
-        subtitle="Review reports, approve flagged posts, and manage Agent Community content"
+        subtitle="Review Agent Community reports and moderate flagged Agent and Personal posts"
         action={
           <button
             type="button"
@@ -1142,11 +1222,55 @@ export function CommunityModerationPage() {
 
       {activeTab === 'pending' && (
         <section className="overflow-hidden rounded-xl bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+            <div>
+              <h2 className="font-semibold text-gray-900">
+                Pending Community Posts
+              </h2>
+              <p className="mt-1 text-xs text-gray-500">
+                Review AI-flagged Agent and Personal Community posts.
+              </p>
+            </div>
+
+            <select
+              value={communityFilter}
+              onChange={(event) =>
+                setCommunityFilter(event.target.value)
+              }
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+              aria-label="Community filter"
+            >
+              <option value="all">All communities</option>
+              <option value="agent">Agent Community</option>
+              <option value="personal">
+                Personal Community
+              </option>
+            </select>
+          </div>
+
           <Table
             loading={loading}
-            data={pendingPosts}
-            emptyMsg="No posts awaiting review"
+            data={filteredPendingPosts}
+            emptyMsg="No posts awaiting review for this community"
             columns={[
+              {
+                key: 'community',
+                label: 'Community',
+                render: (row) => (
+                  <span
+                    className={[
+                      'rounded-full px-2 py-1 text-xs font-medium',
+                      row.community === 'personal'
+                        ? 'bg-purple-100 text-purple-700'
+                        : 'bg-blue-100 text-blue-700',
+                    ].join(' ')}
+                  >
+                    {row.community === 'personal'
+                      ? 'Personal'
+                      : 'Agent'}
+                  </span>
+                ),
+              },
               {
                 key: 'content',
                 label: 'Post',
@@ -1180,11 +1304,10 @@ export function CommunityModerationPage() {
                       type="button"
                       disabled={updatingId === row.id}
                       onClick={() =>
-                        moderatePost(row.id, {
-                          status: 'active',
-                          reason:
-                            'Approved by administrator',
-                        })
+                        moderatePendingPost(
+                          row,
+                          'approve',
+                        )
                       }
                       className="rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-xs text-green-700"
                     >
@@ -1195,33 +1318,34 @@ export function CommunityModerationPage() {
                       type="button"
                       disabled={updatingId === row.id}
                       onClick={() =>
-                        moderatePost(row.id, {
-                          status: 'removed',
-                          reason:
-                            'Rejected by administrator',
-                        })
+                        moderatePendingPost(
+                          row,
+                          'reject',
+                        )
                       }
                       className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-700"
                     >
                       Reject
                     </button>
 
-                    <button
-                      type="button"
-                      disabled={updatingId === row.id}
-                      onClick={() =>
-                        moderatePost(row.id, {
-                          status: 'active',
-                          is_official: true,
-                          is_pinned: true,
-                          reason:
-                            'Approved and highlighted by administrator',
-                        })
-                      }
-                      className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs text-blue-700"
-                    >
-                      Approve + pin
-                    </button>
+                    {row.community === 'agent' && (
+                      <button
+                        type="button"
+                        disabled={updatingId === row.id}
+                        onClick={() =>
+                          moderatePost(row.id, {
+                            status: 'active',
+                            is_official: true,
+                            is_pinned: true,
+                            reason:
+                              'Approved and highlighted by administrator',
+                          })
+                        }
+                        className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs text-blue-700"
+                      >
+                        Approve + pin
+                      </button>
+                    )}
                   </div>
                 ),
               },

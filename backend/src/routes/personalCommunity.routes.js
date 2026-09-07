@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const personalCommunityController = require('../controllers/personalCommunityController');
-const { authenticate, requirePersonalAccount, requirePaidPersonalPlan } = require('../middleware/auth');
+const { authenticate, authorize, requirePersonalAccount, requirePaidPersonalPlan } = require('../middleware/auth');
 const { uploadLimiter } = require('../middleware/rateLimit');
 
 // Same multer config as Agent's agentPost.routes.js exactly: memory
@@ -20,12 +20,27 @@ const upload = multer({
   },
 });
 
-// Baseline gate for the whole Personal Community: must have Personal
-// capability enabled at all. Free vs Paid is applied per-route below,
-// only where it actually differs - viewing and reacting (to both posts
-// and comments) are available on the free plan too, per spec; only
-// creating a post or adding a comment/reply requires Paid.
-router.use(authenticate, requirePersonalAccount);
+// Authenticate first. Superuser moderation routes are deliberately
+// registered before the Personal-account capability gate so platform
+// administrators can review Personal Community content without needing
+// a Personal subscription or Personal capability themselves.
+router.use(authenticate);
+
+router.get(
+  '/moderation/pending',
+  authorize('superuser'),
+  personalCommunityController.listPending
+);
+
+router.patch(
+  '/posts/:post_id/moderate',
+  authorize('superuser'),
+  personalCommunityController.moderatePost
+);
+
+// Baseline gate for Personal Community member routes. Free vs Paid is
+// still applied per-route below exactly as before.
+router.use(requirePersonalAccount);
 
 router.get('/feed', personalCommunityController.listFeed);
 router.get('/posts/:post_id', personalCommunityController.getPost);
