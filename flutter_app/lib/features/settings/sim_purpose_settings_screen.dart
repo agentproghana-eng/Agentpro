@@ -1,8 +1,10 @@
 // sim_purpose_settings_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/auth/auth_bloc.dart';
 import '../../core/services/sim_card_service.dart';
 import '../../core/services/sim_role_assignment_service.dart';
 import '../../core/services/storage_service.dart';
@@ -30,6 +32,13 @@ class _SimPurposeSettingsScreenState extends State<SimPurposeSettingsScreen> {
   bool _saving = false;
 
   String? _error;
+
+  bool get _isPersonalOnlyCustomer {
+    final authState = context.read<AuthBloc>().state;
+
+    return authState is AuthAuthenticated &&
+        authState.user['role'] == 'customer';
+  }
 
   @override
   void initState() {
@@ -101,6 +110,13 @@ class _SimPurposeSettingsScreenState extends State<SimPurposeSettingsScreen> {
       }
 
       for (final card in cards) {
+        if (_isPersonalOnlyCustomer) {
+          // Personal-only accounts always use the canonical
+          // Subscriber role. They must never default to Agent.
+          roles[card.slot] = SimRole.subscriber;
+          continue;
+        }
+
         roles.putIfAbsent(
           card.slot,
           () => SimRole.agent,
@@ -151,7 +167,9 @@ class _SimPurposeSettingsScreenState extends State<SimPurposeSettingsScreen> {
           await StorageService.getOrCreateInstallationId();
 
       final assignments = _simCards.map((card) {
-        final role = _roles[card.slot] ?? SimRole.agent;
+        final role = _isPersonalOnlyCustomer
+            ? SimRole.subscriber
+            : (_roles[card.slot] ?? SimRole.agent);
 
         return {
           'sim_slot': card.slot,
@@ -174,7 +192,9 @@ class _SimPurposeSettingsScreenState extends State<SimPurposeSettingsScreen> {
       // execution does not lose an EVD/Merchant assignment and silently
       // fall back to Agent.
       for (final card in _simCards) {
-        final role = _roles[card.slot] ?? SimRole.agent;
+        final role = _isPersonalOnlyCustomer
+            ? SimRole.subscriber
+            : (_roles[card.slot] ?? SimRole.agent);
 
         await SimRoleAssignmentService.cacheRoleForSlot(
           slot: card.slot,
@@ -380,9 +400,13 @@ class _SimPurposeSettingsScreenState extends State<SimPurposeSettingsScreen> {
     BuildContext context,
     SimCard card,
   ) {
-    final role = _roles[card.slot] ?? SimRole.agent;
+    final role = _isPersonalOnlyCustomer
+        ? SimRole.subscriber
+        : (_roles[card.slot] ?? SimRole.agent);
 
-    final availableRoles = supportedSimRolesForProvider(card.network);
+    final availableRoles = _isPersonalOnlyCustomer
+        ? const <SimRole>[SimRole.subscriber]
+        : supportedSimRolesForProvider(card.network);
 
     return Container(
       decoration: BoxDecoration(
