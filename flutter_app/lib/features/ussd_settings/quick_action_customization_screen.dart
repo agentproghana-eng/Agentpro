@@ -40,8 +40,15 @@ class _QuickActionChoice {
   String? get recipientMode => variant?.recipientMode;
 
   QuickActionPreference preferenceAt(int position) {
+    final isTelecelM4m =
+        definition.provider == 'telecel' &&
+        definition.type == 'buy_data' &&
+        bundleCategory?.trim().toLowerCase() == 'm4m_live' &&
+        recipientMode?.trim().toLowerCase() == 'self';
+
     return QuickActionPreference(
       actionKey: definition.type,
+      customName: isTelecelM4m ? 'M4M' : null,
       bundleCategory: bundleCategory,
       recipientMode: recipientMode,
       position: position,
@@ -156,6 +163,32 @@ class _QuickActionCustomizationScreenState
         }
 
         choices.add(_QuickActionChoice(definition: definition));
+
+        if (definition.provider == 'telecel' &&
+            definition.type == 'buy_data') {
+          for (final variant in definition.variants) {
+            final bundle =
+                variant.bundleCategory?.trim().toLowerCase();
+            final recipient =
+                variant.recipientMode?.trim().toLowerCase();
+
+            if (bundle != 'm4m_live' || recipient != 'self') {
+              continue;
+            }
+
+            choices.add(
+              _QuickActionChoice(
+                definition: QuickActionCatalogDefinition(
+                  provider: definition.provider,
+                  type: definition.type,
+                  displayLabel: 'M4M',
+                  quickActionGroup: definition.quickActionGroup,
+                ),
+                variant: variant,
+              ),
+            );
+          }
+        }
       }
 
       return choices;
@@ -227,6 +260,56 @@ class _QuickActionCustomizationScreenState
           ),
         )
         .toList();
+
+    if (_isSubscriberRole && provider == 'telecel') {
+      final dataDefinitionIndex = definitions.indexWhere(
+        (definition) => definition.type == 'buy_data',
+      );
+
+      if (dataDefinitionIndex >= 0) {
+        final dataDefinition = definitions[dataDefinitionIndex];
+
+        QuickActionCatalogVariant? m4mVariant;
+
+        for (final variant in dataDefinition.variants) {
+          if (variant.bundleCategory?.trim().toLowerCase() ==
+                  'm4m_live' &&
+              variant.recipientMode?.trim().toLowerCase() == 'self') {
+            m4mVariant = variant;
+            break;
+          }
+        }
+
+        if (m4mVariant != null) {
+          final genericDataIndex = raw.indexWhere(
+            (item) => item.actionKey == 'buy_data',
+          );
+
+          raw.insert(
+            genericDataIndex >= 0
+                ? genericDataIndex + 1
+                : raw.length,
+            QuickActionPreference(
+              actionKey: 'buy_data',
+              customName: 'M4M',
+              bundleCategory: m4mVariant.bundleCategory,
+              recipientMode: m4mVariant.recipientMode,
+              position: 0,
+            ),
+          );
+        }
+      }
+
+      final balanceIndex = raw.indexWhere(
+        (item) => item.actionKey == 'check_airtime_balance',
+      );
+
+      if (balanceIndex >= 9) {
+        final balance = raw.removeAt(balanceIndex);
+        final targetIndex = raw.length < 4 ? raw.length : 3;
+        raw.insert(targetIndex, balance);
+      }
+    }
 
     final normalized = _isSubscriberRole
         ? normalizePersonalQuickActionPreferences(preferences: raw)

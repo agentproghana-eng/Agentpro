@@ -8,6 +8,15 @@ const { query, withTransaction } = require('../config/database');
 const { uploadFile } = require('../config/cloudinary');
 const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
+const { v4: uuidv4 } = require('uuid');
+const {
+  amountToMinorUnits,
+  initializeTransaction,
+  verifyTransaction,
+} = require('../services/paystackService');
+const {
+  fulfillBusinessHubPaystackTransaction,
+} = require('../services/businessHubPaystackPaymentService');
 
 const UUID_PATH_SEGMENT =
   '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}';
@@ -1602,6 +1611,38 @@ mpRouter.get('/:ad_id', async (req, res) => {
              AND pending_payment.status = 'pending'
          ) AS payment_reference_submitted,
          (
+           SELECT pending_payment.payment_provider
+           FROM ad_payments pending_payment
+           WHERE pending_payment.advertisement_id = a.id
+             AND pending_payment.status = 'pending'
+           ORDER BY pending_payment.submitted_at DESC
+           LIMIT 1
+         ) AS payment_provider,
+         (
+           SELECT pending_payment.provider_reference
+           FROM ad_payments pending_payment
+           WHERE pending_payment.advertisement_id = a.id
+             AND pending_payment.status = 'pending'
+           ORDER BY pending_payment.submitted_at DESC
+           LIMIT 1
+         ) AS payment_provider_reference,
+         (
+           SELECT pending_payment.authorization_url
+           FROM ad_payments pending_payment
+           WHERE pending_payment.advertisement_id = a.id
+             AND pending_payment.status = 'pending'
+           ORDER BY pending_payment.submitted_at DESC
+           LIMIT 1
+         ) AS payment_authorization_url,
+         (
+           SELECT pending_payment.provider_status
+           FROM ad_payments pending_payment
+           WHERE pending_payment.advertisement_id = a.id
+             AND pending_payment.status = 'pending'
+           ORDER BY pending_payment.submitted_at DESC
+           LIMIT 1
+         ) AS payment_provider_status,
+         (
            SELECT MAX(pending_payment.submitted_at)
            FROM ad_payments pending_payment
            WHERE pending_payment.advertisement_id = a.id
@@ -1738,39 +1779,419 @@ mpRouter.post('/', uploadLimiter, upload.array('images', 3), async (req, res) =>
 
 // Submit payment for an administrator-approved Business Hub listing.
 //
-// The amount is never accepted from the client and is never recalculated
-// from the user's declared price here. advertisements.amount_due is the
-// authoritative reviewed amount once the ad reaches pending_payment.
-mpRouter.post('/:ad_id/payment', async (req, res) => {
-  const reference =
-    String(req.body.momo_reference || '').trim();
+// Paystack is the primary route. The amount is never accepted from the
+// client and is never recalculated from the user's declared price.
+// advertisements.amount_due is authoritative once the ad reaches
+// pending_payment.
+mpRouter.post("/:ad_id/payment/paystack/initialize", async (req, res) => {
+  let createdPaymentId = null;
 
-  const paymentPhone =
-    String(req.body.payment_phone || '').trim();
+  try {
+    const prepared = await withTransaction(async (client) => {
+      const adResult = await client.query(
+        `SELECT
+           a.id,
+           a.posted_by,
+           a.company_id,
+           a.title,
+           a.status,
+           a.amount_due,
+           u.email
+         FROM advertisements a
+         INNER JOIN users u
+           ON u.id = a.posted_by
+         WHERE a.id = $1
+           AND a.posted_by = $2
+         FOR UPDATE OF a`,
+        [req.params.ad_id, req.user.id],
+      );
 
-  if (!reference || !paymentPhone) {
-    return res.status(422).json({
+      if (!adResult.rows.length) {
+        const error = new Error("Ad not found");
+        error.statusCode = 404;
+        throw error;
+      }
+
+      const ad = adResult.rows[0];
+
+      if (ad.status !== "pending_payment") {
+        const error = new Error("This listing is not awaiting payment");
+        error.statusCode = 409;
+        throw error;
+      }
+
+      const amountDue = Number(ad.amount_due);
+
+      if (!Number.isFinite(amountDue) || amountDue <= 0) {
+        const error = new Error(
+          "A positive administrator-approved amount is required for Paystack checkout",
+        );
+        error.statusCode = 409;
+        throw error;
+      }
+
+      const email = String(ad.email || req.user.email || "").trim();
+
+      if (!email) {
+        const error = new Error(
+          "A valid account email is required for Paystack checkout",
+        );
+        error.statusCode = 422;
+        throw error;
+      }
+
+      const existing = await client.query(
+        `SELECT
+           id,
+           payment_provider,
+           provider_reference,
+           authorization_url,
+           provider_status,
+           amount,
+           expected_amount_minor
+         FROM ad_payments
+         WHERE advertisement_id = $1
+           AND status = 'pending'
+         ORDER BY submitted_at DESC
+         LIMIT 1
+         FOR UPDATE`,
+        [ad.id],
+      );
+
+      if (existing.rows.length) {
+        const pending = existing.rows[0];
+
+        if (
+          pending.payment_provider === "paystack" &&
+          String(pending.provider_reference || "").trim() &&
+          String(pending.authorization_url || "").trim()
+        ) {
+          return {
+            resumed: true,
+            payment: pending,
+            email,
+            amountDue: Number(pending.amount),
+            amountMinor: Number(pending.expected_amount_minor),
+            ad,
+          };
+        }
+
+        const error = new Error(
+          pending.payment_provider === "manual_momo"
+            ? "A manual payment transaction ID is already awaiting verification"
+            : "A payment is already in progress",
+        );
+        error.statusCode = 409;
+        throw error;
+      }
+
+      const amountMinor = amountToMinorUnits(amountDue);
+      const reference = `APG-BHUB-${uuidv4()}`;
+
+      const inserted = await client.query(
+        `INSERT INTO ad_payments (
+           advertisement_id,
+           posted_by,
+           amount,
+           payment_provider,
+           provider_reference,
+           provider_currency,
+           expected_amount_minor,
+           provider_status
+         )
+         VALUES (
+           $1,
+           $2,
+           $3,
+           'paystack',
+           $4,
+           'GHS',
+           $5,
+           'initializing'
+         )
+         RETURNING *`,
+        [ad.id, req.user.id, amountDue.toFixed(2), reference, amountMinor],
+      );
+
+      const payment = inserted.rows[0];
+      createdPaymentId = payment.id;
+
+      await auditLog({
+        userId: req.user.id,
+        companyId: ad.company_id || null,
+        action: "BUSINESS_HUB_PAYSTACK_PAYMENT_INITIALIZED",
+        entityType: "advertisement",
+        entityId: ad.id,
+        newValues: {
+          payment_id: payment.id,
+          payment_provider: "paystack",
+          reference,
+          amount: amountDue.toFixed(2),
+          amount_minor: amountMinor,
+          currency: "GHS",
+        },
+        userAgent: req.headers["user-agent"],
+        requestId: req.requestId,
+        dbClient: client,
+        strict: true,
+      });
+
+      return {
+        resumed: false,
+        payment,
+        email,
+        amountDue,
+        amountMinor,
+        ad,
+      };
+    });
+
+    if (prepared.resumed) {
+      return res.json({
+        success: true,
+        message: "Existing Paystack checkout resumed.",
+        data: {
+          payment_id: prepared.payment.id,
+          reference: prepared.payment.provider_reference,
+          authorization_url: prepared.payment.authorization_url,
+          amount: prepared.amountDue,
+          amount_minor: prepared.amountMinor,
+          currency: "GHS",
+          resumed: true,
+        },
+      });
+    }
+
+    const checkout = await initializeTransaction({
+      email: prepared.email,
+      amountMinor: prepared.amountMinor,
+      reference: prepared.payment.provider_reference,
+      metadata: {
+        payment_kind: "business_hub",
+        payment_id: prepared.payment.id,
+        advertisement_id: prepared.ad.id,
+        user_id: req.user.id,
+        company_id: prepared.ad.company_id || null,
+      },
+    });
+
+    await query(
+      `UPDATE ad_payments
+       SET authorization_url = $1,
+           provider_status = 'initialized'
+       WHERE id = $2
+         AND status = 'pending'`,
+      [checkout.authorization_url, prepared.payment.id],
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: "Paystack checkout initialized.",
+      data: {
+        payment_id: prepared.payment.id,
+        reference: prepared.payment.provider_reference,
+        authorization_url: checkout.authorization_url,
+        access_code: checkout.access_code,
+        amount: prepared.amountDue,
+        amount_minor: prepared.amountMinor,
+        currency: "GHS",
+        resumed: false,
+      },
+    });
+  } catch (error) {
+    if (createdPaymentId) {
+      try {
+        await query(
+          `UPDATE ad_payments
+           SET status = 'rejected',
+               provider_status = 'initialization_failed',
+               verified_at = NOW(),
+               rejection_reason =
+                 'Paystack checkout could not be initialized.'
+           WHERE id = $1
+             AND status = 'pending'`,
+          [createdPaymentId],
+        );
+      } catch (recordError) {
+        logger.error(
+          "Failed to record Business Hub Paystack initialization failure:",
+          recordError,
+        );
+      }
+    }
+
+    const status = Number.isInteger(error.statusCode)
+      ? error.statusCode
+      : error?.code === "PAYSTACK_NOT_CONFIGURED"
+        ? 503
+        : 502;
+
+    if (status >= 500) {
+      logger.error("Business Hub Paystack initialization failed:", error);
+    }
+
+    return res.status(status).json({
       success: false,
       message:
-        'Payment reference and payment phone are required',
+        status === 503
+          ? "Paystack payments are temporarily unavailable."
+          : status === 502
+            ? "Paystack checkout could not be initialized."
+            : error.message,
     });
   }
+});
 
-  if (
-    reference.length > 100 ||
-    paymentPhone.length > 20
-  ) {
+mpRouter.get("/:ad_id/payment/paystack/verify/:reference", async (req, res) => {
+  const reference = String(req.params.reference || "").trim();
+
+  if (!reference) {
     return res.status(422).json({
       success: false,
-      message: 'Payment details are invalid',
+      message: "Paystack reference is required",
     });
   }
 
   try {
-    const payment = await withTransaction(
-      async (client) => {
-        const adResult = await client.query(
-          `SELECT
+    const owned = await query(
+      `SELECT id
+         FROM ad_payments
+         WHERE advertisement_id = $1
+           AND posted_by = $2
+           AND payment_provider = 'paystack'
+           AND provider_reference = $3
+         LIMIT 1`,
+      [req.params.ad_id, req.user.id, reference],
+    );
+
+    if (!owned.rows.length) {
+      return res.status(404).json({
+        success: false,
+        message: "Paystack Business Hub payment not found.",
+      });
+    }
+
+    const provider = await verifyTransaction(reference);
+    const providerStatus = String(provider?.status || "")
+      .trim()
+      .toLowerCase();
+
+    if (providerStatus !== "success") {
+      const terminal = new Set(["abandoned", "failed", "reversed"]).has(
+        providerStatus,
+      );
+
+      await query(
+        `UPDATE ad_payments
+           SET provider_transaction_id = $1,
+               provider_status = $2,
+               provider_channel = $3,
+               provider_currency = $4,
+               status = CASE
+                 WHEN $5
+                   AND status = 'pending'
+                   THEN 'rejected'::payment_status
+                 ELSE status
+               END,
+               verified_at = CASE
+                 WHEN $5
+                   AND status = 'pending'
+                   THEN NOW()
+                 ELSE verified_at
+               END,
+               rejection_reason = CASE
+                 WHEN $5
+                   AND status = 'pending'
+                   THEN $6
+                 ELSE rejection_reason
+               END
+           WHERE id = $7`,
+        [
+          provider?.id === undefined || provider?.id === null
+            ? null
+            : String(provider.id),
+          providerStatus || null,
+          provider?.channel ? String(provider.channel) : null,
+          provider?.currency ? String(provider.currency).toUpperCase() : null,
+          terminal,
+          terminal ? `Paystack transaction ${providerStatus}.` : null,
+          owned.rows[0].id,
+        ],
+      );
+
+      return res.json({
+        success: true,
+        message: "Payment has not been confirmed as successful yet.",
+        data: {
+          reference,
+          provider_status: providerStatus,
+          activated: false,
+        },
+      });
+    }
+
+    const fulfillment = await fulfillBusinessHubPaystackTransaction(provider, {
+      source: "verify_api",
+      actorUserId: req.user.id,
+    });
+
+    const activated = ["activated", "already_fulfilled"].includes(
+      fulfillment.outcome,
+    );
+
+    return res.json({
+      success: true,
+      message: activated
+        ? "Payment verified and Business Hub listing published."
+        : "Payment verification completed.",
+      data: {
+        reference,
+        provider_status: providerStatus,
+        outcome: fulfillment.outcome,
+        activated,
+      },
+    });
+  } catch (error) {
+    logger.error("Verify Business Hub Paystack payment error:", error);
+
+    return res
+      .status(error?.code === "PAYSTACK_NOT_CONFIGURED" ? 503 : 502)
+      .json({
+        success: false,
+        message:
+          "Paystack Business Hub payment verification is temporarily unavailable.",
+      });
+  }
+});
+
+// Manual MoMo fallback. The server-owned amount_due remains authoritative.
+// Product wording uses "Transaction ID"; momo_reference is retained only as
+// a backward-compatible database/API alias for older clients.
+mpRouter.post("/:ad_id/payment", async (req, res) => {
+  const transactionId = String(
+    req.body.transaction_id || req.body.momo_reference || "",
+  ).trim();
+
+  const paymentPhone = String(req.body.payment_phone || "").trim();
+
+  if (!transactionId || !paymentPhone) {
+    return res.status(422).json({
+      success: false,
+      message: "Transaction ID and payment phone are required",
+    });
+  }
+
+  if (transactionId.length > 100 || paymentPhone.length > 20) {
+    return res.status(422).json({
+      success: false,
+      message: "Payment details are invalid",
+    });
+  }
+
+  try {
+    const payment = await withTransaction(async (client) => {
+      const adResult = await client.query(
+        `SELECT
              id,
              posted_by,
              company_id,
@@ -1781,131 +2202,111 @@ mpRouter.post('/:ad_id/payment', async (req, res) => {
            WHERE id = $1
              AND posted_by = $2
            FOR UPDATE`,
-          [
-            req.params.ad_id,
-            req.user.id,
-          ]
+        [req.params.ad_id, req.user.id],
+      );
+
+      if (!adResult.rows.length) {
+        const error = new Error("Ad not found");
+        error.statusCode = 404;
+        throw error;
+      }
+
+      const ad = adResult.rows[0];
+
+      if (ad.status !== "pending_payment") {
+        const error = new Error("This listing is not awaiting payment");
+        error.statusCode = 409;
+        throw error;
+      }
+
+      const amountDue = Number(ad.amount_due);
+
+      if (!Number.isFinite(amountDue) || amountDue < 0) {
+        const error = new Error(
+          "Payment amount has not been set by the administrator",
         );
+        error.statusCode = 409;
+        throw error;
+      }
 
-        if (!adResult.rows.length) {
-          const error =
-            new Error('Ad not found');
-
-          error.statusCode = 404;
-          throw error;
-        }
-
-        const ad = adResult.rows[0];
-
-        if (ad.status !== 'pending_payment') {
-          const error = new Error(
-            'This listing is not awaiting payment'
-          );
-
-          error.statusCode = 409;
-          throw error;
-        }
-
-        const amountDue =
-          Number(ad.amount_due);
-
-        if (
-          !Number.isFinite(amountDue) ||
-          amountDue < 0
-        ) {
-          const error = new Error(
-            'Payment amount has not been set by the administrator'
-          );
-
-          error.statusCode = 409;
-          throw error;
-        }
-
-        const existing = await client.query(
-          `SELECT id
+      const existing = await client.query(
+        `SELECT
+             id,
+             payment_provider
            FROM ad_payments
            WHERE advertisement_id = $1
              AND status = 'pending'
            LIMIT 1
            FOR UPDATE`,
-          [ad.id]
+        [ad.id],
+      );
+
+      if (existing.rows.length) {
+        const error = new Error(
+          existing.rows[0].payment_provider === "paystack"
+            ? "A Paystack payment is already in progress"
+            : "A manual payment transaction ID is already awaiting verification",
         );
+        error.statusCode = 409;
+        throw error;
+      }
 
-        if (existing.rows.length) {
-          const error = new Error(
-            'A payment reference is already awaiting verification'
-          );
-
-          error.statusCode = 409;
-          throw error;
-        }
-
-        const inserted = await client.query(
-          `INSERT INTO ad_payments (
+      const inserted = await client.query(
+        `INSERT INTO ad_payments (
              advertisement_id,
              posted_by,
              amount,
              momo_reference,
-             payment_phone
+             payment_phone,
+             payment_provider
            )
-           VALUES ($1, $2, $3, $4, $5)
+           VALUES (
+             $1,
+             $2,
+             $3,
+             $4,
+             $5,
+             'manual_momo'
+           )
            RETURNING *`,
-          [
-            ad.id,
-            req.user.id,
-            amountDue.toFixed(2),
-            reference,
-            paymentPhone,
-          ]
-        );
+        [ad.id, req.user.id, amountDue.toFixed(2), transactionId, paymentPhone],
+      );
 
-        await auditLog({
-          userId: req.user.id,
-          companyId:
-            req.user.company_id || null,
-          action:
-            'BUSINESS_HUB_PAYMENT_REFERENCE_SUBMITTED',
-          entityType: 'advertisement',
-          entityId: ad.id,
-          newValues: {
-            payment_status: 'pending',
-            amount: amountDue.toFixed(2),
-          },
-          userAgent:
-            req.headers['user-agent'],
-          requestId: req.requestId,
-          dbClient: client,
-          strict: true,
-        });
+      await auditLog({
+        userId: req.user.id,
+        companyId: req.user.company_id || null,
+        action: "BUSINESS_HUB_MANUAL_PAYMENT_TRANSACTION_SUBMITTED",
+        entityType: "advertisement",
+        entityId: ad.id,
+        newValues: {
+          payment_status: "pending",
+          payment_provider: "manual_momo",
+          amount: amountDue.toFixed(2),
+        },
+        userAgent: req.headers["user-agent"],
+        requestId: req.requestId,
+        dbClient: client,
+        strict: true,
+      });
 
-        return inserted.rows[0];
-      }
-    );
+      return inserted.rows[0];
+    });
 
     return res.status(201).json({
       success: true,
       data: payment,
-      message:
-        'Payment reference submitted for verification',
+      message: "Transaction ID submitted for manual verification",
     });
   } catch (error) {
-    const status =
-      Number.isInteger(error.statusCode)
-        ? error.statusCode
-        : 500;
+    const status = Number.isInteger(error.statusCode) ? error.statusCode : 500;
 
     if (status === 500) {
-      logger.error(
-        'Business Hub payment submission failed'
-      );
+      logger.error("Business Hub manual payment submission failed", error);
     }
 
     return res.status(status).json({
       success: false,
-      message:
-        status === 500
-          ? 'Failed to submit payment'
-          : error.message,
+      message: status === 500 ? "Failed to submit payment" : error.message,
     });
   }
 });

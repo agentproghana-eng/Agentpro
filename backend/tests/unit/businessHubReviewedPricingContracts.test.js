@@ -111,7 +111,7 @@ describe("Business Hub reviewed pricing contracts", () => {
     );
 
     expect(paymentSection).toContain(
-      "ad.status !== 'pending_payment'"
+      'ad.status !== "pending_payment"'
     );
 
     expect(paymentSection).toContain(
@@ -129,7 +129,7 @@ describe("Business Hub reviewed pricing contracts", () => {
 
   test("duplicate pending payment references fail closed", () => {
     expect(marketplace).toContain(
-      "A payment reference is already awaiting verification"
+      "A manual payment transaction ID is already awaiting verification"
     );
 
     expect(marketplace).toContain(
@@ -139,11 +139,15 @@ describe("Business Hub reviewed pricing contracts", () => {
 
   test("publish requires a pending payment matching amount due", () => {
     expect(admin).toContain(
-      "User has not submitted a payment reference"
+      "User has not submitted a manual payment transaction ID"
     );
 
     expect(admin).toContain(
       "Submitted payment amount does not match the approved amount due"
+    );
+
+    expect(admin).toContain(
+      "payment_provider = 'manual_momo'"
     );
 
     expect(admin).toContain(

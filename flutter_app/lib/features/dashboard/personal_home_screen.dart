@@ -444,9 +444,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
       final definitions = _quickActionCatalog?.definitionsFor(_provider) ??
           const <QuickActionCatalogDefinition>[];
 
-      return definitions
-          .take(9)
-          .toList()
+      final defaults = definitions
           .asMap()
           .entries
           .map(
@@ -456,6 +454,60 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
             ),
           )
           .toList();
+
+      if (_provider == 'telecel') {
+        final dataDefinitionIndex = definitions.indexWhere(
+          (definition) => definition.type == 'buy_data',
+        );
+
+        if (dataDefinitionIndex >= 0) {
+          final dataDefinition = definitions[dataDefinitionIndex];
+
+          QuickActionCatalogVariant? m4mVariant;
+
+          for (final variant in dataDefinition.variants) {
+            if (variant.bundleCategory?.trim().toLowerCase() ==
+                    'm4m_live' &&
+                variant.recipientMode?.trim().toLowerCase() == 'self') {
+              m4mVariant = variant;
+              break;
+            }
+          }
+
+          if (m4mVariant != null) {
+            final genericDataIndex = defaults.indexWhere(
+              (item) => item.actionKey == 'buy_data',
+            );
+
+            defaults.insert(
+              genericDataIndex >= 0
+                  ? genericDataIndex + 1
+                  : defaults.length,
+              QuickActionPreference(
+                actionKey: 'buy_data',
+                customName: 'M4M',
+                bundleCategory: m4mVariant.bundleCategory,
+                recipientMode: m4mVariant.recipientMode,
+                position: 0,
+              ),
+            );
+          }
+        }
+
+        final balanceIndex = defaults.indexWhere(
+          (item) => item.actionKey == 'check_airtime_balance',
+        );
+
+        if (balanceIndex >= 9) {
+          final balance = defaults.removeAt(balanceIndex);
+          final targetIndex = defaults.length < 4 ? defaults.length : 3;
+          defaults.insert(targetIndex, balance);
+        }
+      }
+
+      return normalizePersonalQuickActionPreferences(
+        preferences: defaults,
+      );
     }
 
     return saved.where((item) => item.isVisible).take(9).toList();
@@ -756,7 +808,9 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
     } catch (_) {}
   }
 
-  void _startTransaction(String type) {
+  void _startTransaction(
+    QuickActionPreference preference,
+  ) {
     final sim = _selectedSim;
 
     if (sim == null) {
@@ -778,11 +832,15 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
     }
 
     final query = <String, String>{
-      'type': type,
+      'type': preference.actionKey,
       'provider': _provider,
       if (sim != null) 'sim_slot': sim.slot.toString(),
       if (sim != null && sim.iccid.isNotEmpty) 'sim_iccid': sim.iccid,
       if (sim != null) 'sim_subscription_id': sim.subscriptionId.toString(),
+      if ((preference.bundleCategory ?? '').trim().isNotEmpty)
+        'bundle_category': preference.bundleCategory!.trim(),
+      if ((preference.recipientMode ?? '').trim().isNotEmpty)
+        'recipient_mode': preference.recipientMode!.trim(),
     };
     final uri = Uri(path: '/personal-transactions/new', queryParameters: query);
     context.push(uri.toString());
@@ -1160,7 +1218,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
                                         ),
                                         label: label,
                                         onTap: () => _startTransaction(
-                                          preference.actionKey,
+                                          preference,
                                         ),
                                       );
                                     },

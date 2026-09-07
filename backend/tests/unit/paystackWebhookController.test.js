@@ -2,6 +2,8 @@ const mockVerifySignature = jest.fn();
 
 const mockFulfill = jest.fn();
 
+const mockBusinessHubFulfill = jest.fn();
+
 const mockLoggerInfo = jest.fn();
 
 const mockLoggerError = jest.fn();
@@ -12,6 +14,11 @@ jest.mock("../../src/services/paystackService", () => ({
 
 jest.mock("../../src/services/paystackSubscriptionService", () => ({
   fulfillPaystackTransaction: (...args) => mockFulfill(...args),
+}));
+
+jest.mock("../../src/services/businessHubPaystackPaymentService", () => ({
+  fulfillBusinessHubPaystackTransaction: (...args) =>
+    mockBusinessHubFulfill(...args),
 }));
 
 jest.mock("../../src/utils/logger", () => ({
@@ -53,6 +60,7 @@ describe("Paystack webhook controller", () => {
     expect(res.status).toHaveBeenCalledWith(401);
 
     expect(mockFulfill).not.toHaveBeenCalled();
+    expect(mockBusinessHubFulfill).not.toHaveBeenCalled();
 
     expect(mockLoggerInfo).not.toHaveBeenCalled();
   });
@@ -75,6 +83,7 @@ describe("Paystack webhook controller", () => {
     expect(res.status).toHaveBeenCalledWith(200);
 
     expect(mockFulfill).not.toHaveBeenCalled();
+    expect(mockBusinessHubFulfill).not.toHaveBeenCalled();
   });
 
   test("fulfills a signed charge.success event", async () => {
@@ -114,6 +123,45 @@ describe("Paystack webhook controller", () => {
       actorUserId: null,
     });
 
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  test("routes Business Hub charge.success to Business Hub fulfillment", async () => {
+    mockVerifySignature.mockReturnValue(true);
+
+    mockBusinessHubFulfill.mockResolvedValue({
+      outcome: "activated",
+    });
+
+    const data = {
+      reference: "APG-BHUB-123",
+      status: "success",
+      amount: 1500,
+      currency: "GHS",
+      metadata: {
+        payment_kind: "business_hub",
+      },
+    };
+
+    const req = {
+      rawBody: Buffer.from("{}"),
+      body: {
+        event: "charge.success",
+        data,
+      },
+      get: jest.fn().mockReturnValue("signature"),
+    };
+
+    const res = makeRes();
+
+    await controller.handleWebhook(req, res);
+
+    expect(mockBusinessHubFulfill).toHaveBeenCalledWith(data, {
+      source: "webhook",
+      actorUserId: null,
+    });
+
+    expect(mockFulfill).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(200);
   });
 });

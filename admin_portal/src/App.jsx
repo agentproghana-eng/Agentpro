@@ -1748,7 +1748,7 @@ function SubscriptionsPage() {
             </h3>
 
             <p className="mt-1 text-sm text-gray-500">
-              Reference:{' '}
+              Transaction ID:{' '}
               <span className="font-mono">
                 {payment.momo_reference || '—'}
               </span>
@@ -2102,7 +2102,7 @@ function SubscriptionsPage() {
                   'personal'
                     ? 'Personal'
                     : 'Business'
-                } subscription using the submitted manual MoMo reference.`
+                } subscription using the submitted manual MoMo Transaction ID.`
               : 'The manual payment will be rejected and the subscriber will be informed.'
             : ''
         }
@@ -2957,7 +2957,7 @@ function MarketplacePage() {
                   >
                     <div>
                       <span className="text-gray-500">
-                        Payment Ref:
+                        Transaction ID:
                       </span>
                       {' '}
                       <span className="font-mono font-semibold">

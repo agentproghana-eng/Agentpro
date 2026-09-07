@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_network_image.dart';
@@ -155,6 +156,10 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
               '0',
             ) ??
             0,
+        initialPaystackReference:
+            _ad?['payment_provider_reference']?.toString(),
+        initialAuthorizationUrl:
+            _ad?['payment_authorization_url']?.toString(),
         onSubmitted: _load,
       ),
     );
@@ -217,6 +222,12 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
 
     final paymentReferenceSubmitted =
         ad['payment_reference_submitted'] == true;
+
+    final paymentProvider =
+        ad['payment_provider']?.toString().trim();
+
+    final paystackPending =
+        paymentReferenceSubmitted && paymentProvider == 'paystack';
 
     final images = normalizedMarketplaceImageUrls(
       ad['image_urls'],
@@ -549,16 +560,19 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
               rejectionReason: ad['rejection_reason']?.toString(),
             ),
             if (status == 'pending_payment' &&
-                !paymentReferenceSubmitted) ...[
+                (!paymentReferenceSubmitted || paystackPending)) ...[
               const SizedBox(height: 20),
               AppButton(
-                label: 'Pay GH₵ ${fee.toStringAsFixed(2)} & Submit Reference',
+                label: paystackPending
+                    ? 'Resume Paystack Payment'
+                    : 'Pay GH₵ ${fee.toStringAsFixed(2)} with Paystack',
                 icon: Icons.payment,
                 onPressed: _showPaymentSheet,
               ),
             ],
             if (status == 'pending_payment' &&
-                paymentReferenceSubmitted) ...[
+                paymentReferenceSubmitted &&
+                !paystackPending) ...[
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(14),
@@ -583,7 +597,7 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
                     SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Payment reference submitted. AgentPro is verifying your payment; no further payment submission is required.',
+                        'Manual payment Transaction ID submitted. AgentPro is verifying it; no further payment submission is required.',
                       ),
                     ),
                   ],
@@ -1251,7 +1265,7 @@ class _StatusExplainer extends StatelessWidget {
           AppTheme.secondaryColor,
           'Approved — Payment Required',
           'Your ad was approved! Pay the GH₵ ${fee.toStringAsFixed(2)} publishing '
-              'fee via MTN MoMo below, then submit your payment reference to go live.',
+              'fee securely with Paystack below. Manual MoMo remains available as a fallback.',
         ),
       'active' => (
           Icons.check_circle,
@@ -1305,97 +1319,430 @@ class _StatusExplainer extends StatelessWidget {
   }
 }
 
-/// Bottom sheet for submitting the MoMo payment reference for an
-/// approved ad — mirrors the same pattern as subscription_screen.dart's
-/// payment submission flow for consistency.
+/// Business Hub payment sheet.
+///
+/// Paystack is the primary payment route. Manual MoMo remains available only
+/// as a fallback and uses the provider's Transaction ID terminology.
 class _AdPaymentSheet extends StatefulWidget {
   final String adId;
   final double fee;
+  final String? initialPaystackReference;
+  final String? initialAuthorizationUrl;
   final VoidCallback onSubmitted;
 
-  const _AdPaymentSheet(
-      {required this.adId, required this.fee, required this.onSubmitted});
+  const _AdPaymentSheet({
+    required this.adId,
+    required this.fee,
+    this.initialPaystackReference,
+    this.initialAuthorizationUrl,
+    required this.onSubmitted,
+  });
 
   @override
   State<_AdPaymentSheet> createState() => _AdPaymentSheetState();
 }
 
 class _AdPaymentSheetState extends State<_AdPaymentSheet> {
-  final _refCtrl = TextEditingController();
+  final _transactionIdCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
-  bool _submitting = false;
 
-  Future<void> _submit() async {
-    if (_refCtrl.text.trim().isEmpty || _phoneCtrl.text.trim().isEmpty) {
+  bool _paystackBusy = false;
+  bool _manualSubmitting = false;
+  bool _showManual = false;
+
+  String? _paystackReference;
+  Uri? _authorizationUrl;
+
+  @override
+  void initState() {
+    super.initState();
+
+    final reference = widget.initialPaystackReference?.trim();
+
+    if (reference != null && reference.isNotEmpty) {
+      _paystackReference = reference;
+    }
+
+    final authorization = widget.initialAuthorizationUrl?.trim();
+
+    if (authorization != null && authorization.isNotEmpty) {
+      final uri = Uri.tryParse(authorization);
+
+      if (uri != null &&
+          uri.hasScheme &&
+          const {'https', 'http'}.contains(uri.scheme)) {
+        _authorizationUrl = uri;
+      }
+    }
+  }
+
+  String _apiError(
+    Object error, {
+    required String fallback,
+  }) {
+    if (error is DioException) {
+      final raw = error.response?.data;
+
+      if (raw is Map) {
+        final message = raw['message']?.toString().trim();
+
+        if (message != null && message.isNotEmpty) {
+          return message;
+        }
+      }
+    }
+
+    return fallback;
+  }
+
+  Future<void> _startPaystack() async {
+    if (_paystackBusy) return;
+
+    setState(() => _paystackBusy = true);
+
+    try {
+      var reference = _paystackReference;
+      var authorizationUrl = _authorizationUrl;
+
+      if (reference == null ||
+          reference.isEmpty ||
+          authorizationUrl == null) {
+        final response = await ApiClient.instance.post(
+          '/marketplace/${widget.adId}/payment/paystack/initialize',
+        );
+
+        final raw = response.data['data'];
+
+        if (raw is! Map) {
+          throw const FormatException(
+            'Invalid Paystack checkout response.',
+          );
+        }
+
+        final data = Map<String, dynamic>.from(raw);
+
+        reference = data['reference']?.toString().trim();
+
+        final rawUrl = data['authorization_url']?.toString().trim();
+        authorizationUrl = rawUrl == null ? null : Uri.tryParse(rawUrl);
+
+        if (reference == null ||
+            reference.isEmpty ||
+            authorizationUrl == null ||
+            !authorizationUrl.hasScheme ||
+            !const {'https', 'http'}.contains(authorizationUrl.scheme)) {
+          throw const FormatException(
+            'The Paystack checkout could not be initialized.',
+          );
+        }
+
+        if (mounted) {
+          setState(() {
+            _paystackReference = reference;
+            _authorizationUrl = authorizationUrl;
+          });
+        }
+      }
+
+      final launched = await launchUrl(
+        authorizationUrl,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!launched) {
+        throw const FormatException(
+          'Could not open Paystack checkout.',
+        );
+      }
+
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please fill in both fields')));
+        const SnackBar(
+          content: Text(
+            'Complete the Paystack checkout, return to AgentPro, then tap Verify Payment.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _apiError(
+              error,
+              fallback: 'Could not start Paystack payment.',
+            ),
+          ),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _paystackBusy = false);
+      }
+    }
+  }
+
+  Future<void> _verifyPaystack() async {
+    final reference = _paystackReference?.trim();
+
+    if (reference == null || reference.isEmpty || _paystackBusy) {
       return;
     }
 
-    setState(() => _submitting = true);
+    setState(() => _paystackBusy = true);
+
     try {
-      await ApiClient.instance
-          .post('/marketplace/${widget.adId}/payment', data: {
-        'momo_reference': _refCtrl.text.trim(),
-        'payment_phone': _phoneCtrl.text.trim(),
-      });
-      if (mounted) {
+      final encoded = Uri.encodeComponent(reference);
+
+      final response = await ApiClient.instance.get(
+        '/marketplace/${widget.adId}/payment/paystack/verify/$encoded',
+      );
+
+      final raw = response.data['data'];
+
+      final data = raw is Map
+          ? Map<String, dynamic>.from(raw)
+          : <String, dynamic>{};
+
+      final activated = data['activated'] == true;
+
+      if (!mounted) return;
+
+      if (activated) {
+        final messenger = ScaffoldMessenger.of(context);
+
         Navigator.pop(context);
         widget.onSubmitted();
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content:
-                Text('Payment reference submitted. Awaiting verification.')));
+
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Paystack payment verified. Your Business Hub listing is live.',
+            ),
+          ),
+        );
+
+        return;
       }
-    } on DioException catch (e) {
-      final msg = e.response?.data?['message'] ?? 'Failed to submit payment';
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(msg), backgroundColor: AppTheme.errorColor));
-      }
+
+      final providerStatus = data['provider_status']?.toString().trim();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            providerStatus == null || providerStatus.isEmpty
+                ? 'Payment is not confirmed yet.'
+                : 'Paystack status: $providerStatus',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _apiError(
+              error,
+              fallback: 'Could not verify Paystack payment.',
+            ),
+          ),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
     } finally {
-      if (mounted) setState(() => _submitting = false);
+      if (mounted) {
+        setState(() => _paystackBusy = false);
+      }
+    }
+  }
+
+  Future<void> _submitManual() async {
+    final transactionId = _transactionIdCtrl.text.trim();
+    final paymentPhone = _phoneCtrl.text.trim();
+
+    if (transactionId.isEmpty || paymentPhone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Enter the Transaction ID and phone used to pay.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _manualSubmitting = true);
+
+    try {
+      await ApiClient.instance.post(
+        '/marketplace/${widget.adId}/payment',
+        data: {
+          'transaction_id': transactionId,
+          'payment_phone': paymentPhone,
+        },
+      );
+
+      if (!mounted) return;
+
+      final messenger = ScaffoldMessenger.of(context);
+
+      Navigator.pop(context);
+      widget.onSubmitted();
+
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Transaction ID submitted. Awaiting manual verification.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _apiError(
+              error,
+              fallback: 'Failed to submit manual payment.',
+            ),
+          ),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _manualSubmitting = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    final hasPaystackSession =
+        _paystackReference != null && _authorizationUrl != null;
+
+    return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
-          16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+        16,
+        16,
+        16,
+        MediaQuery.of(context).viewInsets.bottom + 16,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('Submit Payment Reference',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text(
+            'Business Hub Payment',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const SizedBox(height: 4),
           Text(
-              'Pay GH₵ ${widget.fee.toStringAsFixed(2)} via MTN MoMo, then enter your reference below.',
-              style: TextStyle(color: context.appSecondaryText, fontSize: 13)),
+            'GH₵ ${widget.fee.toStringAsFixed(2)} publishing fee',
+            style: TextStyle(
+              color: context.appSecondaryText,
+              fontSize: 13,
+            ),
+          ),
           const SizedBox(height: 16),
-          TextField(
-            controller: _refCtrl,
-            decoration: const InputDecoration(
-              labelText: 'MTN MoMo Reference',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.receipt),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor.withValues(alpha: 0.07),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: AppTheme.primaryColor.withValues(alpha: 0.24),
+              ),
+            ),
+            child: const Text(
+              'Paystack is the recommended payment method. AgentPro publishes your listing only after Paystack confirms the payment.',
             ),
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _phoneCtrl,
-            keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(
-              labelText: 'Phone used to pay',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.phone),
-            ),
-          ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           AppButton(
-              label: 'Submit Reference',
-              onPressed: _submit,
-              isLoading: _submitting),
+            label: hasPaystackSession
+                ? 'Resume Paystack Checkout'
+                : 'Pay with Paystack',
+            icon: Icons.open_in_new,
+            onPressed: _startPaystack,
+            isLoading: _paystackBusy,
+          ),
+          if (_paystackReference != null) ...[
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: _paystackBusy ? null : _verifyPaystack,
+              icon: const Icon(Icons.verified_outlined),
+              label: const Text('Verify Payment'),
+            ),
+          ],
+          if (!hasPaystackSession) ...[
+            const SizedBox(height: 12),
+            TextButton.icon(
+              onPressed: _paystackBusy || _manualSubmitting
+                  ? null
+                  : () {
+                      setState(() {
+                        _showManual = !_showManual;
+                      });
+                    },
+              icon: const Icon(Icons.receipt_long_outlined),
+              label: Text(
+                _showManual
+                    ? 'Hide Manual Payment'
+                    : 'Pay Manually Instead',
+              ),
+            ),
+          ],
+          if (_showManual && !hasPaystackSession) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'Manual MoMo — Requires Verification',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'After paying manually, enter the network Transaction ID and the phone used to pay.',
+              style: TextStyle(
+                color: context.appSecondaryText,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _transactionIdCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Transaction ID',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.receipt),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _phoneCtrl,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Phone used to pay',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.phone),
+              ),
+            ),
+            const SizedBox(height: 16),
+            AppButton(
+              label: 'Submit Transaction ID',
+              onPressed: _submitManual,
+              isLoading: _manualSubmitting,
+            ),
+          ],
         ],
       ),
     );
@@ -1403,7 +1750,7 @@ class _AdPaymentSheetState extends State<_AdPaymentSheet> {
 
   @override
   void dispose() {
-    _refCtrl.dispose();
+    _transactionIdCtrl.dispose();
     _phoneCtrl.dispose();
     super.dispose();
   }

@@ -1210,6 +1210,7 @@ router.patch('/ads/:ad_id/moderate', async (req, res) => {
                FROM ad_payments
                WHERE advertisement_id = $1
                  AND status = 'pending'
+                 AND payment_provider = 'manual_momo'
                ORDER BY submitted_at DESC
                LIMIT 1
                FOR UPDATE`,
@@ -1219,7 +1220,7 @@ router.patch('/ads/:ad_id/moderate', async (req, res) => {
           if (!paymentResult.rows.length) {
             throw adModerationError(
               409,
-              'User has not submitted a payment reference'
+              'User has not submitted a manual payment transaction ID'
             );
           }
 
