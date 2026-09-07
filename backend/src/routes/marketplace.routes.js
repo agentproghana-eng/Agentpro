@@ -1871,7 +1871,6 @@ mpRouter.post('/:ad_id/payment', async (req, res) => {
             payment_status: 'pending',
             amount: amountDue.toFixed(2),
           },
-          ipAddress: req.ip,
           userAgent:
             req.headers['user-agent'],
           requestId: req.requestId,
