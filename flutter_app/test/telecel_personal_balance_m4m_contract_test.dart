@@ -206,7 +206,7 @@ void main() {
 
     expect(
       preferences,
-      contains("customName: 'M4M'"),
+      contains("? 'M4M'"),
     );
 
     expect(

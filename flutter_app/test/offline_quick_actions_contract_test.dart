@@ -140,7 +140,7 @@ void main() {
         final simLoad = _slice(
           source,
           'Future<void> _loadSimMap() async',
-          'void _startTransaction(String type)',
+          'void _startTransaction(',
         );
 
         expect(
