@@ -2225,82 +2225,905 @@ function ConfigPage() {
 // ── Marketplace Moderation Page ───────────────────────────────
 
 function MarketplacePage() {
-  const [ads, setAds] = useState([]);
-  const load = () => API.get('/admin/ads/pending').then(r => {
-    // Ads awaiting payment verification are the ones most likely to
-    // get silently forgotten - a "publish" step someone still needs
-    // to take, sitting on top of an already-approved ad. Surface them
-    // first rather than mixed in chronologically with newer submissions.
-    const sorted = (r.data.data || []).sort((a, b) => {
-      if (a.status === b.status) return 0;
-      return a.status === 'pending_payment' ? -1 : 1;
-    });
-    setAds(sorted);
-  });
-  useEffect(() => { load(); }, []);
+  const [ads, setAds] =
+    useState([]);
 
-  const moderate = async (adId, action) => {
-    try {
-      await API.patch(`/admin/ads/${adId}/moderate`, { action });
-      toast.success(action === 'publish' ? 'Ad published! ✅' : action === 'approve_review' ? 'Ad approved — pending payment' : 'Ad rejected');
-      load();
-    } catch (_) { toast.error('Action failed'); }
+  const [
+    reviewDrafts,
+    setReviewDrafts,
+  ] = useState({});
+
+  const [
+    updatingId,
+    setUpdatingId,
+  ] = useState(null);
+
+  const load = async () => {
+    const response =
+      await API.get(
+        '/admin/ads/pending',
+      );
+
+    const rank = ad => {
+      if (
+        ad.status ===
+          'pending_payment' &&
+        ad.momo_reference
+      ) {
+        return 0;
+      }
+
+      if (
+        ad.status ===
+        'pending_review'
+      ) {
+        return 1;
+      }
+
+      return 2;
+    };
+
+    const sorted = [
+      ...(response.data.data || []),
+    ].sort((left, right) => {
+      const rankDifference =
+        rank(left) - rank(right);
+
+      if (rankDifference !== 0) {
+        return rankDifference;
+      }
+
+      return (
+        new Date(
+          left.created_at,
+        ).getTime() -
+        new Date(
+          right.created_at,
+        ).getTime()
+      );
+    });
+
+    setAds(sorted);
   };
 
-  const pendingReviewCount = ads.filter(a => a.status === 'pending_review').length;
-  const pendingPaymentCount = ads.filter(a => a.status === 'pending_payment').length;
+  useEffect(() => {
+    load();
+  }, []);
+
+  const normalizedMoney = value => {
+    const parsed = Number(value);
+
+    return (
+      Number.isFinite(parsed) &&
+      parsed >= 0
+    )
+      ? parsed
+      : 0;
+  };
+
+  const initialDraft = ad => ({
+    assessedValue:
+      normalizedMoney(
+        ad.admin_assessed_value ??
+          ad.price,
+      ).toFixed(2),
+
+    amountDue:
+      normalizedMoney(
+        ad.amount_due ??
+          ad.publishing_fee,
+      ).toFixed(2),
+
+    reason:
+      ad.pricing_adjustment_reason ||
+      '',
+  });
+
+  const draftFor = ad =>
+    reviewDrafts[ad.id] ||
+    initialDraft(ad);
+
+  const updateDraft = (
+    ad,
+    changes,
+  ) => {
+    setReviewDrafts(previous => ({
+      ...previous,
+      [ad.id]: {
+        ...(
+          previous[ad.id] ||
+          initialDraft(ad)
+        ),
+        ...changes,
+      },
+    }));
+  };
+
+  const updateAssessedValue = (
+    ad,
+    value,
+  ) => {
+    const parsed =
+      Number(value);
+
+    const feePercent =
+      Number(
+        ad.fee_percent ??
+        0.01,
+      );
+
+    const changes = {
+      assessedValue: value,
+    };
+
+    if (
+      value.trim() !== '' &&
+      Number.isFinite(parsed) &&
+      parsed >= 0 &&
+      Number.isFinite(
+        feePercent,
+      ) &&
+      feePercent >= 0
+    ) {
+      changes.amountDue =
+        (
+          Math.round(
+            parsed *
+            feePercent *
+            100,
+          ) / 100
+        ).toFixed(2);
+    }
+
+    updateDraft(
+      ad,
+      changes,
+    );
+  };
+
+  const moderate = async (
+    ad,
+    action,
+    extra = {},
+  ) => {
+    setUpdatingId(ad.id);
+
+    try {
+      await API.patch(
+        `/admin/ads/${ad.id}/moderate`,
+        {
+          action,
+          ...extra,
+        },
+      );
+
+      toast.success(
+        action === 'publish'
+          ? 'Payment verified and listing published ✅'
+          : action === 'approve_review'
+            ? 'Approved — payment request sent'
+            : 'Listing rejected',
+      );
+
+      setReviewDrafts(
+        previous => {
+          const next = {
+            ...previous,
+          };
+
+          delete next[ad.id];
+
+          return next;
+        },
+      );
+
+      await load();
+    } catch (error) {
+      toast.error(
+        error.response?.data
+          ?.message ||
+          'Action failed',
+      );
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const approveForPayment =
+    async ad => {
+      const draft =
+        draftFor(ad);
+
+      const assessedValue =
+        Number(
+          draft.assessedValue,
+        );
+
+      const amountDue =
+        Number(
+          draft.amountDue,
+        );
+
+      if (
+        !Number.isFinite(
+          assessedValue,
+        ) ||
+        assessedValue < 0 ||
+        !Number.isFinite(
+          amountDue,
+        ) ||
+        amountDue < 0
+      ) {
+        toast.error(
+          'Enter valid assessed value and amount due.',
+        );
+
+        return;
+      }
+
+      const declared =
+        normalizedMoney(
+          ad.price,
+        );
+
+      const originalFee =
+        normalizedMoney(
+          ad.publishing_fee,
+        );
+
+      const pricingChanged =
+        Math.round(
+          assessedValue * 100,
+        ) !==
+          Math.round(
+            declared * 100,
+          ) ||
+        Math.round(
+          amountDue * 100,
+        ) !==
+          Math.round(
+            originalFee * 100,
+          );
+
+      const reason =
+        draft.reason.trim();
+
+      if (
+        pricingChanged &&
+        !reason
+      ) {
+        toast.error(
+          'Add a reason when the assessed value or amount due differs from the submitted pricing.',
+        );
+
+        return;
+      }
+
+      await moderate(
+        ad,
+        'approve_review',
+        {
+          admin_assessed_value:
+            assessedValue.toFixed(
+              2,
+            ),
+          amount_due:
+            amountDue.toFixed(2),
+          pricing_adjustment_reason:
+            reason || null,
+        },
+      );
+    };
+
+  const pendingReviewCount =
+    ads.filter(
+      ad =>
+        ad.status ===
+        'pending_review',
+    ).length;
+
+  const awaitingUserPaymentCount =
+    ads.filter(
+      ad =>
+        ad.status ===
+          'pending_payment' &&
+        !ad.momo_reference,
+    ).length;
+
+  const paymentSubmittedCount =
+    ads.filter(
+      ad =>
+        ad.status ===
+          'pending_payment' &&
+        Boolean(
+          ad.momo_reference,
+        ),
+    ).length;
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-2">Ad Moderation ({ads.length})</h2>
-      {pendingPaymentCount > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 mb-4 text-sm text-amber-800 flex items-center gap-2">
-          <span>⚠️</span>
-          <span>{pendingPaymentCount} ad{pendingPaymentCount === 1 ? '' : 's'} already approved, waiting on you to verify payment and publish</span>
+      <h2
+        className="
+          text-xl
+          font-bold
+          text-gray-900
+          mb-2
+        "
+      >
+        Business Hub Moderation
+        {' '}
+        ({ads.length})
+      </h2>
+
+      {paymentSubmittedCount >
+        0 && (
+        <div
+          className="
+            bg-green-50
+            border
+            border-green-200
+            rounded-lg
+            px-4 py-3
+            mb-4
+            text-sm
+            text-green-800
+          "
+        >
+          <strong>
+            {
+              paymentSubmittedCount
+            }
+          </strong>
+          {' '}
+          payment
+          {paymentSubmittedCount ===
+          1
+            ? ''
+            : 's'}
+          {' '}
+          submitted and ready
+          for verification.
         </div>
       )}
-      <p className="text-sm text-gray-500 mb-6">{pendingReviewCount} awaiting first review · {pendingPaymentCount} awaiting payment verification</p>
+
+      <p
+        className="
+          text-sm
+          text-gray-500
+          mb-6
+        "
+      >
+        {pendingReviewCount}
+        {' '}
+        awaiting review ·
+        {' '}
+        {
+          awaitingUserPaymentCount
+        }
+        {' '}
+        waiting for user payment ·
+        {' '}
+        {paymentSubmittedCount}
+        {' '}
+        awaiting payment
+        verification
+      </p>
+
       {ads.length === 0 ? (
-        <div className="text-center py-16 text-gray-400"><p className="text-4xl mb-4">✅</p><p>No pending ads</p></div>
+        <div
+          className="
+            text-center
+            py-16
+            text-gray-400
+          "
+        >
+          <p className="text-4xl mb-4">
+            ✅
+          </p>
+          <p>
+            No pending Business Hub
+            listings
+          </p>
+        </div>
       ) : (
         <div className="grid gap-4">
-          {ads.map(ad => (
-            <div key={ad.id} className="bg-white rounded-xl shadow-sm p-6">
-              <div className="flex justify-between">
-                <div>
-                  <h3 className="font-bold">{ad.title}</h3>
-                  <p className="text-sm text-gray-500">{ad.posted_by_email}</p>
-                  <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">{ad.status}</span>
+          {ads.map(ad => {
+            const draft =
+              draftFor(ad);
+
+            const hasPayment =
+              Boolean(
+                ad.momo_reference,
+              );
+
+            return (
+              <div
+                key={ad.id}
+                className="
+                  bg-white
+                  rounded-xl
+                  shadow-sm
+                  p-6
+                "
+              >
+                <div
+                  className="
+                    flex
+                    flex-wrap
+                    justify-between
+                    gap-3
+                  "
+                >
+                  <div>
+                    <h3 className="font-bold">
+                      {ad.title}
+                    </h3>
+
+                    <p className="text-sm text-gray-500">
+                      {
+                        ad.posted_by_email
+                      }
+                    </p>
+
+                    <span
+                      className="
+                        text-xs
+                        bg-yellow-100
+                        text-yellow-700
+                        px-2
+                        py-0.5
+                        rounded-full
+                      "
+                    >
+                      {ad.status}
+                    </span>
+                  </div>
+
+                  <div className="text-right">
+                    <p className="text-xs text-gray-500">
+                      Declared price
+                    </p>
+
+                    <p className="font-bold text-green-600">
+                      GH₵
+                      {' '}
+                      {
+                        normalizedMoney(
+                          ad.price,
+                        ).toFixed(2)
+                      }
+                    </p>
+
+                    <p className="mt-1 text-xs text-gray-500">
+                      Original system fee:
+                      {' '}
+                      GH₵
+                      {' '}
+                      {
+                        normalizedMoney(
+                          ad.publishing_fee,
+                        ).toFixed(2)
+                      }
+                    </p>
+                  </div>
                 </div>
-                {ad.price && <span className="font-bold text-green-600">GH₵ {parseFloat(ad.price).toFixed(2)}</span>}
-              </div>
-              <p className="text-sm text-gray-600 mt-3 line-clamp-2">{ad.description}</p>
-              {ad.momo_reference && (
-                <div className="mt-3 bg-blue-50 p-3 rounded-lg text-sm">
-                  <span className="text-gray-500">Payment Ref:</span> <span className="font-mono font-semibold">{ad.momo_reference}</span>
-                  <span className="ml-4 text-gray-500">Amount:</span> GH₵ {ad.payment_amount}
+
+                <p
+                  className="
+                    text-sm
+                    text-gray-600
+                    mt-3
+                    line-clamp-2
+                  "
+                >
+                  {ad.description}
+                </p>
+
+                {ad.status ===
+                  'pending_review' && (
+                  <div
+                    className="
+                      mt-5
+                      rounded-xl
+                      border
+                      border-blue-100
+                      bg-blue-50/50
+                      p-4
+                    "
+                  >
+                    <h4
+                      className="
+                        font-semibold
+                        text-gray-900
+                      "
+                    >
+                      Pricing review
+                    </h4>
+
+                    <p
+                      className="
+                        mt-1
+                        text-xs
+                        text-gray-600
+                      "
+                    >
+                      Verify the listing
+                      value before requesting
+                      payment. Changing the
+                      assessed value
+                      automatically suggests
+                      a fee using the stored
+                      posting rate; the final
+                      amount due remains
+                      editable.
+                    </p>
+
+                    <div
+                      className="
+                        mt-4
+                        grid
+                        gap-3
+                        md:grid-cols-2
+                      "
+                    >
+                      <label
+                        className="
+                          text-sm
+                          text-gray-700
+                        "
+                      >
+                        Admin assessed value
+                        (GH₵)
+
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={
+                            draft.assessedValue
+                          }
+                          onChange={event =>
+                            updateAssessedValue(
+                              ad,
+                              event.target
+                                .value,
+                            )
+                          }
+                          className="
+                            mt-1
+                            w-full
+                            rounded-lg
+                            border
+                            border-gray-200
+                            px-3
+                            py-2
+                          "
+                        />
+                      </label>
+
+                      <label
+                        className="
+                          text-sm
+                          text-gray-700
+                        "
+                      >
+                        Final amount to pay
+                        (GH₵)
+
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={
+                            draft.amountDue
+                          }
+                          onChange={event =>
+                            updateDraft(
+                              ad,
+                              {
+                                amountDue:
+                                  event
+                                    .target
+                                    .value,
+                              },
+                            )
+                          }
+                          className="
+                            mt-1
+                            w-full
+                            rounded-lg
+                            border
+                            border-gray-200
+                            px-3
+                            py-2
+                          "
+                        />
+                      </label>
+                    </div>
+
+                    <label
+                      className="
+                        mt-3
+                        block
+                        text-sm
+                        text-gray-700
+                      "
+                    >
+                      Adjustment reason
+
+                      <textarea
+                        rows="2"
+                        maxLength="2000"
+                        value={
+                          draft.reason
+                        }
+                        onChange={event =>
+                          updateDraft(
+                            ad,
+                            {
+                              reason:
+                                event
+                                  .target
+                                  .value,
+                            },
+                          )
+                        }
+                        placeholder="Required when assessed value or final amount differs from the submitted pricing."
+                        className="
+                          mt-1
+                          w-full
+                          rounded-lg
+                          border
+                          border-gray-200
+                          px-3
+                          py-2
+                        "
+                      />
+                    </label>
+                  </div>
+                )}
+
+                {ad.status ===
+                  'pending_payment' && (
+                  <div
+                    className="
+                      mt-4
+                      rounded-lg
+                      border
+                      border-amber-200
+                      bg-amber-50
+                      p-3
+                      text-sm
+                    "
+                  >
+                    <div>
+                      <span className="text-gray-600">
+                        Approved amount:
+                      </span>
+                      {' '}
+                      <strong>
+                        GH₵
+                        {' '}
+                        {
+                          normalizedMoney(
+                            ad.amount_due,
+                          ).toFixed(2)
+                        }
+                      </strong>
+                    </div>
+
+                    {ad.admin_assessed_value !==
+                      null &&
+                      ad.admin_assessed_value !==
+                        undefined && (
+                      <div className="mt-1">
+                        <span className="text-gray-600">
+                          Assessed value:
+                        </span>
+                        {' '}
+                        GH₵
+                        {' '}
+                        {
+                          normalizedMoney(
+                            ad.admin_assessed_value,
+                          ).toFixed(2)
+                        }
+                      </div>
+                    )}
+
+                    {ad.pricing_adjustment_reason && (
+                      <div className="mt-1">
+                        <span className="text-gray-600">
+                          Review note:
+                        </span>
+                        {' '}
+                        {
+                          ad.pricing_adjustment_reason
+                        }
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {hasPayment && (
+                  <div
+                    className="
+                      mt-3
+                      bg-blue-50
+                      p-3
+                      rounded-lg
+                      text-sm
+                    "
+                  >
+                    <div>
+                      <span className="text-gray-500">
+                        Payment Ref:
+                      </span>
+                      {' '}
+                      <span className="font-mono font-semibold">
+                        {
+                          ad.momo_reference
+                        }
+                      </span>
+                    </div>
+
+                    <div className="mt-1">
+                      <span className="text-gray-500">
+                        Submitted amount:
+                      </span>
+                      {' '}
+                      GH₵
+                      {' '}
+                      {
+                        normalizedMoney(
+                          ad.payment_amount,
+                        ).toFixed(2)
+                      }
+                    </div>
+
+                    {ad.payment_submitted_at && (
+                      <div className="mt-1 text-xs text-gray-500">
+                        Submitted:
+                        {' '}
+                        {
+                          new Date(
+                            ad.payment_submitted_at,
+                          ).toLocaleString()
+                        }
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {ad.status ===
+                  'pending_payment' &&
+                  !hasPayment && (
+                  <div
+                    className="
+                      mt-3
+                      rounded-lg
+                      border
+                      border-amber-200
+                      bg-amber-50
+                      p-3
+                      text-sm
+                      text-amber-800
+                    "
+                  >
+                    Waiting for user payment.
+                    AgentPro has issued the
+                    approved amount and payment
+                    request.
+                  </div>
+                )}
+
+                <div
+                  className="
+                    flex
+                    flex-wrap
+                    gap-2
+                    mt-4
+                  "
+                >
+                  {ad.status ===
+                    'pending_review' && (
+                    <>
+                      <button
+                        type="button"
+                        disabled={
+                          updatingId ===
+                          ad.id
+                        }
+                        onClick={() =>
+                          approveForPayment(
+                            ad,
+                          )
+                        }
+                        className="
+                          flex-1
+                          bg-blue-600
+                          text-white
+                          py-2
+                          rounded-lg
+                          text-sm
+                          font-semibold
+                          hover:bg-blue-700
+                          disabled:opacity-50
+                        "
+                      >
+                        Approve & Request
+                        Payment
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={
+                          updatingId ===
+                          ad.id
+                        }
+                        onClick={() =>
+                          moderate(
+                            ad,
+                            'reject',
+                            {
+                              rejection_reason:
+                                'Rejected by administrator',
+                            },
+                          )
+                        }
+                        className="
+                          flex-1
+                          bg-red-50
+                          text-red-600
+                          py-2
+                          rounded-lg
+                          text-sm
+                          border
+                          border-red-200
+                          hover:bg-red-100
+                          disabled:opacity-50
+                        "
+                      >
+                        Reject
+                      </button>
+                    </>
+                  )}
+
+                  {ad.status ===
+                    'pending_payment' &&
+                    hasPayment && (
+                    <button
+                      type="button"
+                      disabled={
+                        updatingId ===
+                        ad.id
+                      }
+                      onClick={() =>
+                        moderate(
+                          ad,
+                          'publish',
+                        )
+                      }
+                      className="
+                        flex-1
+                        bg-green-600
+                        text-white
+                        py-2
+                        rounded-lg
+                        text-sm
+                        font-semibold
+                        hover:bg-green-700
+                        disabled:opacity-50
+                      "
+                    >
+                      ✅ Verify Payment
+                      & Publish
+                    </button>
+                  )}
                 </div>
-              )}
-              <div className="flex gap-2 mt-4">
-                {ad.status === 'pending_review' && (
-                  <>
-                    <button onClick={() => moderate(ad.id, 'approve_review')}
-                      className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">Approve for Payment</button>
-                    <button onClick={() => moderate(ad.id, 'reject')}
-                      className="flex-1 bg-red-50 text-red-600 py-2 rounded-lg text-sm border border-red-200 hover:bg-red-100">Reject</button>
-                  </>
-                )}
-                {ad.status === 'pending_payment' && (
-                  <>
-                    <button onClick={() => moderate(ad.id, 'publish')}
-                      className="flex-1 bg-green-600 text-white py-2 rounded-lg text-sm font-semibold hover:bg-green-700">✅ Verify Payment & Publish</button>
-                    <button onClick={() => moderate(ad.id, 'reject')}
-                      className="flex-1 bg-red-50 text-red-600 py-2 rounded-lg text-sm border border-red-200 hover:bg-red-100">Reject</button>
-                  </>
-                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

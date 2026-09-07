@@ -4,9 +4,10 @@ const mpRouter = express.Router();
 const multer = require('multer');
 const { authenticate, authorize } = require('../middleware/auth');
 const { uploadLimiter } = require('../middleware/rateLimit');
-const { query } = require('../config/database');
+const { query, withTransaction } = require('../config/database');
 const { uploadFile } = require('../config/cloudinary');
 const { logger } = require('../utils/logger');
+const { auditLog } = require('../services/auditService');
 
 const UUID_PATH_SEGMENT =
   '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}';
@@ -1594,6 +1595,18 @@ mpRouter.get('/:ad_id', async (req, res) => {
          COALESCE(c.marketplace_featured, FALSE) AS is_featured,
          COALESCE(AVG(ar.rating), 0)::float AS avg_rating,
          COUNT(ar.id)::int AS rating_count,
+         EXISTS (
+           SELECT 1
+           FROM ad_payments pending_payment
+           WHERE pending_payment.advertisement_id = a.id
+             AND pending_payment.status = 'pending'
+         ) AS payment_reference_submitted,
+         (
+           SELECT MAX(pending_payment.submitted_at)
+           FROM ad_payments pending_payment
+           WHERE pending_payment.advertisement_id = a.id
+             AND pending_payment.status = 'pending'
+         ) AS payment_submitted_at,
          (
            SELECT COALESCE(AVG(seller_rating.rating), 0)::float
            FROM ad_ratings seller_rating
@@ -1723,20 +1736,179 @@ mpRouter.post('/', uploadLimiter, upload.array('images', 3), async (req, res) =>
   }
 });
 
-// Submit payment for an ad
+// Submit payment for an administrator-approved Business Hub listing.
+//
+// The amount is never accepted from the client and is never recalculated
+// from the user's declared price here. advertisements.amount_due is the
+// authoritative reviewed amount once the ad reaches pending_payment.
 mpRouter.post('/:ad_id/payment', async (req, res) => {
-  const { momo_reference, payment_phone } = req.body;
+  const reference =
+    String(req.body.momo_reference || '').trim();
+
+  const paymentPhone =
+    String(req.body.payment_phone || '').trim();
+
+  if (!reference || !paymentPhone) {
+    return res.status(422).json({
+      success: false,
+      message:
+        'Payment reference and payment phone are required',
+    });
+  }
+
+  if (
+    reference.length > 100 ||
+    paymentPhone.length > 20
+  ) {
+    return res.status(422).json({
+      success: false,
+      message: 'Payment details are invalid',
+    });
+  }
+
   try {
-    const ad = await query('SELECT * FROM advertisements WHERE id = $1 AND posted_by = $2', [req.params.ad_id, req.user.id]);
-    if (!ad.rows.length) return res.status(404).json({ success: false, message: 'Ad not found' });
-    const result = await query(
-      `INSERT INTO ad_payments (advertisement_id, posted_by, amount, momo_reference, payment_phone)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [req.params.ad_id, req.user.id, ad.rows[0].publishing_fee, momo_reference, payment_phone]
+    const payment = await withTransaction(
+      async (client) => {
+        const adResult = await client.query(
+          `SELECT
+             id,
+             posted_by,
+             company_id,
+             title,
+             status,
+             amount_due
+           FROM advertisements
+           WHERE id = $1
+             AND posted_by = $2
+           FOR UPDATE`,
+          [
+            req.params.ad_id,
+            req.user.id,
+          ]
+        );
+
+        if (!adResult.rows.length) {
+          const error =
+            new Error('Ad not found');
+
+          error.statusCode = 404;
+          throw error;
+        }
+
+        const ad = adResult.rows[0];
+
+        if (ad.status !== 'pending_payment') {
+          const error = new Error(
+            'This listing is not awaiting payment'
+          );
+
+          error.statusCode = 409;
+          throw error;
+        }
+
+        const amountDue =
+          Number(ad.amount_due);
+
+        if (
+          !Number.isFinite(amountDue) ||
+          amountDue < 0
+        ) {
+          const error = new Error(
+            'Payment amount has not been set by the administrator'
+          );
+
+          error.statusCode = 409;
+          throw error;
+        }
+
+        const existing = await client.query(
+          `SELECT id
+           FROM ad_payments
+           WHERE advertisement_id = $1
+             AND status = 'pending'
+           LIMIT 1
+           FOR UPDATE`,
+          [ad.id]
+        );
+
+        if (existing.rows.length) {
+          const error = new Error(
+            'A payment reference is already awaiting verification'
+          );
+
+          error.statusCode = 409;
+          throw error;
+        }
+
+        const inserted = await client.query(
+          `INSERT INTO ad_payments (
+             advertisement_id,
+             posted_by,
+             amount,
+             momo_reference,
+             payment_phone
+           )
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING *`,
+          [
+            ad.id,
+            req.user.id,
+            amountDue.toFixed(2),
+            reference,
+            paymentPhone,
+          ]
+        );
+
+        await auditLog({
+          userId: req.user.id,
+          companyId:
+            req.user.company_id || null,
+          action:
+            'BUSINESS_HUB_PAYMENT_REFERENCE_SUBMITTED',
+          entityType: 'advertisement',
+          entityId: ad.id,
+          newValues: {
+            payment_status: 'pending',
+            amount: amountDue.toFixed(2),
+          },
+          ipAddress: req.ip,
+          userAgent:
+            req.headers['user-agent'],
+          requestId: req.requestId,
+          dbClient: client,
+          strict: true,
+        });
+
+        return inserted.rows[0];
+      }
     );
-    await query("UPDATE advertisements SET status = 'pending_payment' WHERE id = $1", [req.params.ad_id]);
-    res.status(201).json({ success: true, data: result.rows[0] });
-  } catch (e) { res.status(500).json({ success: false, message: 'Failed to submit payment' }); }
+
+    return res.status(201).json({
+      success: true,
+      data: payment,
+      message:
+        'Payment reference submitted for verification',
+    });
+  } catch (error) {
+    const status =
+      Number.isInteger(error.statusCode)
+        ? error.statusCode
+        : 500;
+
+    if (status === 500) {
+      logger.error(
+        'Business Hub payment submission failed'
+      );
+    }
+
+    return res.status(status).json({
+      success: false,
+      message:
+        status === 500
+          ? 'Failed to submit payment'
+          : error.message,
+    });
+  }
 });
 
 module.exports = mpRouter;

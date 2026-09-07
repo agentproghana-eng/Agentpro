@@ -9,9 +9,10 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { query } = require('../config/database');
 const { withTransaction } = require('../config/database');
 const { sendWelcomeEmail } = require('../services/emailService');
-const { sendRegistrationApprovedSMS, sendAdPaymentConfirmedSMS } = require('../services/smsService');
+const { sendRegistrationApprovedSMS } = require('../services/smsService');
 const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
+const { enqueueOutboxEvent } = require('../services/outboxService');
 
 router.use(authenticate, authorize('superuser'));
 
@@ -837,57 +838,618 @@ router.get('/audit-logs', async (req, res) => {
 });
 
 // ── Moderate Ads ──────────────────────────────────────────────
+
+function normalizeAdMoney(value) {
+  if (
+    value === null ||
+    value === undefined ||
+    String(value).trim() === ''
+  ) {
+    return null;
+  }
+
+  const parsed = Number(value);
+
+  if (
+    !Number.isFinite(parsed) ||
+    parsed < 0
+  ) {
+    return null;
+  }
+
+  return Math.round(parsed * 100) / 100;
+}
+
+function adMoneyEquals(left, right) {
+  return (
+    Math.round(Number(left) * 100) ===
+    Math.round(Number(right) * 100)
+  );
+}
+
+function adModerationError(
+  statusCode,
+  message
+) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
 router.get('/ads/pending', async (req, res) => {
   try {
     const result = await query(
-      `SELECT a.*, u.email as posted_by_email, ap.momo_reference, ap.amount as payment_amount
-       FROM advertisements a LEFT JOIN users u ON a.posted_by = u.id
-       LEFT JOIN ad_payments ap ON ap.advertisement_id = a.id AND ap.status = 'pending'
-       WHERE a.status IN ('pending_review', 'pending_payment') ORDER BY a.created_at ASC`
+      `SELECT
+         a.*,
+         u.email AS posted_by_email,
+         ap.id AS payment_id,
+         ap.momo_reference,
+         ap.amount AS payment_amount,
+         ap.submitted_at AS payment_submitted_at
+       FROM advertisements a
+       LEFT JOIN users u
+         ON a.posted_by = u.id
+       LEFT JOIN ad_payments ap
+         ON ap.advertisement_id = a.id
+        AND ap.status = 'pending'
+       WHERE a.status IN (
+         'pending_review',
+         'pending_payment'
+       )
+       ORDER BY a.created_at ASC`
     );
-    res.json({ success: true, data: result.rows });
-  } catch (e) { res.status(500).json({ success: false, message: 'Failed to fetch pending ads' }); }
+
+    res.json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch pending ads',
+    });
+  }
 });
 
 router.patch('/ads/:ad_id/moderate', async (req, res) => {
-  const { action, rejection_reason } = req.body; // 'approve_review', 'reject', 'publish'
+  const {
+    action,
+    rejection_reason,
+    admin_assessed_value,
+    amount_due,
+    pricing_adjustment_reason,
+  } = req.body;
+
   try {
-    let newStatus;
-    if (action === 'approve_review') newStatus = 'pending_payment';
-    else if (action === 'reject') newStatus = 'rejected';
-    else if (action === 'publish') {
-      newStatus = 'active';
-      const durationConfig = await query("SELECT value FROM system_config WHERE key = 'ad_duration_days'");
-      const gracePeriodConfig = await query("SELECT value FROM system_config WHERE key = 'ad_grace_period_days'");
-      const days = parseInt(durationConfig.rows[0]?.value || 30);
-      const graceDays = parseInt(gracePeriodConfig.rows[0]?.value || 7);
-      const expiresAt = new Date(Date.now() + days * 86400000);
-      const graceEnds = new Date(expiresAt.getTime() + graceDays * 86400000);
-      await query(
-        `UPDATE advertisements SET status = 'active', published_at = NOW(), expires_at = $1, grace_period_ends_at = $2, rejection_reason = NULL WHERE id = $3`,
-        [expiresAt, graceEnds, req.params.ad_id]
-      );
-      // Verify the payment too
-      await query("UPDATE ad_payments SET status = 'verified', verified_by = $1, verified_at = NOW() WHERE advertisement_id = $2 AND status = 'pending'",
-        [req.user.id, req.params.ad_id]);
+    if (action === 'approve_review') {
+      const assessedValue =
+        normalizeAdMoney(
+          admin_assessed_value
+        );
 
-      const { sendAdNotification } = require('../services/notificationService');
-      const ad = await query("SELECT a.posted_by, a.title, u.phone, u.first_name FROM advertisements a JOIN users u ON u.id = a.posted_by WHERE a.id = $1", [req.params.ad_id]);
-      if (ad.rows.length) await sendAdNotification(ad.rows[0].posted_by, { type: 'ad_approved', adTitle: ad.rows[0].title });
-        if (ad.rows.length && ad.rows[0].phone) {
-          try {
-            await sendAdPaymentConfirmedSMS(ad.rows[0].phone, ad.rows[0].first_name, ad.rows[0].title);
-          } catch (smsErr) {
-            logger.error("Failed to send ad payment confirmed SMS:", smsErr);
+      const amountDue =
+        normalizeAdMoney(
+          amount_due
+        );
+
+      const adjustmentReason =
+        String(
+          pricing_adjustment_reason || ''
+        ).trim();
+
+      if (
+        assessedValue === null ||
+        amountDue === null
+      ) {
+        return res.status(422).json({
+          success: false,
+          message:
+            'Assessed value and amount due must be valid non-negative amounts',
+        });
+      }
+
+      if (adjustmentReason.length > 2000) {
+        return res.status(422).json({
+          success: false,
+          message:
+            'Pricing adjustment reason is too long',
+        });
+      }
+
+      const reviewed = await withTransaction(
+        async (client) => {
+          const locked = await client.query(
+            `SELECT
+               id,
+               posted_by,
+               company_id,
+               title,
+               status,
+               price,
+               publishing_fee,
+               fee_percent,
+               payment_request_version
+             FROM advertisements
+             WHERE id = $1
+             FOR UPDATE`,
+            [req.params.ad_id]
+          );
+
+          if (!locked.rows.length) {
+            throw adModerationError(
+              404,
+              'Ad not found'
+            );
           }
-        }
 
-      return res.json({ success: true, message: 'Ad published' });
+          const ad = locked.rows[0];
+
+          if (ad.status !== 'pending_review') {
+            throw adModerationError(
+              409,
+              'Only an ad awaiting review can receive a new payment request'
+            );
+          }
+
+          const declaredValue =
+            normalizeAdMoney(ad.price) ?? 0;
+
+          const originalFee =
+            normalizeAdMoney(
+              ad.publishing_fee
+            ) ?? 0;
+
+          const pricingChanged =
+            !adMoneyEquals(
+              assessedValue,
+              declaredValue
+            ) ||
+            !adMoneyEquals(
+              amountDue,
+              originalFee
+            );
+
+          if (
+            pricingChanged &&
+            !adjustmentReason
+          ) {
+            throw adModerationError(
+              422,
+              'An adjustment reason is required when assessed value or amount due differs from the submitted pricing'
+            );
+          }
+
+          const updated =
+            await client.query(
+              `UPDATE advertisements
+               SET
+                 status = 'pending_payment',
+                 admin_assessed_value = $1,
+                 amount_due = $2,
+                 pricing_adjustment_reason = $3,
+                 pricing_reviewed_by = $4,
+                 pricing_reviewed_at = NOW(),
+                 payment_requested_at = NOW(),
+                 payment_request_version =
+                   payment_request_version + 1,
+                 rejection_reason = NULL,
+                 updated_at = NOW()
+               WHERE id = $5
+                 AND status = 'pending_review'
+               RETURNING *`,
+              [
+                assessedValue.toFixed(2),
+                amountDue.toFixed(2),
+                adjustmentReason || null,
+                req.user.id,
+                ad.id,
+              ]
+            );
+
+          if (!updated.rows.length) {
+            throw adModerationError(
+              409,
+              'Ad review state changed before approval completed'
+            );
+          }
+
+          const reviewedAd =
+            updated.rows[0];
+
+          await auditLog({
+            userId: req.user.id,
+            companyId: null,
+            action:
+              'BUSINESS_HUB_PAYMENT_REQUESTED',
+            entityType:
+              'advertisement',
+            entityId: ad.id,
+            oldValues: {
+              status: ad.status,
+              declared_price: ad.price,
+              original_publishing_fee:
+                ad.publishing_fee,
+            },
+            newValues: {
+              status: 'pending_payment',
+              admin_assessed_value:
+                reviewedAd.admin_assessed_value,
+              amount_due:
+                reviewedAd.amount_due,
+              pricing_adjustment_reason:
+                reviewedAd.pricing_adjustment_reason,
+              payment_request_version:
+                reviewedAd.payment_request_version,
+            },
+            ipAddress: req.ip,
+            userAgent:
+              req.headers['user-agent'],
+            requestId: req.requestId,
+            dbClient: client,
+            strict: true,
+          });
+
+          await enqueueOutboxEvent({
+            dbClient: client,
+            eventType:
+              'notification.business_hub.payment_required',
+            aggregateType:
+              'advertisement',
+            aggregateId:
+              reviewedAd.id,
+            dedupeKey:
+              `business-hub:payment-required:${reviewedAd.id}:v${reviewedAd.payment_request_version}`,
+            payload: {
+              user_id:
+                reviewedAd.posted_by,
+              ad_id:
+                reviewedAd.id,
+              ad_title:
+                reviewedAd.title,
+              amount:
+                Number(
+                  reviewedAd.amount_due
+                ).toFixed(2),
+            },
+          });
+
+          return reviewedAd;
+        }
+      );
+
+      return res.json({
+        success: true,
+        data: reviewed,
+        message:
+          'Ad approved and payment request sent',
+      });
     }
 
-    await query('UPDATE advertisements SET status = $1, rejection_reason = $2 WHERE id = $3', [newStatus, rejection_reason, req.params.ad_id]);
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ success: false, message: 'Failed to moderate ad' }); }
+    if (action === 'reject') {
+      const rejected = await query(
+        `UPDATE advertisements
+         SET
+           status = 'rejected',
+           rejection_reason = $1,
+           updated_at = NOW()
+         WHERE id = $2
+           AND status = 'pending_review'
+         RETURNING *`,
+        [
+          rejection_reason || null,
+          req.params.ad_id,
+        ]
+      );
+
+      if (!rejected.rows.length) {
+        return res.status(409).json({
+          success: false,
+          message:
+            'Only an ad awaiting review can be rejected',
+        });
+      }
+
+      return res.json({
+        success: true,
+        data: rejected.rows[0],
+      });
+    }
+
+    if (action === 'publish') {
+      const published = await withTransaction(
+        async (client) => {
+          const adResult =
+            await client.query(
+              `SELECT
+                 id,
+                 posted_by,
+                 company_id,
+                 title,
+                 status,
+                 amount_due
+               FROM advertisements
+               WHERE id = $1
+               FOR UPDATE`,
+              [req.params.ad_id]
+            );
+
+          if (!adResult.rows.length) {
+            throw adModerationError(
+              404,
+              'Ad not found'
+            );
+          }
+
+          const ad = adResult.rows[0];
+
+          if (ad.status !== 'pending_payment') {
+            throw adModerationError(
+              409,
+              'Ad is not awaiting payment verification'
+            );
+          }
+
+          const amountDue =
+            normalizeAdMoney(
+              ad.amount_due
+            );
+
+          if (amountDue === null) {
+            throw adModerationError(
+              409,
+              'Ad has no administrator-approved amount due'
+            );
+          }
+
+          const paymentResult =
+            await client.query(
+              `SELECT
+                 id,
+                 amount,
+                 submitted_at
+               FROM ad_payments
+               WHERE advertisement_id = $1
+                 AND status = 'pending'
+               ORDER BY submitted_at DESC
+               LIMIT 1
+               FOR UPDATE`,
+              [ad.id]
+            );
+
+          if (!paymentResult.rows.length) {
+            throw adModerationError(
+              409,
+              'User has not submitted a payment reference'
+            );
+          }
+
+          const payment =
+            paymentResult.rows[0];
+
+          const paymentAmount =
+            normalizeAdMoney(
+              payment.amount
+            );
+
+          if (
+            paymentAmount === null ||
+            !adMoneyEquals(
+              paymentAmount,
+              amountDue
+            )
+          ) {
+            throw adModerationError(
+              409,
+              'Submitted payment amount does not match the approved amount due'
+            );
+          }
+
+          const durationConfig =
+            await client.query(
+              `SELECT value
+               FROM system_config
+               WHERE key = 'ad_duration_days'`
+            );
+
+          const graceConfig =
+            await client.query(
+              `SELECT value
+               FROM system_config
+               WHERE key = 'ad_grace_period_days'`
+            );
+
+          const days =
+            parseInt(
+              durationConfig.rows[0]?.value,
+              10
+            ) || 30;
+
+          const graceDays =
+            parseInt(
+              graceConfig.rows[0]?.value,
+              10
+            ) || 7;
+
+          const expiresAt =
+            new Date(
+              Date.now() +
+              days * 86400000
+            );
+
+          const graceEnds =
+            new Date(
+              expiresAt.getTime() +
+              graceDays * 86400000
+            );
+
+          const verifiedPayment =
+            await client.query(
+              `UPDATE ad_payments
+               SET
+                 status = 'verified',
+                 verified_by = $1,
+                 verified_at = NOW()
+               WHERE id = $2
+                 AND status = 'pending'
+               RETURNING id`,
+              [
+                req.user.id,
+                payment.id,
+              ]
+            );
+
+          if (!verifiedPayment.rows.length) {
+            throw adModerationError(
+              409,
+              'Payment state changed before verification completed'
+            );
+          }
+
+          const activated =
+            await client.query(
+              `UPDATE advertisements
+               SET
+                 status = 'active',
+                 published_at = NOW(),
+                 expires_at = $1,
+                 grace_period_ends_at = $2,
+                 rejection_reason = NULL,
+                 updated_at = NOW()
+               WHERE id = $3
+                 AND status = 'pending_payment'
+               RETURNING *`,
+              [
+                expiresAt,
+                graceEnds,
+                ad.id,
+              ]
+            );
+
+          if (!activated.rows.length) {
+            throw adModerationError(
+              409,
+              'Ad state changed before publication completed'
+            );
+          }
+
+          const activeAd =
+            activated.rows[0];
+
+          await auditLog({
+            userId: req.user.id,
+            companyId: null,
+            action:
+              'BUSINESS_HUB_PAYMENT_VERIFIED_AND_PUBLISHED',
+            entityType:
+              'advertisement',
+            entityId:
+              activeAd.id,
+            oldValues: {
+              status:
+                'pending_payment',
+              payment_status:
+                'pending',
+            },
+            newValues: {
+              status:
+                'active',
+              payment_status:
+                'verified',
+              amount:
+                amountDue.toFixed(2),
+            },
+            ipAddress: req.ip,
+            userAgent:
+              req.headers['user-agent'],
+            requestId: req.requestId,
+            dbClient: client,
+            strict: true,
+          });
+
+          const payload = {
+            user_id:
+              activeAd.posted_by,
+            ad_id:
+              activeAd.id,
+            ad_title:
+              activeAd.title,
+            amount:
+              amountDue.toFixed(2),
+          };
+
+          const events = [
+            {
+              eventType:
+                'notification.business_hub.payment_confirmed',
+              channel:
+                'app',
+            },
+            {
+              eventType:
+                'sms.business_hub.payment_confirmed',
+              channel:
+                'sms',
+            },
+            {
+              eventType:
+                'email.business_hub.payment_confirmed',
+              channel:
+                'email',
+            },
+          ];
+
+          for (const event of events) {
+            await enqueueOutboxEvent({
+              dbClient: client,
+              eventType:
+                event.eventType,
+              aggregateType:
+                'advertisement',
+              aggregateId:
+                activeAd.id,
+              dedupeKey:
+                `business-hub:payment-confirmed:${event.channel}:${activeAd.id}:${payment.id}`,
+              payload,
+            });
+          }
+
+          return activeAd;
+        }
+      );
+
+      return res.json({
+        success: true,
+        data: published,
+        message:
+          'Payment verified and ad published',
+      });
+    }
+
+    return res.status(422).json({
+      success: false,
+      message:
+        'Unsupported ad moderation action',
+    });
+  } catch (error) {
+    const status =
+      Number.isInteger(error.statusCode)
+        ? error.statusCode
+        : 500;
+
+    if (status === 500) {
+      logger.error(
+        'Business Hub moderation failed'
+      );
+    }
+
+    return res.status(status).json({
+      success: false,
+      message:
+        status === 500
+          ? 'Failed to moderate ad'
+          : error.message,
+    });
+  }
 });
 
 module.exports = router;

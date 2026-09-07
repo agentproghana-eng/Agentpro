@@ -75,9 +75,21 @@ async function sendSubscriptionRenewalSMS(phone, firstName, amount, expiryDate) 
   );
 }
 
-async function sendAdPaymentConfirmedSMS(phone, firstName, adTitle) {
-  return sendSMS(phone,
-    `AgentPro: Payment received for your Business Hub ad "${adTitle}". It is now live!`
+async function sendAdPaymentConfirmedSMS(
+  phone,
+  firstName,
+  adTitle,
+  amount
+) {
+  const parsedAmount = Number(amount);
+
+  const amountLabel = Number.isFinite(parsedAmount)
+    ? parsedAmount.toFixed(2)
+    : String(amount);
+
+  return sendSMS(
+    phone,
+    `AgentPro: Payment of GHS ${amountLabel} for your Business Hub listing "${adTitle}" has been confirmed. It is now live.`
   );
 }
 

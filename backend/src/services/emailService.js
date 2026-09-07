@@ -1060,6 +1060,94 @@ async function sendNewEmployeeEmail(
   });
 }
 
+
+async function sendAdPaymentConfirmedEmail(
+  email,
+  firstName,
+  adTitle,
+  amount,
+) {
+  const safeName =
+    escapeHtml(firstName);
+
+  const safeTitle =
+    escapeHtml(adTitle);
+
+  const amountLabel =
+    formatMoney(amount);
+
+  const html = renderEmail({
+    preheader:
+      `Payment for your Business Hub listing "${adTitle}" has been confirmed.`,
+    eyebrow:
+      "BUSINESS HUB PAYMENT",
+    title:
+      "Payment confirmed",
+    bodyHtml: `
+      <p
+        style="
+          margin: 0 0 16px;
+          color: ${BRAND.text};
+          font-size: 15px;
+          line-height: 24px;
+        "
+      >
+        Hello ${safeName},
+      </p>
+
+      <p
+        style="
+          margin: 0 0 20px;
+          color: ${BRAND.text};
+          font-size: 15px;
+          line-height: 24px;
+        "
+      >
+        We have confirmed your payment of
+        <strong>${escapeHtml(amountLabel)}</strong>
+        for your Business Hub listing
+        <strong>${safeTitle}</strong>.
+      </p>
+
+      <div
+        style="
+          padding: 18px 20px;
+          background: #EDF7F5;
+          border-left: 4px solid ${BRAND.teal};
+          border-radius: 10px;
+        "
+      >
+        <div
+          style="
+            color: ${BRAND.tealDark};
+            font-size: 14px;
+            line-height: 22px;
+            font-weight: 700;
+          "
+        >
+          Your listing is now live on Business Hub.
+        </div>
+      </div>
+    `,
+  });
+
+  const text = [
+    `Hello ${firstName},`,
+    "",
+    `Payment of ${amountLabel} for your Business Hub listing "${adTitle}" has been confirmed.`,
+    "Your listing is now live on Business Hub.",
+    textFooter(),
+  ].join("\n");
+
+  return sendEmail({
+    to: email,
+    subject:
+      "AgentPro — Business Hub Payment Confirmed",
+    html,
+    text,
+  });
+}
+
 module.exports = {
   BRAND,
   escapeHtml,
@@ -1072,4 +1160,5 @@ module.exports = {
   sendSubscriptionRenewalEmail,
   sendSubscriptionReminderEmail,
   sendNewEmployeeEmail,
+  sendAdPaymentConfirmedEmail,
 };

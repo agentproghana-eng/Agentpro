@@ -108,6 +108,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final route = notificationRouteForType(
       notification['type']?.toString(),
       transactionId: data['transaction_id']?.toString(),
+      adId: data['ad_id']?.toString(),
     );
 
     return route == '/notifications' ? null : route;
