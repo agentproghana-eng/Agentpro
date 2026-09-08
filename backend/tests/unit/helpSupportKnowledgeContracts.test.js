@@ -11,7 +11,7 @@ function readSource(relativePath) {
 describe('Help and Support knowledge contracts', () => {
   test('AI guidance avoids assuming a fixed provider or transaction list', () => {
     const source = readSource(
-      'src/controllers/aiController.js',
+      'src/services/askAgentProService.js',
     );
 
     expect(source).not.toContain(
@@ -33,7 +33,7 @@ describe('Help and Support knowledge contracts', () => {
 
   test('AI guidance distinguishes Personal MTN from MTN Agent SIM support', () => {
     const source = readSource(
-      'src/controllers/aiController.js',
+      'src/services/askAgentProService.js',
     );
 
     expect(source).toContain(
@@ -55,7 +55,7 @@ describe('Help and Support knowledge contracts', () => {
 
   test('AI subscription guidance matches authoritative business seat billing', () => {
     const source = readSource(
-      'src/controllers/aiController.js',
+      'src/services/askAgentProService.js',
     );
 
     expect(source).not.toContain(
@@ -73,7 +73,7 @@ describe('Help and Support knowledge contracts', () => {
 
   test('AI staff onboarding copy matches secure setup-link delivery', () => {
     const source = readSource(
-      'src/controllers/aiController.js',
+      'src/services/askAgentProService.js',
     );
 
     expect(source).toContain(
@@ -99,7 +99,7 @@ describe('Help and Support knowledge contracts', () => {
 
   test('AI guidance stays concise, app-focused, and avoids implementation internals', () => {
     const source = readSource(
-      'src/controllers/aiController.js',
+      'src/services/askAgentProService.js',
     );
 
     expect(source).toContain(
@@ -138,7 +138,7 @@ describe('Help and Support knowledge contracts', () => {
 
   test('AI report and security guidance matches current app behavior', () => {
     const source = readSource(
-      'src/controllers/aiController.js',
+      'src/services/askAgentProService.js',
     );
 
     expect(source).toContain(

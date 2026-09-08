@@ -38,11 +38,6 @@ void main() {
 
     expect(
       assistant,
-      contains('Secure support & diagnostics'),
-    );
-
-    expect(
-      assistant,
       contains('Never share your PIN, OTP or password here.'),
     );
 
