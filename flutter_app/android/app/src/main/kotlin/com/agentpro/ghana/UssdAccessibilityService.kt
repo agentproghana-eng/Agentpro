@@ -118,6 +118,13 @@ class UssdAccessibilityService : AccessibilityService() {
         @Volatile private var awaitingUserSelectionMatchers:
             List<String>? = null
 
+        // Some provider categories have live submenus that can change.
+        // "until_pin" is a strict read-only handoff: after AgentPro has
+        // submitted the verified category digit, every subsequent
+        // pre-PIN choice belongs to the user. No values are retained.
+        @Volatile private var manualUserSelectionUntilPin:
+            Boolean = false
+
         // Registered by UssdAccessibilityChannel so this OS-instantiated
         // service can report progress back to Flutter.
         var listener: UssdAccessibilityListener? = null
@@ -164,6 +171,7 @@ class UssdAccessibilityService : AccessibilityService() {
             lastMatchedScreenHash = null
             lastMatchedScreenAt = 0L
             awaitingUserSelectionMatchers = null
+            manualUserSelectionUntilPin = false
 
             isSessionActive = true
             reachedPinPrompt = false
@@ -200,6 +208,7 @@ class UssdAccessibilityService : AccessibilityService() {
             lastMatchedScreenHash = null
             lastMatchedScreenAt = 0L
             awaitingUserSelectionMatchers = null
+            manualUserSelectionUntilPin = false
         }
     }
 
@@ -610,6 +619,56 @@ class UssdAccessibilityService : AccessibilityService() {
         val normalizedScreen =
             normalizeUssdText(screenText)
 
+        // A flow may deliberately hand every changing submenu to the user
+        // after one verified automated choice. While this state is active,
+        // AgentPro is strictly read-only. Only the configured PIN boundary
+        // may advance the state machine; ordinary unmatched menus are never
+        // counted as flow drift.
+        if (manualUserSelectionUntilPin) {
+            val pinStepIndex = steps.indices.firstOrNull { index ->
+                index >= currentStepIndex &&
+                    steps[index].action == "pin_prompt" &&
+                    steps[index].matchAll.isNotEmpty() &&
+                    steps[index].matchAll.all { marker ->
+                        marker.isNotBlank() &&
+                            normalizedScreen.contains(
+                                normalizeUssdText(marker)
+                            )
+                    }
+            }
+
+            if (pinStepIndex != null) {
+                reachedPinPrompt = true
+                manualUserSelectionUntilPin = false
+                currentStepIndex = pinStepIndex + 1
+                resetGenericFlowMismatchState()
+                listener?.onPinPromptReached()
+
+                Log.d(
+                    TAG,
+                    "Generic flow: manual selection reached PIN boundary"
+                )
+
+                return
+            }
+
+            // Some operator paths can finish without exposing a readable
+            // PIN/result screen to Accessibility. Never invent success.
+            if (normalizedScreen.contains("mmi complete")) {
+                listener?.onResult(
+                    "pending_confirmation",
+                    "Provider session ended after manual selection; final result could not be verified"
+                )
+
+                endSession()
+                UssdForegroundService.stop(this)
+                return
+            }
+
+            resetGenericFlowMismatchState()
+            return
+        }
+
         // A configured await_user_selection step has already matched and
         // advanced currentStepIndex. While that same provider menu remains
         // visible, do absolutely nothing — even if the user takes a long
@@ -664,16 +723,27 @@ class UssdAccessibilityService : AccessibilityService() {
                 val completed = when (step.action) {
                     "await_user_selection" -> {
                         // Deliberately perform no Accessibility write.
-                        // The user owns this provider menu. Keep only its
-                        // configured static matchers so repeated events from
-                        // the same screen remain an indefinite safe wait.
-                        awaitingUserSelectionMatchers =
-                            step.matchAll.toList()
+                        // A normal await step waits on one provider menu.
+                        // action_value="until_pin" instead hands all live
+                        // submenus to the user until the configured PIN
+                        // boundary appears.
+                        if (step.actionValue == "until_pin") {
+                            manualUserSelectionUntilPin = true
+                            awaitingUserSelectionMatchers = null
 
-                        Log.d(
-                            TAG,
-                            "Generic flow: waiting for manual provider selection"
-                        )
+                            Log.d(
+                                TAG,
+                                "Generic flow: read-only manual selection until PIN"
+                            )
+                        } else {
+                            awaitingUserSelectionMatchers =
+                                step.matchAll.toList()
+
+                            Log.d(
+                                TAG,
+                                "Generic flow: waiting for manual provider selection"
+                            )
+                        }
 
                         true
                     }
@@ -732,6 +802,27 @@ class UssdAccessibilityService : AccessibilityService() {
 
                 if (completed) {
                     currentStepIndex = index + 1
+
+                    // A verified automated step may be followed immediately
+                    // by a declarative read-only handoff. Arm it now instead
+                    // of depending on a possibly changing provider submenu
+                    // to match a static phrase first.
+                    val nextStep = steps.getOrNull(currentStepIndex)
+
+                    if (
+                        nextStep?.action == "await_user_selection" &&
+                        nextStep.actionValue == "until_pin"
+                    ) {
+                        manualUserSelectionUntilPin = true
+                        awaitingUserSelectionMatchers = null
+                        currentStepIndex += 1
+                        resetGenericFlowMismatchState()
+
+                        Log.d(
+                            TAG,
+                            "Generic flow: armed read-only manual selection until PIN"
+                        )
+                    }
                 } else {
                     Log.d(
                         TAG,

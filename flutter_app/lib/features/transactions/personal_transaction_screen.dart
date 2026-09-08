@@ -502,18 +502,17 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   }
 
   List<DataBundleCategory> get _availableDataBundleCategories {
-    if (widget.provider != 'telecel') {
-      return kDataBundleCategories;
-    }
-
-    final categories = kDataBundleCategories
-        .where((category) => category.id == 'daily')
-        .toList();
-
-    // M4M is intentionally excluded from generic Buy Data.
-    // It is exposed only through its dedicated M4M Quick Action.
-    return List<DataBundleCategory>.unmodifiable(categories);
+    // M4M is intentionally not part of kDataBundleCategories. It stays
+    // available only through its dedicated Telecel M4M Quick Action.
+    return List<DataBundleCategory>.unmodifiable(kDataBundleCategories);
   }
+
+  bool get _isTelecelManualDataCategory =>
+      widget.provider == 'telecel' &&
+      _isDataBundle &&
+      _bundleCategory != null &&
+      _bundleCategory != 'daily' &&
+      _bundleCategory != 'm4m_live';
 
   List<String> _computeSelections() {
     if (_isMtnDataBundle) {
@@ -531,6 +530,13 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       return [
         if (_m4mPayment != null) _m4mPayment!.digit,
       ];
+    }
+
+    // Flexi, 2Moorch, Weekly, Monthly/Jumbo and Night King can change
+    // their live package menus. AgentPro selects only the verified
+    // top-level category digit; the user owns all package choices.
+    if (_isTelecelManualDataCategory) {
+      return const [];
     }
 
     if (_bundleCategory == 'flexi') {
@@ -872,11 +878,21 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   void _selectCategory(String id) {
     setState(() {
       _bundleCategory = id;
+      _bundleChoice = null;
+      _flexiType = null;
+      _flexiPayment = null;
+      _m4mPayment = null;
+      _flexiAmountCtrl.clear();
+      _moorchPage = 1;
+      _moorchBundlePage = 1;
 
       if (id == 'm4m_live') {
-        _bundleChoice = null;
-        _m4mPayment = null;
         _dbStep = 'm4m_payment';
+      } else if (widget.provider == 'telecel' && id != 'daily') {
+        // The category itself is live-confirmed, but Telecel can change
+        // the packages beneath it. Review the category in AgentPro, then
+        // choose the current package manually on the network screen.
+        _dbStep = 'review';
       } else if (id == 'flexi') {
         _dbStep = 'flexi_type';
       } else if (id == '2moorch') {
@@ -1242,7 +1258,9 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         _recipientMode == 'other' ? _phoneCtrl.text.trim() : null;
 
     final flexiAmount =
-        _bundleCategory == 'flexi' ? _flexiAmountCtrl.text.trim() : null;
+        _bundleCategory == 'flexi' && !_isTelecelManualDataCategory
+            ? _flexiAmountCtrl.text.trim()
+            : null;
 
     final resolvedBundleCategory = _isMtnDataBundle &&
             _bundleCategory != null &&
@@ -2643,6 +2661,27 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
             ],
           ),
         ),
+        if (_isTelecelManualDataCategory) ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: context.appSurface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: context.appDivider),
+            ),
+            child: Text(
+              'AgentPro will open Telecel and select ${_categoryObj?.label ?? 'this category'} '
+              'automatically. Choose the current package, amount or payment '
+              'options on the Telecel screen. AgentPro stays read-only during '
+              'those live choices and never reads or enters your PIN.',
+              style: TextStyle(
+                fontSize: 12,
+                color: context.appSecondaryText,
+              ),
+            ),
+          ),
+        ],
         if (_bundleCategory == 'm4m_live') ...[
           const SizedBox(height: 16),
           Container(
