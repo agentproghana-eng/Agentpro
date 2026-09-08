@@ -1,7 +1,7 @@
 const {
-  GoogleGenerativeAI,
+  GoogleGenAI,
 } = require(
-  '@google/generative-ai',
+  '@google/genai',
 );
 
 const {
@@ -877,35 +877,35 @@ async function runBasic({
   }
 
   try {
-    const genAI =
-      new GoogleGenerativeAI(
+    const ai =
+      new GoogleGenAI({
         apiKey,
-      );
-
-    const model =
-      genAI.getGenerativeModel({
-        model: BASIC_MODEL,
-        systemInstruction:
-          BASIC_SYSTEM_PROMPT +
-          (
-            reason ===
-            'basic_question'
-              ? ''
-              : '\n\nLive diagnostics are unavailable for this turn. Give only generic guidance.'
-          ),
       });
 
-    const result =
-      await model.generateContent(
-        safeMessage,
-      );
+    const response =
+      await ai.models
+        .generateContent({
+          model: BASIC_MODEL,
+          contents: safeMessage,
+          config: {
+            systemInstruction:
+              BASIC_SYSTEM_PROMPT +
+              (
+                reason ===
+                'basic_question'
+                  ? ''
+                  : '\n\nLive diagnostics are unavailable for this turn. Give only generic guidance.'
+              ),
+          },
+        });
 
     const answer =
-      result.response.text();
+      String(
+        response?.text || '',
+      ).trim();
 
     const metadata =
-      result.response
-        .usageMetadata || {};
+      response?.usageMetadata || {};
 
     return {
       mode: 'basic',

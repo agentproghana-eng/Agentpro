@@ -144,6 +144,36 @@ describe(
 
         expect(source)
           .toContain(
+            "'@google/genai'",
+          );
+
+        expect(source)
+          .not.toContain(
+            "'@google/generative-ai'",
+          );
+
+        expect(source)
+          .toContain(
+            'new GoogleGenAI({',
+          );
+
+        expect(source)
+          .toContain(
+            'ai.models',
+          );
+
+        expect(source)
+          .toContain(
+            '.generateContent({',
+          );
+
+        expect(source)
+          .toContain(
+            'systemInstruction:',
+          );
+
+        expect(source)
+          .toContain(
             'store: false',
           );
       },
