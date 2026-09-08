@@ -5,7 +5,12 @@ import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
 
 class AIAssistantScreen extends StatefulWidget {
-  const AIAssistantScreen({super.key});
+  final bool isPersonal;
+
+  const AIAssistantScreen({
+    super.key,
+    required this.isPersonal,
+  });
   @override
   State<AIAssistantScreen> createState() => _AIAssistantScreenState();
 }
@@ -15,14 +20,15 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   final _scrollCtrl = ScrollController();
   final List<_ChatMessage> _messages = [];
   String? _conversationId;
+  String? _supportMode;
   bool _loading = false;
 
   final _suggestions = [
-    'How do I process a Cash In?',
-    'Why did my transaction fail?',
-    'How is my commission calculated?',
-    'How do I renew my subscription?',
-    'How do I add a new agent?',
+    'Check my recent transactions',
+    'Is my subscription active?',
+    'Why is my Business Hub ad not showing?',
+    'Is AgentPro working normally?',
+    'How do I use AgentPro?',
   ];
 
   @override
@@ -34,12 +40,11 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   void _addWelcome() {
     _messages.add(const _ChatMessage(
       role: 'assistant',
-      content: 'Akwaaba! 👋 I\'m your AgentPro AI Assistant.\n\n'
-          'I can help you with:\n'
-          '• Processing Mobile Money transactions\n'
-          '• Understanding your float and commissions\n'
-          '• Subscription and marketplace support\n'
-          '• Troubleshooting failed transactions\n\n'
+      content: 'Akwaaba! 👋 I\'m Ask AgentPro.\n\n'
+          'I can explain AgentPro and securely check read-only '
+          'diagnostic information for your own account, transactions, '
+          'subscription and Business Hub listings.\n\n'
+          'Never share your PIN, OTP or password here.\n\n'
           'What can I help you with today?',
     ));
   }
@@ -58,12 +63,14 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     try {
       final res = await ApiClient.instance.post('/ai/chat', data: {
         'message': msg,
+        'mode': widget.isPersonal ? 'personal' : 'business',
         if (_conversationId != null) 'conversation_id': _conversationId,
       });
       final data = res.data['data'];
       if (mounted) {
         setState(() {
           _conversationId = data['conversation_id'];
+          _supportMode = data['mode']?.toString();
           _messages
               .add(_ChatMessage(role: 'assistant', content: data['message']));
           _loading = false;
@@ -98,18 +105,27 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(children: [
-          CircleAvatar(
+        title: Row(children: [
+          const CircleAvatar(
             backgroundColor: Colors.white,
             radius: 16,
             child:
                 Icon(Icons.smart_toy, color: AppTheme.primaryColor, size: 18),
           ),
-          SizedBox(width: 10),
+          const SizedBox(width: 10),
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('AI Assistant', style: TextStyle(fontSize: 15)),
-            Text('Powered by Claude',
-                style: TextStyle(fontSize: 10, color: Colors.white70)),
+            const Text('Ask AgentPro', style: TextStyle(fontSize: 15)),
+            Text(
+              _supportMode == 'full'
+                  ? 'Live diagnostics'
+                  : _supportMode == 'basic'
+                      ? 'Basic support'
+                      : 'Automatic support',
+              style: const TextStyle(
+                fontSize: 10,
+                color: Colors.white70,
+              ),
+            ),
           ]),
         ]),
         actions: [
@@ -118,6 +134,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
             onPressed: () => setState(() {
               _messages.clear();
               _conversationId = null;
+              _supportMode = null;
               _addWelcome();
             }),
             tooltip: 'New conversation',
@@ -175,7 +192,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                     textInputAction: TextInputAction.send,
                     onSubmitted: (_) => _send(),
                     decoration: InputDecoration(
-                      hintText: 'Ask me anything...',
+                      hintText: 'Ask AgentPro...',
                       border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(24)),
                       contentPadding: const EdgeInsets.symmetric(

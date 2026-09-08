@@ -434,8 +434,14 @@ class AppRouter {
         // Reports
         GoRoute(path: '/reports', builder: (_, __) => const ReportsScreen()),
 
-        // AI Assistant
-        GoRoute(path: '/ai', builder: (_, __) => const AIAssistantScreen()),
+        // Ask AgentPro
+        GoRoute(
+          path: '/ai',
+          builder: (_, state) => AIAssistantScreen(
+            isPersonal:
+                state.uri.queryParameters['mode'] == 'personal',
+          ),
+        ),
 
         // Subscription
         GoRoute(

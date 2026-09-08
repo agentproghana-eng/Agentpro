@@ -97,7 +97,11 @@ class SupportScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         children: [
           InkWell(
-            onTap: () => context.push('/ai'),
+            onTap: () => context.push(
+              isPersonal
+                  ? '/ai?mode=personal'
+                  : '/ai?mode=business',
+            ),
             borderRadius: BorderRadius.circular(14),
             child: Container(
               padding: const EdgeInsets.all(16),
@@ -123,7 +127,7 @@ class SupportScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'AI Assistant',
+                          'Ask AgentPro',
                           style: TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
@@ -131,7 +135,7 @@ class SupportScreen extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          'Ask about any feature, or get help with a transaction',
+                          'Get help and securely diagnose your AgentPro issues',
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.8),
                             fontSize: 11.5,
