@@ -24,6 +24,7 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
   String? _error;
   bool _isSaved = false;
   bool _updatingSaved = false;
+  bool _removing = false;
 
   @override
   void initState() {
@@ -163,6 +164,91 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
         onSubmitted: _load,
       ),
     );
+  }
+
+  Future<void> _removeAd() async {
+    if (_removing || _ad?['status']?.toString() != 'active') {
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Remove this listing?'),
+        content: const Text(
+          'It will stop appearing in Business Hub immediately. '
+          'Your listing, payment, views and enquiry history will remain '
+          'available in My Ads.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.errorColor,
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Remove Listing'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    setState(() => _removing = true);
+
+    try {
+      final response = await ApiClient.instance.delete(
+        '/marketplace/${widget.adId}',
+      );
+
+      if (!mounted) return;
+
+      final raw = response.data['data'];
+
+      final updated = raw is Map
+          ? Map<String, dynamic>.from(raw)
+          : <String, dynamic>{
+              'status': 'removed',
+            };
+
+      final current = Map<String, dynamic>.from(
+        _ad ?? <String, dynamic>{},
+      );
+
+      current.addAll(updated);
+
+      setState(() => _ad = current);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Listing removed from Business Hub.',
+          ),
+        ),
+      );
+    } on DioException catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.response?.data?['message'] ??
+                'Could not remove this listing.',
+          ),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _removing = false);
+      }
+    }
   }
 
   @override
@@ -559,6 +645,17 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
               expiresAt: ad['expires_at']?.toString(),
               rejectionReason: ad['rejection_reason']?.toString(),
             ),
+            if (status == 'active') ...[
+              const SizedBox(height: 20),
+              AppButton(
+                label: 'Remove Listing',
+                icon: Icons.remove_circle_outline,
+                color: AppTheme.errorColor,
+                outlined: true,
+                isLoading: _removing,
+                onPressed: _removeAd,
+              ),
+            ],
             if (status == 'pending_payment' &&
                 (!paymentReferenceSubmitted || paystackPending)) ...[
               const SizedBox(height: 20),
@@ -1275,6 +1372,14 @@ class _StatusExplainer extends StatelessWidget {
               ? 'Your ad is published and visible to all users until '
                   '${DateFormat('dd MMM yyyy').format(expiresAtDate)}.'
               : 'Your ad is published and visible to all users.',
+        ),
+      'removed' => (
+          Icons.remove_circle_outline,
+          Colors.grey,
+          'Removed',
+          'You removed this listing from Business Hub. It is no longer '
+              'public, but its payment and performance history is still '
+              'kept in My Ads.',
         ),
       'rejected' => (
           Icons.cancel,
