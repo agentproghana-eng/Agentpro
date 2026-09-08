@@ -377,7 +377,7 @@ mpRouter.get('/categories', async (req, res) => {
 });
 
 // List the current user's own ads, regardless of status (pending_review,
-// pending_payment, active, rejected, expired). The public list endpoint
+// pending_payment, active, rejected, expired, removed). The public list endpoint
 // above only ever returns 'active' ads, so a user has no other way to
 // see or act on an ad they just submitted.
 mpRouter.get('/mine', async (req, res) => {
@@ -1739,6 +1739,95 @@ mpRouter.get('/:ad_id', async (req, res) => {
       data: isOwner ? ad : publicAd(ad),
     });
   } catch (e) { res.status(500).json({ success: false, message: 'Failed to fetch ad' }); }
+});
+
+
+// Owners may remove a live listing before its paid listing period expires.
+// This is deliberately a soft removal: payment, enquiry, view and audit
+// history remain attached to the advertisement.
+mpRouter.delete('/:ad_id', async (req, res) => {
+  try {
+    const result = await query(
+      `UPDATE advertisements
+       SET status = 'removed',
+           updated_at = NOW()
+       WHERE id = $1
+         AND posted_by = $2
+         AND status = 'active'
+         AND expires_at IS NOT NULL
+         AND expires_at > NOW()
+       RETURNING
+         id,
+         company_id,
+         status,
+         expires_at,
+         updated_at`,
+      [req.params.ad_id, req.user.id]
+    );
+
+    if (!result.rows.length) {
+      const existing = await query(
+        `SELECT posted_by, status, expires_at
+         FROM advertisements
+         WHERE id = $1`,
+        [req.params.ad_id]
+      );
+
+      if (
+        !existing.rows.length ||
+        existing.rows[0].posted_by !== req.user.id
+      ) {
+        return res.status(404).json({
+          success: false,
+          message: 'Ad not found',
+        });
+      }
+
+      return res.status(422).json({
+        success: false,
+        message: 'Only active, unexpired listings can be removed',
+      });
+    }
+
+    const removed = result.rows[0];
+
+    try {
+      await auditLog({
+        userId: req.user.id,
+        companyId: removed.company_id || null,
+        action: 'BUSINESS_HUB_AD_REMOVED',
+        entityType: 'advertisement',
+        entityId: removed.id,
+        oldValues: {
+          status: 'active',
+        },
+        newValues: {
+          status: 'removed',
+        },
+      });
+    } catch (auditError) {
+      logger.warn(
+        'Business Hub ad removal audit log failed:',
+        auditError
+      );
+    }
+
+    res.json({
+      success: true,
+      data: removed,
+      message: 'Listing removed from Business Hub',
+    });
+  } catch (e) {
+    logger.error(
+      'DELETE /marketplace/:ad_id error:',
+      e
+    );
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to remove listing',
+    });
+  }
 });
 
 // Submit an ad. Photos are optional (upload.array tolerates zero
