@@ -236,9 +236,74 @@ class _MessageBubble extends StatelessWidget {
   final _ChatMessage message;
   const _MessageBubble({required this.message});
 
+  static final RegExp _assistantMarkdownPattern = RegExp(
+    r'(\*\*[^*\n]+\*\*|\*[^*\n]+\*|_[^_\n]+_)',
+  );
+
+  List<InlineSpan> _assistantSpans(String text) {
+    final spans = <InlineSpan>[];
+    var cursor = 0;
+
+    for (final match in _assistantMarkdownPattern.allMatches(text)) {
+      if (match.start > cursor) {
+        spans.add(
+          TextSpan(
+            text: text.substring(cursor, match.start),
+          ),
+        );
+      }
+
+      final token = match.group(0) ?? '';
+
+      if (token.startsWith('**') &&
+          token.endsWith('**') &&
+          token.length >= 4) {
+        spans.add(
+          TextSpan(
+            text: token.substring(2, token.length - 2),
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        );
+      } else if (token.length >= 2) {
+        spans.add(
+          TextSpan(
+            text: token.substring(1, token.length - 1),
+            style: const TextStyle(
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        );
+      }
+
+      cursor = match.end;
+    }
+
+    if (cursor < text.length) {
+      spans.add(
+        TextSpan(
+          text: text.substring(cursor),
+        ),
+      );
+    }
+
+    return spans;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isUser = message.role == 'user';
+    final messageStyle = TextStyle(
+      color: isUser
+          ? Colors.white
+          : message.isError
+              ? AppTheme.errorColor
+              : context.appPrimaryText,
+      fontSize: 14,
+      height: 1.4,
+    );
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -271,18 +336,19 @@ class _MessageBubble extends StatelessWidget {
                   bottomRight: Radius.circular(isUser ? 4 : 16),
                 ),
               ),
-              child: Text(
-                message.content,
-                style: TextStyle(
-                  color: isUser
-                      ? Colors.white
-                      : message.isError
-                          ? AppTheme.errorColor
-                          : context.appPrimaryText,
-                  fontSize: 14,
-                  height: 1.4,
-                ),
-              ),
+              child: isUser
+                  ? Text(
+                      message.content,
+                      style: messageStyle,
+                    )
+                  : Text.rich(
+                      TextSpan(
+                        style: messageStyle,
+                        children: _assistantSpans(
+                          message.content,
+                        ),
+                      ),
+                    ),
             ),
           ),
           if (isUser) const SizedBox(width: 8),

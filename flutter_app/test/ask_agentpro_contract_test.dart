@@ -105,6 +105,49 @@ void main() {
   });
 
 
+  test('Ask AgentPro formats assistant emphasis without active links', () {
+    expect(
+      assistant,
+      contains('_assistantSpans'),
+    );
+
+    expect(
+      assistant,
+      contains('Text.rich'),
+    );
+
+    expect(
+      assistant,
+      contains('FontWeight.w700'),
+    );
+
+    expect(
+      assistant,
+      contains('FontStyle.italic'),
+    );
+
+    expect(
+      assistant,
+      isNot(
+        contains('package:flutter_markdown'),
+      ),
+    );
+
+    expect(
+      assistant,
+      isNot(
+        contains('package:url_launcher'),
+      ),
+    );
+
+    expect(
+      assistant,
+      isNot(
+        contains('launchUrl('),
+      ),
+    );
+  });
+
   test('Ask AgentPro displays automatic Basic or Full mode', () {
     expect(
       assistant,
