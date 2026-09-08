@@ -148,6 +148,16 @@ describe(
           );
 
         expect(source)
+          .toContain(
+            "'gemini-3.1-flash-lite'",
+          );
+
+        expect(source)
+          .not.toContain(
+            "'gemini-2.5-flash-lite'",
+          );
+
+        expect(source)
           .not.toContain(
             "'@google/generative-ai'",
           );

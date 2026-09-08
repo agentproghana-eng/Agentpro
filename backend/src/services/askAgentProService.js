@@ -40,7 +40,7 @@ const OPENAI_MODEL =
 const BASIC_MODEL =
   process.env
     .ASK_AGENTPRO_BASIC_MODEL ||
-  'gemini-2.5-flash-lite';
+  'gemini-3.1-flash-lite';
 
 const MAX_TOOL_ROUNDS = 3;
 const MAX_TOOL_CALLS = 4;
