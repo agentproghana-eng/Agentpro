@@ -7,6 +7,10 @@ void main() {
     'lib/features/transactions/personal_transaction_screen.dart',
   ).readAsStringSync();
 
+  final accessibilitySource = File(
+    'android/app/src/main/kotlin/com/agentpro/ghana/UssdAccessibilityService.kt',
+  ).readAsStringSync();
+
   group('Telecel Personal flow UI contract', () {
     test(
       'unified Telecel Transfer Money supports Same and Other Network',
@@ -104,21 +108,84 @@ void main() {
       },
     );
 
-    test('offers only recovered Daily category for Telecel Buy Data', () {
+    test('offers all six live Telecel Buy Data categories', () {
       expect(
         source,
         contains('List<DataBundleCategory> get _availableDataBundleCategories'),
       );
 
+      for (final category in const [
+        "'flexi'",
+        "'2moorch'",
+        "'daily'",
+        "'weekly'",
+        "'monthly'",
+        "'night'",
+      ]) {
+        expect(source, contains(category));
+      }
+
       expect(
         source,
-        contains("category.id == 'daily'"),
+        isNot(contains("category.id == 'daily'")),
       );
 
       expect(
         source,
         contains(
           'children: _availableDataBundleCategories.map((cat) {',
+        ),
+      );
+
+      expect(
+        source,
+        contains('_isTelecelManualDataCategory'),
+      );
+
+      expect(
+        source,
+        contains(
+          "widget.provider == 'telecel' && id != 'daily'",
+        ),
+      );
+
+      expect(
+        source,
+        contains(
+          'Choose the current package, amount or payment',
+        ),
+      );
+    });
+
+    test('changing Telecel package menus stay read-only until PIN', () {
+      expect(
+        accessibilitySource,
+        contains('manualUserSelectionUntilPin'),
+      );
+
+      expect(
+        accessibilitySource,
+        contains('nextStep.actionValue == "until_pin"'),
+      );
+
+      expect(
+        accessibilitySource,
+        contains(
+          '"Generic flow: armed read-only manual selection until PIN"',
+        ),
+      );
+
+      expect(
+        accessibilitySource,
+        contains(
+          'steps[index].action == "pin_prompt"',
+        ),
+      );
+
+      expect(
+        accessibilitySource,
+        contains(
+          '"pending_confirmation"',
         ),
       );
     });
