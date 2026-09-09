@@ -4,6 +4,9 @@ const {
   withTransaction,
 } = require('../config/database');
 const { logger } = require('../utils/logger');
+const {
+  parseDisabledTransactionTypes,
+} = require('../utils/featureFlagConfig');
 const { auditLog } = require('../services/auditService');
 const {
   sanitizeUSSDLog,
@@ -204,6 +207,44 @@ exports.initiateTransaction = async (req, res) => {
           message: 'Existing personal transaction returned for retry.',
         });
       }
+    }
+
+    // Preserve idempotent replay above this boundary. A transaction that
+    // already exists must remain safely replayable even if its operation is
+    // later disabled.
+    try {
+      const flagResult = await query(
+        `SELECT value
+         FROM system_config
+         WHERE key = 'disabled_transaction_types'`
+      );
+
+      if (flagResult.rows.length > 0) {
+        const disabled =
+          parseDisabledTransactionTypes(
+            flagResult.rows[0].value
+          );
+
+        if (
+          disabled.includes(
+            `${provider}:${transaction_type}`
+          )
+        ) {
+          return res.status(403).json({
+            success: false,
+            code: 'TRANSACTION_TYPE_DISABLED',
+            message:
+              'This transaction type has been temporarily disabled by your administrator. Please try again later.',
+          });
+        }
+      }
+    } catch (flagError) {
+      // Match the existing Business transaction policy: configuration
+      // availability must not block a genuine live transaction.
+      logger.error(
+        'Personal feature flag check failed (allowing transaction):',
+        flagError,
+      );
     }
 
     // Paid users resolve their own Personal override first, then Global.
