@@ -9,6 +9,9 @@ const { auditLog } = require("../services/auditService");
 const { sendEmail, sendNewEmployeeEmail } = require("../services/emailService");
 const { sendNewEmployeeSMS } = require("../services/smsService");
 const { getRegisteredProviders } = require("../utils/ussdFlowCapabilities");
+const {
+  parseDisabledTransactionTypes,
+} = require("../utils/featureFlagConfig");
 
 const STAFF_SETUP_TOKEN_TTL_MS = 60 * 60 * 1000;
 
@@ -1009,21 +1012,38 @@ exports.getFeatureFlags = async (req, res) => {
     const result = await query(
       `SELECT value FROM system_config WHERE key = 'disabled_transaction_types'`,
     );
-    let disabled = [];
-    if (result.rows.length > 0) {
-      try {
-        const parsed = JSON.parse(result.rows[0].value);
-        if (Array.isArray(parsed)) disabled = parsed;
-      } catch (_) {
-        /* malformed config - fail safe with empty list */
-      }
+
+    const disabled =
+      result.rows.length === 0
+        ? []
+        : parseDisabledTransactionTypes(
+            result.rows[0].value,
+          );
+
+    res.json({
+      success: true,
+      data: {
+        disabled_transaction_types: disabled,
+      },
+    });
+  } catch (error) {
+    logger.error("Get feature flags error:", error);
+
+    if (error.code === "INVALID_FEATURE_FLAG_CONFIG") {
+      return res.status(503).json({
+        success: false,
+        code: "FEATURE_FLAG_CONFIG_INVALID",
+        message:
+          "Feature flag configuration is temporarily unavailable.",
+      });
     }
-    res.json({ success: true, data: { disabled_transaction_types: disabled } });
-  } catch (e) {
-    logger.error("Get feature flags error:", e);
+
     res
       .status(500)
-      .json({ success: false, message: "Failed to fetch feature flags" });
+      .json({
+        success: false,
+        message: "Failed to fetch feature flags",
+      });
   }
 };
 

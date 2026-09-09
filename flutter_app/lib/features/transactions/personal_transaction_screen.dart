@@ -9,6 +9,7 @@ import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/api/api_client.dart';
 import '../../core/services/offline_queue_service.dart';
+import '../../core/services/feature_flag_service.dart';
 import '../../core/services/sim_card_service.dart';
 import '../../core/services/sim_role_assignment_service.dart';
 import '../../core/services/storage_service.dart';
@@ -939,6 +940,21 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
 
       final isOffline = connectivity.isEmpty ||
           connectivity.every((result) => result == ConnectivityResult.none);
+
+      final transactionDisabled =
+          await FeatureFlagService.isTransactionDisabled(
+        provider: widget.provider,
+        transactionType: transactionType,
+        allowNetwork: !isOffline,
+      );
+
+      if (transactionDisabled) {
+        _showPersonalStartFailure(
+          'This transaction is temporarily unavailable while AgentPro '
+          'verifies the network flow.',
+        );
+        return null;
+      }
 
       // Offline Personal initiation stores request_fields for later sync.
       // Never put a raw bank account number into that persistent queue.

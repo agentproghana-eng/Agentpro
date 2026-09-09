@@ -13,6 +13,9 @@ const { sendRegistrationApprovedSMS } = require('../services/smsService');
 const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
 const { enqueueOutboxEvent } = require('../services/outboxService');
+const {
+  serializeDisabledTransactionTypes,
+} = require('../utils/featureFlagConfig');
 
 router.use(authenticate, authorize('superuser'));
 
@@ -414,13 +417,28 @@ router.get('/config', async (req, res) => {
 
 router.patch('/config/:key', async (req, res) => {
   const { value } = req.body;
+
+  let validatedValue = value;
+
+  if (req.params.key === 'disabled_transaction_types') {
+    try {
+      validatedValue = serializeDisabledTransactionTypes(value);
+    } catch (error) {
+      return res.status(422).json({
+        success: false,
+        code: 'INVALID_FEATURE_FLAG_CONFIG',
+        message: error.message,
+      });
+    }
+  }
+
   try {
     const result = await query(
       'UPDATE system_config SET value = $1, updated_at = NOW(), updated_by = $2 WHERE key = $3 RETURNING *',
-      [value, req.user.id, req.params.key]
+      [validatedValue, req.user.id, req.params.key]
     );
     if (!result.rows.length) return res.status(404).json({ success: false, message: 'Config key not found' });
-    await auditLog({ userId: req.user.id, action: 'CONFIG_UPDATED', newValues: { key: req.params.key, value }, ipAddress: req.ip });
+    await auditLog({ userId: req.user.id, action: 'CONFIG_UPDATED', newValues: { key: req.params.key, value: validatedValue }, ipAddress: req.ip });
     res.json({ success: true, data: result.rows[0] });
   } catch (e) { res.status(500).json({ success: false, message: 'Failed to update config' }); }
 });
