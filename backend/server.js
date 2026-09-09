@@ -14,6 +14,15 @@ const {
   validateProductionSecurityEnv,
 } = require('./src/config/securityEnv');
 const errorHandler = require('./src/middleware/errorHandler');
+const {
+  requirePerformanceTelemetry,
+  performanceTelemetryEnabled,
+} = require('./src/middleware/performanceTelemetryAuth');
+const {
+  startPerformanceTelemetry,
+  stopPerformanceTelemetry,
+  performanceSnapshot,
+} = require('./src/services/performanceTelemetryService');
 const { apiLimiter } = require('./src/middleware/rateLimit');
 
 // Route imports
@@ -195,6 +204,24 @@ app.get('/health', async (req, res) => {
   });
 });
 
+app.get(
+  '/internal/performance',
+  requirePerformanceTelemetry,
+  async (req, res, next) => {
+    try {
+      const snapshot =
+        await performanceSnapshot();
+
+      res.json({
+        success: true,
+        ...snapshot,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 // ============================================================
 // API ROUTES
 // ============================================================
@@ -333,6 +360,8 @@ function gracefulShutdown(signal) {
       const schedulerStop = stopScheduler;
       const outboxStop = stopOutboxWorker;
 
+      stopPerformanceTelemetry();
+
       stopScheduler = null;
       stopOutboxWorker = null;
 
@@ -410,6 +439,14 @@ async function startServer() {
     validateProductionSecurityEnv();
 
     logger.info('Backend telemetry: privacy-safe local logging enabled');
+
+    if (performanceTelemetryEnabled()) {
+      startPerformanceTelemetry();
+
+      logger.info(
+        'Performance telemetry enabled'
+      );
+    }
 
     // Connect to PostgreSQL
     await connectDB();
