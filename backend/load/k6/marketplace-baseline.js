@@ -1,6 +1,7 @@
 'use strict';
 
 import http from 'k6/http';
+import exec from 'k6/execution';
 import { check, sleep } from 'k6';
 
 import { loadConfig } from './lib/config.js';
@@ -71,7 +72,7 @@ export default function () {
   );
 
   if (response.status === 401) {
-    throw new Error(
+    exec.test.abort(
       `AUTH_EXPIRED endpoint=${route.name || route.endpoint}`
     );
   }
