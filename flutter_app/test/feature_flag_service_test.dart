@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:agentpro/core/services/feature_flag_service.dart';
+import 'package:agent_pro_ghana/core/services/feature_flag_service.dart';
 
 void main() {
   group('normalizeDisabledTransactionTypes', () {
