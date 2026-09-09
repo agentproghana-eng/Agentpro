@@ -14,6 +14,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../core/services/offline_queue_service.dart';
+import '../../core/services/feature_flag_service.dart';
 import '../../core/services/sim_card_service.dart';
 import '../../core/services/sim_role_assignment_service.dart';
 import '../../core/services/storage_service.dart';
@@ -655,6 +656,30 @@ class _TransactionScreenState extends State<TransactionScreen> {
     final isOffline = connectivity.every(
       (result) => result == ConnectivityResult.none,
     );
+
+    final transactionDisabled =
+        await FeatureFlagService.isTransactionDisabled(
+      provider: _selectedProvider,
+      transactionType: widget.transactionType,
+      allowNetwork: !isOffline,
+    );
+
+    if (transactionDisabled) {
+      if (!mounted) return;
+
+      setState(() => _loading = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'This transaction is temporarily unavailable while AgentPro '
+            'verifies the network flow.',
+          ),
+        ),
+      );
+
+      return;
+    }
 
     if (isOffline) {
       final trust = await StorageService.evaluateOfflineTransactionTrust(
