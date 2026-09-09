@@ -105,6 +105,11 @@ router.post(
     body("client_operation_id")
       .isUUID()
       .withMessage("client_operation_id must be a valid UUID"),
+    body("offline_authorization_receipt")
+      .optional({ nullable: true, checkFalsy: true })
+      .isString()
+      .isLength({ max: 65536 })
+      .withMessage("offline_authorization_receipt is invalid"),
     body("sim_iccid")
       .optional({ nullable: true })
       .isString()

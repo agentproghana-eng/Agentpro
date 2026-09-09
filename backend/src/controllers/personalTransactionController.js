@@ -4,6 +4,12 @@ const {
   withTransaction,
 } = require('../config/database');
 const { logger } = require('../utils/logger');
+const {
+  parseDisabledTransactionTypes,
+} = require('../utils/featureFlagConfig');
+const {
+  decideOfflineAuthorization,
+} = require('../utils/offlineAuthorizationDecision');
 const { auditLog } = require('../services/auditService');
 const {
   sanitizeUSSDLog,
@@ -147,6 +153,7 @@ exports.initiateTransaction = async (req, res) => {
     installation_id,
     sim_subscription_id,
     client_operation_id,
+    offline_authorization_receipt,
   } = req.body;
 
   const userId = req.user.id;
@@ -204,6 +211,103 @@ exports.initiateTransaction = async (req, res) => {
           message: 'Existing personal transaction returned for retry.',
         });
       }
+    }
+
+    // Preserve idempotent replay above this boundary. A transaction that
+    // already exists must remain safely replayable even if its operation is
+    // later disabled.
+    try {
+      const flagResult = await query(
+        `SELECT value
+         FROM system_config
+         WHERE key = 'disabled_transaction_types'`
+      );
+
+      if (flagResult.rows.length > 0) {
+        const disabled =
+          parseDisabledTransactionTypes(
+            flagResult.rows[0].value
+          );
+
+        if (
+          disabled.includes(
+            `${provider}:${transaction_type}`
+          )
+        ) {
+          try {
+            const authorizationDecision =
+              decideOfflineAuthorization({
+                currentlyDisabled: true,
+                receipt: offline_authorization_receipt,
+                user: req.user,
+                mode: 'personal',
+                provider,
+                transactionType:
+                  transaction_type,
+              });
+
+            if (!authorizationDecision.allowed) {
+              return res.status(403).json({
+                success: false,
+                code:
+                  'TRANSACTION_TYPE_DISABLED',
+                message:
+                  'This transaction type has been temporarily disabled by your administrator. Please try again later.',
+              });
+            }
+          } catch (authorizationError) {
+            const authorizationCode =
+              String(
+                authorizationError?.code ||
+                  ''
+              );
+
+            if (
+              authorizationCode ===
+              'OFFLINE_RECEIPT_SECRET_INVALID'
+            ) {
+              logger.error(
+                'Offline authorization receipt verification unavailable:',
+                authorizationError,
+              );
+
+              return res.status(503).json({
+                success: false,
+                code:
+                  'OFFLINE_AUTHORIZATION_UNAVAILABLE',
+                message:
+                  'Offline authorization verification is temporarily unavailable.',
+              });
+            }
+
+            logger.warn(
+              'Offline authorization receipt rejected:',
+              {
+                code:
+                  authorizationCode ||
+                  'UNKNOWN',
+                requestId:
+                  req.requestId,
+              },
+            );
+
+            return res.status(403).json({
+              success: false,
+              code:
+                'TRANSACTION_TYPE_DISABLED',
+              message:
+                'This transaction type has been temporarily disabled by your administrator. Please try again later.',
+            });
+          }
+        }
+      }
+    } catch (flagError) {
+      // Match the existing Business transaction policy: configuration
+      // availability must not block a genuine live transaction.
+      logger.error(
+        'Personal feature flag check failed (allowing transaction):',
+        flagError,
+      );
     }
 
     // Paid users resolve their own Personal override first, then Global.

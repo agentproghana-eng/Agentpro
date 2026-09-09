@@ -3,7 +3,12 @@ const express = require('express');
 const { body, param, validationResult } = require('express-validator');
 const userRouter = express.Router();
 const userController = require('../controllers/userController');
-const { authenticate, authorize } = require('../middleware/auth');
+const {
+  authenticate,
+  authorize,
+  requireActiveSubscription,
+  requirePersonalAccount,
+} = require('../middleware/auth');
 
 const handleValidation = (req, res, next) => {
   const errors = validationResult(req);
@@ -120,6 +125,47 @@ userRouter.get('/me/quick-actions/catalog', userController.getMyQuickActionCatal
 userRouter.get('/me/quick-actions', userController.getMyQuickActions);
 userRouter.patch('/me/quick-actions', userController.updateMyQuickActions);
 userRouter.get('/me/feature-flags', userController.getFeatureFlags);
+
+const requireOfflineAuthorizationEntitlement =
+  (req, res, next) => {
+    const mode = String(req.params.mode || '')
+      .trim()
+      .toLowerCase();
+
+    if (mode === 'business') {
+      return requireActiveSubscription(
+        req,
+        res,
+        next
+      );
+    }
+
+    if (mode === 'personal') {
+      return requirePersonalAccount(
+        req,
+        res,
+        next
+      );
+    }
+
+    return res.status(422).json({
+      success: false,
+      message: 'Invalid offline authorization mode.',
+      code: 'OFFLINE_AUTHORIZATION_MODE_INVALID',
+    });
+  };
+
+userRouter.get(
+  '/me/offline-authorization/:mode',
+  param('mode')
+    .isIn(['business', 'personal'])
+    .withMessage(
+      'mode must be business or personal'
+    ),
+  handleValidation,
+  requireOfflineAuthorizationEntitlement,
+  userController.getOfflineAuthorization
+);
 
 userRouter.get(
   '/:user_id',

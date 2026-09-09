@@ -78,7 +78,7 @@ void main() {
 
     expect(
       personal,
-      contains('return context.push<String>('),
+      contains('return await context.push<String>('),
     );
 
     expect(

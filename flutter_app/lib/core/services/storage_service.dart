@@ -80,6 +80,121 @@ String? sessionIdFromAccessToken(String? token) {
   }
 }
 
+bool offlineAuthorizationReceiptMatchesTrustRecord({
+  required Map<String, dynamic> stored,
+  required String mode,
+  required String currentUserId,
+  required String currentSessionId,
+  required DateTime authorizedUntil,
+  required String receipt,
+}) {
+  final normalizedMode = mode.trim().toLowerCase();
+  final normalizedReceipt = receipt.trim();
+
+  if (normalizedMode != 'business' && normalizedMode != 'personal') {
+    return false;
+  }
+
+  if (!normalizedReceipt.startsWith('apr1.') ||
+      normalizedReceipt.length > 65536) {
+    return false;
+  }
+
+  final version = int.tryParse(stored['version']?.toString() ?? '');
+
+  if (version != 2) {
+    return false;
+  }
+
+  final storedMode = stored['mode']?.toString().trim().toLowerCase() ?? '';
+
+  if (storedMode != normalizedMode) {
+    return false;
+  }
+
+  final storedUserId = stored['user_id']?.toString().trim() ?? '';
+
+  final storedSessionId = stored['session_id']?.toString().trim() ?? '';
+
+  if (!offlineTrustProofMatchesCurrentSession(
+    proofUserId: storedUserId,
+    proofSessionId: storedSessionId,
+    currentUserId: currentUserId,
+    currentSessionId: currentSessionId,
+  )) {
+    return false;
+  }
+
+  final storedAuthorizedUntil = DateTime.tryParse(
+    stored['authorized_until']?.toString() ?? '',
+  )?.toUtc();
+
+  if (storedAuthorizedUntil == null) {
+    return false;
+  }
+
+  return storedAuthorizedUntil == authorizedUntil.toUtc();
+}
+
+String? offlineAuthorizationReceiptForReplacementTrust({
+  required Map<String, dynamic>? stored,
+  required String mode,
+  required String userId,
+  required String sessionId,
+  required DateTime authorizedUntil,
+  required bool personalPaid,
+  DateTime? personalPaidUntil,
+}) {
+  if (stored == null) {
+    return null;
+  }
+
+  final receipt = stored['authorization_receipt']?.toString().trim() ?? '';
+
+  if (!offlineAuthorizationReceiptMatchesTrustRecord(
+    stored: stored,
+    mode: mode,
+    currentUserId: userId,
+    currentSessionId: sessionId,
+    authorizedUntil: authorizedUntil,
+    receipt: receipt,
+  )) {
+    return null;
+  }
+
+  final normalizedMode = mode.trim().toLowerCase();
+
+  if (normalizedMode != 'personal') {
+    return receipt;
+  }
+
+  final storedPaidValue = stored['personal_paid'];
+  final storedPersonalPaid =
+      storedPaidValue == true || storedPaidValue?.toString() == '1';
+
+  if (storedPersonalPaid != personalPaid) {
+    return null;
+  }
+
+  if (!personalPaid) {
+    return receipt;
+  }
+
+  final storedPaidUntil = DateTime.tryParse(
+    stored['personal_paid_until']?.toString() ?? '',
+  )?.toUtc();
+
+  final replacementPaidUntil = personalPaidUntil?.toUtc();
+
+  if (storedPaidUntil == null ||
+      replacementPaidUntil == null ||
+      storedPaidUntil != replacementPaidUntil) {
+    return null;
+  }
+
+  return receipt;
+}
+
 OfflineServerTrustEvaluation evaluateOfflineServerTrustRecord({
   required Map<String, dynamic> stored,
   required String currentUserId,
@@ -169,8 +284,8 @@ OfflineServerTrustEvaluation evaluateOfflineServerTrustRecord({
   final trustedNow = verifiedAt.add(Duration(milliseconds: elapsedMs));
 
   if (wallNow.toUtc().isBefore(
-    trustedNow.subtract(StorageService._clockRollbackTolerance),
-  )) {
+        trustedNow.subtract(StorageService._clockRollbackTolerance),
+      )) {
     return OfflineServerTrustEvaluation(
       status: OfflineServerTrustStatus.clockRollbackDetected,
       trustedNow: trustedNow,
@@ -203,8 +318,7 @@ OfflineServerTrustEvaluation evaluateOfflineServerTrustRecord({
         stored['personal_paid_until']?.toString() ?? '',
       )?.toUtc();
 
-      personalPaidEntitled =
-          paidUntil != null &&
+      personalPaidEntitled = paidUntil != null &&
           trustedNow.isBefore(paidUntil) &&
           !paidUntil.isAfter(authorizedUntil);
     }
@@ -492,6 +606,35 @@ class StorageService {
       }
 
       final isPersonal = normalizedMode == 'personal';
+      final trustStorageKey = _serverTrustStorageKey(isPersonal);
+
+      Map<String, dynamic>? existingTrust;
+
+      final existingRaw = await _storage.read(
+        key: trustStorageKey,
+      );
+
+      if (existingRaw != null && existingRaw.trim().isNotEmpty) {
+        try {
+          final decoded = jsonDecode(existingRaw);
+
+          if (decoded is Map) {
+            existingTrust = Map<String, dynamic>.from(decoded);
+          }
+        } catch (_) {
+          existingTrust = null;
+        }
+      }
+
+      final preservedReceipt = offlineAuthorizationReceiptForReplacementTrust(
+        stored: existingTrust,
+        mode: normalizedMode,
+        userId: serverUserId.trim(),
+        sessionId: serverSessionId.trim(),
+        authorizedUntil: normalizedAuthorizedUntil,
+        personalPaid: personalPaid,
+        personalPaidUntil: normalizedPaidUntil,
+      );
 
       final payload = <String, dynamic>{
         'version': 2,
@@ -505,10 +648,11 @@ class StorageService {
         if (isPersonal) 'personal_paid': personalPaid,
         if (isPersonal && personalPaid && normalizedPaidUntil != null)
           'personal_paid_until': normalizedPaidUntil.toIso8601String(),
+        if (preservedReceipt != null) 'authorization_receipt': preservedReceipt,
       };
 
       await _storage.write(
-        key: _serverTrustStorageKey(isPersonal),
+        key: trustStorageKey,
         value: jsonEncode(payload),
       );
 
@@ -517,6 +661,102 @@ class StorageService {
       return true;
     } catch (_) {
       return false;
+    }
+  }
+
+  static Future<bool> attachOfflineAuthorizationReceipt({
+    required bool isPersonal,
+    required String receipt,
+    required DateTime authorizedUntil,
+  }) async {
+    try {
+      final normalizedReceipt = receipt.trim();
+
+      if (normalizedReceipt.isEmpty) {
+        return false;
+      }
+
+      final key = _serverTrustStorageKey(isPersonal);
+      final raw = await _storage.read(key: key);
+
+      if (raw == null || raw.trim().isEmpty) {
+        return false;
+      }
+
+      final decoded = jsonDecode(raw);
+
+      if (decoded is! Map) {
+        return false;
+      }
+
+      final stored = Map<String, dynamic>.from(decoded);
+
+      final user = await getUser();
+
+      final currentUserId = user?['id']?.toString().trim() ?? '';
+
+      final currentSessionId = await _currentSessionId() ?? '';
+
+      final mode = isPersonal ? 'personal' : 'business';
+
+      if (!offlineAuthorizationReceiptMatchesTrustRecord(
+        stored: stored,
+        mode: mode,
+        currentUserId: currentUserId,
+        currentSessionId: currentSessionId,
+        authorizedUntil: authorizedUntil,
+        receipt: normalizedReceipt,
+      )) {
+        return false;
+      }
+
+      stored['authorization_receipt'] = normalizedReceipt;
+
+      await _storage.write(
+        key: key,
+        value: jsonEncode(stored),
+      );
+
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<String?> getOfflineAuthorizationReceipt({
+    required bool isPersonal,
+  }) async {
+    try {
+      final evaluation = await evaluateOfflineTransactionTrust(
+        isPersonal: isPersonal,
+      );
+
+      if (!evaluation.isValid) {
+        return null;
+      }
+
+      final key = _serverTrustStorageKey(isPersonal);
+      final raw = await _storage.read(key: key);
+
+      if (raw == null || raw.trim().isEmpty) {
+        return null;
+      }
+
+      final decoded = jsonDecode(raw);
+
+      if (decoded is! Map) {
+        return null;
+      }
+
+      final receipt = decoded['authorization_receipt']?.toString().trim() ?? '';
+
+      if (!receipt.startsWith('apr1.') || receipt.length > 65536) {
+        return null;
+      }
+
+      return receipt;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -628,13 +868,11 @@ class StorageService {
     }
 
     final rawCompanyId = user['company_id']?.toString().trim();
-    final companyId = rawCompanyId == null || rawCompanyId.isEmpty
-        ? '-'
-        : rawCompanyId;
+    final companyId =
+        rawCompanyId == null || rawCompanyId.isEmpty ? '-' : rawCompanyId;
 
-    final encodedScope = base64Url
-        .encode(utf8.encode('$userId|$companyId'))
-        .replaceAll('=', '');
+    final encodedScope =
+        base64Url.encode(utf8.encode('$userId|$companyId')).replaceAll('=', '');
 
     return 'offline_dashboard_v1_$encodedScope';
   }
@@ -709,9 +947,8 @@ class StorageService {
 
       final merged = _deepMergeOfflineDashboardMaps(existing, patch);
 
-      merged['last_verified_update_at'] = DateTime.now()
-          .toUtc()
-          .toIso8601String();
+      merged['last_verified_update_at'] =
+          DateTime.now().toUtc().toIso8601String();
 
       await _storage.write(key: key, value: jsonEncode(merged));
     });

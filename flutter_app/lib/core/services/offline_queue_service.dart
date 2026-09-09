@@ -8,6 +8,44 @@ import 'package:uuid/uuid.dart';
 import '../api/api_client.dart';
 import 'storage_service.dart';
 
+String? normalizeOfflineAuthorizationReceipt(
+  dynamic value,
+) {
+  final receipt = value?.toString().trim() ?? '';
+
+  if (receipt.isEmpty ||
+      !receipt.startsWith('apr1.') ||
+      receipt.length > 65536) {
+    return null;
+  }
+
+  return receipt;
+}
+
+Map<String, dynamic> buildOfflineQueuedInitiationPayload(
+  Map<String, dynamic> transaction,
+) {
+  final rawFields = transaction['request_fields'];
+
+  if (rawFields is! Map) {
+    throw const FormatException(
+      'Offline queued transaction is missing request_fields.',
+    );
+  }
+
+  final fields = Map<String, dynamic>.from(rawFields);
+
+  final receipt = normalizeOfflineAuthorizationReceipt(
+    transaction['offline_authorization_receipt'],
+  );
+
+  if (receipt != null) {
+    fields['offline_authorization_receipt'] = receipt;
+  }
+
+  return fields;
+}
+
 class OfflineQueueIdentity {
   final String userId;
   final String? companyId;
@@ -429,12 +467,18 @@ class OfflineQueueService {
     String? failureReason,
     required List<Map<String, dynamic>> sessionLog,
     bool isPersonal = false,
+    String? offlineAuthorizationReceipt,
   }) async {
     if (!isPersonal && identity.companyId == null) {
       throw StateError(
         'Business offline transactions require a company identity.',
       );
     }
+
+    final normalizedOfflineAuthorizationReceipt =
+        normalizeOfflineAuthorizationReceipt(
+      offlineAuthorizationReceipt,
+    );
 
     final localId = 'local_${const Uuid().v4()}';
     await _box.put(
@@ -444,6 +488,9 @@ class OfflineQueueService {
         'owner_user_id': identity.userId,
         'owner_company_id': isPersonal ? null : identity.companyId,
         'request_fields': requestFields,
+        if (normalizedOfflineAuthorizationReceipt != null)
+          'offline_authorization_receipt':
+              normalizedOfflineAuthorizationReceipt,
         'provider': requestFields['provider'],
         'sim_slot': requestFields['sim_slot'],
         'sim_iccid': requestFields['sim_iccid'],
@@ -733,7 +780,8 @@ class OfflineQueueService {
         if (existingRemoteId != null) {
           transactionId = existingRemoteId;
         } else {
-          final fields = Map<String, dynamic>.from(tx['request_fields'] as Map);
+          final fields = buildOfflineQueuedInitiationPayload(tx);
+
           final initiateRes = await ApiClient.instance.post(
             basePath,
             data: fields,

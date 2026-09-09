@@ -28,6 +28,9 @@ const {
 const {
   verifyBusinessSimRoleAssignment,
 } = require("../services/simRoleTrustService");
+const {
+  decideOfflineAuthorization,
+} = require("../utils/offlineAuthorizationDecision");
 
 async function recordAgentSimUsage({
   agentId,
@@ -122,6 +125,7 @@ exports.initiateTransaction = async (req, res) => {
     sim_subscription_id,
     client_operation_id,
     sim_role,
+    offline_authorization_receipt,
   } = req.body;
 
   const agentId = req.user.id;
@@ -495,11 +499,61 @@ exports.initiateTransaction = async (req, res) => {
           Array.isArray(disabled) &&
           disabled.includes(`${provider}:${transaction_type}`)
         ) {
-          return res.status(403).json({
-            success: false,
-            message:
-              "This transaction type has been temporarily disabled by your administrator. Please try again later.",
-          });
+          try {
+            const authorizationDecision =
+              decideOfflineAuthorization({
+                currentlyDisabled: true,
+                receipt: offline_authorization_receipt,
+                user: req.user,
+                mode: "business",
+                provider,
+                transactionType: transaction_type,
+              });
+
+            if (!authorizationDecision.allowed) {
+              return res.status(403).json({
+                success: false,
+                code: "TRANSACTION_TYPE_DISABLED",
+                message:
+                  "This transaction type has been temporarily disabled by your administrator. Please try again later.",
+              });
+            }
+          } catch (authorizationError) {
+            const authorizationCode =
+              String(authorizationError?.code || "");
+
+            if (
+              authorizationCode ===
+              "OFFLINE_RECEIPT_SECRET_INVALID"
+            ) {
+              logger.error(
+                "Offline authorization receipt verification unavailable:",
+                authorizationError,
+              );
+
+              return res.status(503).json({
+                success: false,
+                code: "OFFLINE_AUTHORIZATION_UNAVAILABLE",
+                message:
+                  "Offline authorization verification is temporarily unavailable.",
+              });
+            }
+
+            logger.warn(
+              "Offline authorization receipt rejected:",
+              {
+                code: authorizationCode || "UNKNOWN",
+                requestId: req.requestId,
+              },
+            );
+
+            return res.status(403).json({
+              success: false,
+              code: "TRANSACTION_TYPE_DISABLED",
+              message:
+                "This transaction type has been temporarily disabled by your administrator. Please try again later.",
+            });
+          }
         }
       } catch (flagParseError) {
         logger.error(

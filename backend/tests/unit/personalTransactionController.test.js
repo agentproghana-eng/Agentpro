@@ -102,6 +102,9 @@ describe('personalTransactionController initiation entitlement', () => {
   test('Free Personal uses only the Global flow and enables automation', async () => {
     mockQuery
       .mockResolvedValueOnce({
+        rows: [],
+      })
+      .mockResolvedValueOnce({
         rows: [{ dial_code: '*170#' }],
       })
       .mockResolvedValueOnce({
@@ -113,9 +116,12 @@ describe('personalTransactionController initiation entitlement', () => {
 
     await personalTransactionController.initiateTransaction(req, res);
 
-    expect(mockQuery).toHaveBeenCalledTimes(2);
+    expect(mockQuery).toHaveBeenCalledTimes(3);
 
-    const [globalSql, globalParams] = mockQuery.mock.calls[0];
+    const [flagSql] = mockQuery.mock.calls[0];
+    expect(flagSql).toContain('disabled_transaction_types');
+
+    const [globalSql, globalParams] = mockQuery.mock.calls[1];
     expect(globalSql).toContain('company_id IS NULL');
     expect(globalSql).toContain('owner_user_id IS NULL');
     expect(globalSql).not.toContain('owner_user_id = $1');
@@ -126,7 +132,7 @@ describe('personalTransactionController initiation entitlement', () => {
       null,
     ]);
 
-    const [insertSql] = mockQuery.mock.calls[1];
+    const [insertSql] = mockQuery.mock.calls[2];
     expect(insertSql).toContain('INSERT INTO personal_transactions');
 
     expect(mockAuditLog).toHaveBeenCalledTimes(1);
@@ -146,6 +152,9 @@ describe('personalTransactionController initiation entitlement', () => {
   test('Paid Personal uses its Personal override without querying Global', async () => {
     mockQuery
       .mockResolvedValueOnce({
+        rows: [],
+      })
+      .mockResolvedValueOnce({
         rows: [{ dial_code: '*personal#' }],
       })
       .mockResolvedValueOnce({
@@ -162,9 +171,12 @@ describe('personalTransactionController initiation entitlement', () => {
 
     await personalTransactionController.initiateTransaction(req, res);
 
-    expect(mockQuery).toHaveBeenCalledTimes(2);
+    expect(mockQuery).toHaveBeenCalledTimes(3);
 
-    const [personalSql, personalParams] = mockQuery.mock.calls[0];
+    const [flagSql] = mockQuery.mock.calls[0];
+    expect(flagSql).toContain('disabled_transaction_types');
+
+    const [personalSql, personalParams] = mockQuery.mock.calls[1];
     expect(personalSql).toContain('owner_user_id = $1');
     expect(personalSql).toContain('company_id IS NULL');
     expect(personalParams).toEqual([
@@ -175,7 +187,7 @@ describe('personalTransactionController initiation entitlement', () => {
       null,
     ]);
 
-    const [insertSql] = mockQuery.mock.calls[1];
+    const [insertSql] = mockQuery.mock.calls[2];
     expect(insertSql).toContain('INSERT INTO personal_transactions');
 
     expect(res.status).toHaveBeenCalledWith(201);
@@ -191,6 +203,9 @@ describe('personalTransactionController initiation entitlement', () => {
 
   test('Paid Personal falls back to Global when no Personal override exists', async () => {
     mockQuery
+      .mockResolvedValueOnce({
+        rows: [],
+      })
       .mockResolvedValueOnce({
         rows: [],
       })
@@ -211,12 +226,15 @@ describe('personalTransactionController initiation entitlement', () => {
 
     await personalTransactionController.initiateTransaction(req, res);
 
-    expect(mockQuery).toHaveBeenCalledTimes(3);
+    expect(mockQuery).toHaveBeenCalledTimes(4);
 
-    const [personalSql] = mockQuery.mock.calls[0];
+    const [flagSql] = mockQuery.mock.calls[0];
+    expect(flagSql).toContain('disabled_transaction_types');
+
+    const [personalSql] = mockQuery.mock.calls[1];
     expect(personalSql).toContain('owner_user_id = $1');
 
-    const [globalSql, globalParams] = mockQuery.mock.calls[1];
+    const [globalSql, globalParams] = mockQuery.mock.calls[2];
     expect(globalSql).toContain('company_id IS NULL');
     expect(globalSql).toContain('owner_user_id IS NULL');
     expect(globalParams).toEqual([
@@ -239,6 +257,9 @@ describe('personalTransactionController initiation entitlement', () => {
 
   test('MTN Personal Send Money passes its reference to USSD automation', async () => {
     mockQuery
+      .mockResolvedValueOnce({
+        rows: [],
+      })
       .mockResolvedValueOnce({
         rows: [{ dial_code: '*170#' }],
       })
@@ -277,6 +298,9 @@ describe('personalTransactionController initiation entitlement', () => {
   test('expired Paid Personal is treated as Free and cannot query a Personal override', async () => {
     mockQuery
       .mockResolvedValueOnce({
+        rows: [],
+      })
+      .mockResolvedValueOnce({
         rows: [{ dial_code: '*110#' }],
       })
       .mockResolvedValueOnce({
@@ -293,9 +317,12 @@ describe('personalTransactionController initiation entitlement', () => {
 
     await personalTransactionController.initiateTransaction(req, res);
 
-    expect(mockQuery).toHaveBeenCalledTimes(2);
+    expect(mockQuery).toHaveBeenCalledTimes(3);
 
-    const [globalSql] = mockQuery.mock.calls[0];
+    const [flagSql] = mockQuery.mock.calls[0];
+    expect(flagSql).toContain('disabled_transaction_types');
+
+    const [globalSql] = mockQuery.mock.calls[1];
     expect(globalSql).toContain('owner_user_id IS NULL');
     expect(globalSql).not.toContain('owner_user_id = $1');
 
@@ -311,7 +338,9 @@ describe('personalTransactionController initiation entitlement', () => {
   });
 
   test('rejects Free Personal initiation when no matching Global flow exists', async () => {
-    mockQuery.mockResolvedValueOnce({ rows: [] });
+    mockQuery
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
 
     const req = makeReq({
       provider: 'mtn',
@@ -321,7 +350,10 @@ describe('personalTransactionController initiation entitlement', () => {
 
     await personalTransactionController.initiateTransaction(req, res);
 
-    expect(mockQuery).toHaveBeenCalledTimes(1);
+    expect(mockQuery).toHaveBeenCalledTimes(2);
+
+    const [flagSql] = mockQuery.mock.calls[0];
+    expect(flagSql).toContain('disabled_transaction_types');
     expect(mockAuditLog).not.toHaveBeenCalled();
 
     expect(res.status).toHaveBeenCalledWith(400);

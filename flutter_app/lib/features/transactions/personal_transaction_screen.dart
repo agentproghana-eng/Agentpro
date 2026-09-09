@@ -9,6 +9,7 @@ import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/api/api_client.dart';
 import '../../core/services/offline_queue_service.dart';
+import '../../core/services/offline_authorization_service.dart';
 import '../../core/services/feature_flag_service.dart';
 import '../../core/services/sim_card_service.dart';
 import '../../core/services/sim_role_assignment_service.dart';
@@ -337,17 +338,15 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       widget.provider == 'telecel' &&
       _effectiveTransactionType == 'send_money_cross_network';
 
-  bool get _isCrossNetwork =>
-      _isMtnCrossNetwork || _isTelecelCrossNetwork;
+  bool get _isCrossNetwork => _isMtnCrossNetwork || _isTelecelCrossNetwork;
 
   bool get _isTelecelBankTransfer =>
       widget.provider == 'telecel' &&
       _effectiveTransactionType == 'send_money_to_bank';
 
-  Map<String, String> get _crossNetworkOptions =>
-      _isTelecelCrossNetwork
-          ? _telecelCrossNetworkOptions
-          : _mtnCrossNetworkOptions;
+  Map<String, String> get _crossNetworkOptions => _isTelecelCrossNetwork
+      ? _telecelCrossNetworkOptions
+      : _mtnCrossNetworkOptions;
 
   List<String>? get _transactionSelectionsInOrder {
     if (_isTelecelBankTransfer) {
@@ -359,13 +358,10 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
 
       final selections = _telecelBankSelections[bankName];
 
-      return selections == null
-          ? null
-          : List<String>.from(selections);
+      return selections == null ? null : List<String>.from(selections);
     }
 
-    if (_isCrossNetwork &&
-        _crossNetworkSelection != null) {
+    if (_isCrossNetwork && _crossNetworkSelection != null) {
       return <String>[_crossNetworkSelection!];
     }
 
@@ -451,14 +447,12 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   bool get _referenceRequired {
     final type = _effectiveTransactionType;
 
-    return ((widget.provider == 'mtn' ||
-                widget.provider == 'telecel') &&
+    return ((widget.provider == 'mtn' || widget.provider == 'telecel') &&
             [
               'send_money_same_network',
               'send_money_cross_network',
             ].contains(type)) ||
-        (widget.provider == 'telecel' &&
-            type == 'send_money_to_bank');
+        (widget.provider == 'telecel' && type == 'send_money_to_bank');
   }
 
   bool get _needsTillNumber => widget.transactionType == 'withdraw_cash';
@@ -717,12 +711,10 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         detected = await SimCardService.getSimCards();
       }
 
-      final supportedDetected = detected
-          .where((sim) => sim.isMoMoSupported)
-          .toList();
+      final supportedDetected =
+          detected.where((sim) => sim.isMoMoSupported).toList();
 
-      final purposes =
-          await SimRoleAssignmentService.rolesForSims(
+      final purposes = await SimRoleAssignmentService.rolesForSims(
         supportedDetected,
         refreshFromServer: true,
       );
@@ -958,8 +950,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
 
       // Offline Personal initiation stores request_fields for later sync.
       // Never put a raw bank account number into that persistent queue.
-      if (isOffline &&
-          transactionType == 'send_money_to_bank') {
+      if (isOffline && transactionType == 'send_money_to_bank') {
         _showPersonalStartFailure(
           'Send Money to Bank requires an internet connection so your '
           'bank account number is not stored in AgentPro offline data.',
@@ -968,6 +959,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       }
 
       Map<String, dynamic> transaction;
+      String? offlineAuthorizationReceipt;
 
       if (isOffline) {
         final trust = await StorageService.evaluateOfflineTransactionTrust(
@@ -1059,6 +1051,11 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           return null;
         }
 
+        offlineAuthorizationReceipt =
+            await OfflineAuthorizationService.receiptForExecution(
+          isPersonal: true,
+        );
+
         final localId = 'local_${const Uuid().v4()}';
 
         transaction = <String, dynamic>{
@@ -1111,7 +1108,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
 
       if (!mounted) return null;
 
-      return context.push<String>(
+      return await context.push<String>(
         '/transactions/progress',
         extra: {
           'is_personal': true,
@@ -1129,6 +1126,8 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           'sim_iccid': selectedSim.iccid.isNotEmpty ? selectedSim.iccid : null,
           'sim_subscription_id': selectedSim.subscriptionId,
           'request_fields': requestFields,
+          if (isOffline && offlineAuthorizationReceipt != null)
+            'offline_authorization_receipt': offlineAuthorizationReceipt,
         },
       );
     } on DioException catch (error) {
@@ -1195,16 +1194,13 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     final transactionType = _effectiveTransactionType;
     final bankName = _selectedBankName;
     final accountNumber = _accountNumberCtrl.text.trim();
-    final selectionsInOrder =
-        _transactionSelectionsInOrder;
+    final selectionsInOrder = _transactionSelectionsInOrder;
 
     final baseRequestFields = <String, dynamic>{
       'provider': widget.provider,
       'transaction_type': transactionType,
-      if (_isTelecelBankTransfer && bankName != null)
-        'bank_name': bankName,
-      if (_isTelecelBankTransfer)
-        'account_number': accountNumber,
+      if (_isTelecelBankTransfer && bankName != null) 'bank_name': bankName,
+      if (_isTelecelBankTransfer) 'account_number': accountNumber,
       if (_isMtnAirtime && _recipientMode != null)
         'recipient_mode': _recipientMode,
       if (_needsAmount) 'amount': double.tryParse(_amountCtrl.text.trim()),
@@ -1214,8 +1210,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       if (selectedSim.iccid.isNotEmpty) 'sim_iccid': selectedSim.iccid,
       'sim_slot': selectedSim.slot,
       'sim_subscription_id': selectedSim.subscriptionId,
-      if (selectionsInOrder != null)
-        'selections_in_order': selectionsInOrder,
+      if (selectionsInOrder != null) 'selections_in_order': selectionsInOrder,
     };
 
     final requestFields = await _withStableClientOperation(baseRequestFields);

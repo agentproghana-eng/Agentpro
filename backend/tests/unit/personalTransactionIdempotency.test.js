@@ -324,6 +324,8 @@ describe('Personal transaction initiation idempotency', () => {
     mockQuery
       // Initial idempotency lookup.
       .mockResolvedValueOnce({ rows: [] })
+      // Feature flag lookup.
+      .mockResolvedValueOnce({ rows: [] })
       // Global flow lookup.
       .mockResolvedValueOnce({
         rows: [{ dial_code: '*170#' }],
@@ -340,9 +342,12 @@ describe('Personal transaction initiation idempotency', () => {
 
     await controller.initiateTransaction(req, res);
 
-    expect(mockQuery).toHaveBeenCalledTimes(3);
+    expect(mockQuery).toHaveBeenCalledTimes(4);
 
-    const [insertSql, insertParams] = mockQuery.mock.calls[2];
+    const [flagSql] = mockQuery.mock.calls[1];
+    expect(flagSql).toContain('disabled_transaction_types');
+
+    const [insertSql, insertParams] = mockQuery.mock.calls[3];
 
     expect(insertSql).toContain('client_operation_id');
     expect(insertSql).toContain('client_operation_fingerprint');
@@ -369,6 +374,8 @@ describe('Personal transaction initiation idempotency', () => {
     mockQuery
       // Initial replay lookup sees nothing.
       .mockResolvedValueOnce({ rows: [] })
+      // Feature flag lookup.
+      .mockResolvedValueOnce({ rows: [] })
       // Global flow lookup.
       .mockResolvedValueOnce({
         rows: [{ dial_code: '*170#' }],
@@ -382,7 +389,10 @@ describe('Personal transaction initiation idempotency', () => {
 
     await controller.initiateTransaction(req, res);
 
-    expect(mockQuery).toHaveBeenCalledTimes(4);
+    expect(mockQuery).toHaveBeenCalledTimes(5);
+
+    const [flagSql] = mockQuery.mock.calls[1];
+    expect(flagSql).toContain('disabled_transaction_types');
     expect(mockAuditLog).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(200);
 

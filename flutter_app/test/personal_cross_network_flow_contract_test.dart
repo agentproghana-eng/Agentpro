@@ -144,8 +144,7 @@ void main() {
       expect(
         source,
         contains(
-          'final selectionsInOrder =\n'
-          '        _transactionSelectionsInOrder;',
+          'final selectionsInOrder = _transactionSelectionsInOrder;',
         ),
       );
 
