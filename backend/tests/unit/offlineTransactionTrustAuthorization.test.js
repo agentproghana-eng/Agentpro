@@ -231,4 +231,59 @@ describe('Offline transaction trust authorization', () => {
       );
     },
   );
+
+  test(
+    'Business trust context is attached to the request from server-derived entitlement state',
+    async () => {
+      query.mockResolvedValueOnce({
+        rows: [
+          {
+            plan: 'business',
+            status: 'active',
+            expires_at:
+              '2099-06-30T23:59:59.000Z',
+          },
+        ],
+      });
+
+      const req = {
+        user: makeUser(),
+      };
+
+      const res = makeResponse();
+      const next = jest.fn();
+
+      await requireActiveSubscription(
+        req,
+        res,
+        next,
+      );
+
+      expect(next)
+        .toHaveBeenCalledTimes(1);
+
+      expect(
+        req.offline_transaction_trust
+      ).toEqual(
+        expect.objectContaining({
+          mode: 'business',
+          user_id: 'user-1',
+          company_id: 'company-1',
+          session_id: 'session-1',
+          authorized_until:
+            '2099-06-30T23:59:59.000Z',
+          personal_paid: false,
+          personal_paid_until: null,
+        }),
+      );
+
+      expect(
+        req.offline_transaction_trust
+          .verified_at
+      ).toEqual(
+        expect.any(String),
+      );
+    },
+  );
+
 });

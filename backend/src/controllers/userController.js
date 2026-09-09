@@ -12,6 +12,12 @@ const { getRegisteredProviders } = require("../utils/ussdFlowCapabilities");
 const {
   parseDisabledTransactionTypes,
 } = require("../utils/featureFlagConfig");
+const {
+  getOfflineAuthorizationSnapshot,
+} = require("../utils/offlineAuthorizationSnapshot");
+const {
+  issueOfflineAuthorizationReceipt,
+} = require("../utils/offlineAuthorizationReceipt");
 
 const STAFF_SETUP_TOKEN_TTL_MS = 60 * 60 * 1000;
 
@@ -1685,6 +1691,117 @@ exports.updateMyQuickActions = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to update Quick Action preferences",
+    });
+  }
+};
+
+// ─── Offline Transaction Authorization Receipt ────────────────
+//
+// The entitlement middleware must run before this handler. It derives
+// req.offline_transaction_trust from the authenticated durable session
+// and current subscription state. The client cannot supply those claims.
+exports.getOfflineAuthorization = async (req, res) => {
+  const mode = String(req.params.mode || '')
+    .trim()
+    .toLowerCase();
+
+  if (
+    mode !== 'business' &&
+    mode !== 'personal'
+  ) {
+    return res.status(422).json({
+      success: false,
+      message: 'Invalid offline authorization mode.',
+      code: 'OFFLINE_AUTHORIZATION_MODE_INVALID',
+    });
+  }
+
+  const trust = req.offline_transaction_trust;
+
+  if (
+    !trust ||
+    trust.mode !== mode ||
+    trust.user_id !== String(req.user.id) ||
+    trust.session_id !==
+      String(req.user.session_id)
+  ) {
+    return res.status(503).json({
+      success: false,
+      message:
+        'Offline transaction authorization is temporarily unavailable.',
+      code: 'OFFLINE_AUTHORIZATION_UNAVAILABLE',
+    });
+  }
+
+  if (
+    mode === 'business' &&
+    (
+      !req.user.company_id ||
+      trust.company_id !==
+        String(req.user.company_id)
+    )
+  ) {
+    return res.status(403).json({
+      success: false,
+      message:
+        'A business identity is required for offline transaction authorization.',
+      code: 'BUSINESS_IDENTITY_REQUIRED',
+    });
+  }
+
+  try {
+    const snapshot =
+      await getOfflineAuthorizationSnapshot(
+        mode
+      );
+
+    const issued =
+      issueOfflineAuthorizationReceipt({
+        userId: trust.user_id,
+        companyId:
+          mode === 'business'
+            ? trust.company_id
+            : null,
+        sessionId:
+          trust.session_id,
+        mode,
+        issuedAt:
+          trust.verified_at,
+        authorizedUntil:
+          trust.authorized_until,
+        allowedOperations:
+          snapshot.allowed_operations,
+        featureFlagVersion:
+          snapshot.feature_flag_version,
+        personalPaid:
+          trust.personal_paid === true,
+        personalPaidUntil:
+          trust.personal_paid_until,
+      });
+
+    return res.json({
+      success: true,
+      data: {
+        receipt: issued.token,
+        receipt_version: 1,
+        mode,
+        authorized_until:
+          trust.authorized_until,
+        feature_flag_version:
+          snapshot.feature_flag_version,
+      },
+    });
+  } catch (error) {
+    logger.error(
+      'Offline authorization receipt issuance error:',
+      error
+    );
+
+    return res.status(503).json({
+      success: false,
+      message:
+        'Offline transaction authorization is temporarily unavailable.',
+      code: 'OFFLINE_AUTHORIZATION_UNAVAILABLE',
     });
   }
 };

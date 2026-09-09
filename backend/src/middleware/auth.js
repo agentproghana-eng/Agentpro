@@ -158,6 +158,29 @@ const _setOfflineTransactionTrustHeaders = ({
     }
   }
 
+  // Keep the authorization context server-derived. A downstream receipt
+  // issuer may sign this exact state, but callers can never supply or
+  // override it through request data.
+  req.offline_transaction_trust = {
+    mode,
+    user_id: String(req.user.id),
+    company_id:
+      mode === 'business' && req.user.company_id
+        ? String(req.user.company_id)
+        : null,
+    session_id: String(req.user.session_id),
+    verified_at: now.toISOString(),
+    authorized_until: authorizedUntil.toISOString(),
+    personal_paid:
+      mode === 'personal' ? paidPersonal : false,
+    personal_paid_until:
+      mode === 'personal' &&
+      paidPersonal &&
+      paidPersonalUntil
+        ? paidPersonalUntil.toISOString()
+        : null,
+  };
+
   return true;
 };
 
