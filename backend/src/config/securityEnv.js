@@ -2,6 +2,8 @@
 
 const MIN_JWT_SECRET_LENGTH = 64;
 
+const MIN_PERFORMANCE_TELEMETRY_TOKEN_LENGTH = 32;
+
 function securityConfigurationError(message) {
   const error = new Error(message);
   error.code = "SECURITY_CONFIGURATION_INVALID";
@@ -29,6 +31,33 @@ function requireStrongJwtSecret(env, name) {
 function validateProductionSecurityEnv(env = process.env) {
   if (env.NODE_ENV !== "production") {
     return;
+  }
+
+  if (
+    String(
+      env.PERFORMANCE_TELEMETRY_ENABLED || ""
+    ).toLowerCase() === "true"
+  ) {
+    const telemetryToken =
+      env.PERFORMANCE_TELEMETRY_TOKEN;
+
+    if (
+      typeof telemetryToken !== "string" ||
+      telemetryToken.length <
+        MIN_PERFORMANCE_TELEMETRY_TOKEN_LENGTH
+    ) {
+      throw securityConfigurationError(
+        "PERFORMANCE_TELEMETRY_TOKEN must be configured with at least 32 characters when performance telemetry is enabled",
+      );
+    }
+
+    if (
+      telemetryToken.trim() !== telemetryToken
+    ) {
+      throw securityConfigurationError(
+        "PERFORMANCE_TELEMETRY_TOKEN must not contain leading or trailing whitespace",
+      );
+    }
   }
 
   const accessSecret = requireStrongJwtSecret(env, "JWT_ACCESS_SECRET");

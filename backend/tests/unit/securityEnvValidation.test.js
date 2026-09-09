@@ -87,6 +87,54 @@ describe("production security environment validation", () => {
     },
   );
 
+  test.each(["true", "TRUE", "True"])(
+    "requires a strong telemetry token when enabled as %s",
+    (enabled) => {
+      expect(() =>
+        validateProductionSecurityEnv({
+          NODE_ENV: "production",
+          JWT_ACCESS_SECRET: strongSecret("access-"),
+          JWT_REFRESH_SECRET: strongSecret("refresh-"),
+          PERFORMANCE_TELEMETRY_ENABLED: enabled,
+        }),
+      ).toThrow(
+        expect.objectContaining({
+          code: "SECURITY_CONFIGURATION_INVALID",
+        }),
+      );
+    },
+  );
+
+  test("accepts enabled telemetry with a strong token", () => {
+    expect(() =>
+      validateProductionSecurityEnv({
+        NODE_ENV: "production",
+        JWT_ACCESS_SECRET: strongSecret("access-"),
+        JWT_REFRESH_SECRET: strongSecret("refresh-"),
+        PERFORMANCE_TELEMETRY_ENABLED: "true",
+        PERFORMANCE_TELEMETRY_TOKEN:
+          "t".repeat(32),
+      }),
+    ).not.toThrow();
+  });
+
+  test("rejects surrounding whitespace in telemetry token", () => {
+    expect(() =>
+      validateProductionSecurityEnv({
+        NODE_ENV: "production",
+        JWT_ACCESS_SECRET: strongSecret("access-"),
+        JWT_REFRESH_SECRET: strongSecret("refresh-"),
+        PERFORMANCE_TELEMETRY_ENABLED: "true",
+        PERFORMANCE_TELEMETRY_TOKEN:
+          " " + "t".repeat(32),
+      }),
+    ).toThrow(
+      expect.objectContaining({
+        code: "SECURITY_CONFIGURATION_INVALID",
+      }),
+    );
+  });
+
   test("errors never expose configured secret values", () => {
     const sensitiveValue = "SENSITIVE_SECRET_VALUE_" + "z".repeat(64);
 
