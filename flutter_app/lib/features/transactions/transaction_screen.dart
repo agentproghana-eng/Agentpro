@@ -14,6 +14,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../core/services/offline_queue_service.dart';
+import '../../core/services/offline_authorization_service.dart';
 import '../../core/services/feature_flag_service.dart';
 import '../../core/services/sim_card_service.dart';
 import '../../core/services/sim_role_assignment_service.dart';
@@ -657,8 +658,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
       (result) => result == ConnectivityResult.none,
     );
 
-    final transactionDisabled =
-        await FeatureFlagService.isTransactionDisabled(
+    final transactionDisabled = await FeatureFlagService.isTransactionDisabled(
       provider: _selectedProvider,
       transactionType: widget.transactionType,
       allowNetwork: !isOffline,
@@ -747,6 +747,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
         (isAccessibilityHardcodedFlow ||
             cachedTemplate != null ||
             cachedFlow != null)) {
+      final offlineAuthorizationReceipt =
+          await OfflineAuthorizationService.receiptForExecution(
+        isPersonal: false,
+      );
+
       final localId = 'local_${DateTime.now().millisecondsSinceEpoch}';
       final requestFields = {
         'provider': _selectedProvider,
@@ -801,6 +806,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
                   ? <String>[_selectedTelecelBundle!.digit]
                   : const <String>[],
           'request_fields': requestFields,
+          if (offlineAuthorizationReceipt != null)
+            'offline_authorization_receipt': offlineAuthorizationReceipt,
         },
       );
       if (mounted) setState(() => _loading = false);

@@ -361,6 +361,97 @@ void main() {
     );
 
     test(
+      'queued authorization receipt stays outside request fields',
+      () async {
+        await OfflineQueueService.queueTransaction(
+          identity: userACompany1,
+          requestFields: const {
+            'provider': 'mtn',
+            'transaction_type': 'cash_in',
+            'client_operation_id': 'operation-1',
+          },
+          status: 'success',
+          sessionLog: const [],
+          isPersonal: false,
+          offlineAuthorizationReceipt: 'apr1.payload.signature',
+        );
+
+        final pending = OfflineQueueService.getPendingTransactions(
+          userACompany1,
+        );
+
+        expect(pending, hasLength(1));
+
+        final transaction = pending.single;
+
+        expect(
+          transaction['offline_authorization_receipt'],
+          'apr1.payload.signature',
+        );
+
+        final requestFields = Map<String, dynamic>.from(
+          transaction['request_fields'] as Map,
+        );
+
+        expect(
+          requestFields.containsKey(
+            'offline_authorization_receipt',
+          ),
+          isFalse,
+        );
+      },
+    );
+
+    test(
+      'receipt is injected into reconnect initiation payload',
+      () {
+        final payload = buildOfflineQueuedInitiationPayload({
+          'request_fields': {
+            'provider': 'mtn',
+            'transaction_type': 'cash_in',
+            'client_operation_id': 'operation-1',
+          },
+          'offline_authorization_receipt': 'apr1.payload.signature',
+        });
+
+        expect(
+          payload['offline_authorization_receipt'],
+          'apr1.payload.signature',
+        );
+
+        expect(
+          payload['client_operation_id'],
+          'operation-1',
+        );
+      },
+    );
+
+    test(
+      'legacy receiptless queue preserves original initiation payload',
+      () {
+        final payload = buildOfflineQueuedInitiationPayload({
+          'request_fields': {
+            'provider': 'mtn',
+            'transaction_type': 'cash_in',
+            'client_operation_id': 'legacy-operation',
+          },
+        });
+
+        expect(
+          payload.containsKey(
+            'offline_authorization_receipt',
+          ),
+          isFalse,
+        );
+
+        expect(
+          payload['client_operation_id'],
+          'legacy-operation',
+        );
+      },
+    );
+
+    test(
       'another user in the same company cannot read the queued transaction',
       () async {
         await OfflineQueueService.queueTransaction(

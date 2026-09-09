@@ -193,6 +193,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
   bool _permissionPermanentlyDenied = false;
   bool _startupInitiationRetryAvailable = false;
   late final OfflineQueueIdentity? _offlineIdentity;
+  late final String? _offlineAuthorizationReceipt;
 
   // Free Personal transactions open the network-owned USSD screen without
   // Accessibility automation. ACTION_CALL returns to Flutter immediately,
@@ -211,6 +212,12 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     _offlineIdentity = authState is AuthAuthenticated
         ? OfflineQueueService.identityFromUser(authState.user)
         : null;
+
+    // Freeze this server-issued proof for the lifetime of this USSD attempt.
+    // It must never be replaced by a newer receipt after dialing begins.
+    _offlineAuthorizationReceipt = normalizeOfflineAuthorizationReceipt(
+      widget.data['offline_authorization_receipt'],
+    );
 
     _pulseCtrl = AnimationController(
       vsync: this,
@@ -1500,6 +1507,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         failureReason: result.failureReason,
         sessionLog: result.sessionLog,
         isPersonal: widget.isPersonal,
+        offlineAuthorizationReceipt: _offlineAuthorizationReceipt,
       );
       if (mounted) {
         setState(() {
