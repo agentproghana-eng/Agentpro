@@ -32,6 +32,7 @@ jest.mock('../../src/controllers/userController', () => {
     getUser: noContent,
     updateUser: noContent,
     reassignBranch: noContent,
+    getOfflineAuthorization: noContent,
   };
 });
 
