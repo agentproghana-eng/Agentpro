@@ -8,6 +8,20 @@ const mockLoggerInfo = jest.fn();
 
 const mockLoggerError = jest.fn();
 
+const mockRecordPaystackWebhookEvent =
+  jest.fn();
+
+jest.mock(
+  "../../src/services/authPaystackTelemetryService",
+  () => ({
+    recordPaystackWebhookEvent:
+      (...args) =>
+        mockRecordPaystackWebhookEvent(
+          ...args
+        ),
+  })
+);
+
 jest.mock("../../src/services/paystackService", () => ({
   verifyWebhookSignature: (...args) => mockVerifySignature(...args),
 }));
@@ -63,6 +77,14 @@ describe("Paystack webhook controller", () => {
     expect(mockBusinessHubFulfill).not.toHaveBeenCalled();
 
     expect(mockLoggerInfo).not.toHaveBeenCalled();
+
+    expect(
+      mockRecordPaystackWebhookEvent.mock.calls
+        .map(([event]) => event)
+    ).toEqual([
+      "received",
+      "invalid_signatures",
+    ]);
   });
 
   test("ignores signed events other than charge.success", async () => {
@@ -84,6 +106,15 @@ describe("Paystack webhook controller", () => {
 
     expect(mockFulfill).not.toHaveBeenCalled();
     expect(mockBusinessHubFulfill).not.toHaveBeenCalled();
+
+    expect(
+      mockRecordPaystackWebhookEvent.mock.calls
+        .map(([event]) => event)
+    ).toEqual([
+      "received",
+      "valid_signatures",
+      "ignored_events",
+    ]);
   });
 
   test("fulfills a signed charge.success event", async () => {
@@ -164,4 +195,74 @@ describe("Paystack webhook controller", () => {
     expect(mockFulfill).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(200);
   });
+  test("records fulfillment success lifecycle", async () => {
+    mockVerifySignature.mockReturnValue(true);
+
+    mockFulfill.mockResolvedValue({
+      outcome: "activated",
+    });
+
+    const req = {
+      rawBody: Buffer.from("{}"),
+      body: {
+        event: "charge.success",
+        data: {
+          reference: "APG-BSUB-TEST",
+          status: "success",
+        },
+      },
+      get: jest.fn().mockReturnValue("signature"),
+    };
+
+    const res = makeRes();
+
+    await controller.handleWebhook(req, res);
+
+    expect(
+      mockRecordPaystackWebhookEvent.mock.calls
+        .map(([event]) => event)
+    ).toEqual([
+      "received",
+      "valid_signatures",
+      "charge_success_events",
+      "fulfillment_successes",
+    ]);
+  });
+
+  test("records fulfillment failure lifecycle", async () => {
+    mockVerifySignature.mockReturnValue(true);
+
+    mockFulfill.mockRejectedValue(
+      new Error("fulfillment failed")
+    );
+
+    const req = {
+      rawBody: Buffer.from("{}"),
+      body: {
+        event: "charge.success",
+        data: {
+          reference: "APG-BSUB-TEST",
+          status: "success",
+        },
+      },
+      get: jest.fn().mockReturnValue("signature"),
+    };
+
+    const res = makeRes();
+
+    await controller.handleWebhook(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+
+    expect(
+      mockRecordPaystackWebhookEvent.mock.calls
+        .map(([event]) => event)
+    ).toEqual([
+      "received",
+      "valid_signatures",
+      "charge_success_events",
+      "fulfillment_failures",
+    ]);
+  });
+
 });

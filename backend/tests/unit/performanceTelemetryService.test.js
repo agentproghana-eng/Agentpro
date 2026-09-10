@@ -83,6 +83,38 @@ describe('performance telemetry service', () => {
     });
   });
 
+  test('exposes auth and Paystack telemetry in the protected snapshot', async () => {
+    startPerformanceTelemetry();
+
+    const snapshot =
+      await performanceSnapshot();
+
+    expect(snapshot.auth).toEqual(
+      expect.objectContaining({
+        enabled: true,
+        window_seconds: 60,
+        login_attempts: 0,
+        successes: 0,
+        rate_limited: 0,
+        server_failures: 0,
+        success_rate: 0,
+      })
+    );
+
+    expect(
+      snapshot.paystack_webhooks
+    ).toEqual(
+      expect.objectContaining({
+        enabled: true,
+        window_seconds: 60,
+        received: 0,
+        invalid_signatures: 0,
+        fulfillment_failures: 0,
+        fulfillment_failure_rate: 0,
+      })
+    );
+  });
+
   test('reports PostgreSQL pool pressure and outbox backlog', async () => {
     const snapshot =
       await performanceSnapshot();
