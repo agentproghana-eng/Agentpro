@@ -10,6 +10,11 @@ const redisConfig = require('../config/redis');
 const {
   providerHealthSnapshot,
 } = require('./providerHealthService');
+const {
+  startApiRequestTelemetry,
+  stopApiRequestTelemetry,
+  apiRequestSnapshot,
+} = require('./apiRequestTelemetryService');
 
 const histogram = monitorEventLoopDelay({
   resolution: 20,
@@ -23,6 +28,7 @@ function startPerformanceTelemetry() {
   }
 
   histogram.enable();
+  startApiRequestTelemetry();
   started = true;
 }
 
@@ -32,6 +38,7 @@ function stopPerformanceTelemetry() {
   }
 
   histogram.disable();
+  stopApiRequestTelemetry();
   started = false;
 }
 
@@ -160,6 +167,8 @@ async function performanceSnapshot() {
     },
 
     event_loop: eventLoopSnapshot(),
+
+    api: apiRequestSnapshot(),
 
     postgres: {
       total_connections: pool.totalCount,

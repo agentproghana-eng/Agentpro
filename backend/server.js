@@ -24,6 +24,9 @@ const {
   performanceSnapshot,
 } = require('./src/services/performanceTelemetryService');
 const { apiLimiter } = require('./src/middleware/rateLimit');
+const apiRequestTelemetry = require(
+  './src/middleware/apiRequestTelemetry'
+);
 
 // Route imports
 const authRoutes = require('./src/routes/auth.routes');
@@ -172,6 +175,11 @@ app.use(morgan(
     stream: { write: (message) => logger.info(message.trim()) }
   }
 ));
+
+// Measure every API response, including requests rejected by
+// the global limiter. Health and internal telemetry endpoints are
+// outside /api/ and therefore never measure themselves.
+app.use('/api/', apiRequestTelemetry);
 
 // Global rate limiter
 app.use('/api/', apiLimiter);
