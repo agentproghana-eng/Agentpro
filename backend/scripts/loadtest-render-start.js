@@ -66,6 +66,91 @@ async function bootstrapCleanDatabase() {
   }
 }
 
+async function ensureLoadTestUser() {
+  const password = process.env.AGENTPRO_LOADTEST_PASSWORD;
+
+  if (!password || password.length < 24) {
+    throw new Error(
+      'AGENTPRO_LOADTEST_PASSWORD must be at least 24 characters'
+    );
+  }
+
+  if (
+    !process.env.JWT_ACCESS_SECRET ||
+    process.env.JWT_ACCESS_SECRET.length < 32 ||
+    !process.env.JWT_REFRESH_SECRET ||
+    process.env.JWT_REFRESH_SECRET.length < 32
+  ) {
+    throw new Error(
+      'Dedicated staging JWT secrets are required'
+    );
+  }
+
+  const client = new Client({
+    connectionString: process.env.DATABASE_URL,
+  });
+
+  await client.connect();
+
+  try {
+    await client.query(
+      `
+        INSERT INTO users (
+          role,
+          first_name,
+          last_name,
+          email,
+          password_hash,
+          status,
+          must_change_password
+        )
+        VALUES (
+          'superuser',
+          'LoadTest',
+          'Capacity',
+          'loadtest-capacity@agentpro.invalid',
+          crypt($1, gen_salt('bf')),
+          'active',
+          FALSE
+        )
+        ON CONFLICT (email)
+        DO UPDATE SET
+          password_hash = crypt(
+            EXCLUDED.email || $1,
+            gen_salt('bf')
+          ),
+          status = 'active',
+          must_change_password = FALSE
+      `,
+      [password]
+    );
+
+    /*
+     * Normalize the UPDATE hash to exactly the supplied secret.
+     * The separate statement avoids relying on an EXCLUDED
+     * expression for credential material.
+     */
+    await client.query(
+      `
+        UPDATE users
+        SET password_hash = crypt(
+          $1,
+          gen_salt('bf')
+        )
+        WHERE email =
+          'loadtest-capacity@agentpro.invalid'
+      `,
+      [password]
+    );
+  } finally {
+    await client.end();
+  }
+
+  console.log(
+    'Dedicated staging load-test user ready'
+  );
+}
+
 async function main() {
   if (
     process.env.AGENTPRO_LOADTEST_ENV !==
@@ -126,6 +211,8 @@ async function main() {
   console.log(
     'Isolated staging migrations complete'
   );
+
+  await ensureLoadTestUser();
 
   run(
     process.execPath,
