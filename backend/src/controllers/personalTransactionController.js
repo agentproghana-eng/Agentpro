@@ -12,6 +12,9 @@ const {
 } = require('../utils/offlineAuthorizationDecision');
 const { auditLog } = require('../services/auditService');
 const {
+  recordTransactionTelemetryEvent,
+} = require('../services/transactionTelemetryService');
+const {
   sanitizeUSSDLog,
   sanitizeFailureReason,
 } = require('./transactionController');
@@ -486,6 +489,12 @@ exports.initiateTransaction = async (req, res) => {
 
     const transaction = result.rows[0];
 
+    recordTransactionTelemetryEvent({
+      mode: 'personal',
+      provider,
+      event: 'initiated',
+    });
+
     // Every Personal account may execute a centrally managed Global flow.
     // personal_override_entitled separately tells Flutter whether cached
     // Personal-owned overrides are allowed for this account.
@@ -558,7 +567,7 @@ exports.completeTransaction = async (req, res) => {
         // A concurrent second request must observe the first committed
         // final state rather than racing a second UPDATE/audit.
         const existing = await client.query(
-          `SELECT id, status
+          `SELECT id, status, provider
            FROM personal_transactions
            WHERE id = $1
              AND user_id = $2
@@ -646,6 +655,7 @@ exports.completeTransaction = async (req, res) => {
         return {
           outcome: 'completed',
           transaction: result.rows[0],
+          provider: tx.provider,
         };
       });
 
@@ -663,6 +673,15 @@ exports.completeTransaction = async (req, res) => {
           `Transaction already ${completion.status}`,
       });
     }
+
+    recordTransactionTelemetryEvent({
+      mode: 'personal',
+      provider: completion.provider,
+      event: 'completed',
+      status,
+      failureReason:
+        sanitizedFailureReason,
+    });
 
     res.json({
       success: true,
