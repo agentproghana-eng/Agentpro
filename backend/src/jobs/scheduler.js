@@ -20,6 +20,9 @@ const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
 const { sendSubscriptionReminder, sendSubscriptionSuspended, sendAdNotification } = require('../services/notificationService');
 const { sendSubscriptionReminderEmail } = require('../services/emailService');
+const {
+  startOperationalIncidentMonitor,
+} = require('../services/operationalIncidentMonitor');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -73,6 +76,9 @@ function startScheduler() {
   let stopped = false;
   const inFlight = new Map();
   const timers = new Map();
+
+  const stopIncidentMonitor =
+    startOperationalIncidentMonitor();
 
   const runTracked = (name, job) => {
     if (stopped) {
@@ -186,6 +192,8 @@ function startScheduler() {
     await Promise.allSettled(
       [...inFlight.values()]
     );
+
+    await stopIncidentMonitor();
 
     logger.info('Scheduler stopped');
   };
