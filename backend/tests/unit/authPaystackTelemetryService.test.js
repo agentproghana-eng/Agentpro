@@ -86,6 +86,7 @@ describe('auth and Paystack telemetry service', () => {
       unavailable: 1,
       server_failures: 1,
       other_responses: 1,
+      aborted: 0,
       success_rate: 0.2,
     });
   });
@@ -209,4 +210,69 @@ describe('auth and Paystack telemetry service', () => {
     expect(serialized).not.toContain('ip_address');
     expect(serialized).not.toContain('authorization');
   });
+
+
+  test(
+    'counts aborted login attempts without classifying them as successes',
+    () => {
+      startAuthPaystackTelemetry();
+
+      recordLoginResponse({
+        aborted: true,
+        nowMs: 1000,
+      });
+
+      const snapshot =
+        authTelemetrySnapshot({
+          nowMs: 1000,
+        });
+
+      expect(
+        snapshot.login_attempts
+      ).toBe(1);
+
+      expect(
+        snapshot.aborted
+      ).toBe(1);
+
+      expect(
+        snapshot.successes
+      ).toBe(0);
+
+      expect(
+        snapshot.success_rate
+      ).toBe(0);
+    }
+  );
+
+  test(
+    'completed login responses are not counted as aborted',
+    () => {
+      startAuthPaystackTelemetry();
+
+      recordLoginResponse({
+        statusCode: 200,
+        aborted: false,
+        nowMs: 1000,
+      });
+
+      const snapshot =
+        authTelemetrySnapshot({
+          nowMs: 1000,
+        });
+
+      expect(
+        snapshot.login_attempts
+      ).toBe(1);
+
+      expect(
+        snapshot.successes
+      ).toBe(1);
+
+      expect(
+        snapshot.aborted
+      ).toBe(0);
+    }
+  );
+
 });
