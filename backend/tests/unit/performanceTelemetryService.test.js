@@ -57,6 +57,32 @@ describe('performance telemetry service', () => {
     stopPerformanceTelemetry();
   });
 
+  test('exposes API telemetry in the protected performance snapshot', async () => {
+    startPerformanceTelemetry();
+
+    const snapshot =
+      await performanceSnapshot();
+
+    expect(snapshot.api).toEqual(
+      expect.objectContaining({
+        enabled: true,
+        window_seconds: 60,
+        requests_total: 0,
+        requests_last_minute: 0,
+        requests_per_minute: 0,
+        server_error_rate: 0,
+      })
+    );
+
+    expect(snapshot.api.responses).toEqual({
+      status_2xx: 0,
+      status_3xx: 0,
+      status_4xx: 0,
+      status_5xx: 0,
+      aborted: 0,
+    });
+  });
+
   test('reports PostgreSQL pool pressure and outbox backlog', async () => {
     const snapshot =
       await performanceSnapshot();
