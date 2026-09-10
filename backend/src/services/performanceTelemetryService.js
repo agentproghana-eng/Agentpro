@@ -7,6 +7,9 @@ const {
 
 const { pool, query } = require('../config/database');
 const redisConfig = require('../config/redis');
+const {
+  providerHealthSnapshot,
+} = require('./providerHealthService');
 
 const histogram = monitorEventLoopDelay({
   resolution: 20,
@@ -136,10 +139,12 @@ async function outboxSnapshot() {
 async function performanceSnapshot() {
   const memory = process.memoryUsage();
 
-  const [redis, outbox] = await Promise.all([
-    redisSnapshot(),
-    outboxSnapshot(),
-  ]);
+  const [redis, outbox, providerHealth] =
+    await Promise.all([
+      redisSnapshot(),
+      outboxSnapshot(),
+      providerHealthSnapshot(),
+    ]);
 
   return {
     timestamp: new Date().toISOString(),
@@ -165,6 +170,8 @@ async function performanceSnapshot() {
     redis,
 
     outbox,
+
+    provider_health: providerHealth,
   };
 }
 
