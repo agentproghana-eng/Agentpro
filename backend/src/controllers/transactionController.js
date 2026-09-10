@@ -3,6 +3,9 @@ const { query, withTransaction } = require("../config/database");
 const { logger } = require("../utils/logger");
 const { auditLog } = require("../services/auditService");
 const {
+  recordTransactionTelemetryEvent,
+} = require("../services/transactionTelemetryService");
+const {
   calculateAndPostCommission,
 } = require("../services/commissionPostingService");
 const {
@@ -755,6 +758,12 @@ exports.initiateTransaction = async (req, res) => {
 
     const transaction = txResult.rows[0];
 
+    recordTransactionTelemetryEvent({
+      mode: "business",
+      provider,
+      event: "initiated",
+    });
+
     // Return transaction details + USSD template for the Flutter app
     // The app will execute USSD automation using this template
     res.status(201).json({
@@ -1138,6 +1147,15 @@ exports.completeTransaction = async (req, res) => {
           "Telecel and AT Money Cash Out must be recorded through the manual Cash Out flow.",
       });
     }
+
+    recordTransactionTelemetryEvent({
+      mode: "business",
+      provider: tx.provider,
+      event: "completed",
+      status: finalStatus,
+      failureReason:
+        sanitizedFailureReason,
+    });
 
     // Generate receipt PDF only on confirmed success
     let receiptUrl = null;

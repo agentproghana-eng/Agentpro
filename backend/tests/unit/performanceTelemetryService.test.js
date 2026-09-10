@@ -115,6 +115,47 @@ describe('performance telemetry service', () => {
     );
   });
 
+  test('exposes transaction telemetry in the protected snapshot', async () => {
+    startPerformanceTelemetry();
+
+    const snapshot =
+      await performanceSnapshot();
+
+    expect(snapshot.transactions).toEqual(
+      expect.objectContaining({
+        enabled: true,
+        window_seconds: 60,
+        initiated: 0,
+        completed: 0,
+        success: 0,
+        failed: 0,
+        pending_confirmation: 0,
+        transactions_per_minute: 0,
+        completion_failure_rate: 0,
+      })
+    );
+
+    expect(
+      snapshot.transactions.by_provider
+    ).toEqual(
+      expect.objectContaining({
+        mtn: expect.any(Object),
+        telecel: expect.any(Object),
+        at_money: expect.any(Object),
+        other: expect.any(Object),
+      })
+    );
+
+    expect(
+      snapshot.transactions.by_mode
+    ).toEqual(
+      expect.objectContaining({
+        business: expect.any(Object),
+        personal: expect.any(Object),
+      })
+    );
+  });
+
   test('reports PostgreSQL pool pressure and outbox backlog', async () => {
     const snapshot =
       await performanceSnapshot();
