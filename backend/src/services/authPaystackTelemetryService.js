@@ -34,6 +34,7 @@ function emptyAuthCounts() {
     unavailable: 0,
     server_failures: 0,
     other_responses: 0,
+    aborted: 0,
   };
 }
 
@@ -116,6 +117,7 @@ function classifyLoginStatus(statusCode) {
 
 function recordLoginResponse({
   statusCode,
+  aborted = false,
   nowMs = Date.now(),
 }) {
   if (!started) {
@@ -131,6 +133,12 @@ function recordLoginResponse({
   );
 
   bucket.login_attempts += 1;
+
+  if (aborted) {
+    bucket.aborted += 1;
+    return;
+  }
+
   bucket[
     classifyLoginStatus(statusCode)
   ] += 1;

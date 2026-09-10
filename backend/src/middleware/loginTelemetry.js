@@ -15,7 +15,7 @@ function loginTelemetry(req, res, next) {
 
   let recorded = false;
 
-  function record() {
+  function recordCompleted() {
     if (recorded) {
       return;
     }
@@ -24,16 +24,28 @@ function loginTelemetry(req, res, next) {
 
     recordLoginResponse({
       statusCode: res.statusCode,
+      aborted: false,
     });
   }
 
-  res.once('finish', record);
-
-  res.once('close', () => {
-    if (!res.writableEnded) {
-      record();
+  function recordAborted() {
+    if (recorded) {
+      return;
     }
-  });
+
+    if (res.writableEnded) {
+      return;
+    }
+
+    recorded = true;
+
+    recordLoginResponse({
+      aborted: true,
+    });
+  }
+
+  res.once('finish', recordCompleted);
+  res.once('close', recordAborted);
 
   next();
 }
