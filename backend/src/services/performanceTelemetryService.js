@@ -26,6 +26,9 @@ const {
   stopTransactionTelemetry,
   transactionTelemetrySnapshot,
 } = require('./transactionTelemetryService');
+const {
+  evaluateOperationalAlerts,
+} = require('./operationalAlertService');
 
 const histogram = monitorEventLoopDelay({
   resolution: 20,
@@ -168,7 +171,7 @@ async function performanceSnapshot() {
       providerHealthSnapshot(),
     ]);
 
-  return {
+  const snapshot = {
     timestamp: new Date().toISOString(),
 
     process: {
@@ -205,6 +208,13 @@ async function performanceSnapshot() {
 
     provider_health: providerHealth,
   };
+
+  snapshot.operational_alerts =
+    evaluateOperationalAlerts(
+      snapshot
+    );
+
+  return snapshot;
 }
 
 module.exports = {

@@ -156,6 +156,35 @@ describe('performance telemetry service', () => {
     );
   });
 
+  test('exposes evaluated operational alerts', async () => {
+    startPerformanceTelemetry();
+
+    const snapshot =
+      await performanceSnapshot();
+
+    expect(
+      snapshot.operational_alerts
+    ).toEqual(
+      expect.objectContaining({
+        status:
+          expect.stringMatching(
+            /^(operational|warning|critical)$/
+          ),
+        counts:
+          expect.objectContaining({
+            critical:
+              expect.any(Number),
+            warning:
+              expect.any(Number),
+            total:
+              expect.any(Number),
+          }),
+        alerts:
+          expect.any(Array),
+      })
+    );
+  });
+
   test('reports PostgreSQL pool pressure and outbox backlog', async () => {
     const snapshot =
       await performanceSnapshot();
