@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../services/storage_service.dart';
 
 enum TokenRefreshOutcome {
@@ -9,13 +11,37 @@ enum TokenRefreshOutcome {
   transientFailure,
 }
 
+class ClientCompatibilityBlock {
+  final String code;
+  final String message;
+  final String? minimumSupportedVersion;
+  final String? recommendedVersion;
+
+  const ClientCompatibilityBlock({
+    required this.code,
+    required this.message,
+    this.minimumSupportedVersion,
+    this.recommendedVersion,
+  });
+}
+
 class ApiClient {
+  static const String _apiContractVersion = '1';
+
+  static final Future<Map<String, String>> _clientHeadersFuture =
+      _loadClientHeaders();
+
   static const String _baseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: 'https://api.agentpro.intellicoresystem.com/api/v1',
   );
 
   static final Dio _dio = _createDio();
+
+  static final ValueNotifier<ClientCompatibilityBlock?>
+      compatibilityBlock =
+      ValueNotifier<ClientCompatibilityBlock?>(null);
+
   static Future<TokenRefreshOutcome>? _refreshFuture;
   static Future<void>? _sessionInvalidationFuture;
 
@@ -26,6 +52,50 @@ class ApiClient {
       _sessionInvalidationController.stream;
 
   static Dio get instance => _dio;
+
+  static String _clientPlatform() {
+    if (kIsWeb) {
+      return 'web';
+    }
+
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return 'android';
+      case TargetPlatform.iOS:
+        return 'ios';
+      case TargetPlatform.macOS:
+        return 'macos';
+      case TargetPlatform.windows:
+        return 'windows';
+      case TargetPlatform.linux:
+        return 'linux';
+      case TargetPlatform.fuchsia:
+        return 'fuchsia';
+    }
+  }
+
+  static Future<Map<String, String>> _loadClientHeaders() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+
+      return <String, String>{
+        'X-AgentPro-App-Version': packageInfo.version,
+        'X-AgentPro-App-Build': packageInfo.buildNumber,
+        'X-AgentPro-Platform': _clientPlatform(),
+        'X-AgentPro-API-Version': _apiContractVersion,
+      };
+    } catch (_) {
+      // Compatibility metadata must never become a new reason that the app
+      // cannot reach AgentPro. If local package metadata is unavailable,
+      // omit the entire compatibility header set so the backend treats this
+      // request as a legacy-supported client during the migration period.
+      return const <String, String>{};
+    }
+  }
+
+  static Future<Map<String, String>> _clientHeaders() {
+    return _clientHeadersFuture;
+  }
 
   static Dio _createDio() {
     final dio = Dio(
@@ -57,6 +127,10 @@ class ApiClient {
               ),
             );
           }
+
+          options.headers.addAll(
+            await _clientHeaders(),
+          );
 
           final token = StorageService.getCachedAccessToken() ??
               await StorageService.getAccessToken();
@@ -152,6 +226,8 @@ class ApiClient {
           return handler.next(response);
         },
         onError: (DioException error, handler) async {
+          _captureCompatibilityBlock(error);
+
           final request = error.requestOptions;
           final isUnauthorized = error.response?.statusCode == 401;
           final alreadyRetried = request.extra['auth_refresh_retried'] == true;
@@ -229,6 +305,64 @@ class ApiClient {
     return dio;
   }
 
+  static void _captureCompatibilityBlock(
+    DioException error,
+  ) {
+    if (error.response?.statusCode != 426) {
+      return;
+    }
+
+    final payload = error.response?.data;
+
+    if (payload is! Map) {
+      return;
+    }
+
+    final code = payload['code']?.toString().trim();
+
+    if (code != 'UPDATE_REQUIRED' &&
+        code != 'API_INCOMPATIBLE') {
+      return;
+    }
+
+    final compatibility = payload['compatibility'];
+
+    String? minimumSupportedVersion;
+    String? recommendedVersion;
+
+    if (compatibility is Map) {
+      minimumSupportedVersion =
+          compatibility['minimum_supported_app_version']
+              ?.toString()
+              .trim();
+
+      recommendedVersion =
+          compatibility['recommended_app_version']
+              ?.toString()
+              .trim();
+    }
+
+    final serverMessage =
+        payload['message']?.toString().trim();
+
+    compatibilityBlock.value = ClientCompatibilityBlock(
+      code: code!,
+      message: serverMessage == null || serverMessage.isEmpty
+          ? 'This version of AgentPro can no longer connect safely.'
+          : serverMessage,
+      minimumSupportedVersion:
+          minimumSupportedVersion == null ||
+                  minimumSupportedVersion.isEmpty
+              ? null
+              : minimumSupportedVersion,
+      recommendedVersion:
+          recommendedVersion == null ||
+                  recommendedVersion.isEmpty
+              ? null
+              : recommendedVersion,
+    );
+  }
+
   static Future<void> _invalidateSession() {
     final existing = _sessionInvalidationFuture;
 
@@ -303,11 +437,17 @@ class ApiClient {
         return TokenRefreshOutcome.terminalFailure;
       }
 
+      final compatibilityHeaders =
+          await _clientHeaders();
+
       final response = await Dio(
         BaseOptions(
           connectTimeout: const Duration(seconds: 15),
           receiveTimeout: const Duration(seconds: 30),
-          headers: {'Content-Type': 'application/json'},
+          headers: <String, dynamic>{
+            'Content-Type': 'application/json',
+            ...compatibilityHeaders,
+          },
           validateStatus: (_) => true,
         ),
       ).post(
