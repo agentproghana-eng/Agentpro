@@ -6,6 +6,9 @@ const mockPerformanceSnapshot =
 const mockReconcile =
   jest.fn();
 
+const mockProcessNotifications =
+  jest.fn();
+
 const mockLoggerInfo =
   jest.fn();
 
@@ -29,6 +32,17 @@ jest.mock(
     reconcileOperationalIncidents:
       (...args) =>
         mockReconcile(
+          ...args
+        ),
+  })
+);
+
+jest.mock(
+  '../../src/services/operationalIncidentNotificationDelivery',
+  () => ({
+    processOperationalIncidentNotifications:
+      (...args) =>
+        mockProcessNotifications(
           ...args
         ),
   })
@@ -78,6 +92,15 @@ describe(
   () => {
     beforeEach(() => {
       jest.clearAllMocks();
+
+      mockProcessNotifications
+        .mockResolvedValue({
+          considered: 0,
+          enqueued: 0,
+          state_advanced: 0,
+          no_recipients: false,
+        });
+
       jest.useRealTimers();
     });
 
@@ -300,6 +323,13 @@ describe(
               '2026-09-10T13:30:00.000Z',
           }
         );
+
+        expect(
+          mockProcessNotifications
+        ).toHaveBeenCalledWith({
+          now:
+            '2026-09-10T13:30:00.000Z',
+        });
       }
     );
 
