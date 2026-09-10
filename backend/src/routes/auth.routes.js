@@ -3,6 +3,9 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const authController = require('../controllers/authController');
 const { authenticate } = require('../middleware/auth');
+const loginTelemetry =
+  require('../middleware/loginTelemetry');
+
 const {
   authLimiter,
   refreshLimiter,
@@ -181,7 +184,7 @@ router.post(
 );
 
 // POST /api/v1/auth/login
-router.post('/login', authLimiter, [
+router.post('/login', loginTelemetry, authLimiter, [
   body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
   body('password').notEmpty().withMessage('Password is required'),
 ], handleValidation, authController.login);

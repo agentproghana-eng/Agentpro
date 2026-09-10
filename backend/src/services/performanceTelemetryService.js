@@ -15,6 +15,12 @@ const {
   stopApiRequestTelemetry,
   apiRequestSnapshot,
 } = require('./apiRequestTelemetryService');
+const {
+  startAuthPaystackTelemetry,
+  stopAuthPaystackTelemetry,
+  authTelemetrySnapshot,
+  paystackWebhookTelemetrySnapshot,
+} = require('./authPaystackTelemetryService');
 
 const histogram = monitorEventLoopDelay({
   resolution: 20,
@@ -29,6 +35,7 @@ function startPerformanceTelemetry() {
 
   histogram.enable();
   startApiRequestTelemetry();
+  startAuthPaystackTelemetry();
   started = true;
 }
 
@@ -39,6 +46,7 @@ function stopPerformanceTelemetry() {
 
   histogram.disable();
   stopApiRequestTelemetry();
+  stopAuthPaystackTelemetry();
   started = false;
 }
 
@@ -169,6 +177,11 @@ async function performanceSnapshot() {
     event_loop: eventLoopSnapshot(),
 
     api: apiRequestSnapshot(),
+
+    auth: authTelemetrySnapshot(),
+
+    paystack_webhooks:
+      paystackWebhookTelemetrySnapshot(),
 
     postgres: {
       total_connections: pool.totalCount,
