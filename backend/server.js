@@ -51,6 +51,10 @@ const adminRoutes = require('./src/routes/admin.routes');
 const branchRoutes = require('./src/routes/branch.routes');
 const ussdFlowRoutes = require('./src/routes/ussdFlow.routes');
 const paystackWebhookRoutes = require('./src/routes/paystackWebhook.routes');
+const compatibilityRoutes = require('./src/routes/compatibility.routes');
+const {
+  enforceClientCompatibility,
+} = require('./src/middleware/clientCompatibility');
 
 const app = express();
 
@@ -111,6 +115,10 @@ app.use(cors({
     'Content-Type',
     'Authorization',
     'X-Request-ID',
+    'X-AgentPro-App-Version',
+    'X-AgentPro-App-Build',
+    'X-AgentPro-Platform',
+    'X-AgentPro-API-Version',
   ],
 
   // Browser/mobile API authentication uses explicit Bearer tokens,
@@ -227,6 +235,12 @@ app.get(
 // ============================================================
 
 const API = '/api/v1';
+
+// Keep compatibility discovery reachable even when the requesting client
+// itself requires an upgrade. Existing clients without version metadata
+// remain legacy-supported during the migration period.
+app.use(`${API}/compatibility`, compatibilityRoutes);
+app.use(API, enforceClientCompatibility);
 
 app.use(`${API}/auth`, authRoutes);
 app.use(`${API}/users`, userRoutes);

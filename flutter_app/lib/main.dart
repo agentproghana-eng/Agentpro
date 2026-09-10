@@ -1,3 +1,5 @@
+import 'shared/widgets/app_update_required_screen.dart';
+import 'core/api/api_client.dart';
 import 'dart:async';
 
 import 'package:firebase_core/firebase_core.dart';
@@ -263,9 +265,20 @@ class _AgentProAppState extends State<AgentProApp> {
 
           return AnnotatedRegion<SystemUiOverlayStyle>(
             value: systemUiStyle,
-            child: InactivityDetector(
-              timeout: const Duration(minutes: 5),
-              child: child ?? const SizedBox.shrink(),
+            child: ValueListenableBuilder<ClientCompatibilityBlock?>(
+              valueListenable: ApiClient.compatibilityBlock,
+              builder: (context, compatibility, _) {
+                if (compatibility != null) {
+                  return AppUpdateRequiredScreen(
+                    compatibility: compatibility,
+                  );
+                }
+
+                return InactivityDetector(
+                  timeout: const Duration(minutes: 5),
+                  child: child ?? const SizedBox.shrink(),
+                );
+              },
             ),
           );
         },
