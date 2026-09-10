@@ -1,6 +1,8 @@
 'use strict';
 
 const {
+  API_MIN_REQUESTS,
+  API_MIN_LATENCY_SAMPLES,
   evaluateOperationalAlerts,
 } = require(
   '../../src/services/operationalAlertService'
@@ -519,6 +521,163 @@ describe(
             .not
             .toContain(forbidden);
         }
+      }
+    );
+  }
+);
+
+describe(
+  'launch traffic alert baselines',
+  () => {
+    test(
+      'API alert evaluation starts at twenty requests per minute',
+      () => {
+        expect(
+          API_MIN_REQUESTS
+        ).toBe(20);
+      }
+    );
+
+    test(
+      'API latency alert evaluation starts at twenty samples per minute',
+      () => {
+        expect(
+          API_MIN_LATENCY_SAMPLES
+        ).toBe(20);
+      }
+    );
+
+    test(
+      'does not alert below the launch request sample floor',
+      () => {
+        const result =
+          evaluateOperationalAlerts({
+            api: {
+              enabled: true,
+              requests_last_minute: 19,
+              server_error_rate: 1,
+              responses: {
+                status_5xx: 19,
+              },
+              latency: {
+                sample_count: 0,
+                p95_ms: null,
+              },
+              window_seconds: 60,
+            },
+          });
+
+        expect(
+          result.alerts.some(
+            (item) =>
+              item.code ===
+                'api_5xx_rate_high' ||
+              item.code ===
+                'api_5xx_rate_critical'
+          )
+        ).toBe(false);
+      }
+    );
+
+    test(
+      'evaluates API error rate once twenty requests are observed',
+      () => {
+        const result =
+          evaluateOperationalAlerts({
+            api: {
+              enabled: true,
+              requests_last_minute: 20,
+              server_error_rate: 0.05,
+              responses: {
+                status_5xx: 1,
+              },
+              latency: {
+                sample_count: 0,
+                p95_ms: null,
+              },
+              window_seconds: 60,
+            },
+          });
+
+        expect(
+          result.alerts
+        ).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              code:
+                'api_5xx_rate_high',
+              severity:
+                'warning',
+            }),
+          ])
+        );
+      }
+    );
+
+    test(
+      'does not alert below the launch latency sample floor',
+      () => {
+        const result =
+          evaluateOperationalAlerts({
+            api: {
+              enabled: true,
+              requests_last_minute: 0,
+              server_error_rate: 0,
+              responses: {
+                status_5xx: 0,
+              },
+              latency: {
+                sample_count: 19,
+                p95_ms: 5000,
+              },
+              window_seconds: 60,
+            },
+          });
+
+        expect(
+          result.alerts.some(
+            (item) =>
+              item.code ===
+                'api_p95_latency_high' ||
+              item.code ===
+                'api_p95_latency_critical'
+          )
+        ).toBe(false);
+      }
+    );
+
+    test(
+      'evaluates latency once twenty samples are observed',
+      () => {
+        const result =
+          evaluateOperationalAlerts({
+            api: {
+              enabled: true,
+              requests_last_minute: 0,
+              server_error_rate: 0,
+              responses: {
+                status_5xx: 0,
+              },
+              latency: {
+                sample_count: 20,
+                p95_ms: 1000,
+              },
+              window_seconds: 60,
+            },
+          });
+
+        expect(
+          result.alerts
+        ).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              code:
+                'api_p95_latency_high',
+              severity:
+                'warning',
+            }),
+          ])
+        );
       }
     );
   }

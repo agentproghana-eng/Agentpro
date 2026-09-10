@@ -5,11 +5,11 @@ const SEVERITY = Object.freeze({
   CRITICAL: 'critical',
 });
 
-const API_MIN_REQUESTS = 100;
+const API_MIN_REQUESTS = 20;
 const API_WARNING_5XX_RATE = 0.05;
 const API_CRITICAL_5XX_RATE = 0.15;
 
-const API_MIN_LATENCY_SAMPLES = 100;
+const API_MIN_LATENCY_SAMPLES = 20;
 const API_WARNING_P95_MS = 1000;
 const API_CRITICAL_P95_MS = 3000;
 
