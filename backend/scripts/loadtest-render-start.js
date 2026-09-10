@@ -93,9 +93,36 @@ async function ensureLoadTestUser() {
   await client.connect();
 
   try {
+    await client.query('BEGIN');
+
+    const companyResult = await client.query(
+      `
+        INSERT INTO companies (
+          name,
+          phone,
+          email,
+          status
+        )
+        VALUES (
+          'AgentPro Load Test',
+          '0000000000',
+          'loadtest-company@agentpro.invalid',
+          'active'
+        )
+        ON CONFLICT (email)
+        DO UPDATE SET
+          status = 'active',
+          updated_at = NOW()
+        RETURNING id
+      `
+    );
+
+    const companyId = companyResult.rows[0].id;
+
     await client.query(
       `
         INSERT INTO users (
+          company_id,
           role,
           first_name,
           last_name,
@@ -105,49 +132,90 @@ async function ensureLoadTestUser() {
           must_change_password
         )
         VALUES (
-          'superuser',
+          $1,
+          'agent',
           'LoadTest',
           'Capacity',
           'loadtest-capacity@agentpro.invalid',
-          crypt($1, gen_salt('bf')),
+          crypt($2, gen_salt('bf')),
           'active',
           FALSE
         )
         ON CONFLICT (email)
         DO UPDATE SET
+          company_id = EXCLUDED.company_id,
+          role = 'agent',
           password_hash = crypt(
-            EXCLUDED.email || $1,
+            $2,
             gen_salt('bf')
           ),
           status = 'active',
           must_change_password = FALSE
       `,
-      [password]
+      [companyId, password]
     );
 
-    /*
-     * Normalize the UPDATE hash to exactly the supplied secret.
-     * The separate statement avoids relying on an EXCLUDED
-     * expression for credential material.
-     */
-    await client.query(
+    const subscriptionResult = await client.query(
       `
-        UPDATE users
-        SET password_hash = crypt(
-          $1,
-          gen_salt('bf')
-        )
-        WHERE email =
-          'loadtest-capacity@agentpro.invalid'
+        SELECT id
+        FROM subscriptions
+        WHERE company_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1
       `,
-      [password]
+      [companyId]
     );
+
+    if (subscriptionResult.rows.length === 0) {
+      await client.query(
+        `
+          INSERT INTO subscriptions (
+            company_id,
+            plan,
+            status,
+            started_at,
+            expires_at
+          )
+          VALUES (
+            $1,
+            'free',
+            'active',
+            NOW(),
+            NOW() + INTERVAL '30 days'
+          )
+        `,
+        [companyId]
+      );
+    } else {
+      await client.query(
+        `
+          UPDATE subscriptions
+          SET
+            plan = 'free',
+            status = 'active',
+            started_at = COALESCE(
+              started_at,
+              NOW()
+            ),
+            expires_at =
+              NOW() + INTERVAL '30 days',
+            updated_at = NOW()
+          WHERE id = $1
+        `,
+        [subscriptionResult.rows[0].id]
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
   } finally {
     await client.end();
   }
 
   console.log(
-    'Dedicated staging load-test user ready'
+    'Dedicated staging load-test agent ready'
   );
 }
 
