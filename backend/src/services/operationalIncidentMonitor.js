@@ -17,6 +17,12 @@ const {
 );
 
 const {
+  processOperationalIncidentNotifications,
+} = require(
+  './operationalIncidentNotificationDelivery'
+);
+
+const {
   logger,
 } = require('../utils/logger');
 
@@ -94,17 +100,31 @@ async function runIncidentReconciliation({
     performanceSnapshot,
   reconcileFn =
     reconcileOperationalIncidents,
+  notificationFn =
+    processOperationalIncidentNotifications,
 } = {}) {
   const snapshot =
     await snapshotFn();
 
-  return reconcileFn(
-    snapshot.operational_alerts,
-    {
-      observedAt:
+  const reconciliation =
+    await reconcileFn(
+      snapshot.operational_alerts,
+      {
+        observedAt:
+          snapshot.timestamp,
+      }
+    );
+
+  const notifications =
+    await notificationFn({
+      now:
         snapshot.timestamp,
-    }
-  );
+    });
+
+  return {
+    reconciliation,
+    notifications,
+  };
 }
 
 function startOperationalIncidentMonitor({

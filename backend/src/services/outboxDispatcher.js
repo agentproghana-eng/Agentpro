@@ -5,6 +5,7 @@ const {
 } = require('../config/database');
 
 const {
+  sendToUser,
   sendTransactionNotification,
   sendAdNotification,
 } = require('./notificationService');
@@ -98,6 +99,127 @@ function businessHubPayload(event) {
       'payload.amount'
     ),
   };
+}
+
+async function dispatchOperationalIncidentNotification(
+  event
+) {
+  const deliveryKey =
+    requireString(
+      event.dedupe_key,
+      'dedupe_key'
+    );
+
+  const payload =
+    requireObject(
+      event.payload,
+      'payload'
+    );
+
+  const userId =
+    requireString(
+      payload.user_id,
+      'payload.user_id'
+    );
+
+  const incidentId =
+    requireString(
+      payload.incident_id,
+      'payload.incident_id'
+    );
+
+  const incidentKey =
+    requireString(
+      payload.incident_key,
+      'payload.incident_key'
+    );
+
+  const alertCode =
+    requireString(
+      payload.alert_code,
+      'payload.alert_code'
+    );
+
+  const component =
+    requireString(
+      payload.component,
+      'payload.component'
+    );
+
+  const severity =
+    requireString(
+      payload.severity,
+      'payload.severity'
+    );
+
+  const kind =
+    requireString(
+      payload.kind,
+      'payload.kind'
+    );
+
+  const title =
+    requireString(
+      payload.title,
+      'payload.title'
+    );
+
+  const body =
+    requireString(
+      payload.body,
+      'payload.body'
+    );
+
+  if (
+    ![
+      'warning',
+      'critical',
+    ].includes(severity)
+  ) {
+    throw dispatchError(
+      'OUTBOX_INVALID_EVENT_PAYLOAD',
+      'Unsupported operational incident severity'
+    );
+  }
+
+  if (
+    ![
+      'opened',
+      'escalated',
+      'reminder',
+      'recovered',
+    ].includes(kind)
+  ) {
+    throw dispatchError(
+      'OUTBOX_INVALID_EVENT_PAYLOAD',
+      'Unsupported operational incident notification kind'
+    );
+  }
+
+  return sendToUser(
+    userId,
+    {
+      type:
+        'operational_incident',
+      title,
+      body,
+      data: {
+        incident_id:
+          incidentId,
+        incident_key:
+          incidentKey,
+        alert_code:
+          alertCode,
+        component,
+        severity,
+        kind,
+      },
+    },
+    {
+      throwOnError: true,
+      deliveryKey,
+    }
+  );
 }
 
 async function dispatchTransactionCompletion(event) {
@@ -278,6 +400,11 @@ async function dispatchOutboxEvent(event) {
     );
 
   switch (eventType) {
+    case 'notification.operational_incident':
+      return dispatchOperationalIncidentNotification(
+        event
+      );
+
     case 'notification.transaction.completed':
       return dispatchTransactionCompletion(
         event
