@@ -1,0 +1,288 @@
+name: AgentPro Distributed 500 VU Load Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agentpro-distributed-loadtest
+  cancel-in-progress: false
+
+env:
+  LOADTEST_BASE_URL: https://agentpro-loadtest-api-v2.onrender.com
+  LOADTEST_EMAIL: loadtest-capacity@agentpro.invalid
+  K6_SCRIPT: backend/load/k6/representative-read.js
+
+jobs:
+  prepare:
+    name: Prepare distributed load test
+    runs-on: ubuntu-latest
+
+    outputs:
+      start_epoch: ${{ steps.clock.outputs.start_epoch }}
+
+    steps:
+      - name: Verify fixed staging target
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test "$LOADTEST_BASE_URL" = \
+            "https://agentpro-loadtest-api-v2.onrender.com"
+
+          case "$LOADTEST_BASE_URL" in
+            *agentpro-api-izi3.onrender.com*|\
+            *api.agentpro.intellicoresystem.com*)
+              echo "Production target rejected."
+              exit 1
+              ;;
+          esac
+
+          echo "STAGING_TARGET_GUARD=PASS"
+          echo "PRODUCTION_NOT_TARGETED=PASS"
+
+      - name: Set synchronized start time
+        id: clock
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Give all five hosted runners time to start and install k6.
+          START_EPOCH="$(( $(date +%s) + 180 ))"
+
+          echo "start_epoch=$START_EPOCH" >> "$GITHUB_OUTPUT"
+
+          echo "SYNC_START_EPOCH=$START_EPOCH"
+          echo "SYNC_START_READY=PASS"
+
+  shard:
+    name: Load shard ${{ matrix.shard }}
+    needs: prepare
+
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5]
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout exact branch commit
+        uses: actions/checkout@v4
+        with:
+          ref: perf/1000-vu-capacity-gate
+          persist-credentials: false
+
+      - name: Verify expected test files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -f "$K6_SCRIPT"
+
+          grep -Fq \
+            '(__VU - 1 + __ITER) % routes.length' \
+            "$K6_SCRIPT"
+
+          echo "REPRESENTATIVE_ROUTE_STAGGER=PASS"
+
+      - name: Setup Grafana k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Verify k6
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          k6 version
+          k6 inspect "$K6_SCRIPT" >/dev/null
+
+          echo "K6_READY=PASS"
+
+      - name: Guard staging target
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test "$LOADTEST_BASE_URL" = \
+            "https://agentpro-loadtest-api-v2.onrender.com"
+
+          case "$LOADTEST_BASE_URL" in
+            *agentpro-api-izi3.onrender.com*|\
+            *api.agentpro.intellicoresystem.com*)
+              echo "Production target rejected."
+              exit 1
+              ;;
+          esac
+
+          echo "STAGING_TARGET_GUARD=PASS"
+          echo "PRODUCTION_NOT_TARGETED=PASS"
+
+      - name: Login dedicated staging user
+        id: auth
+        shell: bash
+        env:
+          LOADTEST_PASSWORD: ${{ secrets.AGENTPRO_LOADTEST_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          test -n "${LOADTEST_PASSWORD:-}"
+
+          LOGIN_JSON="$RUNNER_TEMP/login.json"
+
+          HTTP="$(
+            curl -sS \
+              --connect-timeout 10 \
+              --max-time 30 \
+              -o "$LOGIN_JSON" \
+              -w '%{http_code}' \
+              -H 'Content-Type: application/json' \
+              -X POST \
+              "$LOADTEST_BASE_URL/api/v1/auth/login" \
+              --data "$(
+                jq -nc \
+                  --arg email "$LOADTEST_EMAIL" \
+                  --arg password "$LOADTEST_PASSWORD" \
+                  '{email:$email,password:$password}'
+              )"
+          )"
+
+          unset LOADTEST_PASSWORD
+
+          echo "LOGIN_HTTP=$HTTP"
+          test "$HTTP" = "200"
+
+          TOKEN="$(
+            jq -r '.data.access_token // empty' \
+              "$LOGIN_JSON"
+          )"
+
+          rm -f "$LOGIN_JSON"
+
+          test "${#TOKEN}" -ge 32
+
+          echo "::add-mask::$TOKEN"
+
+          {
+            echo "access_token<<EOF"
+            echo "$TOKEN"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "ACCESS_TOKEN_READY=PASS"
+
+      - name: Wait for synchronized start
+        shell: bash
+        env:
+          START_EPOCH: ${{ needs.prepare.outputs.start_epoch }}
+        run: |
+          set -euo pipefail
+
+          NOW="$(date +%s)"
+
+          if [ "$NOW" -lt "$START_EPOCH" ]; then
+            WAIT_SECONDS="$(( START_EPOCH - NOW ))"
+
+            echo "WAIT_SECONDS=$WAIT_SECONDS"
+            sleep "$WAIT_SECONDS"
+          else
+            echo "START_TIME_ALREADY_REACHED=CONTINUE"
+          fi
+
+          echo "SHARD_START_EPOCH=$(date +%s)"
+          echo "SYNC_WAIT_COMPLETE=PASS"
+
+      - name: Run 100 VU shard
+        id: load
+        continue-on-error: true
+        shell: bash
+        env:
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: |
+          set -uo pipefail
+
+          SUMMARY="$RUNNER_TEMP/k6-summary-${{ matrix.shard }}.json"
+
+          set +e
+
+          k6 run \
+            --vus 100 \
+            --duration 2m \
+            --summary-export "$SUMMARY" \
+            -e AGENTPRO_BASE_URL="$LOADTEST_BASE_URL" \
+            -e AGENTPRO_ACCESS_TOKEN="$ACCESS_TOKEN" \
+            "$K6_SCRIPT"
+
+          STATUS=$?
+
+          set -e
+
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+
+          echo "K6_EXIT_STATUS=$STATUS"
+          echo "SUMMARY_PATH=$SUMMARY"
+
+          if [ "$STATUS" -eq 0 ]; then
+            echo "SHARD_${{ matrix.shard }}=PASS"
+          else
+            echo "SHARD_${{ matrix.shard }}=FAIL"
+          fi
+
+      - name: Summarize shard
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SUMMARY="$RUNNER_TEMP/k6-summary-${{ matrix.shard }}.json"
+
+          test -s "$SUMMARY"
+
+          jq \
+            --argjson shard '${{ matrix.shard }}' \
+            '{
+              shard: $shard,
+              http_reqs: .metrics.http_reqs.values.count,
+              http_req_failed_rate:
+                .metrics.http_req_failed.values.rate,
+              p50_ms:
+                .metrics.http_req_duration.values["p(50)"],
+              p95_ms:
+                .metrics.http_req_duration.values["p(95)"],
+              p99_ms:
+                .metrics.http_req_duration.values["p(99)"],
+              max_ms:
+                .metrics.http_req_duration.values.max
+            }' \
+            "$SUMMARY"
+
+          echo "SHARD_SUMMARY_READY=PASS"
+
+      - name: Upload shard summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentpro-500vu-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/k6-summary-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Enforce shard threshold result
+        if: always()
+        shell: bash
+        env:
+          LOAD_STATUS: ${{ steps.load.outputs.status }}
+        run: |
+          set -euo pipefail
+
+          test -n "${LOAD_STATUS:-}"
+
+          if [ "$LOAD_STATUS" != "0" ]; then
+            echo "LOAD_SHARD_THRESHOLD=FAIL"
+            exit "$LOAD_STATUS"
+          fi
+
+          echo "LOAD_SHARD_THRESHOLD=PASS"
