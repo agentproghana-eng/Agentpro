@@ -1713,6 +1713,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
               // it as a phone field.
               if (_needsMerchantId) ...[
                 AppTextField(
+                  transactionEmphasis: true,
                   controller: _merchantIdCtrl,
                   label: 'Merchant ID',
                   prefixIcon: Icons.storefront_outlined,
@@ -1763,6 +1764,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
               // Code, so retain that terminology for those specific flows.
               if (_needsCustomer) ...[
                 AppTextField(
+                  transactionEmphasis: true,
                   controller: _customerPhoneCtrl,
                   label: [
                     'business_deposit',
@@ -1806,6 +1808,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
               if (_needsRecipient) ...[
                 AppTextField(
+                  transactionEmphasis: true,
                   controller: _recipientPhoneCtrl,
                   label: 'Phone Number',
                   hint: '024XXXXXXX',
@@ -1875,6 +1878,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
               // 3. REFERENCE — only when required by the provider flow.
               if (_needsReference) ...[
                 AppTextField(
+                  transactionEmphasis: true,
                   controller: _referenceCtrl,
                   label: 'Reference',
                   prefixIcon: Icons.notes_outlined,

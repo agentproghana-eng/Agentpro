@@ -94,6 +94,12 @@ class AppTextField extends StatelessWidget {
   final ValueChanged<String>? onChanged;
   final TextInputAction? textInputAction;
 
+  /// Larger, stronger transaction-entry treatment.
+  ///
+  /// Opt-in only so login, registration, marketplace and other forms keep
+  /// their existing typography and density.
+  final bool transactionEmphasis;
+
   const AppTextField({
     super.key,
     required this.controller,
@@ -109,10 +115,25 @@ class AppTextField extends StatelessWidget {
     this.onTap,
     this.onChanged,
     this.textInputAction,
+    this.transactionEmphasis = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final fieldStyle = transactionEmphasis
+        ? const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          )
+        : null;
+
+    final labelStyle = transactionEmphasis
+        ? const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          )
+        : null;
+
     return TextFormField(
       controller: controller,
       obscureText: obscureText,
@@ -123,10 +144,30 @@ class AppTextField extends StatelessWidget {
       onChanged: onChanged,
       textInputAction: textInputAction,
       validator: validator,
+      style: fieldStyle,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
+        labelStyle: labelStyle,
+        floatingLabelStyle: labelStyle,
+        hintStyle: transactionEmphasis
+            ? const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              )
+            : null,
+        contentPadding: transactionEmphasis
+            ? const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 20,
+              )
+            : null,
+        prefixIcon: prefixIcon != null
+            ? Icon(
+                prefixIcon,
+                size: transactionEmphasis ? 24 : null,
+              )
+            : null,
         suffixIcon: suffixIcon,
       ),
     );
