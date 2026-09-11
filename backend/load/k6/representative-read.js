@@ -85,8 +85,14 @@ const routes = [
 ];
 
 export default function () {
+  // Spread VUs across the route set instead of making every VU
+  // begin each test on auth/me. This avoids an artificial synchronized
+  // thundering herd while preserving deterministic route coverage.
+  const routeIndex =
+    (__VU - 1 + __ITER) % routes.length;
+
   const route =
-    routes[__ITER % routes.length];
+    routes[routeIndex];
 
   const response = http.get(
     `${config.baseUrl}${route.path}`,
