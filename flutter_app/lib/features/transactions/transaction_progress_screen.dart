@@ -1713,6 +1713,24 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     final rawType = widget.data['transaction_type']?.toString() ?? '';
     final type = rawType.isEmpty ? '' : transactionTypeLabel(rawType, provider);
 
+    final rawRequestFields = widget.data['request_fields'];
+    final requestFields = rawRequestFields is Map
+        ? Map<String, dynamic>.from(rawRequestFields)
+        : <String, dynamic>{};
+
+    final processingPhone = <dynamic>[
+      widget.data['recipient_phone'],
+      widget.data['customer_phone'],
+      requestFields['recipient_phone'],
+      requestFields['customer_phone'],
+    ]
+        .map((value) => value?.toString().trim() ?? '')
+        .where((value) => RegExp(r'^\d{10}$').hasMatch(value))
+        .firstWhere(
+          (value) => value.isNotEmpty,
+          orElse: () => '',
+        );
+
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
@@ -1792,6 +1810,17 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
                           color: context.appSecondaryText,
                         ),
                       ),
+                      if (processingPhone.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          processingPhone,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: context.appSecondaryText,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 7),
                       Text(
                         _statusMessage,
@@ -2409,7 +2438,14 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             AppButton(
               label: 'New Transaction',
               icon: Icons.add_circle_outline,
-              onPressed: () => _returnHome(refreshDashboard: true),
+              onPressed: () {
+                DashboardRefreshService.notifyTransactionCompleted(
+                  isPersonal: widget.isPersonal,
+                  provider: widget.data['provider']?.toString() ?? 'mtn',
+                  simSlot: _parseSimSlot(widget.data['sim_slot']),
+                );
+                context.pop('success');
+              },
             ),
             const SizedBox(height: 12),
             AppButton(

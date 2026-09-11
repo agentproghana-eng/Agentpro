@@ -868,6 +868,41 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     _pendingClientOperationFingerprint = null;
   }
 
+  void _clearTransactionInputsAfterSuccess() {
+    _amountCtrl.clear();
+    _phoneCtrl.clear();
+    _referenceCtrl.clear();
+    _tillNumberCtrl.clear();
+    _accountNumberCtrl.clear();
+    _flexiAmountCtrl.clear();
+    _resetClientOperationForNewAttempt();
+
+    setState(() {
+      _crossNetworkSelection = null;
+      _sendMoneyMode = null;
+      _selectedBankName = null;
+
+      _recipientMode = null;
+      _bundleCategory = null;
+      _bundleChoice = null;
+      _flexiType = null;
+      _flexiPayment = null;
+      _m4mPayment = null;
+
+      _mashupTier = null;
+      _mashupAllocation = null;
+      _mashupPayment = null;
+
+      _moorchPage = 1;
+      _moorchBundlePage = 1;
+      _dbStep = 'recipient_mode';
+      _mashupStep = 'recipient_mode';
+
+      // Preserve only intentional route-level quick-action defaults.
+      _applyInitialQuickActionPreset();
+    });
+  }
+
   void _selectCategory(String id) {
     setState(() {
       _bundleCategory = id;
@@ -1231,7 +1266,9 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       setState(() => _loading = false);
     }
 
-    if (mounted && progressAction == 'retry_now') {
+    if (mounted && progressAction == 'success') {
+      _clearTransactionInputsAfterSuccess();
+    } else if (mounted && progressAction == 'retry_now') {
       _resetClientOperationForNewAttempt();
       await _submit();
     } else if (mounted && progressAction == 'edit_retry') {
@@ -1310,7 +1347,9 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       setState(() => _loading = false);
     }
 
-    if (mounted && progressAction == 'retry_now') {
+    if (mounted && progressAction == 'success') {
+      _clearTransactionInputsAfterSuccess();
+    } else if (mounted && progressAction == 'retry_now') {
       _resetClientOperationForNewAttempt();
       await _submitDataBundle();
     } else if (mounted && progressAction == 'edit_retry') {
@@ -2097,7 +2136,9 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       setState(() => _loading = false);
     }
 
-    if (mounted && progressAction == 'retry_now') {
+    if (mounted && progressAction == 'success') {
+      _clearTransactionInputsAfterSuccess();
+    } else if (mounted && progressAction == 'retry_now') {
       _resetClientOperationForNewAttempt();
       await _submitMtnMashup();
     } else if (mounted && progressAction == 'edit_retry') {
