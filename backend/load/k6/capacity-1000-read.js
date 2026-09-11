@@ -14,16 +14,37 @@ const accessToken = String(
 
 if (accessToken.length < 32) {
   throw new Error(
-    'AGENTPRO_ACCESS_TOKEN is required for representative reads.'
+    'AGENTPRO_ACCESS_TOKEN is required for the 1000 VU capacity gate.'
+  );
+}
+
+const forbiddenHosts = new Set([
+  'agentpro-api-izi3.onrender.com',
+  'api.agentpro.intellicoresystem.com',
+]);
+
+if (forbiddenHosts.has(config.hostname)) {
+  throw new Error(
+    'The 1000 VU capacity gate must not run against production.'
   );
 }
 
 export const options = {
-  vus: 1,
-  duration: '2m',
+  stages: [
+    { duration: '1m', target: 100 },
+    { duration: '2m', target: 250 },
+    { duration: '2m', target: 500 },
+    { duration: '3m', target: 1000 },
+    { duration: '5m', target: 1000 },
+    { duration: '2m', target: 0 },
+  ],
+
+  gracefulRampDown: '30s',
 
   thresholds: {
-    http_req_failed: ['rate<0.01'],
+    http_req_failed: [
+      'rate<0.01',
+    ],
 
     http_req_duration: [
       'p(50)<500',
@@ -85,9 +106,6 @@ const routes = [
 ];
 
 export default function () {
-  // Spread VUs across the route set instead of making every VU
-  // begin each test on auth/me. This avoids an artificial synchronized
-  // thundering herd while preserving deterministic route coverage.
   const routeIndex =
     (__VU - 1 + __ITER) % routes.length;
 
@@ -103,8 +121,10 @@ export default function () {
       },
 
       tags: {
-        scenario: 'representative_read',
-        endpoint: route.name,
+        scenario:
+          'capacity_1000_read',
+        endpoint:
+          route.name,
       },
 
       timeout: '15s',
@@ -113,7 +133,7 @@ export default function () {
 
   if (response.status === 401) {
     exec.test.abort(
-      `AUTH_EXPIRED endpoint=${route.name || route.endpoint}`
+      `AUTH_EXPIRED endpoint=${route.name}`
     );
   }
 
@@ -138,7 +158,5 @@ export default function () {
     );
   }
 
-  // One source IP is subject to the production global API limiter.
-  // Keep this baseline intentionally well below 100 requests/minute.
-  sleep(3);
+  sleep(1);
 }
