@@ -12,6 +12,10 @@ class MainActivity : FlutterFragmentActivity() {
     private val USSD_ACCESSIBILITY_CHANNEL = "com.agentpro.ghana/ussd_accessibility"
     private val DEVICE_CLOCK_CHANNEL = "com.agentpro.ghana/device_clock"
     private val DEVICE_SECURITY_CHANNEL = "com.agentpro.ghana/device_security"
+    private val MTN_CASH_OUT_SMS_CHANNEL =
+        "com.agentpro.ghana/mtn_cashout_sms"
+
+    private lateinit var mtnCashOutSmsChannel: MtnCashOutSmsChannel
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -27,6 +31,14 @@ class MainActivity : FlutterFragmentActivity() {
         // Register USSD Accessibility Service channel (MTN Cash In pilot)
         UssdAccessibilityChannel(this)
             .register(flutterEngine.dartExecutor.binaryMessenger, USSD_ACCESSIBILITY_CHANNEL)
+
+        // Narrow MTN Agent Cash Out receipt listener. It is armed only for
+        // an active Cash Out and never scans historical SMS.
+        mtnCashOutSmsChannel = MtnCashOutSmsChannel(this)
+        mtnCashOutSmsChannel.register(
+            flutterEngine.dartExecutor.binaryMessenger,
+            MTN_CASH_OUT_SMS_CHANNEL
+        )
 
         // Monotonic Android clock used for bounded offline transaction trust.
         DeviceClockChannel(this)
@@ -49,5 +61,27 @@ class MainActivity : FlutterFragmentActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        if (
+            ::mtnCashOutSmsChannel.isInitialized &&
+            mtnCashOutSmsChannel.onRequestPermissionsResult(
+                requestCode,
+                grantResults
+            )
+        ) {
+            return
+        }
+
+        super.onRequestPermissionsResult(
+            requestCode,
+            permissions,
+            grantResults
+        )
     }
 }

@@ -663,6 +663,55 @@ class UssdAccessibilityService : AccessibilityService() {
     // This function deliberately receives only screenText, not the
     // Accessibility root node. That makes post-PIN input impossible here.
     private fun handleAfterPinPrompt(screenText: String) {
+        // MTN Agent Cash Out is a two-party approval flow:
+        // 1. the agent enters the agent PIN on this device;
+        // 2. the customer separately approves on the customer's device;
+        // 3. final success is confirmed by the MTN SMS received by the agent.
+        //
+        // Therefore generic post-PIN success markers such as "successful",
+        // "received", or "MMI complete" must NEVER complete an MTN Cash Out.
+        // The only decisive USSD-side result handled here is the explicit
+        // failure popup. Otherwise Flutter waits for the confirmation source.
+        if (
+            pendingProvider == "mtn" &&
+            pendingTransactionType == "cash_out"
+        ) {
+            // Accessibility can publish the same PIN screen more than once.
+            // Do not advance the Flutter state until the provider has
+            // actually moved away from the agent PIN prompt.
+            val stillAtAgentPinPrompt =
+                screenText.contains("enter mm pin") ||
+                    screenText.contains("enter your pin")
+
+            if (stillAtAgentPinPrompt) {
+                return
+            }
+
+            if (screenText.contains("transaction failed")) {
+                listener?.onResult(
+                    "failure",
+                    "Transaction failed"
+                )
+
+                endSession()
+                UssdForegroundService.stop(this)
+                return
+            }
+
+            listener?.onResult(
+                "awaiting_customer_confirmation",
+                "Cash Out handed to customer for approval"
+            )
+
+            // The agent PIN has been submitted and MTN has moved beyond the
+            // agent PIN screen. AgentPro is finished with this USSD session.
+            // Customer approval and the final receipt are now independent.
+            endSession()
+            UssdForegroundService.stop(this)
+
+            return
+        }
+
         // MTN/Telecel use the legacy hardcoded marker lists when custom
         // markers are absent. Generic flows use their configured markers.
         val successMarkers = pendingSuccessMarkers ?: listOf(

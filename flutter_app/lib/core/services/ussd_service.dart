@@ -38,6 +38,7 @@ enum USSDStatus {
   idle,
   dialing,
   awaitingPIN, // User must enter PIN on the OS/network's own prompt
+  awaitingCustomerConfirmation, // MTN Cash Out: waiting for customer approval / SMS
   processing,
   success,
   failed,
@@ -458,16 +459,83 @@ class UssdAccessibilityEngine {
     'com.agentpro.ghana/ussd_accessibility',
   );
 
+  static const _mtnCashOutSmsChannel = MethodChannel(
+    'com.agentpro.ghana/mtn_cashout_sms',
+  );
+
   final _progressController = StreamController<USSDProgress>.broadcast();
   Stream<USSDProgress> get progressStream => _progressController.stream;
 
   Completer<USSDResult>? _resultCompleter;
   Timer? _prePinTimeout;
   Timer? _postPinTimeout;
+  Timer? _customerConfirmationTimeout;
   bool _pinPromptReached = false;
+  bool _mtnCashOutSmsArmed = false;
+  String? _activeMtnCashOutAmount;
 
   UssdAccessibilityEngine() {
     _channel.setMethodCallHandler(_handleNativeCall);
+  }
+
+  Future<bool> _prepareMtnCashOutSms(
+    String transactionId,
+    String amount, {
+    String? customerName,
+  }) async {
+    final permissionGranted =
+        await _mtnCashOutSmsChannel.invokeMethod<bool>(
+              'requestReceiveSmsPermission',
+            ) ??
+            false;
+
+    if (!permissionGranted) {
+      return false;
+    }
+
+    await _mtnCashOutSmsChannel.invokeMethod(
+      'armCashOutSmsSession',
+      {
+        'transaction_id': transactionId,
+        'amount': amount,
+        if (customerName?.trim().isNotEmpty == true)
+          'customer_name': customerName!.trim(),
+      },
+    );
+
+    _mtnCashOutSmsArmed = true;
+    _activeMtnCashOutAmount = amount;
+
+    return true;
+  }
+
+  Future<void> _markMtnCashOutPinReached() async {
+    if (!_mtnCashOutSmsArmed) {
+      return;
+    }
+
+    await _mtnCashOutSmsChannel.invokeMethod(
+      'markCashOutPinReached',
+    );
+  }
+
+  Future<void> _disarmMtnCashOutSmsSession() async {
+    final wasArmed = _mtnCashOutSmsArmed;
+
+    _mtnCashOutSmsArmed = false;
+    _activeMtnCashOutAmount = null;
+
+    if (!wasArmed) {
+      return;
+    }
+
+    try {
+      await _mtnCashOutSmsChannel.invokeMethod(
+        'disarmCashOutSmsSession',
+      );
+    } catch (_) {
+      // Best-effort cleanup. Native also self-disarms after a matched receipt.
+    }
   }
 
   Future<dynamic> _handleNativeCall(MethodCall call) async {
@@ -476,6 +544,11 @@ class UssdAccessibilityEngine {
         _pinPromptReached = true;
         _prePinTimeout?.cancel();
         _prePinTimeout = null;
+
+        // Seeing the PIN prompt is not yet a financial handoff. The agent
+        // may still cancel or correct the transaction here. MTN Cash Out is
+        // persisted only after native Accessibility observes that the
+        // provider has actually moved away from this PIN screen.
 
         _postPinTimeout?.cancel();
         _postPinTimeout = Timer(const Duration(seconds: 45), () async {
@@ -509,13 +582,80 @@ class UssdAccessibilityEngine {
         );
         break;
       case 'onResult':
+        final args = call.arguments as Map;
+        final outcome = args['outcome'] as String? ?? 'failure';
+        final nativeMessage = args['message']?.toString().trim() ?? '';
+
+        if (outcome == 'awaiting_customer_confirmation') {
+          _postPinTimeout?.cancel();
+          _postPinTimeout = null;
+          _customerConfirmationTimeout?.cancel();
+          _customerConfirmationTimeout = null;
+
+          final completer = _resultCompleter;
+
+          if (completer == null || completer.isCompleted) {
+            break;
+          }
+
+          if (_mtnCashOutSmsArmed) {
+            try {
+              await _markMtnCashOutPinReached();
+
+              // markCashOutPinReached moves the active operation into the
+              // persistent multi-transaction ledger. From here this engine
+              // no longer owns that Cash Out.
+              _mtnCashOutSmsArmed = false;
+              _activeMtnCashOutAmount = null;
+            } on PlatformException {
+              await cancelAutomation();
+
+              if (!completer.isCompleted) {
+                completer.complete(
+                  const USSDResult(
+                    outcome: USSDStatus.pendingConfirmation,
+                    failureReason:
+                        'MTN Cash Out was handed off, but AgentPro could not '
+                        'start automatic SMS reconciliation. Please verify '
+                        'the transaction before trying again.',
+                    sessionLog: [],
+                  ),
+                );
+              }
+
+              break;
+            }
+          }
+
+          _progressController.add(
+            USSDProgress(
+              status: USSDStatus.awaitingCustomerConfirmation,
+              message: nativeMessage.isNotEmpty
+                  ? nativeMessage
+                  : 'Cash Out handed to customer for approval.',
+            ),
+          );
+
+          if (!completer.isCompleted) {
+            completer.complete(
+              const USSDResult(
+                outcome: USSDStatus.pendingConfirmation,
+                failureReason:
+                    'MTN Cash Out is awaiting customer approval and SMS confirmation.',
+                sessionLog: [],
+              ),
+            );
+          }
+
+          break;
+        }
+
         _prePinTimeout?.cancel();
         _prePinTimeout = null;
         _postPinTimeout?.cancel();
         _postPinTimeout = null;
-        final args = call.arguments as Map;
-        final outcome = args['outcome'] as String? ?? 'failure';
-        final nativeMessage = args['message']?.toString().trim() ?? '';
+        _customerConfirmationTimeout?.cancel();
+        _customerConfirmationTimeout = null;
 
         final mappedOutcome = switch (outcome) {
           'success' => USSDStatus.success,
@@ -542,6 +682,8 @@ class UssdAccessibilityEngine {
               ? nativeMessage
               : 'The network reported that the transaction failed.',
         };
+
+        await _disarmMtnCashOutSmsSession();
 
         final completer = _resultCompleter;
 
@@ -594,6 +736,10 @@ class UssdAccessibilityEngine {
     _prePinTimeout = null;
     _postPinTimeout?.cancel();
     _postPinTimeout = null;
+    _customerConfirmationTimeout?.cancel();
+    _customerConfirmationTimeout = null;
+
+    await _disarmMtnCashOutSmsSession();
 
     try {
       await _channel.invokeMethod('cancelAutomation');
@@ -609,7 +755,9 @@ class UssdAccessibilityEngine {
   /// already move after manual authorization and the result is no longer
   /// safe to classify as a definite failure automatically.
   Future<USSDResult> execute({
+    String? transactionId,
     String? customerPhone,
+    String? customerName,
     String? amount,
     required String transactionType,
     required String provider,
@@ -627,8 +775,75 @@ class UssdAccessibilityEngine {
   }) async {
     _prePinTimeout?.cancel();
     _postPinTimeout?.cancel();
+    _customerConfirmationTimeout?.cancel();
+    _customerConfirmationTimeout = null;
     _pinPromptReached = false;
     _resultCompleter = Completer<USSDResult>();
+
+    await _disarmMtnCashOutSmsSession();
+
+    final isMtnCashOut =
+        provider == 'mtn' && transactionType == 'cash_out';
+
+    if (isMtnCashOut) {
+      final normalizedAmount = amount?.trim() ?? '';
+
+      if (normalizedAmount.isEmpty) {
+        return const USSDResult(
+          outcome: USSDStatus.failed,
+          failureReason:
+              'A valid amount is required before MTN Cash Out can start.',
+          sessionLog: [],
+        );
+      }
+
+      _progressController.add(
+        const USSDProgress(
+          status: USSDStatus.processing,
+          message: 'Preparing MTN Cash Out confirmation...',
+        ),
+      );
+
+      try {
+        final normalizedTransactionId =
+            transactionId?.trim() ?? '';
+
+        if (normalizedTransactionId.isEmpty) {
+          return const USSDResult(
+            outcome: USSDStatus.failed,
+            failureReason:
+                'A transaction ID is required before MTN Cash Out can start.',
+            sessionLog: [],
+          );
+        }
+
+        final prepared = await _prepareMtnCashOutSms(
+          normalizedTransactionId,
+          normalizedAmount,
+          customerName: customerName,
+        );
+
+        if (!prepared) {
+          return const USSDResult(
+            outcome: USSDStatus.failed,
+            failureReason:
+                'SMS permission is required to confirm MTN Cash Out. '
+                'No USSD request was sent.',
+            sessionLog: [],
+          );
+        }
+      } on PlatformException {
+        await _disarmMtnCashOutSmsSession();
+
+        return const USSDResult(
+          outcome: USSDStatus.failed,
+          failureReason:
+              'AgentPro could not prepare MTN Cash Out confirmation. '
+              'No USSD request was sent.',
+          sessionLog: [],
+        );
+      }
+    }
 
     _progressController.add(
       const USSDProgress(
@@ -689,6 +904,8 @@ class UssdAccessibilityEngine {
       _prePinTimeout = null;
       _postPinTimeout?.cancel();
       _postPinTimeout = null;
+      _customerConfirmationTimeout?.cancel();
+      _customerConfirmationTimeout = null;
       await cancelAutomation();
 
       // These native errors are emitted from validation/resolution or from
@@ -758,6 +975,8 @@ class UssdAccessibilityEngine {
       _prePinTimeout = null;
       _postPinTimeout?.cancel();
       _postPinTimeout = null;
+      _customerConfirmationTimeout?.cancel();
+      _customerConfirmationTimeout = null;
       await cancelAutomation();
 
       // A generic Dart/platform transport failure at the native dispatch
@@ -779,6 +998,20 @@ class UssdAccessibilityEngine {
     _prePinTimeout = null;
     _postPinTimeout?.cancel();
     _postPinTimeout = null;
-    if (!_progressController.isClosed) _progressController.close();
+    _customerConfirmationTimeout?.cancel();
+    _customerConfirmationTimeout = null;
+
+    if (_mtnCashOutSmsArmed) {
+      _mtnCashOutSmsArmed = false;
+      _activeMtnCashOutAmount = null;
+
+      _mtnCashOutSmsChannel.invokeMethod(
+        'disarmCashOutSmsSession',
+      );
+    }
+
+    if (!_progressController.isClosed) {
+      _progressController.close();
+    }
   }
 }

@@ -11,6 +11,11 @@
     <!-- SIM detection -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
+    <!-- MTN Agent Cash Out confirmation.
+         RECEIVE_SMS only: AgentPro listens for a new receipt during an
+         explicitly active Cash Out and never scans the SMS inbox. -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+
     <!-- Brief foreground service shown only during an active USSD
          automation session, so the OS doesn't kill the accessibility
          service's process mid-transaction. -->
@@ -143,6 +148,18 @@
             android:name=".UssdForegroundService"
             android:foregroundServiceType="shortService"
             android:exported="false" />
+
+        <!-- MTN Cash Out receipt reconciliation.
+             The receiver parses only newly delivered MTN Cash Out receipts.
+             Historical SMS inbox access is not used. -->
+        <receiver
+            android:name=".MtnCashOutSmsReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
 
         <!-- FCM default channel -->
         <meta-data

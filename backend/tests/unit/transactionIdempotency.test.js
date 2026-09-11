@@ -1262,6 +1262,135 @@ describe('Transaction completion idempotency', () => {
   );
 });
 
+it('promotes pending MTN Cash Out to success and posts balances exactly once', async () => {
+  const pending = existingTransaction({
+    status: 'pending_confirmation',
+    provider: 'mtn',
+    transaction_type: 'cash_out',
+    amount: '30.00',
+    sim_iccid: '8901000000000000001',
+    sim_slot: 0,
+    installation_id:
+      '11111111-1111-4111-8111-111111111111',
+    sim_subscription_id: 7,
+    sim_wallet_id: null,
+  });
+
+  const completed = {
+    ...pending,
+    status: 'success',
+    network_reference: '89306931491',
+    sim_wallet_id: 'sim-wallet-cash-out',
+  };
+
+  mockClientQuery
+    .mockResolvedValueOnce({
+      rows: [pending],
+    })
+    .mockResolvedValueOnce({
+      rows: [],
+    });
+
+  mockQuery.mockResolvedValue({
+    rows: [completed],
+  });
+
+  const req = makeReq();
+
+  req.params = {
+    transaction_id: 'tx-1',
+  };
+
+  req.body = {
+    status: 'success',
+    network_reference: '89306931491',
+    failure_reason: null,
+    ussd_session_log: [],
+  };
+
+  const res = makeRes();
+
+  await transactionController.completeTransaction(
+    req,
+    res
+  );
+
+  expect(mockPostCashOut).toHaveBeenCalledTimes(1);
+
+  expect(mockPostCashOut).toHaveBeenCalledWith(
+    expect.objectContaining({
+      query: mockClientQuery,
+    }),
+    pending,
+    'agent-1',
+  );
+
+  expect(
+    mockCalculateAndPostCommission
+  ).toHaveBeenCalledTimes(1);
+
+  expect(res.json).toHaveBeenCalledWith(
+    expect.objectContaining({
+      success: true,
+      data: expect.objectContaining({
+        id: 'tx-1',
+        status: 'success',
+        network_reference: '89306931491',
+      }),
+    }),
+  );
+});
+
+it('rejects changing pending MTN Cash Out to failed', async () => {
+  const pending = existingTransaction({
+    status: 'pending_confirmation',
+    provider: 'mtn',
+    transaction_type: 'cash_out',
+    amount: '30.00',
+  });
+
+  mockClientQuery.mockResolvedValueOnce({
+    rows: [pending],
+  });
+
+  const req = makeReq();
+
+  req.params = {
+    transaction_id: 'tx-1',
+  };
+
+  req.body = {
+    status: 'failed',
+    network_reference: null,
+    failure_reason: 'The network reported that the transaction failed.',
+    ussd_session_log: [],
+  };
+
+  const res = makeRes();
+
+  await transactionController.completeTransaction(
+    req,
+    res
+  );
+
+  expect(res.status).toHaveBeenCalledWith(409);
+
+  expect(res.json).toHaveBeenCalledWith(
+    expect.objectContaining({
+      success: false,
+      message:
+        'Transaction already pending_confirmation; cannot change completion to failed',
+    }),
+  );
+
+  expect(mockClientQuery).toHaveBeenCalledTimes(1);
+  expect(mockPostCashOut).not.toHaveBeenCalled();
+  expect(
+    mockCalculateAndPostCommission
+  ).not.toHaveBeenCalled();
+  expect(mockQuery).not.toHaveBeenCalled();
+});
+
 it('posts MTN Cash Out principal balances before earned commission', async () => {
   const initiated = existingTransaction({
     status: 'initiated',

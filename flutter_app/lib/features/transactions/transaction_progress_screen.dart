@@ -1341,7 +1341,9 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     });
 
     final result = await accessEngine.execute(
+      transactionId: transactionId,
       customerPhone: phoneForAutomation,
+      customerName: automationParams['customer_name'],
       amount: automationParams['amount'],
       transactionType: nativeTransactionType,
       provider: provider,
@@ -1365,6 +1367,25 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
       if (mounted) {
         Navigator.of(context).pop('cancelled');
+      }
+
+      return;
+    }
+
+    final isMtnCashOutHandoff =
+        provider == 'mtn' &&
+        transactionType == 'cash_out' &&
+        result.outcome == USSDStatus.pendingConfirmation;
+
+    if (isMtnCashOutHandoff) {
+      await _reportResult(
+        transactionId,
+        result,
+        autoReturnAfterAmbiguousResult: false,
+      );
+
+      if (mounted && context.canPop()) {
+        context.pop('pending_confirmation');
       }
 
       return;
@@ -1510,7 +1531,11 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     }
   }
 
-  Future<void> _reportResult(String transactionId, USSDResult result) async {
+  Future<void> _reportResult(
+    String transactionId,
+    USSDResult result, {
+    bool autoReturnAfterAmbiguousResult = true,
+  }) async {
     // Map the engine's outcome to the backend's status values directly —
     // do NOT collapse pendingConfirmation into 'failed'. That distinction
     // is the entire point of this status: we genuinely don't know if the
@@ -1553,7 +1578,9 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         });
       }
 
-      if (_shouldReturnAfterMissingResult(result)) {
+      if (
+          autoReturnAfterAmbiguousResult &&
+          _shouldReturnAfterMissingResult(result)) {
         await _returnToTransactionAfterMissingResult(result);
       }
       return;
@@ -1580,7 +1607,9 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         });
       }
 
-      if (_shouldReturnAfterMissingResult(result)) {
+      if (
+          autoReturnAfterAmbiguousResult &&
+          _shouldReturnAfterMissingResult(result)) {
         await _returnToTransactionAfterMissingResult(result);
       }
     } on DioException catch (e) {
@@ -1614,7 +1643,9 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
           });
         }
 
-        if (_shouldReturnAfterMissingResult(result)) {
+        if (
+            autoReturnAfterAmbiguousResult &&
+            _shouldReturnAfterMissingResult(result)) {
           await _returnToTransactionAfterMissingResult(result);
         }
         return;
@@ -1651,6 +1682,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
   int get _activeProgressStep {
     if (_status == USSDStatus.awaitingPIN) return 4;
+    if (_status == USSDStatus.awaitingCustomerConfirmation) return 5;
 
     final message = _statusMessage.toLowerCase();
 
@@ -1701,13 +1733,15 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         ),
         _ProgressTimelineItem(
           title: 'Confirming result',
-          subtitle: 'Waiting for the provider response',
+          subtitle: 'Waiting for provider or customer confirmation',
           icon: Icons.receipt_long_outlined,
         ),
       ];
 
   Widget _buildProgress() {
     final isAwaitingPIN = _status == USSDStatus.awaitingPIN;
+    final isAwaitingCustomerConfirmation =
+        _status == USSDStatus.awaitingCustomerConfirmation;
     final activeStep = _activeProgressStep;
     final provider = widget.data['provider']?.toString() ?? '';
     final rawType = widget.data['transaction_type']?.toString() ?? '';
@@ -1739,7 +1773,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: isAwaitingPIN
+                colors:
+                    (isAwaitingPIN || isAwaitingCustomerConfirmation)
                     ? [
                         AppTheme.secondaryColor.withValues(alpha: 0.18),
                         AppTheme.secondaryColor.withValues(alpha: 0.06),
