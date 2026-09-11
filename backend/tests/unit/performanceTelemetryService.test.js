@@ -185,6 +185,39 @@ describe('performance telemetry service', () => {
     );
   });
 
+  test('exposes database timing telemetry only as aggregate metrics', async () => {
+    startPerformanceTelemetry();
+
+    const snapshot =
+      await performanceSnapshot();
+
+    expect(
+      snapshot.database_timing
+    ).toEqual(
+      expect.objectContaining({
+        enabled: true,
+        window_seconds: 60,
+        operations: expect.any(Number),
+        failures: expect.any(Number),
+        acquisition_wait:
+          expect.any(Object),
+        execution:
+          expect.any(Object),
+        total:
+          expect.any(Object),
+      })
+    );
+
+    const serialized =
+      JSON.stringify(
+        snapshot.database_timing
+      ).toLowerCase();
+
+    expect(serialized).not.toContain('sql');
+    expect(serialized).not.toContain('query');
+    expect(serialized).not.toContain('params');
+  });
+
   test('reports PostgreSQL pool pressure and outbox backlog', async () => {
     const snapshot =
       await performanceSnapshot();

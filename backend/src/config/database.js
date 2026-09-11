@@ -1,5 +1,9 @@
 const { Pool } = require('pg');
+const { performance } = require('perf_hooks');
 const { logger } = require('../utils/logger');
+const {
+  recordDatabaseOperation,
+} = require('../services/databaseTelemetryService');
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -30,16 +34,61 @@ async function connectDB() {
  * Execute a query
  */
 async function query(text, params) {
-  const start = Date.now();
+  const totalStartedAt = performance.now();
+  const acquisitionStartedAt = performance.now();
+
+  let client = null;
+  let acquisitionMs = null;
+  let executionMs = null;
+  let executionStartedAt = null;
+  let success = false;
+
   try {
-    const result = await pool.query(text, params);
-    const duration = Date.now() - start;
-    if (process.env.NODE_ENV === 'development' && duration > 1000) {
-      logger.warn(`Slow query (${duration}ms): ${text}`);
+    client = await pool.connect();
+
+    acquisitionMs =
+      performance.now() -
+      acquisitionStartedAt;
+
+    executionStartedAt =
+      performance.now();
+
+    const result =
+      await client.query(text, params);
+
+    executionMs =
+      performance.now() -
+      executionStartedAt;
+
+    success = true;
+
+    const duration =
+      performance.now() -
+      totalStartedAt;
+
+    if (
+      process.env.NODE_ENV === 'development' &&
+      duration > 1000
+    ) {
+      logger.warn(
+        `Slow query (${Math.round(duration)}ms): ${text}`
+      );
     }
+
     return result;
   } catch (error) {
-    const duration = Date.now() - start;
+    if (
+      executionStartedAt !== null &&
+      executionMs === null
+    ) {
+      executionMs =
+        performance.now() -
+        executionStartedAt;
+    }
+
+    const duration =
+      performance.now() -
+      totalStartedAt;
 
     if (process.env.NODE_ENV === 'development') {
       logger.error('Query error:', {
@@ -54,6 +103,28 @@ async function query(text, params) {
     }
 
     throw error;
+  } finally {
+    if (
+      acquisitionMs === null &&
+      !client
+    ) {
+      acquisitionMs =
+        performance.now() -
+        acquisitionStartedAt;
+    }
+
+    recordDatabaseOperation({
+      acquisitionMs,
+      executionMs,
+      totalMs:
+        performance.now() -
+        totalStartedAt,
+      success,
+    });
+
+    if (client) {
+      client.release();
+    }
   }
 }
 
