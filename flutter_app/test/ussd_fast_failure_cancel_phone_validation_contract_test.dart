@@ -36,15 +36,50 @@ void main() {
     ).readAsStringSync();
 
     expect(service, contains('COMMON_FAILURE_MARKERS'));
+    expect(service, contains('PROVIDER_FAILURE_MARKERS'));
+    expect(service, contains('COMMON_TERMINAL_SUCCESS_MARKERS'));
+    expect(service, contains('PROVIDER_TERMINAL_SUCCESS_MARKERS'));
+    expect(service, contains('"telecel" to listOf('));
+    expect(service, contains('"confirmed. ghs"'));
+    expect(
+      service,
+      contains('PROVIDER_TERMINAL_SUCCESS_PROMOTION_MARKERS'),
+    );
+    expect(
+      service,
+      contains('"confirmed"'),
+    );
     expect(service, contains('"invalid mobile number"'));
     expect(service, contains('"incorrect mobile number"'));
     expect(service, contains('"number not valid"'));
     expect(service, contains('"not allowed to access this code"'));
     expect(
       service,
-      contains(
-        '(COMMON_FAILURE_MARKERS + failureMarkers.orEmpty())',
-      ),
+      contains('providerFailureMarkers(provider)'),
+    );
+    expect(
+      service,
+      contains('providerTerminalSuccessMarkers(provider)'),
+    );
+    expect(
+      service,
+      contains('pendingTerminalSuccessMarkers'),
+    );
+    expect(
+      service,
+      contains('terminalSuccessMarkers'),
+    );
+    expect(
+      service,
+      contains('filterNot {'),
+    );
+    expect(
+      service,
+      contains('it in terminalSuccessPromotionMarkers'),
+    );
+    expect(
+      service,
+      contains('if (reachedPinPrompt)'),
     );
 
     expect(

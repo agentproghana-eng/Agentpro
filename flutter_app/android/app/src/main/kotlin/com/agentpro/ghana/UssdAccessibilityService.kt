@@ -66,9 +66,15 @@ class UssdAccessibilityService : AccessibilityService() {
         private const val REPEATED_MISMATCH_MIN_INTERVAL_MS = 2000L
         private const val RECENT_MATCH_SCREEN_GRACE_MS = 8000L
 
-        // Safe terminal failure responses inherited by every automated
-        // USSD flow. Flow-specific markers are merged with these rather
-        // than replacing them.
+        // Central USSD result-marker registry.
+        //
+        // Flow-specific markers supplied by the backend remain supported,
+        // but every session also inherits safe common/provider markers.
+        //
+        // Provider terminal-success markers are intentionally separate from
+        // ordinary flow-specific success markers. Financial provider success
+        // is only trusted after the PIN boundary, preventing words such as
+        // "confirmed" from prematurely completing an earlier USSD menu.
         private val COMMON_FAILURE_MARKERS = listOf(
             "invalid mobile number",
             "invalid number",
@@ -81,6 +87,69 @@ class UssdAccessibilityService : AccessibilityService() {
             "error",
             "not allowed to access this code"
         )
+
+        private val PROVIDER_FAILURE_MARKERS = mapOf(
+            "mtn" to emptyList<String>(),
+            "telecel" to emptyList<String>(),
+            "at_money" to emptyList<String>()
+        )
+
+        private val COMMON_TERMINAL_SUCCESS_MARKERS =
+            emptyList<String>()
+
+        private val PROVIDER_TERMINAL_SUCCESS_MARKERS = mapOf(
+            "mtn" to emptyList<String>(),
+            // Live-confirmed Telecel Cash result:
+            // "... Confirmed. GHS... sent to ..."
+            //
+            // Use the stronger terminal phrase rather than "confirmed"
+            // alone to reduce false-positive financial success detection.
+            "telecel" to listOf(
+                "confirmed. ghs"
+            ),
+            "at_money" to emptyList<String>()
+        )
+
+        // Historical Telecel database flows already contain "confirmed"
+        // as a flow-specific success marker. Promote that broad legacy
+        // marker out of the ordinary success list without using it as the
+        // actual terminal-success signature.
+        private val PROVIDER_TERMINAL_SUCCESS_PROMOTION_MARKERS = mapOf(
+            "mtn" to emptyList<String>(),
+            "telecel" to listOf(
+                "confirmed"
+            ),
+            "at_money" to emptyList<String>()
+        )
+
+        private fun normalizeMarkers(
+            markers: List<String>
+        ): List<String> =
+            markers
+                .map { it.trim().lowercase() }
+                .filter { it.isNotBlank() }
+                .distinct()
+
+        private fun providerFailureMarkers(
+            provider: String?
+        ): List<String> =
+            PROVIDER_FAILURE_MARKERS[
+                provider?.trim()?.lowercase()
+            ].orEmpty()
+
+        private fun providerTerminalSuccessMarkers(
+            provider: String?
+        ): List<String> =
+            PROVIDER_TERMINAL_SUCCESS_MARKERS[
+                provider?.trim()?.lowercase()
+            ].orEmpty()
+
+        private fun providerTerminalSuccessPromotionMarkers(
+            provider: String?
+        ): List<String> =
+            PROVIDER_TERMINAL_SUCCESS_PROMOTION_MARKERS[
+                provider?.trim()?.lowercase()
+            ].orEmpty()
 
         // Set by UssdAccessibilityChannel right before the dial is
         // placed. reachedPinPrompt is a strict WRITE boundary: after it
@@ -123,7 +192,17 @@ class UssdAccessibilityService : AccessibilityService() {
         // those never set these, so their behavior is 100% unchanged
         // from before this interpreter existed.
         @Volatile var pendingSteps: List<FlowStep>? = null
+
+        // Flow-specific success markers retain their existing semantics.
+        // They may be valid before a PIN boundary for non-financial flows
+        // such as balance enquiries.
         @Volatile var pendingSuccessMarkers: List<String>? = null
+
+        // Central/provider terminal success is treated more strictly:
+        // it is recognized only after reachedPinPrompt == true.
+        @Volatile var pendingTerminalSuccessMarkers:
+            List<String>? = null
+
         @Volatile var pendingFailureMarkers: List<String>? = null
         @Volatile var pendingSelections: Map<String, String>? = null
 
@@ -172,12 +251,39 @@ class UssdAccessibilityService : AccessibilityService() {
             pendingSteps = steps
             pendingSelections = selections
             currentStepIndex = 0
-            pendingSuccessMarkers = successMarkers
+
+            val terminalSuccessMarkers =
+                normalizeMarkers(
+                    COMMON_TERMINAL_SUCCESS_MARKERS +
+                        providerTerminalSuccessMarkers(provider)
+                )
+
+            pendingTerminalSuccessMarkers =
+                terminalSuccessMarkers
+
+            val terminalSuccessPromotionMarkers =
+                normalizeMarkers(
+                    terminalSuccessMarkers +
+                        providerTerminalSuccessPromotionMarkers(provider)
+                )
+
+            // A marker promoted into centralized terminal-success handling
+            // must not also remain in the ordinary flow-specific list.
+            // Telecel's historical "confirmed" marker is therefore removed
+            // even though the stronger runtime signature is "confirmed. ghs".
+            pendingSuccessMarkers =
+                normalizeMarkers(
+                    successMarkers.orEmpty()
+                ).filterNot {
+                    it in terminalSuccessPromotionMarkers
+                }
+
             pendingFailureMarkers =
-                (COMMON_FAILURE_MARKERS + failureMarkers.orEmpty())
-                    .map { it.trim().lowercase() }
-                    .filter { it.isNotBlank() }
-                    .distinct()
+                normalizeMarkers(
+                    COMMON_FAILURE_MARKERS +
+                        providerFailureMarkers(provider) +
+                        failureMarkers.orEmpty()
+                )
             // Never let duplicate-detection state bleed from a previous
             // transaction into the new one.
             lastScreenText = null
@@ -213,6 +319,7 @@ class UssdAccessibilityService : AccessibilityService() {
             pendingSteps = null
             currentStepIndex = 0
             pendingSuccessMarkers = null
+            pendingTerminalSuccessMarkers = null
             pendingFailureMarkers = null
 
             // Raw USSD screen text and the last value written into the USSD
@@ -391,7 +498,34 @@ class UssdAccessibilityService : AccessibilityService() {
             return
         }
 
-        // Flow-specific success markers remain generic-flow behaviour.
+        // Central/provider terminal-success markers are financial outcome
+        // evidence and are therefore trusted only after the strict PIN
+        // boundary has been reached.
+        if (reachedPinPrompt) {
+            val matchedTerminalSuccess =
+                pendingTerminalSuccessMarkers
+                    ?.firstOrNull { marker ->
+                        marker.isNotBlank() &&
+                            normalizedScreen.contains(
+                                normalizeUssdText(marker)
+                            )
+                    }
+
+            if (matchedTerminalSuccess != null) {
+                listener?.onResult(
+                    "success",
+                    "Provider reported success"
+                )
+
+                endSession()
+                UssdForegroundService.stop(this)
+                return
+            }
+        }
+
+        // Flow-specific success markers retain the existing generic-flow
+        // semantics. Some valid non-financial flows, such as balance
+        // enquiries, can complete without ever reaching a PIN prompt.
         if (pendingSteps != null) {
             val matchedSuccess = pendingSuccessMarkers
                 ?.firstOrNull { marker ->
