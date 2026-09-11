@@ -475,12 +475,29 @@ async function startServer() {
     logger.info('✅ PostgreSQL connected');
 
     // Connect to Redis (non-fatal: app runs with reduced functionality
-    // - no token blacklisting, no caching - if Redis is unavailable)
-    try {
-      await connectRedis();
-      logger.info('✅ Redis connected');
-    } catch (redisErr) {
-      logger.warn('⚠️  Redis unavailable, continuing without it:', redisErr.message);
+    // - no token blacklisting, no caching - if Redis is unavailable).
+    //
+    // Free isolated load-test staging has no dedicated Redis allocation.
+    // Only that exact environment may skip client creation entirely so
+    // failed reconnect attempts cannot distort authenticated latency.
+    const skipRedisForIsolatedLoadTest =
+      process.env.AGENTPRO_LOADTEST_ENV === 'isolated-staging' &&
+      process.env.AGENTPRO_DISABLE_REDIS === 'true';
+
+    if (skipRedisForIsolatedLoadTest) {
+      logger.info(
+        '⏭️ Redis disabled for isolated staging load test'
+      );
+    } else {
+      try {
+        await connectRedis();
+        logger.info('✅ Redis connected');
+      } catch (redisErr) {
+        logger.warn(
+          '⚠️  Redis unavailable, continuing without it:',
+          redisErr.message
+        );
+      }
     }
 
 // Initialize Firebase (skip during tests)

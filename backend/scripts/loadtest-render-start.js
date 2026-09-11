@@ -220,6 +220,15 @@ async function ensureLoadTestUser() {
 }
 
 async function main() {
+  // Free isolated staging has no dedicated Redis allocation.
+  // Prevent ioredis from creating a localhost reconnecting client,
+  // which would otherwise add retry latency to every authenticated
+  // request. PostgreSQL remains the durable session authority.
+  if (
+    process.env.AGENTPRO_LOADTEST_ENV === 'isolated-staging'
+  ) {
+    process.env.AGENTPRO_DISABLE_REDIS = 'true';
+  }
   if (
     process.env.AGENTPRO_LOADTEST_ENV !==
     'isolated-staging'
