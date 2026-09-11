@@ -873,7 +873,17 @@ exports.completeTransaction = async (req, res) => {
 
       tx = lockedResult.rows[0];
 
-      if (tx.status !== "initiated" && tx.status !== "processing") {
+      const isMtnCashOutPendingPromotion =
+        tx.status === "pending_confirmation" &&
+        finalStatus === "success" &&
+        tx.provider === "mtn" &&
+        tx.transaction_type === "cash_out";
+
+      if (
+        tx.status !== "initiated" &&
+        tx.status !== "processing" &&
+        !isMtnCashOutPendingPromotion
+      ) {
         if (tx.status === finalStatus) {
           idempotentReplay = true;
           return;

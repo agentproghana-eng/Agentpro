@@ -14,6 +14,7 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'core/auth/auth_bloc.dart';
 import 'core/router/app_router.dart';
 import 'core/services/inactivity_service.dart';
+import 'core/services/mtn_cash_out_reconciliation_service.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/permission_service.dart';
 import 'core/services/offline_queue_service.dart';
@@ -100,7 +101,8 @@ class AgentProApp extends StatefulWidget {
   State<AgentProApp> createState() => _AgentProAppState();
 }
 
-class _AgentProAppState extends State<AgentProApp> {
+class _AgentProAppState extends State<AgentProApp>
+    with WidgetsBindingObserver {
   AuthBloc? _authBloc;
   AuthRouterRefreshNotifier? _routerRefreshNotifier;
   GoRouter? _router;
@@ -110,6 +112,9 @@ class _AgentProAppState extends State<AgentProApp> {
   @override
   void initState() {
     super.initState();
+
+    WidgetsBinding.instance.addObserver(this);
+    MtnCashOutReconciliationService.initialize();
 
     if (!widget.isJailbroken) {
       final authBloc = AuthBloc()..add(AuthCheckEvent());
@@ -132,6 +137,10 @@ class _AgentProAppState extends State<AgentProApp> {
       _notificationAuthSubscription = authBloc.stream.listen((state) {
         if (state is AuthAuthenticated) {
           _consumePendingNotificationNavigation();
+
+          unawaited(
+            MtnCashOutReconciliationService.reconcile(),
+          );
         }
       });
     }
@@ -218,7 +227,19 @@ class _AgentProAppState extends State<AgentProApp> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (
+        state == AppLifecycleState.resumed &&
+        _authBloc?.state is AuthAuthenticated) {
+      unawaited(
+        MtnCashOutReconciliationService.reconcile(),
+      );
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _notificationNavigationSubscription?.cancel();
     _notificationAuthSubscription?.cancel();
     _router?.dispose();
