@@ -106,8 +106,11 @@ const routes = [
 ];
 
 export default function () {
+  const routeIndex =
+    (__VU - 1 + __ITER) % routes.length;
+
   const route =
-    routes[__ITER % routes.length];
+    routes[routeIndex];
 
   const response = http.get(
     `${config.baseUrl}${route.path}`,
