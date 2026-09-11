@@ -1,0 +1,521 @@
+name: AgentPro Distributed 1000 VU Load Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agentpro-distributed-capacity-loadtest
+  cancel-in-progress: false
+
+env:
+  LOADTEST_BASE_URL: https://agentpro-loadtest-api-v2.onrender.com
+  LOADTEST_EMAIL: loadtest-capacity@agentpro.invalid
+  K6_SCRIPT: backend/load/k6/representative-read.js
+
+jobs:
+  prepare:
+    name: Prepare 1000 VU test
+    runs-on: ubuntu-latest
+
+    outputs:
+      start_epoch: ${{ steps.clock.outputs.start_epoch }}
+      telemetry_end_epoch: ${{ steps.clock.outputs.telemetry_end_epoch }}
+
+    steps:
+      - name: Verify fixed staging target
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test "$LOADTEST_BASE_URL" = \
+            "https://agentpro-loadtest-api-v2.onrender.com"
+
+          case "$LOADTEST_BASE_URL" in
+            *agentpro-api-izi3.onrender.com*|\
+            *api.agentpro.intellicoresystem.com*)
+              echo "Production target rejected."
+              exit 1
+              ;;
+          esac
+
+          echo "STAGING_TARGET_GUARD=PASS"
+          echo "PRODUCTION_NOT_TARGETED=PASS"
+
+      - name: Set synchronized start time
+        id: clock
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Ten hosted runners need enough time to provision,
+          # install k6 and authenticate before the common start.
+          START_EPOCH="$(( $(date +%s) + 300 ))"
+
+          # Cover the 2-minute test plus shutdown/grace.
+          TELEMETRY_END_EPOCH="$(( START_EPOCH + 150 ))"
+
+          echo "start_epoch=$START_EPOCH" \
+            >> "$GITHUB_OUTPUT"
+
+          echo "telemetry_end_epoch=$TELEMETRY_END_EPOCH" \
+            >> "$GITHUB_OUTPUT"
+
+          echo "SYNC_START_EPOCH=$START_EPOCH"
+          echo "TELEMETRY_END_EPOCH=$TELEMETRY_END_EPOCH"
+          echo "SYNC_START_READY=PASS"
+
+  telemetry:
+    name: Staging performance telemetry
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Verify telemetry secret exists
+        shell: bash
+        env:
+          PERFORMANCE_TOKEN: ${{ secrets.AGENTPRO_PERFORMANCE_TELEMETRY_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          test -n "${PERFORMANCE_TOKEN:-}"
+          test "${#PERFORMANCE_TOKEN}" -ge 32
+
+          echo "::add-mask::$PERFORMANCE_TOKEN"
+          echo "PERFORMANCE_TELEMETRY_SECRET=PASS"
+
+      - name: Wait for synchronized start
+        shell: bash
+        env:
+          START_EPOCH: ${{ needs.prepare.outputs.start_epoch }}
+        run: |
+          set -euo pipefail
+
+          NOW="$(date +%s)"
+
+          if [ "$NOW" -lt "$START_EPOCH" ]; then
+            WAIT_SECONDS="$(( START_EPOCH - NOW ))"
+
+            echo "WAIT_SECONDS=$WAIT_SECONDS"
+            sleep "$WAIT_SECONDS"
+          fi
+
+          ACTUAL_START="$(date +%s)"
+
+          echo "TELEMETRY_START_EPOCH=$ACTUAL_START"
+
+          if [ "$ACTUAL_START" -gt "$(( START_EPOCH + 10 ))" ]; then
+            echo "TELEMETRY_START_TOO_LATE=FAIL"
+            exit 1
+          fi
+
+          echo "TELEMETRY_SYNC=PASS"
+
+      - name: Sample performance telemetry
+        shell: bash
+        env:
+          PERFORMANCE_TOKEN: ${{ secrets.AGENTPRO_PERFORMANCE_TELEMETRY_TOKEN }}
+          END_EPOCH: ${{ needs.prepare.outputs.telemetry_end_epoch }}
+        run: |
+          set -euo pipefail
+
+          echo "::add-mask::$PERFORMANCE_TOKEN"
+
+          OUT="$RUNNER_TEMP/performance-telemetry.jsonl"
+          RESPONSE="$RUNNER_TEMP/performance-response.json"
+
+          : > "$OUT"
+
+          SUCCESS=0
+          FAILURE=0
+
+          while [ "$(date +%s)" -le "$END_EPOCH" ]; do
+            SAMPLE_EPOCH="$(date +%s)"
+
+            HTTP="$(
+              curl -sS \
+                --connect-timeout 5 \
+                --max-time 10 \
+                -o "$RESPONSE" \
+                -w '%{http_code}' \
+                -H "x-agentpro-performance-token: $PERFORMANCE_TOKEN" \
+                "$LOADTEST_BASE_URL/internal/performance" \
+                || true
+            )"
+
+            if [ "$HTTP" = "200" ] && \
+               jq -e '.success == true' "$RESPONSE" >/dev/null 2>&1
+            then
+              jq -c \
+                --argjson sampled_at_epoch "$SAMPLE_EPOCH" \
+                '. + {sampled_at_epoch:$sampled_at_epoch}' \
+                "$RESPONSE" \
+                >> "$OUT"
+
+              SUCCESS="$(( SUCCESS + 1 ))"
+            else
+              FAILURE="$(( FAILURE + 1 ))"
+              echo "TELEMETRY_SAMPLE_HTTP=$HTTP"
+            fi
+
+            sleep 2
+          done
+
+          rm -f "$RESPONSE"
+
+          echo "TELEMETRY_SUCCESSFUL_SAMPLES=$SUCCESS"
+          echo "TELEMETRY_FAILED_SAMPLES=$FAILURE"
+
+          test "$SUCCESS" -ge 20
+
+          echo "TELEMETRY_SAMPLING=PASS"
+
+      - name: Summarize telemetry
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          IN="$RUNNER_TEMP/performance-telemetry.jsonl"
+          OUT="$RUNNER_TEMP/performance-telemetry-summary.json"
+
+          test -s "$IN"
+
+          python3 - "$IN" "$OUT" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          source = pathlib.Path(sys.argv[1])
+          target = pathlib.Path(sys.argv[2])
+
+          rows = [
+              json.loads(line)
+              for line in source.read_text().splitlines()
+              if line.strip()
+          ]
+
+          if not rows:
+              raise SystemExit("No telemetry samples")
+
+          def dig(row, *keys, default=0):
+              value = row
+              for key in keys:
+                  if not isinstance(value, dict):
+                      return default
+                  value = value.get(key, default)
+              return value if value is not None else default
+
+          summary = {
+              "samples": len(rows),
+              "max_total_connections": max(
+                  dig(r, "postgres", "total_connections")
+                  for r in rows
+              ),
+              "min_idle_connections": min(
+                  dig(r, "postgres", "idle_connections")
+                  for r in rows
+              ),
+              "max_waiting_requests": max(
+                  dig(r, "postgres", "waiting_requests")
+                  for r in rows
+              ),
+              "samples_with_waiting_requests": sum(
+                  1
+                  for r in rows
+                  if dig(r, "postgres", "waiting_requests") > 0
+              ),
+              "max_event_loop_p95_ms": max(
+                  dig(r, "event_loop", "p95_ms")
+                  for r in rows
+              ),
+              "max_event_loop_p99_ms": max(
+                  dig(r, "event_loop", "p99_ms")
+                  for r in rows
+              ),
+              "max_rss_bytes": max(
+                  dig(r, "process", "rss_bytes")
+                  for r in rows
+              ),
+              "max_heap_used_bytes": max(
+                  dig(r, "process", "heap_used_bytes")
+                  for r in rows
+              ),
+          }
+
+          target.write_text(
+              json.dumps(summary, indent=2) + "\n"
+          )
+
+          print(json.dumps(summary, indent=2))
+          PY
+
+          echo "TELEMETRY_SUMMARY_READY=PASS"
+
+      - name: Upload telemetry evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentpro-1000vu-telemetry
+          path: |
+            ${{ runner.temp }}/performance-telemetry.jsonl
+            ${{ runner.temp }}/performance-telemetry-summary.json
+          if-no-files-found: error
+          retention-days: 7
+
+  shard:
+    name: Load shard ${{ matrix.shard }}
+    needs: prepare
+
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout dispatched commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify representative test contract
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -f "$K6_SCRIPT"
+
+          grep -Fq \
+            '(__VU - 1 + __ITER) % routes.length' \
+            "$K6_SCRIPT"
+
+          grep -Fq \
+            "http_req_failed: ['rate<0.01']" \
+            "$K6_SCRIPT"
+
+          echo "REPRESENTATIVE_TEST_CONTRACT=PASS"
+
+      - name: Setup Grafana k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Verify k6
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          k6 version
+
+          k6 inspect \
+            -e AGENTPRO_ACCESS_TOKEN='inspect-only-token-00000000000000000000000000000000' \
+            -e AGENTPRO_BASE_URL="$LOADTEST_BASE_URL" \
+            "$K6_SCRIPT" \
+            >/dev/null
+
+          echo "K6_READY=PASS"
+
+      - name: Guard staging target
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test "$LOADTEST_BASE_URL" = \
+            "https://agentpro-loadtest-api-v2.onrender.com"
+
+          case "$LOADTEST_BASE_URL" in
+            *agentpro-api-izi3.onrender.com*|\
+            *api.agentpro.intellicoresystem.com*)
+              echo "Production target rejected."
+              exit 1
+              ;;
+          esac
+
+          echo "STAGING_TARGET_GUARD=PASS"
+          echo "PRODUCTION_NOT_TARGETED=PASS"
+
+      - name: Login dedicated staging user
+        id: auth
+        shell: bash
+        env:
+          LOADTEST_PASSWORD: ${{ secrets.AGENTPRO_LOADTEST_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          test -n "${LOADTEST_PASSWORD:-}"
+
+          LOGIN_JSON="$RUNNER_TEMP/login.json"
+
+          HTTP="$(
+            curl -sS \
+              --connect-timeout 10 \
+              --max-time 30 \
+              -o "$LOGIN_JSON" \
+              -w '%{http_code}' \
+              -H 'Content-Type: application/json' \
+              -X POST \
+              "$LOADTEST_BASE_URL/api/v1/auth/login" \
+              --data "$(
+                jq -nc \
+                  --arg email "$LOADTEST_EMAIL" \
+                  --arg password "$LOADTEST_PASSWORD" \
+                  '{email:$email,password:$password}'
+              )"
+          )"
+
+          unset LOADTEST_PASSWORD
+
+          echo "LOGIN_HTTP=$HTTP"
+          test "$HTTP" = "200"
+
+          TOKEN="$(
+            jq -r '.data.access_token // empty' \
+              "$LOGIN_JSON"
+          )"
+
+          rm -f "$LOGIN_JSON"
+
+          test "${#TOKEN}" -ge 32
+
+          echo "::add-mask::$TOKEN"
+
+          {
+            echo "access_token<<EOF"
+            echo "$TOKEN"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "ACCESS_TOKEN_READY=PASS"
+
+      - name: Wait for synchronized start
+        shell: bash
+        env:
+          START_EPOCH: ${{ needs.prepare.outputs.start_epoch }}
+        run: |
+          set -euo pipefail
+
+          NOW="$(date +%s)"
+
+          if [ "$NOW" -lt "$START_EPOCH" ]; then
+            WAIT_SECONDS="$(( START_EPOCH - NOW ))"
+
+            echo "WAIT_SECONDS=$WAIT_SECONDS"
+            sleep "$WAIT_SECONDS"
+          fi
+
+          ACTUAL_START="$(date +%s)"
+
+          echo "SHARD_START_EPOCH=$ACTUAL_START"
+
+          if [ "$ACTUAL_START" -gt "$(( START_EPOCH + 10 ))" ]; then
+            echo "SHARD_START_TOO_LATE=FAIL"
+            exit 1
+          fi
+
+          echo "SYNC_WAIT_COMPLETE=PASS"
+
+      - name: Run 100 VU shard
+        id: load
+        continue-on-error: true
+        shell: bash
+        env:
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: |
+          set -uo pipefail
+
+          RAW="$RUNNER_TEMP/k6-summary-${{ matrix.shard }}.json"
+
+          set +e
+
+          k6 run \
+            --vus 100 \
+            --duration 2m \
+            --summary-trend-stats "avg,min,med,max,p(90),p(95),p(99)" \
+            --summary-export "$RAW" \
+            -e AGENTPRO_BASE_URL="$LOADTEST_BASE_URL" \
+            -e AGENTPRO_ACCESS_TOKEN="$ACCESS_TOKEN" \
+            "$K6_SCRIPT"
+
+          STATUS=$?
+
+          set -e
+
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+
+          echo "K6_EXIT_STATUS=$STATUS"
+          echo "RAW_SUMMARY_PATH=$RAW"
+
+          if [ "$STATUS" -eq 0 ]; then
+            echo "SHARD_${{ matrix.shard }}=PASS"
+          else
+            echo "SHARD_${{ matrix.shard }}=FAIL"
+          fi
+
+      - name: Normalize k6 summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          RAW="$RUNNER_TEMP/k6-summary-${{ matrix.shard }}.json"
+          NORMALIZED="$RUNNER_TEMP/k6-normalized-${{ matrix.shard }}.json"
+
+          test -s "$RAW"
+
+          jq \
+            --argjson shard '${{ matrix.shard }}' \
+            '{
+              shard: $shard,
+              requests: .metrics.http_reqs.count,
+              failed_rate: .metrics.http_req_failed.value,
+              p50_ms: .metrics.http_req_duration.med,
+              p95_ms: .metrics.http_req_duration["p(95)"],
+              p99_ms: .metrics.http_req_duration["p(99)"],
+              max_ms: .metrics.http_req_duration.max
+            }' \
+            "$RAW" \
+            > "$NORMALIZED"
+
+          jq -e '
+            .requests != null and
+            .failed_rate != null and
+            .p50_ms != null and
+            .p95_ms != null and
+            .p99_ms != null and
+            .max_ms != null
+          ' "$NORMALIZED" >/dev/null
+
+          cat "$NORMALIZED"
+
+          echo "NORMALIZED_SUMMARY_READY=PASS"
+
+      - name: Upload shard evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentpro-1000vu-shard-${{ matrix.shard }}
+          path: |
+            ${{ runner.temp }}/k6-summary-${{ matrix.shard }}.json
+            ${{ runner.temp }}/k6-normalized-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Enforce shard threshold result
+        if: always()
+        shell: bash
+        env:
+          LOAD_STATUS: ${{ steps.load.outputs.status }}
+        run: |
+          set -euo pipefail
+
+          test -n "${LOAD_STATUS:-}"
+
+          if [ "$LOAD_STATUS" != "0" ]; then
+            echo "LOAD_SHARD_THRESHOLD=FAIL"
+            exit "$LOAD_STATUS"
+          fi
+
+          echo "LOAD_SHARD_THRESHOLD=PASS"
