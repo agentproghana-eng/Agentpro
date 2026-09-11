@@ -478,7 +478,7 @@ class UssdAccessibilityEngine {
         _prePinTimeout = null;
 
         _postPinTimeout?.cancel();
-        _postPinTimeout = Timer(const Duration(seconds: 10), () async {
+        _postPinTimeout = Timer(const Duration(seconds: 45), () async {
           final completer = _resultCompleter;
 
           if (completer == null || completer.isCompleted) {

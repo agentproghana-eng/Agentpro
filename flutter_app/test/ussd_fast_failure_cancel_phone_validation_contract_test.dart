@@ -63,7 +63,11 @@ void main() {
 
     expect(
       ussd,
-      contains('Timer(const Duration(seconds: 10)'),
+      contains('Timer(const Duration(seconds: 45)'),
+    );
+    expect(
+      ussd,
+      isNot(contains('Timer(const Duration(seconds: 10)')),
     );
     expect(
       ussd,
@@ -82,6 +86,18 @@ void main() {
       progress,
       contains("Navigator.of(context).pop('cancelled')"),
     );
+    expect(
+      progress,
+      contains("context.pop('success')"),
+    );
+    expect(
+      progress,
+      contains('processingPhone'),
+    );
+    expect(
+      progress,
+      contains("RegExp(r'^\\d{10}\$').hasMatch(value)"),
+    );
 
     expect(
       channel,
@@ -96,10 +112,46 @@ void main() {
       transaction,
       contains("RegExp(r'^\\d{10}\$')"),
     );
+    expect(
+      transaction,
+      contains('_clearTransactionInputsAfterSuccess'),
+    );
+    expect(
+      transaction,
+      contains('_selectedTelecelBundle = null'),
+    );
+    expect(
+      transaction,
+      contains('_feeAutoCalculated = true'),
+    );
+    expect(
+      transaction,
+      contains('Duration(milliseconds: 50)'),
+    );
 
     expect(
       personal,
       contains("RegExp(r'^\\d{10}\$')"),
+    );
+    expect(
+      personal,
+      contains('_clearTransactionInputsAfterSuccess'),
+    );
+    expect(
+      personal,
+      contains('_crossNetworkSelection = null'),
+    );
+    expect(
+      personal,
+      contains('_bundleCategory = null'),
+    );
+    expect(
+      personal,
+      contains('_mashupTier = null'),
+    );
+    expect(
+      personal,
+      contains('_applyInitialQuickActionPreset()'),
     );
     expect(
       personal,

@@ -434,7 +434,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
     }
 
     _flowPreloadDebounce = Timer(
-      const Duration(milliseconds: 180),
+      const Duration(milliseconds: 50),
       () => unawaited(_preloadSelectedFlow()),
     );
   }
@@ -559,6 +559,20 @@ class _TransactionScreenState extends State<TransactionScreen> {
     });
 
     _scheduleFlowPreload();
+  }
+
+  void _clearTransactionInputsAfterSuccess() {
+    _customerPhoneCtrl.clear();
+    _amountCtrl.clear();
+    _recipientPhoneCtrl.clear();
+    _referenceCtrl.clear();
+    _merchantIdCtrl.clear();
+    _feeCtrl.clear();
+
+    setState(() {
+      _selectedTelecelBundle = null;
+      _feeAutoCalculated = true;
+    });
   }
 
   Future<void> _proceed() async {
@@ -812,7 +826,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
       );
       if (mounted) setState(() => _loading = false);
 
-      if (mounted && progressAction == 'retry_now') {
+      if (mounted && progressAction == 'success') {
+      _clearTransactionInputsAfterSuccess();
+    } else if (mounted && progressAction == 'retry_now') {
         await _proceed();
       }
       return;
@@ -883,7 +899,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
       setState(() => _loading = false);
     }
 
-    if (mounted && progressAction == 'retry_now') {
+    if (mounted && progressAction == 'success') {
+      _clearTransactionInputsAfterSuccess();
+    } else if (mounted && progressAction == 'retry_now') {
       await _proceed();
     }
   }
