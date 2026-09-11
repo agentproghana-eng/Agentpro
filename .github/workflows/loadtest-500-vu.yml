@@ -70,10 +70,10 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - name: Checkout exact branch commit
+      - name: Checkout dispatched commit
         uses: actions/checkout@v4
         with:
-          ref: perf/1000-vu-capacity-gate
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Verify expected test files
@@ -98,7 +98,12 @@ jobs:
           set -euo pipefail
 
           k6 version
-          k6 inspect "$K6_SCRIPT" >/dev/null
+
+          k6 inspect \
+            -e AGENTPRO_ACCESS_TOKEN='inspect-only-token-00000000000000000000000000000000' \
+            -e AGENTPRO_BASE_URL="$LOADTEST_BASE_URL" \
+            "$K6_SCRIPT" \
+            >/dev/null
 
           echo "K6_READY=PASS"
 
