@@ -228,6 +228,7 @@ async function main() {
     process.env.AGENTPRO_LOADTEST_ENV === 'isolated-staging'
   ) {
     process.env.AGENTPRO_DISABLE_REDIS = 'true';
+    process.env.AGENTPRO_DISABLE_API_RATE_LIMIT = 'true';
   }
   if (
     process.env.AGENTPRO_LOADTEST_ENV !==

@@ -55,7 +55,7 @@ function createLimiter({
   return rateLimit(options);
 }
 
-exports.apiLimiter =
+const apiLimiter =
   createLimiter({
     windowMs:
       parseInt(
@@ -81,6 +81,20 @@ exports.apiLimiter =
 
     passOnStoreError: true,
   });
+
+exports.apiLimiter = (req, res, next) => {
+  const isolatedLoadTest =
+    process.env.AGENTPRO_LOADTEST_ENV ===
+      'isolated-staging' &&
+    process.env.AGENTPRO_DISABLE_API_RATE_LIMIT ===
+      'true';
+
+  if (isolatedLoadTest) {
+    return next();
+  }
+
+  return apiLimiter(req, res, next);
+};
 
 exports.authLimiter =
   createLimiter({
