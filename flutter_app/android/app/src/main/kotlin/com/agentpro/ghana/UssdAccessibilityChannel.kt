@@ -309,10 +309,16 @@ class UssdAccessibilityChannel(
             }
         }
 
-        if (needsCustomerPhone && customerPhone.isNullOrBlank()) {
+        if (
+            needsCustomerPhone &&
+            (
+                customerPhone.isNullOrBlank() ||
+                !customerPhone.matches(Regex("^\\d{10}$"))
+            )
+        ) {
             result.error(
-                "MISSING_CUSTOMER_PHONE",
-                "customer_phone is required by this USSD flow",
+                "INVALID_CUSTOMER_PHONE",
+                "Enter a valid 10-digit mobile number",
                 null
             )
             return

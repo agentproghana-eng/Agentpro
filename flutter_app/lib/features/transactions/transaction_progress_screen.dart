@@ -854,6 +854,16 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     // Execute USSD
     final result = await _engine!.execute();
 
+    if (result.outcome == USSDStatus.cancelled) {
+      await _engineProgressSubscription?.cancel();
+
+      if (mounted) {
+        Navigator.of(context).pop('cancelled');
+      }
+
+      return;
+    }
+
     if (_requiresPostPinConfirmation(result)) {
       await _confirmManually(requiredChoice: true);
       return;
@@ -1099,6 +1109,16 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
     final result = await _engine!.execute();
 
+    if (result.outcome == USSDStatus.cancelled) {
+      await _engineProgressSubscription?.cancel();
+
+      if (mounted) {
+        Navigator.of(context).pop('cancelled');
+      }
+
+      return;
+    }
+
     if (_requiresPostPinConfirmation(result)) {
       await _confirmManually(requiredChoice: true);
       return;
@@ -1339,6 +1359,16 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     );
 
     accessEngine.dispose();
+
+    if (result.outcome == USSDStatus.cancelled) {
+      await _engineProgressSubscription?.cancel();
+
+      if (mounted) {
+        Navigator.of(context).pop('cancelled');
+      }
+
+      return;
+    }
 
     if (_requiresPostPinConfirmation(result)) {
       await _confirmManually(requiredChoice: true);

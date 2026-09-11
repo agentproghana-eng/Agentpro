@@ -1761,13 +1761,23 @@ class _TransactionScreenState extends State<TransactionScreen> {
                   keyboardType: TextInputType.phone,
                   prefixIcon: Icons.phone_outlined,
                   validator: (v) {
-                    if (v == null || v.isEmpty) {
-                      return [
-                        'business_deposit',
-                        'business_withdrawal',
-                      ].contains(widget.transactionType)
+                    final value = (v ?? '').trim();
+                    final isAgentShortCode = [
+                      'business_deposit',
+                      'business_withdrawal',
+                    ].contains(widget.transactionType);
+
+                    if (value.isEmpty) {
+                      return isAgentShortCode
                           ? 'Agent short code is required'
                           : 'Phone number is required';
+                    }
+
+                    if (
+                      !isAgentShortCode &&
+                      !RegExp(r'^\d{10}$').hasMatch(value)
+                    ) {
+                      return 'Enter a valid 10-digit mobile number';
                     }
 
                     return null;
@@ -1783,9 +1793,19 @@ class _TransactionScreenState extends State<TransactionScreen> {
                   hint: '024XXXXXXX',
                   keyboardType: TextInputType.phone,
                   prefixIcon: Icons.phone_outlined,
-                  validator: (v) => v == null || v.isEmpty
-                      ? 'Phone number is required'
-                      : null,
+                  validator: (v) {
+                    final value = (v ?? '').trim();
+
+                    if (value.isEmpty) {
+                      return 'Phone number is required';
+                    }
+
+                    if (!RegExp(r'^\d{10}$').hasMatch(value)) {
+                      return 'Enter a valid 10-digit mobile number';
+                    }
+
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 14),
               ],

@@ -66,6 +66,22 @@ class UssdAccessibilityService : AccessibilityService() {
         private const val REPEATED_MISMATCH_MIN_INTERVAL_MS = 2000L
         private const val RECENT_MATCH_SCREEN_GRACE_MS = 8000L
 
+        // Safe terminal failure responses inherited by every automated
+        // USSD flow. Flow-specific markers are merged with these rather
+        // than replacing them.
+        private val COMMON_FAILURE_MARKERS = listOf(
+            "invalid mobile number",
+            "invalid number",
+            "incorrect mobile number",
+            "number not valid",
+            "insufficient",
+            "failed",
+            "incomplete",
+            "not found",
+            "error",
+            "not allowed to access this code"
+        )
+
         // Set by UssdAccessibilityChannel right before the dial is
         // placed. reachedPinPrompt is a strict WRITE boundary: after it
         // becomes true, the service may continue observing provider screens
@@ -157,7 +173,11 @@ class UssdAccessibilityService : AccessibilityService() {
             pendingSelections = selections
             currentStepIndex = 0
             pendingSuccessMarkers = successMarkers
-            pendingFailureMarkers = failureMarkers
+            pendingFailureMarkers =
+                (COMMON_FAILURE_MARKERS + failureMarkers.orEmpty())
+                    .map { it.trim().lowercase() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
             // Never let duplicate-detection state bleed from a previous
             // transaction into the new one.
             lastScreenText = null
@@ -252,8 +272,65 @@ class UssdAccessibilityService : AccessibilityService() {
         UssdForegroundService.stop(this)
     }
 
+    private fun handleExplicitPostPinCancel(
+        event: AccessibilityEvent
+    ): Boolean {
+        if (
+            !isSessionActive ||
+            !reachedPinPrompt ||
+            event.eventType != AccessibilityEvent.TYPE_VIEW_CLICKED
+        ) {
+            return false
+        }
+
+        val labels = buildList {
+            event.text
+                .mapNotNull { it?.toString() }
+                .forEach(::add)
+
+            event.contentDescription
+                ?.toString()
+                ?.let(::add)
+
+            event.source?.text
+                ?.toString()
+                ?.let(::add)
+
+            event.source?.contentDescription
+                ?.toString()
+                ?.let(::add)
+        }
+
+        val explicitCancel = labels.any { label ->
+            val normalized = normalizeUssdText(label).trim()
+
+            normalized == "cancel" ||
+                normalized == "cancel ussd"
+        }
+
+        if (!explicitCancel) {
+            return false
+        }
+
+        listener?.onResult(
+            "cancelled",
+            "Transaction cancelled by user at PIN prompt"
+        )
+
+        endSession()
+        UssdForegroundService.stop(this)
+
+        return true
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         if (!isSessionActive) return
+
+        // A positively identified Cancel-button click at the PIN boundary is
+        // safe to classify immediately. Merely losing the USSD window is not.
+        if (handleExplicitPostPinCancel(event)) {
+            return
+        }
 
         // Ignore accessibility noise that cannot represent a new USSD screen.
         if (
@@ -293,44 +370,49 @@ class UssdAccessibilityService : AccessibilityService() {
             return
         }
 
-        // A provider can terminate a generic flow before its expected PIN
-        // boundary. MTN Pulse does this for allocations that are available
-        // only in the MyMTN App. Terminal markers therefore have to be
-        // recognised on every genuine provider USSD screen, not only after
-        // the PIN prompt has been reached.
-        if (pendingSteps != null) {
-            val normalizedScreen = normalizeUssdText(screenText)
+        val normalizedScreen = normalizeUssdText(screenText)
 
+        // Definite failure responses terminate every flow immediately,
+        // including legacy MTN/Telecel sessions before their PIN boundary.
+        val matchedFailure = pendingFailureMarkers
+            ?.firstOrNull { marker ->
+                marker.isNotBlank() &&
+                    normalizedScreen.contains(normalizeUssdText(marker))
+            }
+
+        if (matchedFailure != null) {
+            listener?.onResult(
+                "failure",
+                "Provider reported failure"
+            )
+
+            endSession()
+            UssdForegroundService.stop(this)
+            return
+        }
+
+        // Flow-specific success markers remain generic-flow behaviour.
+        if (pendingSteps != null) {
             val matchedSuccess = pendingSuccessMarkers
                 ?.firstOrNull { marker ->
                     marker.isNotBlank() &&
                         normalizedScreen.contains(normalizeUssdText(marker))
                 }
 
-            val matchedFailure = pendingFailureMarkers
-                ?.firstOrNull { marker ->
-                    marker.isNotBlank() &&
-                        normalizedScreen.contains(normalizeUssdText(marker))
-                }
-
-            if (matchedSuccess != null || matchedFailure != null) {
-                val succeeded = matchedSuccess != null
-
-                val message = when {
-                    normalizedScreen.contains(
-                        "only available on mymtn app"
-                    ) ->
+            if (matchedSuccess != null) {
+                val message =
+                    if (
+                        normalizedScreen.contains(
+                            "only available on mymtn app"
+                        )
+                    ) {
                         "This offer can only be purchased in the MyMTN App."
-
-                    succeeded ->
+                    } else {
                         "Provider reported success"
-
-                    else ->
-                        "Provider reported failure"
-                }
+                    }
 
                 listener?.onResult(
-                    if (succeeded) "success" else "failure",
+                    "success",
                     message
                 )
 

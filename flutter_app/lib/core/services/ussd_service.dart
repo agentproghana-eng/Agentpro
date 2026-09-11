@@ -41,6 +41,7 @@ enum USSDStatus {
   processing,
   success,
   failed,
+  cancelled, // User explicitly cancelled at the visible PIN prompt
   pendingConfirmation, // Genuinely unknown outcome — needs manual verification
 }
 
@@ -477,7 +478,7 @@ class UssdAccessibilityEngine {
         _prePinTimeout = null;
 
         _postPinTimeout?.cancel();
-        _postPinTimeout = Timer(const Duration(seconds: 20), () async {
+        _postPinTimeout = Timer(const Duration(seconds: 10), () async {
           final completer = _resultCompleter;
 
           if (completer == null || completer.isCompleted) {
@@ -518,6 +519,7 @@ class UssdAccessibilityEngine {
 
         final mappedOutcome = switch (outcome) {
           'success' => USSDStatus.success,
+          'cancelled' => USSDStatus.cancelled,
           'pending_confirmation' => USSDStatus.pendingConfirmation,
           'flow_mismatch' => USSDStatus.pendingConfirmation,
           'role_mismatch' => USSDStatus.failed,
@@ -526,6 +528,9 @@ class UssdAccessibilityEngine {
 
         final failureReason = switch (mappedOutcome) {
           USSDStatus.success => null,
+          USSDStatus.cancelled => nativeMessage.isNotEmpty
+              ? nativeMessage
+              : 'Transaction cancelled by user.',
           USSDStatus.pendingConfirmation => outcome == 'flow_mismatch'
               ? 'The provider menu no longer matched the configured USSD '
                   'flow. AgentPro stopped automation and did not retry. '

@@ -1616,7 +1616,15 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
                 label: 'Recipient Phone',
                 keyboardType: TextInputType.phone,
                 prefixIcon: Icons.phone_outlined,
-                validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null,
+                validator: (v) {
+                  final value = (v ?? '').trim();
+
+                  if (!RegExp(r'^\d{10}$').hasMatch(value)) {
+                    return 'Enter a valid 10-digit mobile number';
+                  }
+
+                  return null;
+                },
               ),
               const SizedBox(height: 14),
             ],
@@ -1654,7 +1662,15 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
               label: 'Recipient Phone',
               keyboardType: TextInputType.phone,
               prefixIcon: Icons.phone_outlined,
-              validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null,
+              validator: (v) {
+                  final value = (v ?? '').trim();
+
+                  if (!RegExp(r'^\d{10}$').hasMatch(value)) {
+                    return 'Enter a valid 10-digit mobile number';
+                  }
+
+                  return null;
+                },
             ),
             const SizedBox(height: 14),
           ],
@@ -1812,9 +1828,9 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
             AppButton(
               label: 'Continue',
               onPressed: () {
-                if (_phoneCtrl.text.trim().length < 9) {
+                if (!RegExp(r'^\\d{10}$').hasMatch(_phoneCtrl.text.trim())) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Enter a valid phone number')),
+                    const SnackBar(content: Text('Enter a valid 10-digit mobile number')),
                   );
                   return;
                 }
@@ -2013,9 +2029,9 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       return;
     }
 
-    if (_recipientMode == 'other' && _phoneCtrl.text.trim().length < 9) {
+    if (_recipientMode == 'other' && !RegExp(r'^\\d{10}$').hasMatch(_phoneCtrl.text.trim())) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid recipient phone number.')),
+        const SnackBar(content: Text('Enter a valid 10-digit mobile number')),
       );
       return;
     }
@@ -2241,9 +2257,9 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         AppButton(
           label: 'Continue',
           onPressed: () {
-            if (_phoneCtrl.text.trim().length < 9) {
+            if (!RegExp(r'^\\d{10}$').hasMatch(_phoneCtrl.text.trim())) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Enter a valid phone number')),
+                const SnackBar(content: Text('Enter a valid 10-digit mobile number')),
               );
               return;
             }
