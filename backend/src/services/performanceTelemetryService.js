@@ -29,6 +29,11 @@ const {
 const {
   evaluateOperationalAlerts,
 } = require('./operationalAlertService');
+const {
+  startDatabaseTelemetry,
+  stopDatabaseTelemetry,
+  databaseTelemetrySnapshot,
+} = require('./databaseTelemetryService');
 
 const histogram = monitorEventLoopDelay({
   resolution: 20,
@@ -45,6 +50,7 @@ function startPerformanceTelemetry() {
   startApiRequestTelemetry();
   startAuthPaystackTelemetry();
   startTransactionTelemetry();
+  startDatabaseTelemetry();
   started = true;
 }
 
@@ -57,6 +63,7 @@ function stopPerformanceTelemetry() {
   stopApiRequestTelemetry();
   stopAuthPaystackTelemetry();
   stopTransactionTelemetry();
+  stopDatabaseTelemetry();
   started = false;
 }
 
@@ -201,6 +208,9 @@ async function performanceSnapshot() {
       idle_connections: pool.idleCount,
       waiting_requests: pool.waitingCount,
     },
+
+    database_timing:
+      databaseTelemetrySnapshot(),
 
     redis,
 
