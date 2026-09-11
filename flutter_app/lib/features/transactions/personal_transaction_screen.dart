@@ -1589,6 +1589,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
             ),
             const SizedBox(height: 14),
             AppTextField(
+              transactionEmphasis: true,
               controller: _accountNumberCtrl,
               label: 'Account Number',
               keyboardType: TextInputType.number,
@@ -1634,6 +1635,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
             ),
             const SizedBox(height: 14),
             AppTextField(
+              transactionEmphasis: true,
               controller: _amountCtrl,
               label: 'Amount (GHS)',
               keyboardType: const TextInputType.numberWithOptions(
@@ -1651,6 +1653,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
             const SizedBox(height: 14),
             if (_needsPhone) ...[
               AppTextField(
+                transactionEmphasis: true,
                 controller: _phoneCtrl,
                 label: 'Recipient Phone',
                 keyboardType: TextInputType.phone,
@@ -1697,6 +1700,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           ],
           if (!_isMtnAirtime && _needsPhone) ...[
             AppTextField(
+              transactionEmphasis: true,
               controller: _phoneCtrl,
               label: 'Recipient Phone',
               keyboardType: TextInputType.phone,
@@ -1715,6 +1719,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           ],
           if (!_isMtnAirtime && _needsAmount) ...[
             AppTextField(
+              transactionEmphasis: true,
               controller: _amountCtrl,
               label: 'Amount (GHS)',
               keyboardType: const TextInputType.numberWithOptions(
@@ -1731,6 +1736,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           ],
           if (_needsReference) ...[
             AppTextField(
+              transactionEmphasis: true,
               controller: _referenceCtrl,
               label: _referenceRequired ? 'Reference' : 'Reference (optional)',
               prefixIcon: Icons.notes_outlined,
@@ -1743,6 +1749,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           ],
           if (_needsTillNumber) ...[
             AppTextField(
+              transactionEmphasis: true,
               controller: _tillNumberCtrl,
               label: 'Till Number',
               keyboardType: TextInputType.number,
@@ -1858,6 +1865,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
             ),
             const SizedBox(height: 20),
             AppTextField(
+              transactionEmphasis: true,
               controller: _phoneCtrl,
               label: 'Recipient Phone',
               keyboardType: TextInputType.phone,
@@ -2289,6 +2297,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         ),
         const SizedBox(height: 20),
         AppTextField(
+          transactionEmphasis: true,
           controller: _phoneCtrl,
           label: 'Recipient Phone',
           keyboardType: TextInputType.phone,
@@ -2411,6 +2420,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         ),
         const SizedBox(height: 16),
         AppTextField(
+          transactionEmphasis: true,
           controller: _flexiAmountCtrl,
           label: 'Amount (GHS)',
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -2644,6 +2654,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         ),
         const SizedBox(height: 16),
         AppTextField(
+          transactionEmphasis: true,
           controller: _flexiAmountCtrl,
           label: 'Amount (GHS)',
           keyboardType: const TextInputType.numberWithOptions(decimal: true),

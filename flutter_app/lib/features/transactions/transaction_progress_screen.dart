@@ -1815,9 +1815,10 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
                         Text(
                           processingPhone,
                           style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: context.appSecondaryText,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: context.appText,
+                            letterSpacing: 0.3,
                           ),
                         ),
                       ],
