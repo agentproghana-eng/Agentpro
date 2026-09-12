@@ -1,13 +1,13 @@
-# Intellicore System Corporate Website
+# Coreintel Systems Corporate Website
 
 Official corporate website source for:
 
-- https://intellicoresystem.com
-- https://www.intellicoresystem.com
+- https://coreintelsystems.org
+- https://www.coreintelsystems.org
 
 ## Product identity
 
-- Company: Intellicore System
+- Company: Coreintel Systems
 - Flagship product: AgentPro
 - AgentPro tagline: One App. Every Business.
 - Support: support@agentproghana.com

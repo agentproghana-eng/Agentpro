@@ -6,7 +6,7 @@ import { createPageMetadata } from "@/lib/metadata";
 export const metadata: Metadata = createPageMetadata({
   title: "Contact",
   description:
-    "Contact Intellicore Systems for AgentPro support, sales, partnerships, enterprise enquiries and general questions.",
+    "Contact Coreintel Systems for AgentPro support, sales, partnerships, enterprise enquiries and general questions.",
   path: "/contact",
 });
 
@@ -17,7 +17,7 @@ const sections = [
     items: [
       {
         title: "General enquiries",
-        description: "Questions about Intellicore Systems and its technology.",
+        description: "Questions about Coreintel Systems and its technology.",
       },
       {
         title: "AgentPro support",
@@ -48,11 +48,11 @@ const sections = [
 export default function ContactPage() {
   return (
     <PublicInfoPage
-      eyebrow="Contact Intellicore"
+      eyebrow="Contact Coreintel"
       title="Start the right conversation."
-      description="For AgentPro, partnerships, enterprise, media, technical support or general enquiries, contact Intellicore Systems."
+      description="For AgentPro, partnerships, enterprise, media, technical support or general enquiries, contact Coreintel Systems."
       primaryAction={{
-        label: "Email Intellicore",
+        label: "Email Coreintel",
         href: "mailto:support@agentproghana.com",
       }}
       highlights={[

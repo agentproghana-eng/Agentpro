@@ -6,7 +6,7 @@ import { createPageMetadata } from "@/lib/metadata";
 export const metadata: Metadata = createPageMetadata({
   title: "Solutions",
   description:
-    "Intellicore Systems builds digital infrastructure for business operations, financial visibility, workforce accountability, commerce and connected communities.",
+    "Coreintel Systems builds digital infrastructure for business operations, financial visibility, workforce accountability, commerce and connected communities.",
   path: "/solutions",
 });
 
@@ -90,15 +90,15 @@ const sections = [
 export default function SolutionsPage() {
   return (
     <PublicInfoPage
-      eyebrow="Intellicore Solutions"
+      eyebrow="Coreintel Solutions"
       title="Technology organised around outcomes."
-      description="Intellicore Systems focuses on practical outcomes for businesses, professionals, institutions and connected commercial ecosystems."
+      description="Coreintel Systems focuses on practical outcomes for businesses, professionals, institutions and connected commercial ecosystems."
       primaryAction={{
         label: "Explore AgentPro",
         href: "/agentpro",
       }}
       secondaryAction={{
-        label: "Talk to Intellicore",
+        label: "Talk to Coreintel",
         href: "/contact",
       }}
       highlights={[

@@ -6,7 +6,7 @@ import { createPageMetadata } from "@/lib/metadata";
 export const metadata: Metadata = createPageMetadata({
   title: "Cookie Policy",
   description:
-    "Information about cookies and similar browser technologies used by Intellicore web experiences.",
+    "Information about cookies and similar browser technologies used by Coreintel web experiences.",
   path: "/cookies",
 });
 
@@ -44,7 +44,7 @@ export default function Page() {
     <PublicInfoPage
       eyebrow="Legal"
       title="Cookie Policy"
-      description="Information about cookies and similar browser technologies used by Intellicore web experiences."
+      description="Information about cookies and similar browser technologies used by Coreintel web experiences."
       sections={sections}
     />
   );

@@ -273,7 +273,7 @@ export function HubSessionGate({
             Try again
           </button>
 
-          <Link href="/">Return to Intellicore</Link>
+          <Link href="/">Return to Coreintel</Link>
         </div>
       </main>
     );

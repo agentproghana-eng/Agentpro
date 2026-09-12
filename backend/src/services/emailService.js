@@ -5,7 +5,7 @@ const BRAND = Object.freeze({
   name: "AgentPro",
   country: "GHANA",
   tagline: "One App. Every Business.",
-  company: "Intellicore System",
+  company: "Coreintel Systems",
   supportEmail: "support@agentproghana.com",
   teal: "#006B5E",
   tealDark: "#004C43",

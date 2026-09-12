@@ -6,7 +6,7 @@ import { createPageMetadata } from "@/lib/metadata";
 export const metadata: Metadata = createPageMetadata({
   title: "Security",
   description:
-    "Intellicore Systems' security principles for authentication, authorization, session protection, business isolation, monitoring and privacy.",
+    "Coreintel Systems' security principles for authentication, authorization, session protection, business isolation, monitoring and privacy.",
   path: "/security",
 });
 
@@ -84,7 +84,7 @@ export default function SecurityPage() {
     <PublicInfoPage
       eyebrow="Security"
       title="Trust requires more than a security badge."
-      description="Intellicore Systems treats authentication, authorization, isolation, privacy and operational monitoring as core platform concerns."
+      description="Coreintel Systems treats authentication, authorization, isolation, privacy and operational monitoring as core platform concerns."
       primaryAction={{
         label: "Report a Security Concern",
         href: "mailto:support@agentproghana.com?subject=Security%20Concern",

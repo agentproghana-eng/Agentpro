@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://intellicoresystem.com/sitemap.xml
+Sitemap: https://coreintelsystems.org/sitemap.xml
