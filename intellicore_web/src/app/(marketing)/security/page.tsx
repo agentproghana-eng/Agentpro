@@ -87,7 +87,7 @@ export default function SecurityPage() {
       description="Intellicore Systems treats authentication, authorization, isolation, privacy and operational monitoring as core platform concerns."
       primaryAction={{
         label: "Report a Security Concern",
-        href: "mailto:support@intellicoresystem.com?subject=Security%20Concern",
+        href: "mailto:support@agentproghana.com?subject=Security%20Concern",
       }}
       highlights={[
         "Role-aware authorization",

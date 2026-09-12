@@ -62,7 +62,7 @@ void main() {
 
       expect(
         normalized,
-        contains('support@intellicoresystem.com'),
+        contains('support@agentproghana.com'),
       );
     });
 

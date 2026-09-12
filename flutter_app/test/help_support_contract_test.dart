@@ -158,7 +158,7 @@ void main() {
 
       expect(
         source,
-        isNot(contains("'support@intellicoresystem.com'")),
+        isNot(contains("'support@agentproghana.com'")),
       );
 
       expect(
