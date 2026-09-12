@@ -93,6 +93,7 @@ class AppTextField extends StatelessWidget {
   final VoidCallback? onTap;
   final ValueChanged<String>? onChanged;
   final TextInputAction? textInputAction;
+  final double? transactionLabelFontSize;
 
   /// Larger, stronger transaction-entry treatment.
   ///
@@ -115,6 +116,7 @@ class AppTextField extends StatelessWidget {
     this.onTap,
     this.onChanged,
     this.textInputAction,
+    this.transactionLabelFontSize,
     this.transactionEmphasis = false,
   });
 
@@ -122,14 +124,14 @@ class AppTextField extends StatelessWidget {
   Widget build(BuildContext context) {
     final fieldStyle = transactionEmphasis
         ? const TextStyle(
-            fontSize: 32,
+            fontSize: 30,
             fontWeight: FontWeight.bold,
           )
         : null;
 
     final labelStyle = transactionEmphasis
-        ? const TextStyle(
-            fontSize: 16,
+        ? TextStyle(
+            fontSize: transactionLabelFontSize ?? 16,
             fontWeight: FontWeight.w700,
           )
         : null;
