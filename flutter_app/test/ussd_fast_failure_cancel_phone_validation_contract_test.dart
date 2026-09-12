@@ -100,9 +100,27 @@ void main() {
       ussd,
       contains('Timer(const Duration(seconds: 45)'),
     );
+    // Ten seconds is permitted only for the deliberately bounded
+    // MTN Cash Out window after the amount has been submitted and while
+    // AgentPro is waiting for the agent PIN prompt. Generic USSD failure
+    // handling must not use this short timeout.
     expect(
       ussd,
-      isNot(contains('Timer(const Duration(seconds: 10)')),
+      contains("case 'onWaitingForPinPrompt':"),
+    );
+    expect(
+      ussd,
+      contains('Timer(const Duration(seconds: 10)'),
+    );
+    expect(
+      ussd,
+      contains('_waitingForMtnCashOutPinPrompt'),
+    );
+    expect(
+      ussd,
+      contains(
+        'MTN Cash Out PIN prompt was not received within 10 seconds.',
+      ),
     );
     expect(
       ussd,

@@ -471,6 +471,7 @@ class UssdAccessibilityEngine {
   Timer? _postPinTimeout;
   Timer? _customerConfirmationTimeout;
   bool _pinPromptReached = false;
+  bool _waitingForMtnCashOutPinPrompt = false;
   bool _mtnCashOutSmsArmed = false;
   String? _activeMtnCashOutAmount;
 
@@ -540,8 +541,52 @@ class UssdAccessibilityEngine {
 
   Future<dynamic> _handleNativeCall(MethodCall call) async {
     switch (call.method) {
+      case 'onWaitingForPinPrompt':
+        _waitingForMtnCashOutPinPrompt = true;
+
+        // This event is emitted only after MTN Cash Out's amount was
+        // successfully submitted. From here the next valid provider screen
+        // must be the agent PIN prompt.
+        _prePinTimeout?.cancel();
+        _prePinTimeout = Timer(const Duration(seconds: 10), () async {
+          final completer = _resultCompleter;
+
+          if (
+              _pinPromptReached ||
+              !_waitingForMtnCashOutPinPrompt ||
+              completer == null ||
+              completer.isCompleted) {
+            return;
+          }
+
+          _waitingForMtnCashOutPinPrompt = false;
+
+          await cancelAutomation();
+
+          if (!completer.isCompleted) {
+            completer.complete(
+              const USSDResult(
+                outcome: USSDStatus.failed,
+                failureReason:
+                    'MTN Cash Out PIN prompt was not received within 10 seconds. '
+                    'Ask the customer to allow Cash Out and try again.',
+                sessionLog: [],
+              ),
+            );
+          }
+        });
+
+        _progressController.add(
+          const USSDProgress(
+            status: USSDStatus.processing,
+            message: 'Waiting for MTN Cash Out PIN prompt...',
+          ),
+        );
+        break;
+
       case 'onPinPromptReached':
         _pinPromptReached = true;
+        _waitingForMtnCashOutPinPrompt = false;
         _prePinTimeout?.cancel();
         _prePinTimeout = null;
 
@@ -738,6 +783,7 @@ class UssdAccessibilityEngine {
     _postPinTimeout = null;
     _customerConfirmationTimeout?.cancel();
     _customerConfirmationTimeout = null;
+    _waitingForMtnCashOutPinPrompt = false;
 
     await _disarmMtnCashOutSmsSession();
 
@@ -778,6 +824,7 @@ class UssdAccessibilityEngine {
     _customerConfirmationTimeout?.cancel();
     _customerConfirmationTimeout = null;
     _pinPromptReached = false;
+    _waitingForMtnCashOutPinPrompt = false;
     _resultCompleter = Completer<USSDResult>();
 
     await _disarmMtnCashOutSmsSession();
@@ -875,7 +922,10 @@ class UssdAccessibilityEngine {
       // startAutomation returning successfully means native code has crossed
       // the provider-dial boundary. From here, absence of a provider screen
       // or result is ambiguous and must never be classified as a safe retry.
-      if (!_pinPromptReached && !(_resultCompleter?.isCompleted ?? true)) {
+      if (
+          !_pinPromptReached &&
+          !_waitingForMtnCashOutPinPrompt &&
+          !(_resultCompleter?.isCompleted ?? true)) {
         _prePinTimeout = Timer(const Duration(seconds: 45), () async {
           final completer = _resultCompleter;
 

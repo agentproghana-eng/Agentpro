@@ -457,6 +457,10 @@ class UssdAccessibilityChannel(
         }
     }
 
+    override fun onWaitingForPinPrompt() {
+        channel.invokeMethod("onWaitingForPinPrompt", null)
+    }
+
     override fun onPinPromptReached() {
         channel.invokeMethod("onPinPromptReached", null)
     }

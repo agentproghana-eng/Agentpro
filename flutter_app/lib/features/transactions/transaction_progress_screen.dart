@@ -1372,6 +1372,38 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       return;
     }
 
+    final isMtnCashOutPinWaitTimeout =
+        provider == 'mtn' &&
+        transactionType == 'cash_out' &&
+        result.outcome == USSDStatus.failed &&
+        result.failureReason ==
+            'MTN Cash Out PIN prompt was not received within 10 seconds. '
+                'Ask the customer to allow Cash Out and try again.';
+
+    if (isMtnCashOutPinWaitTimeout) {
+      await _reportResult(
+        transactionId,
+        result,
+        autoReturnAfterAmbiguousResult: false,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Cash Out stopped. Ask the customer to allow Cash Out and try again.',
+            ),
+          ),
+        );
+
+        if (context.canPop()) {
+          context.pop('failed');
+        }
+      }
+
+      return;
+    }
+
     final isMtnCashOutHandoff =
         provider == 'mtn' &&
         transactionType == 'cash_out' &&
