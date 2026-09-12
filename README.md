@@ -227,7 +227,7 @@ PostgreSQL  Redis
 
 ## API Conventions
 
-- **Base URL**: `https://api.agentpro.intellicoresystem.com/api/v1`
+- **Base URL**: `https://api.agentproghana.com/api/v1`
 - **Auth**: `Authorization: Bearer <access_token>`
 - **Response format**:
 ```json
@@ -258,7 +258,7 @@ PostgreSQL  Redis
 
 - Technical: support@agentproghana.com
 - User support: support@agentproghana.com
-- Admin portal: admin.agentpro.intellicoresystem.com
+- Admin portal: admin.agentproghana.com
 
 ---
 

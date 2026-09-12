@@ -9,7 +9,7 @@
 
     <!-- Production API: enforce HTTPS with system CA validation -->
     <domain-config cleartextTrafficPermitted="false">
-        <domain includeSubdomains="true">api.agentpro.intellicoresystem.com</domain>
+        <domain includeSubdomains="true">api.agentproghana.com</domain>
 
         <!--
             TLS is validated against Android's trusted system CA store.

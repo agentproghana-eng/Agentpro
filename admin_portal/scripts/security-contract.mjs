@@ -430,7 +430,7 @@ assert(
 
 assert(
   envExample.includes(
-    'https://api.agentpro.intellicoresystem.com/api/v1',
+    'https://api.agentproghana.com/api/v1',
   ),
   'Production API URL must use /api/v1',
 );
@@ -450,6 +450,11 @@ assert(
 assert(
   server.includes('process.env.ADMIN_URL'),
   'Admin production origin must be environment controlled',
+);
+
+assert(
+  server.includes('process.env.LEGACY_ADMIN_URL'),
+  'Legacy admin origin must remain environment controlled during migration',
 );
 
 assert(

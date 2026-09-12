@@ -33,7 +33,7 @@ class ApiClient {
 
   static const String _baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://api.agentpro.intellicoresystem.com/api/v1',
+    defaultValue: 'https://api.agentproghana.com/api/v1',
   );
 
   static final Dio _dio = _createDio();

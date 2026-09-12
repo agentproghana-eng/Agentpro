@@ -35,7 +35,8 @@ jobs:
 
           case "$LOADTEST_BASE_URL" in
             *agentpro-api-izi3.onrender.com*|\
-            *api.agentpro.intellicoresystem.com*)
+            *api.agentpro.intellicoresystem.com*|\
+            *api.agentproghana.com*)
               echo "Production target rejected."
               exit 1
               ;;
@@ -328,7 +329,8 @@ jobs:
 
           case "$LOADTEST_BASE_URL" in
             *agentpro-api-izi3.onrender.com*|\
-            *api.agentpro.intellicoresystem.com*)
+            *api.agentpro.intellicoresystem.com*|\
+            *api.agentproghana.com*)
               echo "Production target rejected."
               exit 1
               ;;
