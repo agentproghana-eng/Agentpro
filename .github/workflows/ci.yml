@@ -268,7 +268,7 @@ jobs:
 
   # ── Coreintel Web Build ───────────────────────────────────
   intellicore-web-build:
-    name: Coreintel Web Build
+    name: Intellicore Web Build
     runs-on: ubuntu-latest
 
     steps:
