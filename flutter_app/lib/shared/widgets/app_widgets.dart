@@ -122,8 +122,8 @@ class AppTextField extends StatelessWidget {
   Widget build(BuildContext context) {
     final fieldStyle = transactionEmphasis
         ? const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
+            fontSize: 32,
+            fontWeight: FontWeight.bold,
           )
         : null;
 
