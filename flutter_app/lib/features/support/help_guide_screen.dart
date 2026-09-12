@@ -50,7 +50,32 @@ final List<HelpSection> _helpSections = [
         HelpItem(
           question: 'How does the automatic dialing work?',
           answer:
-              'Tapping a transaction type starts the available automated USSD flow, so you do not need to dial and navigate the network menu yourself. The app pauses when the network asks for your MoMo PIN. Enter the PIN only on the real network screen, then continue the transaction.',
+              'Tapping a transaction type starts the available automated USSD flow, so you do not need to dial and navigate the network menu yourself. AgentPro fills only the transaction details required by the flow. When the real network screen asks for your MoMo PIN, automation stops and you enter the PIN yourself.',
+        ),
+        HelpItem(
+          question: 'What happens if the network says the transaction failed?',
+          answer:
+              'When AgentPro recognises a definite network failure message, automation stops immediately so you can correct the problem and start the next transaction without waiting for the full progress timeout.',
+        ),
+        HelpItem(
+          question: 'What if I cancel when the PIN screen appears?',
+          answer:
+              'Cancel the real network USSD screen. AgentPro treats an explicit PIN-stage cancellation as cancelled and returns you to the transaction form as quickly as possible.',
+        ),
+        HelpItem(
+          question: 'What does Pending confirmation mean?',
+          answer:
+              'It means AgentPro cannot yet prove whether the financial transaction succeeded or failed. Do not repeat the transaction while its result is uncertain. Wait for the network confirmation or check your transaction history before trying again.',
+        ),
+        HelpItem(
+          question: 'How long should a customer phone number be?',
+          answer:
+              'Normal customer phone-number fields must contain exactly 10 digits. Merchant numbers, till numbers, operator IDs and other non-phone identifiers follow their own rules.',
+        ),
+        HelpItem(
+          question: 'What do New Transaction and Done do after success?',
+          answer:
+              'New Transaction clears the completed form so you can start another transaction immediately. Done leaves the completed transaction flow and returns you to the normal app navigation.',
         ),
         HelpItem(
           question:
@@ -61,12 +86,27 @@ final List<HelpSection> _helpSections = [
         HelpItem(
           question: 'Which SIM does a transaction use?',
           answer:
-              'The app automatically detects which SIM slot has each network and dials from the correct one — no manual SIM switching needed.',
+              'AgentPro detects the available network SIMs and uses the SIM assigned to the required purpose, such as Agent, Subscriber, EVD or Merchant. Check Settings → SIM Purpose if the role is missing or incorrect.',
+        ),
+        HelpItem(
+          question: 'Why does AgentPro need Accessibility for USSD?',
+          answer:
+              'Accessibility lets AgentPro read the visible USSD menu and enter the non-secret transaction steps you have requested. If automation cannot run, open the AgentPro accessibility setup and enable the AgentPro service. Your MoMo PIN is still entered only by you on the real network screen.',
         ),
         HelpItem(
           question: 'Will the AI Assistant ever ask for my PIN?',
           answer:
               'Never. If anything — including this assistant — asks for the MoMo PIN, do not share it. The PIN should only ever be entered on the real network USSD screen.',
+        ),
+        HelpItem(
+          question: 'How does MTN Agent Cash Out work?',
+          answer:
+              'The customer first enables or allows Cash Out on the customer phone. Start Cash Out in AgentPro and enter the agent PIN only when the real MTN USSD screen asks for it. After the agent PIN, AgentPro sends no further USSD input. The customer enters the customer PIN on the customer phone. AgentPro then waits for the MTN confirmation SMS to reconcile the transaction.',
+        ),
+        HelpItem(
+          question: 'Can I start another MTN Cash Out while one is waiting for confirmation?',
+          answer:
+              'Yes. After the safe USSD handoff, a Cash Out can remain pending confirmation while you start another transaction. Each pending Cash Out is reconciled independently when a matching trusted confirmation arrives.',
         ),
       ]),
   const HelpSection(
@@ -263,7 +303,7 @@ final List<HelpSection> _helpSections = [
         HelpItem(
           question: 'How do I reach AgentPro support?',
           answer:
-              'Email support@intellicoresystem.com, call 0207438990, or message on WhatsApp — all available from the Support screen.',
+              'Email support@agentproghana.com, call 0207438990, or message on WhatsApp — all available from the Support screen.',
         ),
         HelpItem(
           question: 'What are the support hours?',
