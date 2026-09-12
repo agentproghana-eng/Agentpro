@@ -4,7 +4,7 @@ class AppConstants {
   // ── API ──────────────────────────────────────────────────────
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://api.agentpro.intellicoresystem.com/api/v1',
+    defaultValue: 'https://api.agentproghana.com/api/v1',
   );
 
   // For local development:

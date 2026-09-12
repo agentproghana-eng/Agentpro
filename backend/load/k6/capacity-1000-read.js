@@ -21,6 +21,7 @@ if (accessToken.length < 32) {
 const forbiddenHosts = new Set([
   'agentpro-api-izi3.onrender.com',
   'api.agentpro.intellicoresystem.com',
+  'api.agentproghana.com',
 ]);
 
 if (forbiddenHosts.has(config.hostname)) {

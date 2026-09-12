@@ -10,7 +10,7 @@ export const siteConfig = {
     process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "support@agentproghana.com",
   company: {
     name: "Coreintel Systems",
-    url: "https://coreintelsystem.com",
+    url: "https://coreintelsystems.org",
   },
   agentPro: {
     name: "AgentPro",

@@ -82,6 +82,7 @@ app.use(helmet({
 const allowedCorsOrigins = new Set(
   [
     process.env.ADMIN_URL,
+    process.env.LEGACY_ADMIN_URL,
     process.env.FRONTEND_URL,
 
     // Local browser development.

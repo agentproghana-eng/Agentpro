@@ -28,7 +28,7 @@ void main() {
       expect(
         settings,
         contains(
-          'https://admin.agentpro.intellicoresystem.com/privacy-policy/',
+          'https://admin.agentproghana.com/privacy-policy/',
         ),
       );
 

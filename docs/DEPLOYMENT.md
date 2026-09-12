@@ -48,8 +48,8 @@ Version 2.0 | Confidential
 ### 1.4 Domain Setup (production)
 1. Register `intellicoresystem.com`
 2. Add DNS records:
-   - `api.agentpro.intellicoresystem.com` → Render backend service
-   - `admin.agentpro.intellicoresystem.com` → Admin portal hosting URL
+   - `api.agentproghana.com` → Render backend service
+   - `admin.agentproghana.com` → Admin portal hosting URL
 3. SSL is auto-managed by Render for configured custom domains
 
 ---
@@ -100,12 +100,12 @@ npm run seed
 5. Configure Redis using the production Redis service or configured Redis provider
 6. Set production environment variables in the Render service
 7. Deploy the current production branch/commit
-8. Set custom domain: `api.agentpro.intellicoresystem.com`
+8. Set custom domain: `api.agentproghana.com`
 9. Verify the deployment is healthy before directing production traffic to it
 
 ### 3.4 Verify deployment
 ```bash
-curl https://api.agentpro.intellicoresystem.com/health
+curl https://api.agentproghana.com/health
 # Expected: { "success": true, "services": { "database": "healthy", "redis": "healthy" } }
 ```
 
@@ -125,7 +125,7 @@ Deploy `dist/` to:
 - **Vercel**: `vercel --prod`
 - **Render Static Site**: deploy the built `dist/` directory as a static site
 
-Set custom domain: `admin.agentpro.intellicoresystem.com`
+Set custom domain: `admin.agentproghana.com`
 
 ---
 
@@ -143,7 +143,7 @@ flutter pub get
 ### 5.2 Update API URL (if needed)
 Edit `lib/core/constants/app_constants.dart`:
 ```dart
-static const String apiBaseUrl = 'https://api.agentpro.intellicoresystem.com/api/v1';
+static const String apiBaseUrl = 'https://api.agentproghana.com/api/v1';
 ```
 
 ### 5.3 Generate Android signing keystore
@@ -185,7 +185,7 @@ flutter build appbundle --release
 ### 5.7 Update certificate pins
 After deploying backend, get your API certificate hash:
 ```bash
-openssl s_client -connect api.agentpro.intellicoresystem.com:443 2>/dev/null \
+openssl s_client -connect api.agentproghana.com:443 2>/dev/null \
   | openssl x509 -noout -fingerprint -sha256 \
   | sed 's/://g' \
   | awk -F= '{print $2}' \
@@ -207,14 +207,14 @@ Update `network_security_config.xml` with the actual hash.
 6. Required permissions justification:
    - `CALL_PHONE`: Required for USSD automation (Mobile Money transactions)
    - `READ_PHONE_STATE`: Required to detect SIM cards and route to correct network
-7. Privacy policy URL: `https://admin.agentpro.intellicoresystem.com/privacy-policy/`
+7. Privacy policy URL: `https://admin.agentproghana.com/privacy-policy/`
 8. Submit for review (typically 3-7 days)
 
 ---
 
 ## Step 7 — First Login & Configuration
 
-1. Open admin portal: `https://admin.agentpro.intellicoresystem.com`
+1. Open admin portal: `https://admin.agentproghana.com`
 2. Login with superuser credentials from `.env` (`SUPERUSER_EMAIL` / `SUPERUSER_PASSWORD`)
 3. **Change superuser password immediately** (Settings → Change Password)
 4. Go to **System Config** → set `agent_pro_momo_number` to your MTN MoMo merchant number
@@ -249,7 +249,7 @@ See `backend/.env.example` for the complete list. Critical ones:
 ## Monitoring & Maintenance
 
 ### Health checks
-- API: `GET https://api.agentpro.intellicoresystem.com/health`
+- API: `GET https://api.agentproghana.com/health`
 - Database: Monitored via Render dashboard
 - Errors: Firebase Crashlytics (mobile app)
 
@@ -294,7 +294,7 @@ See `backend/.env.example` for the complete list. Critical ones:
 
 - Technical: support@agentproghana.com
 - User support: support@agentproghana.com
-- Admin portal: https://admin.agentpro.intellicoresystem.com
+- Admin portal: https://admin.agentproghana.com
 
 ---
 

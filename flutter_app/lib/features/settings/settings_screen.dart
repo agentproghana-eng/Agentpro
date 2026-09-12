@@ -147,7 +147,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _openPrivacyPolicy() async {
     final uri = Uri.parse(
-      'https://admin.agentpro.intellicoresystem.com/privacy-policy/',
+      'https://admin.agentproghana.com/privacy-policy/',
     );
 
     try {

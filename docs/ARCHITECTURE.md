@@ -24,7 +24,7 @@ Version 2.0 | Confidential
          ▼                  ▼
 ┌─────────────────────────────────────────────────────────────┐
 │              Node.js + Express.js REST API                  │
-│              api.agentpro.intellicoresystem.com                          │
+│              api.agentproghana.com                          │
 ├─────────────────────────────────────────────────────────────┤
 │  Auth    │  Users   │  Transactions │  Float  │  Reports    │
 │  Module  │  Module  │  Module       │  Module │  Module     │
@@ -167,7 +167,7 @@ admin_portal/
 
 ## API Design Conventions
 
-- Base URL: `https://api.agentpro.intellicoresystem.com/api/v1`
+- Base URL: `https://api.agentproghana.com/api/v1`
 - All responses: `{ success: bool, data: {}, message: string, meta: {} }`
 - Auth: `Authorization: Bearer <JWT>`
 - Pagination: `?page=1&limit=20`
