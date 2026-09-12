@@ -79,7 +79,7 @@ export function PublicInfoPage({
 
           {highlights && highlights.length > 0 && (
             <aside className="ic-page-highlight-panel">
-              <span>Intellicore platform</span>
+              <span>Coreintel platform</span>
 
               <div>
                 {highlights.map((highlight) => (
@@ -154,7 +154,7 @@ export function PublicInfoPage({
       <div className="ic-page-back">
         <div className="ic-shell">
           <Link href="/">
-            Intellicore Systems
+            Coreintel Systems
             <ArrowRight size={14} />
           </Link>
         </div>

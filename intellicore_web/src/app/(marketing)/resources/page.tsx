@@ -6,7 +6,7 @@ import { createPageMetadata } from "@/lib/metadata";
 export const metadata: Metadata = createPageMetadata({
   title: "Resources",
   description:
-    "Intellicore and AgentPro resources, guides, tutorials, product updates, business education and security information.",
+    "Coreintel and AgentPro resources, guides, tutorials, product updates, business education and security information.",
   path: "/resources",
 });
 
@@ -32,7 +32,7 @@ const sections = [
       {
         title: "Product updates",
         description:
-          "Follow important AgentPro and Intellicore platform developments.",
+          "Follow important AgentPro and Coreintel platform developments.",
       },
       {
         title: "Security information",
@@ -53,7 +53,7 @@ export default function ResourcesPage() {
     <PublicInfoPage
       eyebrow="Resources"
       title="Learn, operate and get support."
-      description="Resources for AgentPro users, businesses, partners and the wider Intellicore ecosystem."
+      description="Resources for AgentPro users, businesses, partners and the wider Coreintel ecosystem."
       primaryAction={{
         label: "Contact Support",
         href: "/contact?topic=support",

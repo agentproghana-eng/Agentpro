@@ -30,7 +30,7 @@ info:
   contact:
     name: AgentPro Support
     email: support@agentproghana.com
-    url: https://intellicoresystem.com
+    url: https://coreintelsystems.org
 
 servers:
   - url: https://api.agentpro.intellicoresystem.com/api/v1

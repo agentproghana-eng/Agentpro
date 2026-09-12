@@ -78,7 +78,7 @@ export function PortalShell({
     <div className="ic-portal-shell">
       <header className="ic-portal-topbar">
         <div className="ic-portal-brand">
-          <Link href="/">Intellicore</Link>
+          <Link href="/">Coreintel</Link>
 
           <span>AgentPro</span>
         </div>

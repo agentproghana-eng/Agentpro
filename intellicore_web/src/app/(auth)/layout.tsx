@@ -32,7 +32,7 @@ export default function AuthLayout({
             </h1>
 
             <p>
-              Secure access to the AgentPro web experience from Intellicore
+              Secure access to the AgentPro web experience from Coreintel
               Systems.
             </p>
           </div>
@@ -47,13 +47,13 @@ export default function AuthLayout({
 
       <section className="ic-auth-content">
         <div className="ic-auth-content-top">
-          <Link href="/">Back to Intellicore</Link>
+          <Link href="/">Back to Coreintel</Link>
         </div>
 
         <div className="ic-auth-card">{children}</div>
 
         <p className="ic-auth-footer-note">
-          AgentPro is a product of Intellicore Systems.
+          AgentPro is a product of Coreintel Systems.
         </p>
       </section>
     </main>

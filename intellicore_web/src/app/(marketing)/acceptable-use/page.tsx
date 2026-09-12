@@ -6,7 +6,7 @@ import { createPageMetadata } from "@/lib/metadata";
 export const metadata: Metadata = createPageMetadata({
   title: "Acceptable Use",
   description:
-    "Rules intended to protect AgentPro users, businesses, communities and the wider Intellicore platform.",
+    "Rules intended to protect AgentPro users, businesses, communities and the wider Coreintel platform.",
   path: "/acceptable-use",
 });
 
@@ -18,7 +18,7 @@ const sections = [
       {
         title: "No fraud",
         description:
-          "Do not use Intellicore services to deceive, impersonate, defraud or facilitate financial abuse.",
+          "Do not use Coreintel services to deceive, impersonate, defraud or facilitate financial abuse.",
       },
       {
         title: "No harassment",
@@ -44,7 +44,7 @@ export default function Page() {
     <PublicInfoPage
       eyebrow="Legal"
       title="Acceptable Use"
-      description="Rules intended to protect AgentPro users, businesses, communities and the wider Intellicore platform."
+      description="Rules intended to protect AgentPro users, businesses, communities and the wider Coreintel platform."
       sections={sections}
     />
   );

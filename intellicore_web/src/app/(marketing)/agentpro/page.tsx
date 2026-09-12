@@ -6,7 +6,7 @@ import { createPageMetadata } from "@/lib/metadata";
 export const metadata: Metadata = createPageMetadata({
   title: "AgentPro — One App. Every Business.",
   description:
-    "AgentPro is Intellicore Systems' integrated operating platform for business operations, transactions, reporting, people, discovery and opportunity.",
+    "AgentPro is Coreintel Systems' integrated operating platform for business operations, transactions, reporting, people, discovery and opportunity.",
   path: "/agentpro",
 });
 
@@ -171,8 +171,8 @@ export default function AgentProPage() {
         eyebrow: "AgentPro",
         title: "Build a clearer, more connected business.",
         description:
-          "Talk to Intellicore Systems about AgentPro, partnerships, deployment or support.",
-        label: "Contact Intellicore",
+          "Talk to Coreintel Systems about AgentPro, partnerships, deployment or support.",
+        label: "Contact Coreintel",
         href: "/contact?topic=agentpro",
       }}
     />

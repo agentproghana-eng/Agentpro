@@ -6,7 +6,7 @@ import { createPageMetadata } from "@/lib/metadata";
 export const metadata: Metadata = createPageMetadata({
   title: "Privacy",
   description:
-    "How Intellicore Systems approaches privacy and responsible handling of personal and business information.",
+    "How Coreintel Systems approaches privacy and responsible handling of personal and business information.",
   path: "/privacy",
 });
 
@@ -44,7 +44,7 @@ export default function Page() {
     <PublicInfoPage
       eyebrow="Legal"
       title="Privacy"
-      description="How Intellicore Systems approaches privacy and responsible handling of personal and business information."
+      description="How Coreintel Systems approaches privacy and responsible handling of personal and business information."
       sections={sections}
     />
   );

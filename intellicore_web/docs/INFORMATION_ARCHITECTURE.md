@@ -1,4 +1,4 @@
-# Intellicore Systems Web Platform
+# Coreintel Systems Web Platform
 
 ## Product boundaries
 
@@ -35,14 +35,14 @@
 
 ## Experience boundaries
 
-### Intellicore Systems
+### Coreintel Systems
 
 Corporate identity, solutions, partnerships, trust, resources and
-future Intellicore products.
+future Coreintel products.
 
 ### AgentPro
 
-Intellicore's flagship operating platform:
+Coreintel's flagship operating platform:
 One App. Every Business.
 
 ### Community Hub

@@ -18,7 +18,7 @@ class AppConstants {
   static const String supportPhone = '0207438990';
   static const String supportWhatsAppNumber = '233207438990';
   static const String supportHours = 'Mon - Fri, 8:00 AM - 5:00 PM';
-  static const String websiteUrl = 'https://intellicoresystem.com';
+  static const String websiteUrl = 'https://coreintelsystems.org';
 
   // ── MoMo Providers ───────────────────────────────────────────
   static const Map<String, String> providerNames = {

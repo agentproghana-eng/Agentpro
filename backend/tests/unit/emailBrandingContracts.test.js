@@ -124,7 +124,7 @@ describe(
         expect(
           payload.html,
         ).toContain(
-          'Intellicore System',
+          'Coreintel Systems',
         );
 
         expect(

@@ -6,7 +6,7 @@ import { createPageMetadata } from "@/lib/metadata";
 export const metadata: Metadata = createPageMetadata({
   title: "Partners",
   description:
-    "Partner with Intellicore Systems across telecom, financial services, enterprise, government, technology and business ecosystems.",
+    "Partner with Coreintel Systems across telecom, financial services, enterprise, government, technology and business ecosystems.",
   path: "/partners",
 });
 
@@ -42,7 +42,7 @@ const sections = [
       {
         title: "Investors",
         description:
-          "Engage with Intellicore's long-term platform and market vision.",
+          "Engage with Coreintel's long-term platform and market vision.",
       },
     ],
   },
@@ -52,10 +52,10 @@ export default function PartnersPage() {
   return (
     <PublicInfoPage
       eyebrow="Partners"
-      title="Build with Intellicore."
-      description="Intellicore Systems is building a platform ecosystem designed for collaboration with institutions that serve businesses and communities."
+      title="Build with Coreintel."
+      description="Coreintel Systems is building a platform ecosystem designed for collaboration with institutions that serve businesses and communities."
       primaryAction={{
-        label: "Partner With Intellicore",
+        label: "Partner With Coreintel",
         href: "/contact?topic=partnership",
       }}
       secondaryAction={{

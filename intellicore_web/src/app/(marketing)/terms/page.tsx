@@ -6,7 +6,7 @@ import { createPageMetadata } from "@/lib/metadata";
 export const metadata: Metadata = createPageMetadata({
   title: "Terms",
   description:
-    "General terms governing use of Intellicore Systems and AgentPro services.",
+    "General terms governing use of Coreintel Systems and AgentPro services.",
   path: "/terms",
 });
 
@@ -33,7 +33,7 @@ const sections = [
       {
         title: "Lawful use",
         description:
-          "Intellicore services must not be used for unlawful, fraudulent or abusive activity.",
+          "Coreintel services must not be used for unlawful, fraudulent or abusive activity.",
       },
     ],
   },
@@ -44,7 +44,7 @@ export default function Page() {
     <PublicInfoPage
       eyebrow="Legal"
       title="Terms"
-      description="General terms governing use of Intellicore Systems and AgentPro services."
+      description="General terms governing use of Coreintel Systems and AgentPro services."
       sections={sections}
     />
   );

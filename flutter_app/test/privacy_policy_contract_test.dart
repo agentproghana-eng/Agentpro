@@ -57,7 +57,7 @@ void main() {
 
       expect(
         normalized,
-        contains('intellicore system'),
+        contains('coreintel systems'),
       );
 
       expect(

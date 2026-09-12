@@ -262,7 +262,7 @@ assert(
 
 assert(
   normalizedPrivacyPolicy.includes(
-    'Intellicore System',
+    'Coreintel Systems',
   ),
   'Privacy policy must identify the AgentPro operator',
 );
