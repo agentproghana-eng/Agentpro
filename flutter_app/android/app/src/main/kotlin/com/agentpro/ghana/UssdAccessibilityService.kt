@@ -350,6 +350,7 @@ class UssdAccessibilityService : AccessibilityService() {
     )
 
     interface UssdAccessibilityListener {
+        fun onWaitingForPinPrompt()
         fun onPinPromptReached()
         fun onResult(outcome: String, message: String)
     }
@@ -626,8 +627,21 @@ class UssdAccessibilityService : AccessibilityService() {
                 pendingCustomerPhone?.let { respond(root, it) }
             pendingProvider == "mtn" && screenText.contains("enter mobile number") ->
                 pendingCustomerPhone?.let { respond(root, it) }
-            pendingProvider == "mtn" && screenText.contains("amount") ->
-                pendingAmount?.let { respond(root, it) }
+            pendingProvider == "mtn" && screenText.contains("amount") -> {
+                val amountSubmitted =
+                    pendingAmount?.let { respond(root, it) } ?: false
+
+                // Cash Out's amount is the last AgentPro-controlled input.
+                // Start the short PIN-wait window only after that write
+                // actually succeeds. Other MTN transaction types keep their
+                // existing timeout behavior.
+                if (
+                    amountSubmitted &&
+                    pendingTransactionType == "cash_out"
+                ) {
+                    listener?.onWaitingForPinPrompt()
+                }
+            }
             pendingProvider == "mtn" && (screenText.contains("enter mm pin") || screenText.contains("enter your pin")) -> {
                 reachedPinPrompt = true
                 listener?.onPinPromptReached()
