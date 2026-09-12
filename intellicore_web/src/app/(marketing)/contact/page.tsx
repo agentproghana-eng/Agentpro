@@ -53,7 +53,7 @@ export default function ContactPage() {
       description="For AgentPro, partnerships, enterprise, media, technical support or general enquiries, contact Intellicore Systems."
       primaryAction={{
         label: "Email Intellicore",
-        href: "mailto:support@intellicoresystem.com",
+        href: "mailto:support@agentproghana.com",
       }}
       highlights={[
         "General enquiries",

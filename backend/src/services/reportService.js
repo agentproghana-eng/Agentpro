@@ -275,7 +275,7 @@ async function generateTransactionReceipt(transaction) {
       doc.fontSize(7).fillColor(COLORS.muted).font('Helvetica')
         .text('Thank you for using AgentPro',
           20, doc.page.height - 32, { align: 'center' });
-      doc.text('support@intellicoresystem.com', { align: 'center' });
+      doc.text('support@agentproghana.com', { align: 'center' });
 
       doc.end();
     });

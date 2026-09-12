@@ -256,8 +256,8 @@ PostgreSQL  Redis
 
 ## Support
 
-- Technical: support@intellicoresystem.com
-- User support: support@intellicoresystem.com
+- Technical: support@agentproghana.com
+- User support: support@agentproghana.com
 - Admin portal: admin.agentpro.intellicoresystem.com
 
 ---

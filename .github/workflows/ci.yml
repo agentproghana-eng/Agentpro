@@ -294,7 +294,7 @@ jobs:
         env:
           AGENTPRO_API_BASE_URL: https://agentpro-api-izi3.onrender.com
           NEXT_PUBLIC_SITE_URL: https://intellicoresystem.com
-          NEXT_PUBLIC_SUPPORT_EMAIL: support@intellicoresystem.com
+          NEXT_PUBLIC_SUPPORT_EMAIL: support@agentproghana.com
         run: npm run build
 
   # ── Flutter Build ─────────────────────────────────────────

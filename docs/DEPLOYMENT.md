@@ -292,8 +292,8 @@ See `backend/.env.example` for the complete list. Critical ones:
 
 ## Support & Contacts
 
-- Technical: support@intellicoresystem.com
-- User support: support@intellicoresystem.com
+- Technical: support@agentproghana.com
+- User support: support@agentproghana.com
 - Admin portal: https://admin.agentpro.intellicoresystem.com
 
 ---

@@ -183,14 +183,14 @@ assert(
 
 assert(
   accountDeletion.includes(
-    'mailto:support@intellicoresystem.com',
+    'mailto:support@agentproghana.com',
   ),
   'Public deletion page must provide an actionable deletion-request pathway',
 );
 
 assert(
   accountDeletion.includes(
-    'support@intellicoresystem.com',
+    'support@agentproghana.com',
   ),
   'Public deletion page must display the support deletion address',
 );
@@ -269,7 +269,7 @@ assert(
 
 assert(
   normalizedPrivacyPolicy.includes(
-    'support@intellicoresystem.com',
+    'support@agentproghana.com',
   ),
   'Privacy policy must provide a privacy contact',
 );

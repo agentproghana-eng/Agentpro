@@ -10,7 +10,7 @@ Official corporate website source for:
 - Company: Intellicore System
 - Flagship product: AgentPro
 - AgentPro tagline: One App. Every Business.
-- Support: support@intellicoresystem.com
+- Support: support@agentproghana.com
 
 ## Deployment
 
