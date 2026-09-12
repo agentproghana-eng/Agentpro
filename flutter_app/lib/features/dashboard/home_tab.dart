@@ -605,6 +605,7 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
           child: DashboardProviderSelector(
             selectedProvider: _provider,
             simMap: _simMap,
+            simPurposes: _simPurposes,
             detectionComplete: _simDetectionComplete,
             permissionDenied: _simPermissionDenied,
             onProviderChanged: (provider) {

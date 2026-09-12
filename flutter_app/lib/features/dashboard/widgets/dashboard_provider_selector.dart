@@ -12,6 +12,16 @@ String dashboardProviderLabel(String provider) {
   };
 }
 
+String? dashboardSimPurposeLabel(String? purpose) {
+  return switch (purpose?.trim().toLowerCase()) {
+    'agent' => 'AGENT',
+    'subscriber' || 'personal' => 'SUBSCRIBER',
+    'evd' => 'EVD',
+    'merchant' => 'MERCHANT',
+    _ => null,
+  };
+}
+
 Color dashboardProviderColor(String provider) {
   return switch (provider) {
     'mtn' => const Color(0xFFFFCC00),
@@ -26,6 +36,7 @@ class DashboardProviderSelector extends StatelessWidget {
     super.key,
     required this.selectedProvider,
     required this.simMap,
+    required this.simPurposes,
     required this.detectionComplete,
     required this.permissionDenied,
     required this.onProviderChanged,
@@ -33,6 +44,7 @@ class DashboardProviderSelector extends StatelessWidget {
 
   final String selectedProvider;
   final Map<String, SimCard?>? simMap;
+  final Map<int, String> simPurposes;
   final bool detectionComplete;
   final bool permissionDenied;
   final ValueChanged<String> onProviderChanged;
@@ -136,14 +148,22 @@ class DashboardProviderSelector extends StatelessWidget {
     for (var i = 0; i < providers.length; i++) {
       final provider = providers[i];
       final sim = simMap?[provider];
+      final purposeLabel = sim == null
+          ? null
+          : dashboardSimPurposeLabel(
+              simPurposes[sim.slot],
+            );
 
       widgets.add(
         Expanded(
           child: _DashboardProviderTab(
             label: sim == null
                 ? dashboardProviderLabel(provider)
-                : '${dashboardProviderLabel(provider)}  '
-                    'SIM ${sim.slot + 1}',
+                : purposeLabel == null
+                    ? '${dashboardProviderLabel(provider)}  '
+                        'SIM ${sim.slot + 1}'
+                    : '${dashboardProviderLabel(provider)} '
+                        '($purposeLabel)',
             value: provider,
             selected: selectedProvider == provider,
             color: dashboardProviderColor(provider),

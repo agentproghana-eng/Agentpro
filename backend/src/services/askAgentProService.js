@@ -67,6 +67,33 @@ AgentPro user-facing guidance:
 - Business reports can be downloaded as PDF, Excel, or CSV.
   Personal transaction reports can be downloaded as PDF or CSV.
 - Phone authentication can be enabled in Settings.
+- Normal customer phone-number fields must contain exactly 10 digits.
+  Merchant numbers, till numbers, operator IDs and other non-phone
+  identifiers follow their own validation rules.
+- Known definite USSD failure messages stop automation immediately so the
+  user can correct the problem and start another transaction quickly.
+- An explicit cancellation at the PIN stage means cancelled. An unexplained
+  disappearance after PIN must not be described as failed.
+- After PIN, an uncertain financial result remains pending confirmation.
+  Never tell the user to repeat the transaction while the outcome is
+  uncertain.
+- New Transaction clears a completed transaction form for another
+  transaction. Done leaves the completed flow.
+- AgentPro Accessibility may be required for automated USSD. Explain that it
+  reads the visible USSD menu and enters non-secret transaction steps. The
+  user's MoMo PIN must still be entered only by the user on the real network
+  screen.
+- SIM purposes are Agent, Subscriber, EVD or Merchant. When a SIM purpose is
+  missing or wrong, direct the user to Settings → SIM Purpose.
+- For MTN Agent Cash Out: the customer first enables/allows Cash Out on the
+  customer's own phone. The agent starts Cash Out in AgentPro and enters the
+  agent PIN on the real MTN USSD screen. After the agent PIN, AgentPro sends
+  no more USSD input. The customer enters the customer PIN on the customer's
+  phone. The MTN confirmation SMS is used to reconcile the transaction.
+- Multiple MTN Agent Cash Outs may remain independently pending confirmation
+  while the agent continues with another transaction. Never guess which SMS
+  belongs to which transaction and never resolve an ambiguous match by
+  arrival order alone.
 `.trim();
 
 const FULL_SYSTEM_PROMPT = `
@@ -92,7 +119,7 @@ remains uncertain.
 
 Be concise, practical and clear. Use Ghana Cedis as GHS or GH₵.
 If evidence is insufficient, say so.
-Escalate unresolved issues to support@intellicoresystem.com.
+Escalate unresolved issues to support@agentproghana.com.
 
 ${APP_HELP_GUIDANCE}
 
@@ -838,14 +865,14 @@ function localBasicFallback(
       'Live account diagnostics are not available for this request right now. ' +
       'You can still check Transaction History, Subscription, Business Hub, ' +
       'or How to Use the App. If the issue remains unresolved, contact ' +
-      'support@intellicoresystem.com.'
+      'support@agentproghana.com.'
     );
   }
 
   return (
     'Basic support is temporarily unavailable. ' +
     'Please open Support → How to Use the App for step-by-step guidance, ' +
-    'or contact support@intellicoresystem.com.'
+    'or contact support@agentproghana.com.'
   );
 }
 

@@ -14,7 +14,7 @@ class AppConstants {
   static const String appName = 'AgentPro';
   static const String appTagline = 'One App. Every Business.';
   static const String appVersion = '2.0.0';
-  static const String supportEmail = 'support@intellicoresystem.com';
+  static const String supportEmail = 'support@agentproghana.com';
   static const String supportPhone = '0207438990';
   static const String supportWhatsAppNumber = '233207438990';
   static const String supportHours = 'Mon - Fri, 8:00 AM - 5:00 PM';
