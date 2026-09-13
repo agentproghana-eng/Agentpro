@@ -9,6 +9,9 @@ const mockReconcile =
 const mockProcessNotifications =
   jest.fn();
 
+const mockProcessEmails =
+  jest.fn();
+
 const mockLoggerInfo =
   jest.fn();
 
@@ -43,6 +46,17 @@ jest.mock(
     processOperationalIncidentNotifications:
       (...args) =>
         mockProcessNotifications(
+          ...args
+        ),
+  })
+);
+
+jest.mock(
+  '../../src/services/operationalIncidentEmailDelivery',
+  () => ({
+    processOperationalIncidentEmails:
+      (...args) =>
+        mockProcessEmails(
           ...args
         ),
   })
@@ -99,6 +113,16 @@ describe(
           enqueued: 0,
           state_advanced: 0,
           no_recipients: false,
+        });
+
+      mockProcessEmails
+        .mockResolvedValue({
+          considered: 0,
+          attempted: 0,
+          sent: 0,
+          failed: 0,
+          skipped_no_recipient:
+            false,
         });
 
       jest.useRealTimers();
@@ -329,6 +353,149 @@ describe(
         ).toHaveBeenCalledWith({
           now:
             '2026-09-10T13:30:00.000Z',
+        });
+
+        expect(
+          mockProcessEmails
+        ).toHaveBeenCalledWith({
+          now:
+            '2026-09-10T13:30:00.000Z',
+        });
+      }
+    );
+
+    test(
+      'push delivery failure does not suppress independent email delivery',
+      async () => {
+        const snapshotFn =
+          jest.fn()
+            .mockResolvedValue({
+              timestamp:
+                '2026-09-10T13:30:00.000Z',
+              operational_alerts: {
+                status:
+                  'critical',
+                alerts: [],
+              },
+            });
+
+        const reconcileFn =
+          jest.fn()
+            .mockResolvedValue({
+              active: [],
+              resolved: [],
+            });
+
+        const notificationFn =
+          jest.fn()
+            .mockRejectedValue(
+              Object.assign(
+                new Error(
+                  'outbox unavailable'
+                ),
+                {
+                  code:
+                    'OUTBOX_DOWN',
+                }
+              )
+            );
+
+        const emailFn =
+          jest.fn()
+            .mockResolvedValue({
+              sent: 1,
+            });
+
+        const result =
+          await runIncidentReconciliation({
+            snapshotFn,
+            reconcileFn,
+            notificationFn,
+            emailFn,
+          });
+
+        expect(emailFn)
+          .toHaveBeenCalledTimes(1);
+
+        expect(result.notifications)
+          .toEqual({
+            failed: true,
+            error_code:
+              'OUTBOX_DOWN',
+          });
+
+        expect(
+          result.operational_emails
+        ).toEqual({
+          sent: 1,
+        });
+      }
+    );
+
+    test(
+      'email failure does not suppress push delivery',
+      async () => {
+        const snapshotFn =
+          jest.fn()
+            .mockResolvedValue({
+              timestamp:
+                '2026-09-10T13:30:00.000Z',
+              operational_alerts: {
+                status:
+                  'critical',
+                alerts: [],
+              },
+            });
+
+        const reconcileFn =
+          jest.fn()
+            .mockResolvedValue({
+              active: [],
+              resolved: [],
+            });
+
+        const notificationFn =
+          jest.fn()
+            .mockResolvedValue({
+              enqueued: 1,
+            });
+
+        const emailFn =
+          jest.fn()
+            .mockRejectedValue(
+              Object.assign(
+                new Error(
+                  'email unavailable'
+                ),
+                {
+                  code:
+                    'EMAIL_DOWN',
+                }
+              )
+            );
+
+        const result =
+          await runIncidentReconciliation({
+            snapshotFn,
+            reconcileFn,
+            notificationFn,
+            emailFn,
+          });
+
+        expect(notificationFn)
+          .toHaveBeenCalledTimes(1);
+
+        expect(result.notifications)
+          .toEqual({
+            enqueued: 1,
+          });
+
+        expect(
+          result.operational_emails
+        ).toEqual({
+          failed: true,
+          error_code:
+            'EMAIL_DOWN',
         });
       }
     );
