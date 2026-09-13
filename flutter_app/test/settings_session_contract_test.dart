@@ -477,7 +477,7 @@ void main() {
 
         final firebaseBootstrap = _slice(
           mainSource,
-          'Future<void> _initializeFirebaseNotifications() async',
+          'Future<void> _initializeFirebaseServices() async',
           'void _runNonBlocking',
         );
 
