@@ -23,6 +23,10 @@ const {
   stopPerformanceTelemetry,
   performanceSnapshot,
 } = require('./src/services/performanceTelemetryService');
+
+const {
+  sendOperationalIncidentEmail,
+} = require('./src/services/emailService');
 const { apiLimiter } = require('./src/middleware/rateLimit');
 const apiRequestTelemetry = require(
   './src/middleware/apiRequestTelemetry'
@@ -232,6 +236,70 @@ app.get(
       res.json({
         success: true,
         ...snapshot,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+
+app.post(
+  '/internal/performance/operational-email-test',
+  requirePerformanceTelemetry,
+  async (req, res, next) => {
+    try {
+      const recipient =
+        String(
+          process.env.OPERATIONAL_ALERT_EMAIL_TO ||
+            ''
+        ).trim();
+
+      if (!recipient) {
+        return res.status(503).json({
+          success: false,
+          code:
+            'OPERATIONAL_ALERT_EMAIL_NOT_CONFIGURED',
+        });
+      }
+
+      const requestId =
+        String(
+          req.requestId ||
+            'unknown'
+        );
+
+      const result =
+        await sendOperationalIncidentEmail({
+          to: recipient,
+          incidentId:
+            `smoke-${requestId}`,
+          incidentKey:
+            'observability:email-smoke-test',
+          alertCode:
+            'operational_email_smoke_test',
+          component:
+            'observability',
+          kind:
+            'opened',
+          idempotencyKey:
+            `operational-email-smoke/${requestId}`,
+        });
+
+      if (
+        result?.skipped === true
+      ) {
+        return res.status(503).json({
+          success: false,
+          code:
+            'OPERATIONAL_ALERT_EMAIL_PROVIDER_NOT_CONFIGURED',
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        delivered:
+          true,
       });
     } catch (error) {
       next(error);
