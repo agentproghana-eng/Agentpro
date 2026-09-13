@@ -455,7 +455,9 @@ jobs:
 
       - name: Build release APK
         working-directory: flutter_app
-        run: flutter build apk --release
+        run: |
+          flutter build apk --release \
+            --dart-define=CRASHLYTICS_SMOKE_TEST=true
 
       - name: Verify release Firebase resources
         working-directory: flutter_app

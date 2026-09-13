@@ -81,6 +81,23 @@ Future<void> _initializeFirebaseServices() async {
     !kDebugMode,
   );
 
+  const crashlyticsSmokeTest = bool.fromEnvironment(
+    'CRASHLYTICS_SMOKE_TEST',
+    defaultValue: false,
+  );
+
+  if (crashlyticsSmokeTest && !kDebugMode) {
+    await crashlytics.log(
+      'AgentPro controlled Crashlytics runtime smoke test',
+    );
+
+    await Future<void>.delayed(
+      const Duration(seconds: 8),
+    );
+
+    crashlytics.crash();
+  }
+
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
 
