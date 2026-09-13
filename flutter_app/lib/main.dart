@@ -1,11 +1,14 @@
-import 'shared/widgets/app_update_required_screen.dart';
-import 'core/api/api_client.dart';
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'core/api/api_client.dart';
+import 'shared/widgets/app_update_required_screen.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
 import 'package:go_router/go_router.dart';
@@ -43,8 +46,8 @@ Future<void> main() async {
   runApp(AgentProApp(isJailbroken: isJailbroken));
 
   _runNonBlocking(
-    'Firebase notifications',
-    _initializeFirebaseNotifications(),
+    'Firebase services',
+    _initializeFirebaseServices(),
   );
 
   _runNonBlocking(
@@ -67,8 +70,37 @@ Future<void> main() async {
   );
 }
 
-Future<void> _initializeFirebaseNotifications() async {
+Future<void> _initializeFirebaseServices() async {
   await Firebase.initializeApp();
+
+  final crashlytics = FirebaseCrashlytics.instance;
+
+  // Production crash collection only. Debug builds remain quiet so
+  // local development errors do not pollute production observability.
+  await crashlytics.setCrashlyticsCollectionEnabled(
+    !kDebugMode,
+  );
+
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+
+    unawaited(
+      crashlytics.recordFlutterFatalError(details),
+    );
+  };
+
+  PlatformDispatcher.instance.onError = (error, stack) {
+    unawaited(
+      crashlytics.recordError(
+        error,
+        stack,
+        fatal: true,
+      ),
+    );
+
+    return true;
+  };
+
   await NotificationService.init();
 }
 
