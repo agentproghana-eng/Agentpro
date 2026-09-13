@@ -343,6 +343,7 @@ async function sendEmail({
   subject,
   html,
   text,
+  idempotencyKey = null,
 }) {
   if (!resend) {
     logger.warn(
@@ -355,16 +356,30 @@ async function sendEmail({
   }
 
   try {
-    const {
-      data,
-      error,
-    } = await resend.emails.send({
+    const request = {
       from: FROM,
       to,
       subject,
       html,
       text,
-    });
+    };
+
+    const response =
+      idempotencyKey
+        ? await resend.emails.send(
+            request,
+            {
+              idempotencyKey,
+            }
+          )
+        : await resend.emails.send(
+            request
+          );
+
+    const {
+      data,
+      error,
+    } = response;
 
     if (error) {
       throw new Error(
@@ -1061,6 +1076,136 @@ async function sendNewEmployeeEmail(
 }
 
 
+async function sendOperationalIncidentEmail({
+  to,
+  incidentId,
+  incidentKey,
+  alertCode,
+  component,
+  kind,
+  idempotencyKey,
+}) {
+  const recovered =
+    kind === 'recovered';
+
+  const reminder =
+    kind === 'reminder';
+
+  const safeComponent =
+    escapeHtml(component);
+
+  const html = renderEmail({
+    preheader:
+      recovered
+        ? `AgentPro ${component} incident recovered.`
+        : `Critical AgentPro ${component} incident requires attention.`,
+    eyebrow:
+      recovered
+        ? 'OPERATIONAL RECOVERY'
+        : 'CRITICAL OPERATIONAL ALERT',
+    title:
+      recovered
+        ? 'AgentPro incident recovered'
+        : reminder
+          ? 'Critical incident remains active'
+          : 'Critical AgentPro incident detected',
+    bodyHtml: `
+      <p
+        style="
+          margin: 0 0 18px;
+          color: ${BRAND.text};
+          font-size: 15px;
+          line-height: 24px;
+        "
+      >
+        ${
+          recovered
+            ? 'The following operational incident has recovered.'
+            : reminder
+              ? 'The following critical operational incident remains unresolved.'
+              : 'A critical operational incident requires attention.'
+        }
+      </p>
+
+      <div
+        style="
+          padding: 18px 20px;
+          background:
+            ${recovered ? '#EDF7F5' : '#FFF8E6'};
+          border-left:
+            4px solid
+            ${recovered ? BRAND.teal : BRAND.gold};
+          border-radius: 10px;
+          font-size: 13px;
+          line-height: 21px;
+        "
+      >
+        <div>
+          <strong>Component:</strong>
+          ${safeComponent}
+        </div>
+
+        <div>
+          <strong>Alert:</strong>
+          ${escapeHtml(alertCode)}
+        </div>
+
+        <div>
+          <strong>Incident key:</strong>
+          ${escapeHtml(incidentKey)}
+        </div>
+
+        <div>
+          <strong>Incident ID:</strong>
+          ${escapeHtml(incidentId)}
+        </div>
+      </div>
+
+      <p
+        style="
+          margin: 20px 0 0;
+          color: ${BRAND.muted};
+          font-size: 12px;
+          line-height: 19px;
+        "
+      >
+        Operational metadata only.
+        No customer or transaction data is included.
+      </p>
+    `,
+  });
+
+  const text = [
+    recovered
+      ? 'AgentPro operational incident recovered'
+      : reminder
+        ? 'AgentPro critical incident remains active'
+        : 'AgentPro critical operational incident',
+    '',
+    `Component: ${component}`,
+    `Alert: ${alertCode}`,
+    `Incident key: ${incidentKey}`,
+    `Incident ID: ${incidentId}`,
+    '',
+    'Operational metadata only.',
+    textFooter(),
+  ].join('\n');
+
+  return sendEmail({
+    to,
+    subject:
+      recovered
+        ? `AgentPro — ${component} Recovered`
+        : reminder
+          ? `AgentPro — Critical ${component} Incident Reminder`
+          : `AgentPro — Critical ${component} Incident`,
+    html,
+    text,
+    idempotencyKey,
+  });
+}
+
+
 async function sendAdPaymentConfirmedEmail(
   email,
   firstName,
@@ -1161,4 +1306,5 @@ module.exports = {
   sendSubscriptionReminderEmail,
   sendNewEmployeeEmail,
   sendAdPaymentConfirmedEmail,
+  sendOperationalIncidentEmail,
 };

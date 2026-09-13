@@ -23,6 +23,12 @@ const {
 );
 
 const {
+  processOperationalIncidentEmails,
+} = require(
+  './operationalIncidentEmailDelivery'
+);
+
+const {
   logger,
 } = require('../utils/logger');
 
@@ -102,6 +108,8 @@ async function runIncidentReconciliation({
     reconcileOperationalIncidents,
   notificationFn =
     processOperationalIncidentNotifications,
+  emailFn =
+    processOperationalIncidentEmails,
 } = {}) {
   const snapshot =
     await snapshotFn();
@@ -115,15 +123,77 @@ async function runIncidentReconciliation({
       }
     );
 
-  const notifications =
-    await notificationFn({
+  const [
+    notificationResult,
+    emailResult,
+  ] = await Promise.allSettled([
+    notificationFn({
       now:
         snapshot.timestamp,
-    });
+    }),
+    emailFn({
+      now:
+        snapshot.timestamp,
+    }),
+  ]);
+
+  const notifications =
+    notificationResult.status ===
+      'fulfilled'
+      ? notificationResult.value
+      : {
+          failed: true,
+          error_code:
+            notificationResult
+              .reason?.code ||
+            null,
+        };
+
+  const operationalEmails =
+    emailResult.status ===
+      'fulfilled'
+      ? emailResult.value
+      : {
+          failed: true,
+          error_code:
+            emailResult
+              .reason?.code ||
+            null,
+        };
+
+  if (
+    notificationResult.status ===
+      'rejected'
+  ) {
+    logger.error(
+      'Operational incident push delivery failed',
+      {
+        errorCode:
+          notificationResult
+            .reason?.code,
+      }
+    );
+  }
+
+  if (
+    emailResult.status ===
+      'rejected'
+  ) {
+    logger.error(
+      'Operational incident email delivery failed',
+      {
+        errorCode:
+          emailResult
+            .reason?.code,
+      }
+    );
+  }
 
   return {
     reconciliation,
     notifications,
+    operational_emails:
+      operationalEmails,
   };
 }
 
