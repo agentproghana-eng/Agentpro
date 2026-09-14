@@ -1,6 +1,7 @@
 const mockQuery = jest.fn();
 const mockWithTransaction = jest.fn();
 const mockAuditLog = jest.fn();
+const mockRecordOperationalEvent = jest.fn();
 const mockVerifyBusinessSimRoleAssignment =
   jest.fn();
 const mockResolveAgentFinancialBranch =
@@ -23,6 +24,17 @@ jest.mock(
   () => ({
     auditLog: (...args) =>
       mockAuditLog(...args),
+  })
+);
+
+jest.mock(
+  '../../src/services/operationalEventService',
+  () => ({
+    recordOperationalEvent:
+      (...args) =>
+        mockRecordOperationalEvent(
+          ...args
+        ),
   })
 );
 
@@ -355,6 +367,12 @@ function arrangeNewTransactionPreflight({
             undefined
           );
 
+        mockRecordOperationalEvent
+          .mockResolvedValue({
+            id:
+              'operational-event-1',
+          });
+
         return callback(client);
       }
     );
@@ -531,6 +549,28 @@ describe(
           .toHaveBeenCalledWith(
             201
           );
+
+        expect(
+          mockRecordOperationalEvent
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            dbClient:
+              expect.objectContaining({
+                query:
+                  expect.any(Function),
+              }),
+            eventName:
+              'transaction.initiated',
+            subjectType:
+              'transaction',
+            subjectId:
+              'tx-new',
+            correlationId:
+              'request-1',
+            dedupeKey:
+              'transaction:tx-new:initiated:v1',
+          })
+        );
       }
     );
 

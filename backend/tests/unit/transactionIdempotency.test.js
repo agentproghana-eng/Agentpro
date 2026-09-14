@@ -9,6 +9,7 @@ const mockWithTransaction = jest.fn();
 const mockAuditLog = jest.fn();
 const mockSendTransactionNotification = jest.fn();
 const mockEnqueueOutboxEvent = jest.fn();
+const mockRecordOperationalEvent = jest.fn();
 const mockGenerateTransactionReceipt = jest.fn();
 
 const mockCalculateAndPostCommission = jest.fn();
@@ -40,6 +41,11 @@ jest.mock('../../src/services/notificationService', () => ({
 jest.mock('../../src/services/outboxService', () => ({
   enqueueOutboxEvent: (...args) =>
     mockEnqueueOutboxEvent(...args),
+}));
+
+jest.mock('../../src/services/operationalEventService', () => ({
+  recordOperationalEvent: (...args) =>
+    mockRecordOperationalEvent(...args),
 }));
 
 jest.mock('../../src/services/reportService', () => ({
@@ -212,6 +218,9 @@ beforeEach(() => {
   });
 
   mockAuditLog.mockResolvedValue(undefined);
+  mockRecordOperationalEvent.mockResolvedValue({
+    id: 'operational-event-1',
+  });
   mockSendTransactionNotification.mockResolvedValue(undefined);
 
   mockEnqueueOutboxEvent.mockImplementation(
@@ -2487,6 +2496,37 @@ it('does not post Commission Transfer balances while outcome is pending confirma
         mockEnqueueOutboxEvent
       ).toHaveBeenCalledTimes(1);
 
+      expect(
+        mockRecordOperationalEvent
+      ).toHaveBeenCalledTimes(1);
+
+      expect(
+        mockRecordOperationalEvent
+      ).toHaveBeenCalledWith({
+        dbClient:
+          expect.objectContaining({
+            query: mockClientQuery,
+          }),
+        eventName:
+          'transaction.failed',
+        actorUserId: 'agent-1',
+        companyId: 'company-1',
+        subjectType: 'transaction',
+        subjectId: 'tx-1',
+        correlationId: 'request-1',
+        dedupeKey:
+          'transaction:tx-1:outcome:failed:v1',
+        attributes: {
+          provider: 'mtn',
+          transaction_type: 'cash_in',
+          status: 'failed',
+          amount: '100.00',
+          currency: 'GHS',
+          failure_reason:
+            expect.anything(),
+        },
+      });
+
       const event =
         mockEnqueueOutboxEvent
           .mock.calls[0][0];
@@ -2541,6 +2581,14 @@ it('does not post Commission Transfer balances while outcome is pending confirma
         mockAuditLog
           .mock.invocationCallOrder[0]
       ).toBeLessThan(
+        mockRecordOperationalEvent
+          .mock.invocationCallOrder[0]
+      );
+
+      expect(
+        mockRecordOperationalEvent
+          .mock.invocationCallOrder[0]
+      ).toBeLessThan(
         mockEnqueueOutboxEvent
           .mock.invocationCallOrder[0]
       );
@@ -2591,6 +2639,7 @@ it('does not post Commission Transfer balances while outcome is pending confirma
     // Replaying a committed completion must not perform another
     // financial UPDATE/posting cycle.
     expect(mockQuery).not.toHaveBeenCalled();
+    expect(mockRecordOperationalEvent).not.toHaveBeenCalled();
   });
 
   it('rejects a conflicting completion replay', async () => {
