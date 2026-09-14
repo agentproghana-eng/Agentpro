@@ -23,6 +23,9 @@ const { sendSubscriptionReminderEmail } = require('../services/emailService');
 const {
   startOperationalIncidentMonitor,
 } = require('../services/operationalIncidentMonitor');
+const {
+  startFraudAnomalyMonitor,
+} = require('../services/fraudAnomalyMonitor');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -79,6 +82,9 @@ function startScheduler() {
 
   const stopIncidentMonitor =
     startOperationalIncidentMonitor();
+
+  const stopFraudAnomalyMonitor =
+    startFraudAnomalyMonitor();
 
   const runTracked = (name, job) => {
     if (stopped) {
@@ -194,6 +200,7 @@ function startScheduler() {
     );
 
     await stopIncidentMonitor();
+    await stopFraudAnomalyMonitor();
 
     logger.info('Scheduler stopped');
   };
