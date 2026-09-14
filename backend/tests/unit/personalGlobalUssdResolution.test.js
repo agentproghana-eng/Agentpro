@@ -251,3 +251,6 @@ describe('Personal Global USSD runtime access', () => {
   });
 
 });
+jest.mock('../../src/services/operationalEventService', () => ({
+  recordOperationalEvent: jest.fn().mockResolvedValue({ id: 'event-1' }),
+}));
