@@ -55,13 +55,32 @@ describe("login account enumeration resistance", () => {
   test("does not extend lockout for wrong credentials on locked accounts", () => {
     const source = getLoginSource();
 
-    expect(source).toContain("if (user && !isLocked)");
+    expect(source).toContain("if (user)");
+    expect(source).toContain("if (!isLocked)");
 
-    const conditionalIncrement = source.indexOf("if (user && !isLocked)");
+    const knownUserGate =
+      source.indexOf("if (user)");
 
-    const update = source.indexOf("SET login_attempts = login_attempts + 1");
+    const conditionalIncrement =
+      source.indexOf(
+        "if (!isLocked)",
+        knownUserGate,
+      );
 
-    expect(update).toBeGreaterThan(conditionalIncrement);
+    const update =
+      source.indexOf(
+        "SET login_attempts = login_attempts + 1",
+        conditionalIncrement,
+      );
+
+    expect(knownUserGate)
+      .toBeGreaterThanOrEqual(0);
+
+    expect(conditionalIncrement)
+      .toBeGreaterThan(knownUserGate);
+
+    expect(update)
+      .toBeGreaterThan(conditionalIncrement);
   });
 
   test("keeps failed-attempt updates atomic in PostgreSQL", () => {

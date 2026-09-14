@@ -1,10 +1,19 @@
 const mockQuery =
   jest.fn();
 
+const mockTxQuery =
+  jest.fn();
+
+const mockWithTransaction =
+  jest.fn();
+
 const mockCompare =
   jest.fn();
 
 const mockHash =
+  jest.fn();
+
+const mockRecordOperationalEvent =
   jest.fn();
 
 jest.mock(
@@ -13,8 +22,23 @@ jest.mock(
     query:
       (...args) =>
         mockQuery(...args),
+
     withTransaction:
-      jest.fn(),
+      (...args) =>
+        mockWithTransaction(
+          ...args
+        ),
+  })
+);
+
+jest.mock(
+  '../../src/services/operationalEventService',
+  () => ({
+    recordOperationalEvent:
+      (...args) =>
+        mockRecordOperationalEvent(
+          ...args
+        ),
   })
 );
 
@@ -88,6 +112,21 @@ describe(
   () => {
     beforeEach(() => {
       jest.clearAllMocks();
+
+      mockWithTransaction
+        .mockImplementation(
+          async (callback) =>
+            callback({
+              query:
+                (...args) =>
+                  mockTxQuery(
+                    ...args
+                  ),
+            })
+        );
+
+      mockRecordOperationalEvent
+        .mockResolvedValue(undefined);
     });
 
     test(
@@ -107,7 +146,9 @@ describe(
                 status: 'active',
               },
             ],
-          })
+          });
+
+        mockTxQuery
           .mockResolvedValueOnce({
             rows: [
               {
@@ -149,13 +190,21 @@ describe(
 
         expect(
           mockQuery
-        ).toHaveBeenCalledTimes(2);
+        ).toHaveBeenCalledTimes(1);
+
+        expect(
+          mockWithTransaction
+        ).toHaveBeenCalledTimes(1);
+
+        expect(
+          mockTxQuery
+        ).toHaveBeenCalledTimes(1);
 
         const [
           sql,
           params,
         ] =
-          mockQuery.mock.calls[1];
+          mockTxQuery.mock.calls[0];
 
         expect(sql)
           .toContain(
@@ -183,6 +232,21 @@ describe(
             30,
             'user-1',
           ]);
+
+        expect(
+          mockRecordOperationalEvent
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            eventName:
+              'auth.login.failed',
+            actorUserId:
+              'user-1',
+            subjectType:
+              'user',
+            subjectId:
+              'user-1',
+          })
+        );
 
         expect(status)
           .toHaveBeenCalledWith(

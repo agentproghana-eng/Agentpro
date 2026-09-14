@@ -9,6 +9,12 @@ const {
 } = require('./fraudAnomalyService');
 
 const {
+  AUTH_EVENT_NAMES,
+  AUTH_RULES,
+  evaluateAuthAnomalies,
+} = require('./authFraudAnomalyService');
+
+const {
   persistFraudSignals,
 } = require('./fraudSignalService');
 
@@ -28,12 +34,18 @@ const MAX_CANDIDATE_ACTORS = 100;
 
 const MAX_EVENTS_PER_ACTOR = 200;
 
-const RELEVANT_EVENT_NAMES =
+const TRANSACTION_EVENT_NAMES =
   Object.freeze([
     'transaction.initiated',
     'transaction.completed',
     'transaction.failed',
     'transaction.pending_confirmation',
+  ]);
+
+const RELEVANT_EVENT_NAMES =
+  Object.freeze([
+    ...TRANSACTION_EVENT_NAMES,
+    ...AUTH_EVENT_NAMES,
   ]);
 
 function fraudMonitorEnabled(
@@ -127,11 +139,24 @@ async function selectCandidateActors({
          AND occurred_at <=
              $1::timestamptz
          AND actor_user_id IS NOT NULL
-         AND subject_type IN (
-           'transaction',
-           'personal_transaction'
+         AND (
+           (
+             subject_type IN (
+               'transaction',
+               'personal_transaction'
+             )
+             AND event_name =
+               ANY($2::text[])
+           )
+           OR
+           (
+             subject_type = 'user'
+             AND subject_id =
+               actor_user_id::text
+             AND event_name =
+               ANY($4::text[])
+           )
          )
-         AND event_name = ANY($2::text[])
        GROUP BY actor_user_id
        HAVING
          COUNT(*) FILTER (
@@ -177,13 +202,29 @@ async function selectCandidateActors({
              0
            ) >= 0.5
          )
+         OR
+         COUNT(*) FILTER (
+           WHERE event_name =
+             'auth.login.failed'
+         ) >= 5
+         OR
+         COUNT(*) FILTER (
+           WHERE event_name =
+             'auth.mfa.failed'
+         ) >= 3
+         OR
+         COUNT(*) FILTER (
+           WHERE event_name =
+             'auth.password_reset.issued'
+         ) >= 3
        ORDER BY latest_activity DESC,
                 actor_user_id
        LIMIT $3`,
       [
         evaluatedAt,
-        RELEVANT_EVENT_NAMES,
+        TRANSACTION_EVENT_NAMES,
         boundedLimit + 1,
+        AUTH_EVENT_NAMES,
       ]
     );
 
@@ -258,12 +299,24 @@ async function loadCandidateEvents({
                INTERVAL '10 minutes'
            AND occurred_at <=
                $2::timestamptz
-           AND subject_type IN (
-             'transaction',
-             'personal_transaction'
+           AND (
+             (
+               subject_type IN (
+                 'transaction',
+                 'personal_transaction'
+               )
+               AND event_name =
+                 ANY($3::text[])
+             )
+             OR
+             (
+               subject_type = 'user'
+               AND subject_id =
+                 actor_user_id::text
+               AND event_name =
+                 ANY($5::text[])
+             )
            )
-           AND event_name =
-               ANY($3::text[])
        )
        SELECT
          id,
@@ -282,8 +335,9 @@ async function loadCandidateEvents({
       [
         actorUserIds,
         evaluatedAt,
-        RELEVANT_EVENT_NAMES,
+        TRANSACTION_EVENT_NAMES,
         boundedEvents,
+        AUTH_EVENT_NAMES,
       ]
     );
 
@@ -295,6 +349,8 @@ async function runFraudAnomalyEvaluation({
   now = new Date(),
   evaluateFn =
     evaluateTransactionAnomalies,
+  evaluateAuthFn =
+    evaluateAuthAnomalies,
   persistFn =
     persistFraudSignals,
 } = {}) {
@@ -354,16 +410,25 @@ async function runFraudAnomalyEvaluation({
           evaluatedAt.toISOString(),
       });
 
-    const evaluation =
+    const transactionEvaluation =
       evaluateFn({
         events,
         now: evaluatedAt,
       });
 
+    const authEvaluation =
+      evaluateAuthFn({
+        events,
+        now: evaluatedAt,
+      });
+
     if (
-      evaluation
+      transactionEvaluation
         .enforcement_action !==
-      'none'
+        'none' ||
+      authEvaluation
+        .enforcement_action !==
+        'none'
     ) {
       const error =
         new Error(
@@ -375,6 +440,59 @@ async function runFraudAnomalyEvaluation({
 
       throw error;
     }
+
+    const evaluation = {
+      evaluated_at:
+        evaluatedAt.toISOString(),
+
+      evaluated_event_count:
+        events.length,
+
+      signal_count:
+        transactionEvaluation
+          .signal_count +
+        authEvaluation
+          .signal_count,
+
+      highest_risk_score:
+        Math.max(
+          transactionEvaluation
+            .highest_risk_score || 0,
+          authEvaluation
+            .highest_risk_score || 0,
+        ),
+
+      highest_severity:
+        (
+          [
+            ...transactionEvaluation
+              .signals,
+            ...authEvaluation
+              .signals,
+          ]
+            .sort(
+              (left, right) =>
+                right.risk_score -
+                left.risk_score,
+            )[0]
+            ?.severity
+        ) || null,
+
+      enforcement_action:
+        'none',
+
+      signals: [
+        ...transactionEvaluation.signals,
+        ...authEvaluation.signals,
+      ].sort(
+        (left, right) =>
+          right.risk_score -
+            left.risk_score ||
+          left.rule_id.localeCompare(
+            right.rule_id,
+          ),
+      ),
+    };
 
     const persistence =
       await persistFn({
@@ -402,6 +520,14 @@ async function runFraudAnomalyEvaluation({
 
       signal_count:
         evaluation.signal_count,
+
+      transaction_signal_count:
+        transactionEvaluation
+          .signal_count,
+
+      auth_signal_count:
+        authEvaluation
+          .signal_count,
 
       created_signal_count:
         persistence.created_count,
@@ -619,6 +745,9 @@ module.exports = {
   LOOKBACK_MINUTES,
   MAX_CANDIDATE_ACTORS,
   MAX_EVENTS_PER_ACTOR,
+  TRANSACTION_EVENT_NAMES,
+  AUTH_EVENT_NAMES,
+  AUTH_RULES,
   RELEVANT_EVENT_NAMES,
   fraudMonitorEnabled,
   tryAcquireFraudLeadership,
