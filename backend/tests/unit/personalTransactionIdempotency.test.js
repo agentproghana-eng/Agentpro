@@ -407,3 +407,6 @@ describe('Personal transaction initiation idempotency', () => {
     );
   });
 });
+jest.mock('../../src/services/operationalEventService', () => ({
+  recordOperationalEvent: jest.fn().mockResolvedValue({ id: 'event-1' }),
+}));

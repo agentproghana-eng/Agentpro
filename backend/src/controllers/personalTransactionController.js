@@ -11,6 +11,7 @@ const {
   decideOfflineAuthorization,
 } = require('../utils/offlineAuthorizationDecision');
 const { auditLog } = require('../services/auditService');
+const { recordOperationalEvent } = require('../services/operationalEventService');
 const {
   recordTransactionTelemetryEvent,
 } = require('../services/transactionTelemetryService');
@@ -438,6 +439,22 @@ exports.initiateTransaction = async (req, res) => {
           strict: true,
         });
 
+        await recordOperationalEvent({
+          dbClient: client,
+          eventName: 'transaction.initiated',
+          actorUserId: userId,
+          subjectType: 'personal_transaction',
+          subjectId: transaction.id,
+          correlationId: req.requestId,
+          dedupeKey: `personal_transaction:${transaction.id}:initiated:v1`,
+          attributes: {
+            mode: 'personal', provider, transaction_type,
+            status: 'initiated',
+            amount: amount ? String(amount) : null,
+            currency: 'GHS',
+          },
+        });
+
         return insertResult;
       });
     } catch (insertError) {
@@ -567,7 +584,7 @@ exports.completeTransaction = async (req, res) => {
         // A concurrent second request must observe the first committed
         // final state rather than racing a second UPDATE/audit.
         const existing = await client.query(
-          `SELECT id, status, provider
+          `SELECT id, status, provider, transaction_type, amount
            FROM personal_transactions
            WHERE id = $1
              AND user_id = $2
@@ -650,6 +667,26 @@ exports.completeTransaction = async (req, res) => {
           requestId: req.requestId,
           dbClient: client,
           strict: true,
+        });
+
+        await recordOperationalEvent({
+          dbClient: client,
+          eventName: {
+            success: 'transaction.completed',
+            failed: 'transaction.failed',
+            pending_confirmation: 'transaction.pending_confirmation',
+          }[status],
+          actorUserId: userId,
+          subjectType: 'personal_transaction',
+          subjectId: transaction_id,
+          correlationId: req.requestId,
+          dedupeKey: `personal_transaction:${transaction_id}:outcome:${status}:v1`,
+          attributes: {
+            mode: 'personal', provider: tx.provider,
+            transaction_type: tx.transaction_type,
+            status, amount: tx.amount == null ? null : String(tx.amount),
+            currency: 'GHS', failure_reason: sanitizedFailureReason,
+          },
         });
 
         return {

@@ -502,3 +502,76 @@ describe('personalTransactionController completion SQL typing', () => {
     },
   );
 });
+jest.mock('../../src/services/operationalEventService', () => ({
+  recordOperationalEvent: jest.fn().mockResolvedValue({ id: 'event-1' }),
+}));
+
+describe('Personal lifecycle recording', () => {
+  const { recordOperationalEvent } = require('../../src/services/operationalEventService');
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockQuery.mockReset();
+    recordOperationalEvent.mockReset().mockResolvedValue({ id: 'event-1' });
+  });
+
+  test.each([
+    ['success', 'transaction.completed'],
+    ['failed', 'transaction.failed'],
+    ['pending_confirmation', 'transaction.pending_confirmation'],
+  ])('records %s with only selected attributes', async (status, eventName) => {
+    mockQuery.mockResolvedValueOnce({ rows: [{
+      id: 'tx-1', status: 'initiated', provider: 'mtn',
+      transaction_type: 'balance_check', amount: null,
+    }] }).mockResolvedValueOnce({ rows: [{ id: 'tx-1', status }] });
+    const req = makeReq();
+    req.params = { transaction_id: 'tx-1' };
+    req.body = { status, notes: 'private', network_reference: 'private' };
+    const res = makeRes();
+    await personalTransactionController.completeTransaction(req, res);
+    expect(res.status).not.toHaveBeenCalledWith(500);
+    expect(recordOperationalEvent).toHaveBeenCalledTimes(1);
+    expect(recordOperationalEvent).toHaveBeenCalledWith({
+      dbClient: expect.objectContaining({ query: expect.any(Function) }),
+      eventName, actorUserId: req.user.id,
+      subjectType: 'personal_transaction', subjectId: 'tx-1',
+      correlationId: req.requestId,
+      dedupeKey: `personal_transaction:tx-1:outcome:${status}:v1`,
+      attributes: {
+        mode: 'personal', provider: 'mtn', transaction_type: 'balance_check',
+        status, amount: null, currency: 'GHS', failure_reason: undefined,
+      },
+    });
+    expect(mockAuditLog.mock.invocationCallOrder[0]).toBeLessThan(
+      recordOperationalEvent.mock.invocationCallOrder[0]);
+  });
+
+  test('event failure rejects the owning transaction callback', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: 'tx-1', status: 'initiated' }] })
+      .mockResolvedValueOnce({ rows: [{ id: 'tx-1' }] });
+    const failure = new Error('event write failed');
+    recordOperationalEvent.mockRejectedValueOnce(failure);
+    const rolledBack = jest.fn();
+    mockWithTransaction.mockImplementation(async callback => {
+      try { return await callback({ query: mockQuery }); }
+      catch (error) { rolledBack(error); throw error; }
+    });
+    const req = makeReq();
+    req.params = { transaction_id: 'tx-1' };
+    req.body = { status: 'failed' };
+    const res = makeRes();
+    await personalTransactionController.completeTransaction(req, res);
+    expect(rolledBack).toHaveBeenCalledWith(failure);
+    expect(res.status).toHaveBeenCalledWith(500);
+  });
+
+  test('already-final completion does not record an event', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: 'tx-1', status: 'success' }] });
+    const req = makeReq();
+    req.params = { transaction_id: 'tx-1' };
+    req.body = { status: 'success' };
+    const res = makeRes();
+    await personalTransactionController.completeTransaction(req, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(recordOperationalEvent).not.toHaveBeenCalled();
+  });
+});
