@@ -41,6 +41,8 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
   bool _hasMore = true;
   int _page = 1;
   int _total = 0;
+  String? _nextCursor;
+  bool _usingCursorPagination = true;
   String? _error;
   bool _showBranchFilter = false;
   bool _isAgent = false;
@@ -174,12 +176,20 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
     }
   }
 
-  Map<String, dynamic> _buildQueryParams({required int page}) {
+  bool get _canUseCursorPagination =>
+      _sortBy == 'date' && _sortOrder == 'desc';
+
+  Map<String, dynamic> _buildQueryParams({
+    int? page,
+    String? cursor,
+    required bool cursorMode,
+  }) {
     return {
-      'page': page,
       'limit': 20,
-      'sort_by': _sortBy,
-      'sort_order': _sortOrder,
+      if (cursorMode && cursor != null) 'cursor': cursor,
+      if (!cursorMode) 'page': page ?? 1,
+      if (!cursorMode) 'sort_by': _sortBy,
+      if (!cursorMode) 'sort_order': _sortOrder,
       if (_typeFilter != 'all') 'transaction_type': _typeFilter,
       if (_providerFilter != 'all') 'provider': _providerFilter,
       if (_simIccidFilter != null) 'sim_iccid': _simIccidFilter,
@@ -207,65 +217,118 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
   }
 
   Future<void> _load() async {
+    final cursorMode = _canUseCursorPagination;
+
     setState(() {
       _loading = true;
       _error = null;
       _page = 1;
+      _nextCursor = null;
       _hasMore = true;
+      _usingCursorPagination = cursorMode;
     });
+
     try {
       final res = await ApiClient.instance.get(
-        '/transactions',
-        queryParameters: _buildQueryParams(page: 1),
+        cursorMode ? '/transactions/cursor' : '/transactions',
+        queryParameters: _buildQueryParams(
+          page: 1,
+          cursorMode: cursorMode,
+        ),
       );
+
       final data = (res.data['data'] as List?) ?? [];
       final meta = res.data['meta'] as Map<String, dynamic>?;
-      if (mounted) {
-        setState(() {
-          final currentPage = (meta?['page'] as num?)?.toInt() ?? 1;
-          final totalPages = (meta?['total_pages'] as num?)?.toInt() ?? 1;
 
-          _transactions = data;
+      if (!mounted) return;
+
+      setState(() {
+        _transactions = data;
+        _loading = false;
+
+        if (cursorMode) {
+          _nextCursor = meta?['next_cursor']?.toString();
+          _hasMore = meta?['has_more'] == true;
+
+          // Cursor feeds deliberately avoid an expensive exact COUNT(*).
+          // Keep this as the number currently loaded; the UI below makes
+          // it clear when additional rows exist.
+          _total = data.length;
+        } else {
+          final currentPage =
+              (meta?['page'] as num?)?.toInt() ?? 1;
+          final totalPages =
+              (meta?['total_pages'] as num?)?.toInt() ?? 1;
+
           _page = currentPage;
-          _total = (meta?['total'] as num?)?.toInt() ?? data.length;
-          _loading = false;
+          _total =
+              (meta?['total'] as num?)?.toInt() ?? data.length;
           _hasMore = currentPage < totalPages;
-        });
-      }
+        }
+      });
     } catch (_) {
-      if (mounted) {
-        setState(() {
-          _error = 'Failed to load transactions';
-          _loading = false;
-        });
-      }
+      if (!mounted) return;
+
+      setState(() {
+        _error = 'Failed to load transactions';
+        _loading = false;
+      });
     }
   }
 
   Future<void> _loadMore() async {
     if (_loadingMore || !_hasMore) return;
+
+    final cursorMode = _usingCursorPagination;
+    final cursor = _nextCursor;
+
+    // A cursor page that claims more data must provide the seek token.
+    // Stop rather than replaying page one and creating duplicates.
+    if (cursorMode && (cursor == null || cursor.isEmpty)) {
+      setState(() => _hasMore = false);
+      return;
+    }
+
     setState(() => _loadingMore = true);
+
     final nextPage = _page + 1;
+
     try {
       final res = await ApiClient.instance.get(
-        '/transactions',
-        queryParameters: _buildQueryParams(page: nextPage),
+        cursorMode ? '/transactions/cursor' : '/transactions',
+        queryParameters: _buildQueryParams(
+          page: nextPage,
+          cursor: cursor,
+          cursorMode: cursorMode,
+        ),
       );
+
       final data = (res.data['data'] as List?) ?? [];
       final meta = res.data['meta'] as Map<String, dynamic>?;
-      if (mounted) {
-        setState(() {
-          final currentPage = (meta?['page'] as num?)?.toInt() ?? nextPage;
-          final totalPages =
-              (meta?['total_pages'] as num?)?.toInt() ?? currentPage;
 
-          _transactions.addAll(data);
+      if (!mounted) return;
+
+      setState(() {
+        _transactions.addAll(data);
+        _loadingMore = false;
+
+        if (cursorMode) {
+          _nextCursor = meta?['next_cursor']?.toString();
+          _hasMore = meta?['has_more'] == true;
+          _total = _transactions.length;
+        } else {
+          final currentPage =
+              (meta?['page'] as num?)?.toInt() ?? nextPage;
+          final totalPages =
+              (meta?['total_pages'] as num?)?.toInt() ??
+                  currentPage;
+
           _page = currentPage;
-          _total = (meta?['total'] as num?)?.toInt() ?? _total;
-          _loadingMore = false;
+          _total =
+              (meta?['total'] as num?)?.toInt() ?? _total;
           _hasMore = currentPage < totalPages;
-        });
-      }
+        }
+      });
     } catch (_) {
       if (!mounted) return;
 
@@ -898,7 +961,10 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
               child: Text(
                 _loading
                     ? 'Loading transactions…'
-                    : '$_total ${_total == 1 ? 'transaction' : 'transactions'}',
+                    : _usingCursorPagination
+                        ? '${_transactions.length}${_hasMore ? '+' : ''} '
+                            '${_transactions.length == 1 && !_hasMore ? 'transaction' : 'transactions'}'
+                        : '$_total ${_total == 1 ? 'transaction' : 'transactions'}',
                 style: TextStyle(
                   fontSize: 12,
                   color: context.appSecondaryText,

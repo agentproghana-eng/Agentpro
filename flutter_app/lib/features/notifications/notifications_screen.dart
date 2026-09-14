@@ -23,26 +23,53 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   List<Map<String, dynamic>> _notifications = [];
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = true;
   bool _markingAllRead = false;
+  String? _nextCursor;
+
+  final _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     _load();
   }
 
-  Future<List<Map<String, dynamic>>> _fetchNotifications() async {
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_onScroll)
+      ..dispose();
+
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      _loadMore();
+    }
+  }
+
+  Future<Map<String, dynamic>> _fetchNotificationPage({
+    String? cursor,
+  }) async {
     final response = await ApiClient.instance.get(
-      '/notifications',
+      '/notifications/cursor',
       queryParameters: {
-        'page': 1,
         'limit': 30,
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
       },
     );
 
     final raw = response.data['data'];
+    final rawMeta = response.data['meta'];
 
-    return raw is List
+    final notifications = raw is List
         ? raw
             .whereType<Map>()
             .map(
@@ -50,18 +77,27 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             )
             .toList()
         : <Map<String, dynamic>>[];
+
+    final meta = rawMeta is Map
+        ? Map<String, dynamic>.from(rawMeta)
+        : <String, dynamic>{};
+
+    return {
+      'data': notifications,
+      'meta': meta,
+    };
   }
 
   Future<void> _load({
     bool forceRefresh = false,
   }) async {
-    final cached = ApiCache.get<List<Map<String, dynamic>>>(_cacheKey);
+    final cached =
+        ApiCache.get<List<Map<String, dynamic>>>(_cacheKey);
 
-    if (cached != null && mounted) {
+    if (cached != null && mounted && !forceRefresh) {
       setState(() {
-        _notifications = List<Map<String, dynamic>>.from(
-          cached,
-        );
+        _notifications =
+            List<Map<String, dynamic>>.from(cached);
         _loading = false;
       });
     } else if (mounted) {
@@ -69,24 +105,92 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
 
     try {
+      final page = await _fetchNotificationPage();
+
       final notifications =
-          await ApiCache.getOrLoad<List<Map<String, dynamic>>>(
-        key: _cacheKey,
-        ttl: const Duration(seconds: 45),
-        forceRefresh: forceRefresh,
-        loader: _fetchNotifications,
+          List<Map<String, dynamic>>.from(
+        page['data'] as List,
+      );
+
+      final meta = Map<String, dynamic>.from(
+        page['meta'] as Map,
       );
 
       if (!mounted) return;
 
       setState(() {
-        _notifications = List<Map<String, dynamic>>.from(notifications);
+        _notifications = notifications;
+        _nextCursor = meta['next_cursor']?.toString();
+        _hasMore = meta['has_more'] == true;
         _loading = false;
       });
+
+      ApiCache.put<List<Map<String, dynamic>>>(
+        _cacheKey,
+        notifications,
+        ttl: const Duration(seconds: 45),
+      );
     } catch (_) {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      if (!mounted) return;
+
+      setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || !_hasMore) return;
+
+    final cursor = _nextCursor;
+
+    if (cursor == null || cursor.isEmpty) {
+      setState(() => _hasMore = false);
+      return;
+    }
+
+    setState(() => _loadingMore = true);
+
+    try {
+      final page = await _fetchNotificationPage(
+        cursor: cursor,
+      );
+
+      final notifications =
+          List<Map<String, dynamic>>.from(
+        page['data'] as List,
+      );
+
+      final meta = Map<String, dynamic>.from(
+        page['meta'] as Map,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _notifications.addAll(notifications);
+        _nextCursor = meta['next_cursor']?.toString();
+        _hasMore = meta['has_more'] == true;
+        _loadingMore = false;
+      });
+
+      ApiCache.put<List<Map<String, dynamic>>>(
+        _cacheKey,
+        List<Map<String, dynamic>>.from(
+          _notifications,
+        ),
+        ttl: const Duration(seconds: 45),
+      );
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() => _loadingMore = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not load more notifications.',
+          ),
+        ),
+      );
     }
   }
 
@@ -290,9 +394,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     forceRefresh: true,
                   ),
                   child: ListView.builder(
+                    controller: _scrollController,
                     physics: const AlwaysScrollableScrollPhysics(),
-                    itemCount: _notifications.length,
+                    itemCount:
+                        _notifications.length + (_loadingMore ? 1 : 0),
                     itemBuilder: (context, index) {
+                      if (index >= _notifications.length) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 18),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                            ),
+                          ),
+                        );
+                      }
+
                       final notification = _notifications[index];
                       final isRead = notification['is_read'] == true;
                       final route = _routeForNotification(notification);
