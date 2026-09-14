@@ -20,6 +20,9 @@ const {
   buildOperatorStatus,
 } = require('../services/operatorStatusService');
 const {
+  searchSupportTimeline,
+} = require('../services/supportTimelineService');
+const {
   serializeDisabledTransactionTypes,
 } = require('../utils/featureFlagConfig');
 
@@ -74,6 +77,81 @@ router.get('/operational-status', async (req, res) => {
       success: false,
       message:
         'Operational status is temporarily unavailable',
+    });
+  }
+});
+
+// ── Support Timeline Search ───────────────────────────────────
+//
+// This router is already globally protected by
+// authenticate + authorize('superuser').
+//
+// Search is exact and bounded. Never log or audit the raw search value,
+// because it may itself be a phone number or email address.
+router.get('/support/timeline', async (req, res) => {
+  try {
+    const result =
+      await searchSupportTimeline({
+        type: req.query.type,
+        value: req.query.value,
+      });
+
+    await auditLog({
+      userId: req.user.id,
+      companyId: null,
+      action:
+        'SUPPORT_TIMELINE_SEARCH',
+      entityType:
+        'support_search',
+      entityId: null,
+      newValues: {
+        search_type:
+          result.search_type,
+        event_count:
+          result.events.length,
+        identity_count:
+          result.identities.length,
+        truncated:
+          result.truncated,
+      },
+      ipAddress: req.ip,
+      requestId:
+        req.requestId,
+      strict: true,
+    });
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    if (error.statusCode) {
+      return res
+        .status(
+          error.statusCode
+        )
+        .json({
+          success: false,
+          code: error.code,
+          message:
+            error.message,
+        });
+    }
+
+    logger.error(
+      'Support timeline search error:',
+      {
+        errorCode:
+          error?.code,
+        requestId:
+          req.requestId,
+      }
+    );
+
+    res.status(500).json({
+      success: false,
+      message:
+        'Support timeline search failed',
     });
   }
 });
