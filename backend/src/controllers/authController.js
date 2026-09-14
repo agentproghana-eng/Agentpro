@@ -1,7 +1,10 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const { v4: uuidv4 } = require('uuid');
+const {
+  v4: uuidv4,
+  validate: uuidValidate,
+} = require('uuid');
 const { query, withTransaction } = require('../config/database');
 const { blacklistToken, isTokenBlacklisted } = require('../config/redis');
 const { logger } = require('../utils/logger');
@@ -36,6 +39,9 @@ const {
 const {
   grantPersonalTrial,
 } = require("../services/personalTrialEntitlementService");
+const {
+  recordOperationalEvent,
+} = require('../services/operationalEventService');
 const {
   deleteFile: deleteCloudinaryFile,
 } = require('../config/cloudinary');
@@ -93,6 +99,44 @@ function getRefreshTokenExpiry() {
 // work when a login email does not exist. It must never authenticate a user.
 const LOGIN_DUMMY_PASSWORD_HASH =
   '$2b$12$aqbxgu6Uo3qgDdhEOGX8IeAp1dCCjCttgK2cA.lt/s2MQxdrKMv2K';
+
+function requestCorrelationId(req) {
+  return uuidValidate(req?.requestId)
+    ? req.requestId
+    : uuidv4();
+}
+
+async function recordAuthSecurityEventBestEffort({
+  req,
+  eventName,
+  actorUserId,
+  companyId = null,
+  attributes = {},
+}) {
+  try {
+    await withTransaction(async (client) => {
+      await recordOperationalEvent({
+        dbClient: client,
+        eventName,
+        source: 'backend',
+        actorUserId,
+        companyId,
+        subjectType: 'user',
+        subjectId: actorUserId,
+        correlationId: requestCorrelationId(req),
+        attributes,
+      });
+    });
+  } catch (error) {
+    logger.error(
+      'Auth security operational event recording failed',
+      {
+        eventName,
+        errorCode: error?.code || 'UNEXPECTED',
+      },
+    );
+  }
+}
 
 const PERSONAL_VERIFICATION_CODES = new Set([
   "PHONE_VERIFICATION_RESEND_TOO_SOON",
@@ -788,29 +832,57 @@ exports.login = async (req, res) => {
       lockedUntil > now;
 
     if (!user || !passwordValid) {
-      // Preserve the existing atomic PostgreSQL failed-attempt counter for
-      // real, currently-unlocked accounts. Locked accounts and nonexistent
-      // accounts both return the same generic credential failure.
-      if (user && !isLocked) {
+      // Preserve the existing failed-attempt lockout behavior while also
+      // recording a privacy-safe security event for known accounts. Unknown
+      // emails remain deliberately absent from durable fraud telemetry so the
+      // event stream never becomes an account-enumeration dataset.
+      if (user) {
         const maxAttempts = 5;
         const lockMinutes = 30;
 
-        await query(
-          `UPDATE users
-           SET login_attempts = login_attempts + 1,
-               locked_until = CASE
-                 WHEN login_attempts + 1 >= $1
-                 THEN NOW() + ($2 * INTERVAL '1 minute')
-                 ELSE locked_until
-               END
-           WHERE id = $3
-           RETURNING login_attempts, locked_until`,
-          [
-            maxAttempts,
-            lockMinutes,
-            user.id,
-          ]
-        );
+        await withTransaction(async (client) => {
+          let lockedAfterAttempt = isLocked;
+
+          if (!isLocked) {
+            const failedAttempt = await client.query(
+              `UPDATE users
+               SET login_attempts = login_attempts + 1,
+                   locked_until = CASE
+                     WHEN login_attempts + 1 >= $1
+                     THEN NOW() + ($2 * INTERVAL '1 minute')
+                     ELSE locked_until
+                   END
+               WHERE id = $3
+               RETURNING login_attempts, locked_until`,
+              [
+                maxAttempts,
+                lockMinutes,
+                user.id,
+              ],
+            );
+
+            lockedAfterAttempt =
+              Boolean(
+                failedAttempt.rows[0]?.locked_until,
+              );
+          }
+
+          await recordOperationalEvent({
+            dbClient: client,
+            eventName: 'auth.login.failed',
+            source: 'backend',
+            actorUserId: user.id,
+            companyId: user.company_id || null,
+            subjectType: 'user',
+            subjectId: user.id,
+            correlationId: requestCorrelationId(req),
+            attributes: {
+              reason: 'invalid_credential',
+              locked_before_attempt: isLocked,
+              locked_after_attempt: lockedAfterAttempt,
+            },
+          });
+        });
       }
 
       return res.status(401).json({
@@ -1640,6 +1712,16 @@ exports.completeMfa = async (req, res) => {
           );
 
         if (challenge?.userId) {
+          await recordAuthSecurityEventBestEffort({
+            req,
+            eventName: 'auth.mfa.failed',
+            actorUserId: challenge.userId,
+            companyId: null,
+            attributes: {
+              locked: failure.locked,
+            },
+          });
+
           await auditLog({
             userId:
               challenge.userId,
@@ -2049,7 +2131,7 @@ exports.requestPasswordReset = async (req, res) => {
       // Lock the stable user row so all reset/setup-token replacement paths
       // serialize on the same per-user database row.
       const result = await client.query(
-        `SELECT id, first_name, email, phone
+        `SELECT id, company_id, first_name, email, phone
          FROM users
          WHERE id = $1
            AND email = $2
@@ -2073,6 +2155,20 @@ exports.requestPasswordReset = async (req, res) => {
         'INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)',
         [user.id, tokenHash, expiresAt]
       );
+
+      await recordOperationalEvent({
+        dbClient: client,
+        eventName: 'auth.password_reset.issued',
+        source: 'backend',
+        actorUserId: user.id,
+        companyId: user.company_id || null,
+        subjectType: 'user',
+        subjectId: user.id,
+        correlationId: requestCorrelationId(req),
+        attributes: {
+          outcome: 'issued',
+        },
+      });
 
       return { user };
     });
