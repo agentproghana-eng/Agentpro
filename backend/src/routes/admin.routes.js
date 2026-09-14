@@ -14,6 +14,12 @@ const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
 const { enqueueOutboxEvent } = require('../services/outboxService');
 const {
+  performanceSnapshot,
+} = require('../services/performanceTelemetryService');
+const {
+  buildOperatorStatus,
+} = require('../services/operatorStatusService');
+const {
   serializeDisabledTransactionTypes,
 } = require('../utils/featureFlagConfig');
 
@@ -39,6 +45,37 @@ router.get('/overview', async (req, res) => {
       }
     });
   } catch (e) { res.status(500).json({ success: false, message: 'Failed to fetch overview' }); }
+});
+
+// ── Operational Status ────────────────────────────────────────
+//
+// Superuser-only because this router is protected globally by
+// authenticate + authorize('superuser'). Return a deliberately
+// reduced view of internal telemetry rather than the raw snapshot.
+router.get('/operational-status', async (req, res) => {
+  try {
+    const snapshot =
+      await performanceSnapshot();
+
+    res.json({
+      success: true,
+      data:
+        buildOperatorStatus(
+          snapshot
+        ),
+    });
+  } catch (error) {
+    logger.error(
+      'Operational status error:',
+      error
+    );
+
+    res.status(503).json({
+      success: false,
+      message:
+        'Operational status is temporarily unavailable',
+    });
+  }
 });
 
 // ── Pending Registrations ─────────────────────────────────────

@@ -1281,8 +1281,366 @@ function DashboardPage() {
         })}
       </div>
 
+      <OperationalHealthWidget />
       <PendingRegistrationsWidget />
     </div>
+  );
+}
+
+
+// ── Operational Health Widget ─────────────────────────────────
+
+function OperationalHealthWidget() {
+  const {
+    data: status,
+    isLoading,
+    isError,
+    refetch,
+    isFetching,
+  } = useQuery({
+    queryKey: [
+      'admin',
+      'operational-status',
+    ],
+    queryFn: async () => {
+      const response =
+        await API.get(
+          '/admin/operational-status',
+        );
+
+      return response.data.data;
+    },
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+
+  const statusMeta = (
+    value,
+  ) => {
+    switch (value) {
+      case 'operational':
+        return {
+          label: 'Operational',
+          classes:
+            'bg-green-100 text-green-700',
+        };
+
+      case 'degraded':
+        return {
+          label: 'Degraded',
+          classes:
+            'bg-amber-100 text-amber-800',
+        };
+
+      case 'major_outage':
+        return {
+          label: 'Major outage',
+          classes:
+            'bg-red-100 text-red-700',
+        };
+
+      default:
+        return {
+          label:
+            'Insufficient data',
+          classes:
+            'bg-gray-100 text-gray-600',
+        };
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div
+        className="
+          mb-8 rounded-xl bg-white
+          p-6 shadow-sm
+        "
+      >
+        <p
+          className="
+            text-sm text-gray-500
+          "
+        >
+          Loading provider and platform
+          health...
+        </p>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div
+        className="
+          mb-8 rounded-xl
+          border border-amber-200
+          bg-amber-50 p-6
+        "
+      >
+        <div
+          className="
+            flex flex-wrap
+            items-center
+            justify-between gap-3
+          "
+        >
+          <div>
+            <h3
+              className="
+                font-bold
+                text-amber-900
+              "
+            >
+              Operational status unavailable
+            </h3>
+
+            <p
+              className="
+                mt-1 text-sm
+                text-amber-800
+              "
+            >
+              AgentPro could not load the
+              current health snapshot.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="
+              rounded-lg
+              border border-amber-300
+              bg-white px-3 py-2
+              text-sm font-medium
+              text-amber-900
+            "
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const platform =
+    Object.values(
+      status?.platform || {},
+    );
+
+  const providers =
+    status?.providers || [];
+
+  const cards = [
+    ...providers.map(
+      (item) => ({
+        key:
+          `provider-${item.key}`,
+        label: item.label,
+        status: item.status,
+        detail:
+          item.failure_rate == null
+            ? 'Waiting for enough transactions'
+            : `${
+                Math.round(
+                  item.failure_rate *
+                    1000,
+                ) / 10
+              }% failure rate`,
+      }),
+    ),
+
+    ...platform.map(
+      (item) => ({
+        key:
+          `platform-${item.label}`,
+        label: item.label,
+        status: item.status,
+        detail: null,
+      }),
+    ),
+  ];
+
+  return (
+    <section
+      className="
+        mb-8 rounded-xl
+        bg-white p-6
+        shadow-sm
+      "
+      aria-labelledby="operational-health-title"
+    >
+      <div
+        className="
+          mb-5 flex flex-wrap
+          items-start
+          justify-between gap-3
+        "
+      >
+        <div>
+          <h3
+            id="operational-health-title"
+            className="
+              font-bold
+              text-gray-900
+            "
+          >
+            Provider & Platform Health
+          </h3>
+
+          <p
+            className="
+              mt-1 text-sm
+              text-gray-500
+            "
+          >
+            Live operational view of
+            AgentPro and external
+            dependencies.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => refetch()}
+          disabled={isFetching}
+          className="
+            rounded-lg
+            border border-gray-200
+            bg-white px-3 py-2
+            text-sm font-medium
+            text-gray-700
+            hover:bg-gray-50
+            disabled:opacity-50
+          "
+        >
+          {isFetching
+            ? 'Refreshing...'
+            : 'Refresh'}
+        </button>
+      </div>
+
+      <div
+        className="
+          grid grid-cols-1 gap-3
+          sm:grid-cols-2
+          lg:grid-cols-4
+        "
+      >
+        {cards.map((item) => {
+          const meta =
+            statusMeta(
+              item.status,
+            );
+
+          return (
+            <div
+              key={item.key}
+              className="
+                rounded-xl
+                border
+                border-gray-100
+                p-4
+              "
+            >
+              <div
+                className="
+                  flex items-center
+                  justify-between
+                  gap-3
+                "
+              >
+                <p
+                  className="
+                    text-sm
+                    font-semibold
+                    text-gray-900
+                  "
+                >
+                  {item.label}
+                </p>
+
+                <span
+                  className={`
+                    rounded-full
+                    px-2 py-1
+                    text-xs
+                    font-medium
+                    ${meta.classes}
+                  `}
+                >
+                  {meta.label}
+                </span>
+              </div>
+
+              {item.detail && (
+                <p
+                  className="
+                    mt-2 text-xs
+                    text-gray-500
+                  "
+                >
+                  {item.detail}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {status?.alerts?.length >
+        0 && (
+        <div
+          className="
+            mt-5 rounded-lg
+            border border-amber-100
+            bg-amber-50 p-4
+          "
+        >
+          <p
+            className="
+              text-sm font-semibold
+              text-amber-900
+            "
+          >
+            Active operational alerts
+          </p>
+
+          <ul
+            className="
+              mt-2 space-y-1
+              text-sm
+              text-amber-800
+            "
+          >
+            {status.alerts.map(
+              (alert) => (
+                <li
+                  key={alert.code}
+                >
+                  {alert.message}
+                </li>
+              ),
+            )}
+          </ul>
+        </div>
+      )}
+
+      {status?.timestamp && (
+        <p
+          className="
+            mt-4 text-xs
+            text-gray-400
+          "
+        >
+          Last checked{' '}
+          {new Date(
+            status.timestamp,
+          ).toLocaleString()}
+        </p>
+      )}
+    </section>
   );
 }
 
