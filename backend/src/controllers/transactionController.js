@@ -24,6 +24,9 @@ const {
   postWorkingFloatTransfer,
 } = require("../services/workingFloatPostingService");
 const { enqueueOutboxEvent } = require("../services/outboxService");
+const {
+  recordOperationalEvent,
+} = require("../services/operationalEventService");
 const { generateTransactionReceipt } = require("../services/reportService");
 const {
   resolveAgentFinancialBranch,
@@ -667,6 +670,25 @@ exports.initiateTransaction = async (req, res) => {
           strict: true,
         });
 
+        await recordOperationalEvent({
+          dbClient: client,
+          eventName: "transaction.initiated",
+          actorUserId: agentId,
+          companyId,
+          subjectType: "transaction",
+          subjectId: transaction.id,
+          correlationId: req.requestId,
+          dedupeKey: `transaction:${transaction.id}:initiated:v1`,
+          attributes: {
+            provider,
+            transaction_type,
+            status: "initiated",
+            amount: String(amount),
+            currency: "GHS",
+            sim_role: businessSimRole,
+          },
+        });
+
         return insertResult;
       });
     } catch (insertError) {
@@ -1089,6 +1111,33 @@ exports.completeTransaction = async (req, res) => {
         requestId: req.requestId,
         dbClient: client,
         strict: true,
+      });
+
+      const operationalEventName = {
+        success: "transaction.completed",
+        failed: "transaction.failed",
+        pending_confirmation:
+          "transaction.pending_confirmation",
+      }[finalStatus];
+
+      await recordOperationalEvent({
+        dbClient: client,
+        eventName: operationalEventName,
+        actorUserId: agentId,
+        companyId: tx.company_id,
+        subjectType: "transaction",
+        subjectId: transaction_id,
+        correlationId: req.requestId,
+        dedupeKey:
+          `transaction:${transaction_id}:outcome:${finalStatus}:v1`,
+        attributes: {
+          provider: tx.provider,
+          transaction_type: tx.transaction_type,
+          status: finalStatus,
+          amount: String(tx.amount),
+          currency: "GHS",
+          failure_reason: sanitizedFailureReason,
+        },
       });
 
       const notificationType = {
