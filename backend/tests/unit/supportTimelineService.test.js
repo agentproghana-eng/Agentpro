@@ -2,6 +2,7 @@
 
 const {
   normalizeSearch,
+  buildCaseSummary,
   searchSupportTimeline,
 } = require(
   '../../src/services/supportTimelineService'
@@ -212,5 +213,218 @@ describe(
         );
       }
     );
+    test(
+      'builds transaction case summary from safe events',
+      () => {
+        const summary =
+          buildCaseSummary([
+            {
+              id: 'event-1',
+              event_name:
+                'transaction.initiated',
+              subject_type:
+                'transaction',
+              subject_id:
+                'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              correlation_id:
+                'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+              actor_user_id:
+                'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+              company_id:
+                'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+              attributes: {
+                provider: 'mtn',
+                transaction_type:
+                  'cash_in',
+                status:
+                  'initiated',
+              },
+              occurred_at:
+                '2026-09-14T09:00:00.000Z',
+            },
+            {
+              id: 'event-2',
+              event_name:
+                'transaction.failed',
+              subject_type:
+                'transaction',
+              subject_id:
+                'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              correlation_id:
+                'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+              actor_user_id:
+                'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+              company_id:
+                'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+              attributes: {
+                provider: 'mtn',
+                transaction_type:
+                  'cash_in',
+                status:
+                  'failed',
+              },
+              occurred_at:
+                '2026-09-14T09:01:00.000Z',
+            },
+          ]);
+
+        expect(summary).toEqual({
+          event_count: 2,
+          failed_count: 1,
+          pending_confirmation_count:
+            0,
+          outcome: 'failed',
+          provider: 'mtn',
+          transaction_type:
+            'cash_in',
+          first_event_at:
+            '2026-09-14T09:00:00.000Z',
+          last_event_at:
+            '2026-09-14T09:01:00.000Z',
+          transaction_ids: [
+            'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          ],
+          correlation_ids: [
+            'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          ],
+          user_ids: [
+            'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+          ],
+          company_ids: [
+            'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+          ],
+        });
+      }
+    );
+
+    test(
+      'uses the latest terminal transaction event as case outcome',
+      () => {
+        const summary =
+          buildCaseSummary([
+            {
+              event_name:
+                'transaction.failed',
+              subject_type:
+                'transaction',
+              subject_id: 'tx-1',
+              correlation_id:
+                'corr-1',
+              attributes: {
+                provider:
+                  'telecel',
+                transaction_type:
+                  'cash_out',
+              },
+              occurred_at:
+                '2026-09-14T09:00:00.000Z',
+            },
+            {
+              event_name:
+                'transaction.completed',
+              subject_type:
+                'transaction',
+              subject_id: 'tx-1',
+              correlation_id:
+                'corr-1',
+              attributes: {
+                provider:
+                  'telecel',
+                transaction_type:
+                  'cash_out',
+              },
+              occurred_at:
+                '2026-09-14T09:01:00.000Z',
+            },
+          ]);
+
+        expect(
+          summary.outcome
+        ).toBe('completed');
+
+        expect(
+          summary.failed_count
+        ).toBe(1);
+      }
+    );
+
+    test(
+      'latest pending confirmation remains the case outcome',
+      () => {
+        const summary =
+          buildCaseSummary([
+            {
+              event_name:
+                'transaction.completed',
+              subject_type:
+                'transaction',
+              subject_id: 'tx-1',
+              correlation_id:
+                'corr-1',
+              attributes: {
+                provider:
+                  'telecel',
+                transaction_type:
+                  'cash_out',
+              },
+              occurred_at:
+                '2026-09-14T09:00:00.000Z',
+            },
+            {
+              event_name:
+                'transaction.pending_confirmation',
+              subject_type:
+                'transaction',
+              subject_id: 'tx-1',
+              correlation_id:
+                'corr-1',
+              attributes: {
+                provider:
+                  'telecel',
+                transaction_type:
+                  'cash_out',
+              },
+              occurred_at:
+                '2026-09-14T09:01:00.000Z',
+            },
+          ]);
+
+        expect(
+          summary.outcome
+        ).toBe(
+          'pending_confirmation'
+        );
+
+        expect(
+          summary
+            .pending_confirmation_count
+        ).toBe(1);
+      }
+    );
+
+    test(
+      'empty event list returns unknown case summary',
+      () => {
+        expect(
+          buildCaseSummary([])
+        ).toEqual({
+          event_count: 0,
+          failed_count: 0,
+          pending_confirmation_count:
+            0,
+          outcome: 'unknown',
+          provider: null,
+          transaction_type: null,
+          first_event_at: null,
+          last_event_at: null,
+          transaction_ids: [],
+          correlation_ids: [],
+          user_ids: [],
+          company_ids: [],
+        });
+      }
+    );
+
+
   }
 );

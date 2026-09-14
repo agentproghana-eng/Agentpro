@@ -2532,6 +2532,11 @@ function SupportConsolePage() {
     setSubmittedSearch,
   ] = useState(null);
 
+  const [
+    timelineFilter,
+    setTimelineFilter,
+  ] = useState('all');
+
   const searchQuery =
     useQuery({
       queryKey: [
@@ -2587,6 +2592,78 @@ function SupportConsolePage() {
 
   const events =
     data?.events || [];
+
+  const caseSummary =
+    data?.case_summary || null;
+
+  const filteredEvents =
+    events.filter(event => {
+      if (
+        timelineFilter ===
+        'failed'
+      ) {
+        return (
+          event.event_name ===
+          'transaction.failed'
+        );
+      }
+
+      if (
+        timelineFilter ===
+        'pending_confirmation'
+      ) {
+        return (
+          event.event_name ===
+          'transaction.pending_confirmation'
+        );
+      }
+
+      return true;
+    });
+
+  const copySupportId =
+    async (
+      label,
+      value,
+    ) => {
+      if (!value) {
+        return;
+      }
+
+      try {
+        await navigator.clipboard
+          .writeText(
+            String(value),
+          );
+
+        toast.success(
+          `${label} copied`,
+        );
+      } catch (_) {
+        toast.error(
+          `Could not copy ${label.toLowerCase()}.`,
+        );
+      }
+    };
+
+  const outcomeLabel =
+    value => {
+      const labels = {
+        completed: 'Completed',
+        failed: 'Failed',
+        pending_confirmation:
+          'Pending confirmation',
+        in_progress:
+          'In progress',
+        unknown: 'Unknown',
+      };
+
+      return (
+        labels[value] ||
+        value ||
+        'Unknown'
+      );
+    };
 
   return (
     <div>
@@ -3025,6 +3102,448 @@ function SupportConsolePage() {
             </div>
           )}
 
+          {caseSummary && (
+            <div
+              className="
+                mb-6
+                rounded-xl
+                bg-white
+                p-5
+                shadow-sm
+              "
+            >
+              <div
+                className="
+                  flex
+                  flex-wrap
+                  items-start
+                  justify-between
+                  gap-3
+                "
+              >
+                <div>
+                  <h3
+                    className="
+                      font-bold
+                      text-gray-900
+                    "
+                  >
+                    Case Summary
+                  </h3>
+
+                  <p
+                    className="
+                      mt-1
+                      text-sm
+                      text-gray-500
+                    "
+                  >
+                    Derived from the
+                    privacy-safe operational
+                    timeline.
+                  </p>
+                </div>
+
+                <span
+                  className="
+                    rounded-full
+                    bg-gray-100
+                    px-3 py-1
+                    text-xs
+                    font-semibold
+                    text-gray-700
+                  "
+                >
+                  {outcomeLabel(
+                    caseSummary.outcome,
+                  )}
+                </span>
+              </div>
+
+              <div
+                className="
+                  mt-5
+                  grid gap-4
+                  sm:grid-cols-2
+                  lg:grid-cols-4
+                "
+              >
+                <div>
+                  <p
+                    className="
+                      text-xs
+                      uppercase
+                      tracking-wide
+                      text-gray-400
+                    "
+                  >
+                    Provider
+                  </p>
+
+                  <p
+                    className="
+                      mt-1
+                      font-semibold
+                      text-gray-900
+                    "
+                  >
+                    {
+                      caseSummary.provider ||
+                      '—'
+                    }
+                  </p>
+                </div>
+
+                <div>
+                  <p
+                    className="
+                      text-xs
+                      uppercase
+                      tracking-wide
+                      text-gray-400
+                    "
+                  >
+                    Transaction type
+                  </p>
+
+                  <p
+                    className="
+                      mt-1
+                      font-semibold
+                      text-gray-900
+                    "
+                  >
+                    {
+                      caseSummary.transaction_type ||
+                      '—'
+                    }
+                  </p>
+                </div>
+
+                <div>
+                  <p
+                    className="
+                      text-xs
+                      uppercase
+                      tracking-wide
+                      text-gray-400
+                    "
+                  >
+                    Failed events
+                  </p>
+
+                  <p
+                    className="
+                      mt-1
+                      font-semibold
+                      text-gray-900
+                    "
+                  >
+                    {
+                      caseSummary.failed_count
+                    }
+                  </p>
+                </div>
+
+                <div>
+                  <p
+                    className="
+                      text-xs
+                      uppercase
+                      tracking-wide
+                      text-gray-400
+                    "
+                  >
+                    Pending confirmation
+                  </p>
+
+                  <p
+                    className="
+                      mt-1
+                      font-semibold
+                      text-gray-900
+                    "
+                  >
+                    {
+                      caseSummary
+                        .pending_confirmation_count
+                    }
+                  </p>
+                </div>
+              </div>
+
+              <div
+                className="
+                  mt-5
+                  grid gap-4
+                  md:grid-cols-2
+                "
+              >
+                <div>
+                  <p
+                    className="
+                      text-xs
+                      text-gray-400
+                    "
+                  >
+                    First event
+                  </p>
+
+                  <p
+                    className="
+                      mt-1
+                      text-sm
+                      text-gray-700
+                    "
+                  >
+                    {caseSummary.first_event_at
+                      ? new Date(
+                          caseSummary.first_event_at,
+                        ).toLocaleString()
+                      : '—'}
+                  </p>
+                </div>
+
+                <div>
+                  <p
+                    className="
+                      text-xs
+                      text-gray-400
+                    "
+                  >
+                    Last event
+                  </p>
+
+                  <p
+                    className="
+                      mt-1
+                      text-sm
+                      text-gray-700
+                    "
+                  >
+                    {caseSummary.last_event_at
+                      ? new Date(
+                          caseSummary.last_event_at,
+                        ).toLocaleString()
+                      : '—'}
+                  </p>
+                </div>
+              </div>
+
+              {caseSummary
+                .transaction_ids
+                ?.length > 0 && (
+                <div className="mt-5">
+                  <p
+                    className="
+                      text-xs
+                      font-semibold
+                      uppercase
+                      tracking-wide
+                      text-gray-400
+                    "
+                  >
+                    Transaction IDs
+                  </p>
+
+                  <div
+                    className="
+                      mt-2
+                      space-y-2
+                    "
+                  >
+                    {caseSummary
+                      .transaction_ids
+                      .map(id => (
+                        <div
+                          key={id}
+                          className="
+                            flex
+                            items-center
+                            justify-between
+                            gap-3
+                            rounded-lg
+                            bg-gray-50
+                            px-3 py-2
+                          "
+                        >
+                          <span
+                            className="
+                              min-w-0
+                              break-all
+                              font-mono
+                              text-xs
+                              text-gray-600
+                            "
+                          >
+                            {id}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              copySupportId(
+                                'Transaction ID',
+                                id,
+                              )
+                            }
+                            className="
+                              shrink-0
+                              text-xs
+                              font-semibold
+                              text-primary
+                              hover:underline
+                            "
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {caseSummary
+                .correlation_ids
+                ?.length > 0 && (
+                <div className="mt-5">
+                  <p
+                    className="
+                      text-xs
+                      font-semibold
+                      uppercase
+                      tracking-wide
+                      text-gray-400
+                    "
+                  >
+                    Correlation IDs
+                  </p>
+
+                  <div
+                    className="
+                      mt-2
+                      space-y-2
+                    "
+                  >
+                    {caseSummary
+                      .correlation_ids
+                      .map(id => (
+                        <div
+                          key={id}
+                          className="
+                            flex
+                            items-center
+                            justify-between
+                            gap-3
+                            rounded-lg
+                            bg-gray-50
+                            px-3 py-2
+                          "
+                        >
+                          <span
+                            className="
+                              min-w-0
+                              break-all
+                              font-mono
+                              text-xs
+                              text-gray-600
+                            "
+                          >
+                            {id}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              copySupportId(
+                                'Correlation ID',
+                                id,
+                              )
+                            }
+                            className="
+                              shrink-0
+                              text-xs
+                              font-semibold
+                              text-primary
+                              hover:underline
+                            "
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              <div
+                className="
+                  mt-5
+                  grid gap-3
+                  md:grid-cols-2
+                "
+              >
+                <div>
+                  <p
+                    className="
+                      text-xs
+                      font-semibold
+                      uppercase
+                      tracking-wide
+                      text-gray-400
+                    "
+                  >
+                    Related user IDs
+                  </p>
+
+                  <p
+                    className="
+                      mt-2
+                      break-all
+                      font-mono
+                      text-xs
+                      text-gray-600
+                    "
+                  >
+                    {caseSummary
+                      .user_ids
+                      ?.join(', ') ||
+                      '—'}
+                  </p>
+                </div>
+
+                <div>
+                  <p
+                    className="
+                      text-xs
+                      font-semibold
+                      uppercase
+                      tracking-wide
+                      text-gray-400
+                    "
+                  >
+                    Related company IDs
+                  </p>
+
+                  <p
+                    className="
+                      mt-2
+                      break-all
+                      font-mono
+                      text-xs
+                      text-gray-600
+                    "
+                  >
+                    {caseSummary
+                      .company_ids
+                      ?.join(', ') ||
+                      '—'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div
             className="
               rounded-xl
@@ -3051,17 +3570,58 @@ function SupportConsolePage() {
                 Operational Timeline
               </h3>
 
-              <span
+              <div
                 className="
-                  text-xs
-                  text-gray-400
+                  flex
+                  flex-wrap
+                  items-center
+                  gap-2
                 "
               >
-                Oldest → newest
-              </span>
+                <select
+                  value={timelineFilter}
+                  onChange={event =>
+                    setTimelineFilter(
+                      event.target.value,
+                    )
+                  }
+                  className="
+                    rounded-lg
+                    border
+                    border-gray-200
+                    bg-white
+                    px-2 py-1
+                    text-xs
+                    text-gray-700
+                  "
+                >
+                  <option value="all">
+                    All events
+                  </option>
+
+                  <option value="failed">
+                    Failed
+                  </option>
+
+                  <option
+                    value="pending_confirmation"
+                  >
+                    Pending confirmation
+                  </option>
+                </select>
+
+                <span
+                  className="
+                    text-xs
+                    text-gray-400
+                  "
+                >
+                  Oldest → newest
+                </span>
+              </div>
             </div>
 
-            {events.length === 0 ? (
+            {filteredEvents.length === 0 ? (
               <div
                 className="
                   py-10
@@ -3080,7 +3640,7 @@ function SupportConsolePage() {
                   space-y-3
                 "
               >
-                {events.map(
+                {filteredEvents.map(
                   event => (
                     <div
                       key={event.id}
