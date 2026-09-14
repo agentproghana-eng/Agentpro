@@ -183,6 +183,175 @@ function safeEvent(row) {
   };
 }
 
+function uniqueNonEmpty(values) {
+  return [
+    ...new Set(
+      values.filter(Boolean)
+    ),
+  ];
+}
+
+function buildCaseSummary(events) {
+  const safeEvents =
+    Array.isArray(events)
+      ? events
+      : [];
+
+  if (!safeEvents.length) {
+    return {
+      event_count: 0,
+      failed_count: 0,
+      pending_confirmation_count: 0,
+      outcome: 'unknown',
+      provider: null,
+      transaction_type: null,
+      first_event_at: null,
+      last_event_at: null,
+      transaction_ids: [],
+      correlation_ids: [],
+      user_ids: [],
+      company_ids: [],
+    };
+  }
+
+  const transactionEvents =
+    safeEvents.filter(
+      event =>
+        event.subject_type ===
+          'transaction' ||
+        event.subject_type ===
+          'personal_transaction'
+    );
+
+  const failedEvents =
+    safeEvents.filter(
+      event =>
+        event.event_name ===
+        'transaction.failed'
+    );
+
+  const pendingEvents =
+    safeEvents.filter(
+      event =>
+        event.event_name ===
+        'transaction.pending_confirmation'
+    );
+
+  const completedEvents =
+    safeEvents.filter(
+      event =>
+        event.event_name ===
+        'transaction.completed'
+    );
+
+  const latestTransactionEvent =
+    [...transactionEvents]
+      .reverse()
+      .find(Boolean) ||
+    [...safeEvents]
+      .reverse()
+      .find(Boolean);
+
+  const latestTerminalEvent =
+    [...safeEvents]
+      .reverse()
+      .find(
+        event =>
+          [
+            'transaction.completed',
+            'transaction.failed',
+            'transaction.pending_confirmation',
+          ].includes(
+            event.event_name
+          )
+      );
+
+  const outcomeByEventName = {
+    'transaction.completed':
+      'completed',
+    'transaction.failed':
+      'failed',
+    'transaction.pending_confirmation':
+      'pending_confirmation',
+  };
+
+  const outcome =
+    latestTerminalEvent
+      ? outcomeByEventName[
+          latestTerminalEvent
+            .event_name
+        ] || 'unknown'
+      : 'in_progress';
+
+  return {
+    event_count:
+      safeEvents.length,
+
+    failed_count:
+      failedEvents.length,
+
+    pending_confirmation_count:
+      pendingEvents.length,
+
+    outcome,
+
+    provider:
+      latestTransactionEvent
+        ?.attributes
+        ?.provider ||
+      null,
+
+    transaction_type:
+      latestTransactionEvent
+        ?.attributes
+        ?.transaction_type ||
+      null,
+
+    first_event_at:
+      safeEvents[0]
+        ?.occurred_at ||
+      null,
+
+    last_event_at:
+      safeEvents[
+        safeEvents.length - 1
+      ]?.occurred_at ||
+      null,
+
+    transaction_ids:
+      uniqueNonEmpty(
+        transactionEvents.map(
+          event =>
+            event.subject_id
+        )
+      ),
+
+    correlation_ids:
+      uniqueNonEmpty(
+        safeEvents.map(
+          event =>
+            event.correlation_id
+        )
+      ),
+
+    user_ids:
+      uniqueNonEmpty(
+        safeEvents.map(
+          event =>
+            event.actor_user_id
+        )
+      ),
+
+    company_ids:
+      uniqueNonEmpty(
+        safeEvents.map(
+          event =>
+            event.company_id
+        )
+      ),
+  };
+}
+
 async function resolveUsers(
   dbQuery,
   type,
@@ -354,6 +523,8 @@ async function searchSupportTimeline({
         identities: [],
         company: null,
         events: [],
+        case_summary:
+          buildCaseSummary([]),
         truncated: false,
       };
     }
@@ -540,5 +711,6 @@ module.exports = {
   MAX_EVENTS,
   normalizeSearch,
   safeEvent,
+  buildCaseSummary,
   searchSupportTimeline,
 };
