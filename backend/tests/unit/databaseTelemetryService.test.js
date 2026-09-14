@@ -2,9 +2,11 @@
 
 const {
   WINDOW_SECONDS,
+  SLOW_QUERY_THRESHOLD_MS,
   startDatabaseTelemetry,
   stopDatabaseTelemetry,
   recordDatabaseOperation,
+  recordDatabaseTransaction,
   databaseTelemetrySnapshot,
 } = require(
   '../../src/services/databaseTelemetryService'
@@ -152,6 +154,95 @@ describe('database telemetry service', () => {
     ).toBe(5);
   });
 
+  test('tracks bounded slow query fingerprints without SQL text', () => {
+    startDatabaseTelemetry();
+
+    recordDatabaseOperation({
+      acquisitionMs: 5,
+      executionMs:
+        SLOW_QUERY_THRESHOLD_MS + 25,
+      totalMs:
+        SLOW_QUERY_THRESHOLD_MS + 30,
+      queryFingerprint:
+        'q_0123456789abcdef',
+      queryLabel:
+        'transactions.history',
+      nowMs: 250_000,
+    });
+
+    const snapshot =
+      databaseTelemetrySnapshot({
+        nowMs: 250_000,
+      });
+
+    expect(
+      snapshot.slow_queries.count
+    ).toBe(1);
+
+    expect(
+      snapshot
+        .slow_queries
+        .fingerprints
+    ).toEqual([
+      {
+        fingerprint:
+          'q_0123456789abcdef',
+        label:
+          'transactions.history',
+        count: 1,
+        failures: 0,
+        max_execution_ms:
+          SLOW_QUERY_THRESHOLD_MS + 25,
+      },
+    ]);
+
+    const serialized =
+      JSON.stringify(snapshot);
+
+    expect(serialized)
+      .not.toContain(
+        'SELECT * FROM'
+      );
+  });
+
+  test('tracks transaction acquisition and total duration separately', () => {
+    startDatabaseTelemetry();
+
+    recordDatabaseTransaction({
+      acquisitionMs: 35,
+      totalMs: 220,
+      success: true,
+      nowMs: 275_000,
+    });
+
+    const snapshot =
+      databaseTelemetrySnapshot({
+        nowMs: 275_000,
+      });
+
+    expect(
+      snapshot.transactions.count
+    ).toBe(1);
+
+    expect(
+      snapshot.transactions.failures
+    ).toBe(0);
+
+    expect(
+      snapshot
+        .transactions
+        .acquisition_wait
+        .p95_ms
+    ).toBe(35);
+
+    expect(
+      snapshot
+        .transactions
+        .total
+        .p95_ms
+    ).toBe(220);
+  });
+
   test('exposes aggregate operational data only', () => {
     startDatabaseTelemetry();
 
@@ -169,9 +260,8 @@ describe('database telemetry service', () => {
         })
       ).toLowerCase();
 
-    expect(serialized).not.toContain('sql');
-    expect(serialized).not.toContain('query');
-    expect(serialized).not.toContain('text');
+    expect(serialized).not.toContain('sql_text');
+    expect(serialized).not.toContain('query_text');
     expect(serialized).not.toContain('params');
     expect(serialized).not.toContain('email');
     expect(serialized).not.toContain('token');

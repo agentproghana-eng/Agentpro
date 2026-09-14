@@ -25,6 +25,14 @@ const OUTBOX_CRITICAL_AGE_SECONDS = 900;
 const POSTGRES_WARNING_WAITING = 1;
 const POSTGRES_CRITICAL_WAITING = 5;
 
+const DATABASE_MIN_LATENCY_SAMPLES = 20;
+
+const DATABASE_WARNING_EXECUTION_P95_MS = 500;
+const DATABASE_CRITICAL_EXECUTION_P95_MS = 1500;
+
+const DATABASE_WARNING_ACQUISITION_P95_MS = 100;
+const DATABASE_CRITICAL_ACQUISITION_P95_MS = 500;
+
 function finiteNumber(value, fallback = 0) {
   const parsed = Number(value);
 
@@ -553,6 +561,161 @@ function evaluatePostgresAlerts(
   );
 }
 
+function evaluateDatabaseTimingAlerts(
+  databaseTiming,
+  alerts
+) {
+  if (!databaseTiming?.enabled) {
+    return;
+  }
+
+  const windowSeconds =
+    finiteNumber(
+      databaseTiming.window_seconds,
+      60
+    );
+
+  const executionSamples =
+    finiteNumber(
+      databaseTiming
+        .execution
+        ?.sample_count
+    );
+
+  const executionP95 =
+    databaseTiming
+      .execution
+      ?.p95_ms == null
+      ? null
+      : finiteNumber(
+          databaseTiming
+            .execution
+            .p95_ms
+        );
+
+  if (
+    executionSamples >=
+      DATABASE_MIN_LATENCY_SAMPLES &&
+    executionP95 !== null &&
+    executionP95 >=
+      DATABASE_WARNING_EXECUTION_P95_MS
+  ) {
+    const critical =
+      executionP95 >=
+      DATABASE_CRITICAL_EXECUTION_P95_MS;
+
+    alerts.push(
+      alert({
+        code: critical
+          ? 'database_execution_p95_critical'
+          : 'database_execution_p95_high',
+
+        severity: critical
+          ? SEVERITY.CRITICAL
+          : SEVERITY.WARNING,
+
+        component: 'database',
+
+        message:
+          'Database execution p95 latency is elevated.',
+
+        observed: {
+          sample_count:
+            executionSamples,
+          p95_ms:
+            executionP95,
+        },
+
+        threshold: {
+          minimum_samples:
+            DATABASE_MIN_LATENCY_SAMPLES,
+
+          warning_p95_ms:
+            DATABASE_WARNING_EXECUTION_P95_MS,
+
+          critical_p95_ms:
+            DATABASE_CRITICAL_EXECUTION_P95_MS,
+        },
+
+        window: {
+          seconds:
+            windowSeconds,
+        },
+      })
+    );
+  }
+
+  const acquisitionSamples =
+    finiteNumber(
+      databaseTiming
+        .acquisition_wait
+        ?.sample_count
+    );
+
+  const acquisitionP95 =
+    databaseTiming
+      .acquisition_wait
+      ?.p95_ms == null
+      ? null
+      : finiteNumber(
+          databaseTiming
+            .acquisition_wait
+            .p95_ms
+        );
+
+  if (
+    acquisitionSamples >=
+      DATABASE_MIN_LATENCY_SAMPLES &&
+    acquisitionP95 !== null &&
+    acquisitionP95 >=
+      DATABASE_WARNING_ACQUISITION_P95_MS
+  ) {
+    const critical =
+      acquisitionP95 >=
+      DATABASE_CRITICAL_ACQUISITION_P95_MS;
+
+    alerts.push(
+      alert({
+        code: critical
+          ? 'database_acquisition_p95_critical'
+          : 'database_acquisition_p95_high',
+
+        severity: critical
+          ? SEVERITY.CRITICAL
+          : SEVERITY.WARNING,
+
+        component: 'database',
+
+        message:
+          'Database connection acquisition p95 latency is elevated.',
+
+        observed: {
+          sample_count:
+            acquisitionSamples,
+          p95_ms:
+            acquisitionP95,
+        },
+
+        threshold: {
+          minimum_samples:
+            DATABASE_MIN_LATENCY_SAMPLES,
+
+          warning_p95_ms:
+            DATABASE_WARNING_ACQUISITION_P95_MS,
+
+          critical_p95_ms:
+            DATABASE_CRITICAL_ACQUISITION_P95_MS,
+        },
+
+        window: {
+          seconds:
+            windowSeconds,
+        },
+      })
+    );
+  }
+}
+
 function evaluateOperationalAlerts(
   snapshot
 ) {
@@ -585,6 +748,11 @@ function evaluateOperationalAlerts(
 
   evaluatePostgresAlerts(
     snapshot?.postgres,
+    alerts
+  );
+
+  evaluateDatabaseTimingAlerts(
+    snapshot?.database_timing,
     alerts
   );
 
@@ -655,6 +823,12 @@ module.exports = {
 
   POSTGRES_WARNING_WAITING,
   POSTGRES_CRITICAL_WAITING,
+
+  DATABASE_MIN_LATENCY_SAMPLES,
+  DATABASE_WARNING_EXECUTION_P95_MS,
+  DATABASE_CRITICAL_EXECUTION_P95_MS,
+  DATABASE_WARNING_ACQUISITION_P95_MS,
+  DATABASE_CRITICAL_ACQUISITION_P95_MS,
 
   evaluateOperationalAlerts,
 };

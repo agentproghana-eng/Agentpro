@@ -115,19 +115,35 @@ describe('production log privacy', () => {
     );
 
     expect(source).toContain(
-      "logger.error('Database query failed'",
+      "'Database query failed'",
     );
 
     expect(source).toContain(
-      'errorCode: error?.code',
+      'fingerprint',
     );
 
     expect(source).toContain(
-      'durationMs: duration',
+      'errorCode:',
+    );
+
+    expect(source).toContain(
+      'durationMs:',
     );
 
     expect(source).not.toContain(
       "logger.error('Query error:', { text, error: error.message })",
+    );
+
+    expect(source).not.toContain(
+      'error.message',
+    );
+
+    expect(source).not.toContain(
+      'params:',
+    );
+
+    expect(source).not.toContain(
+      'text:',
     );
   });
 
