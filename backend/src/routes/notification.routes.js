@@ -3,8 +3,16 @@ const express = require('express');
 const notifRouter = express.Router();
 const { authenticate } = require('../middleware/auth');
 const { query } = require('../config/database');
+const cursorHistoryController = require('../controllers/cursorHistoryController');
 
 notifRouter.use(authenticate);
+
+// Scale-safe notification history. The legacy page-number route remains
+// available until all clients have migrated.
+notifRouter.get(
+  '/cursor',
+  cursorHistoryController.listNotifications
+);
 
 notifRouter.get('/', async (req, res) => {
   const { page = 1, limit = 30, unread_only } = req.query;
