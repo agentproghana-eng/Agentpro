@@ -100,6 +100,40 @@ describe(
     );
 
     test(
+      'backlog migration adds telemetry support indexes',
+      () => {
+        const migration =
+          fs.readFileSync(
+            path.join(
+              __dirname,
+              '../../migrations/128_outbox_backlog_indexes.sql'
+            ),
+            'utf8'
+          );
+
+        expect(migration)
+          .toContain(
+            'idx_outbox_events_pending_created_at'
+          );
+
+        expect(migration)
+          .toContain(
+            'idx_outbox_events_dead_letter_created_at'
+          );
+
+        expect(migration)
+          .toContain(
+            "WHERE status = 'pending'"
+          );
+
+        expect(migration)
+          .toContain(
+            "WHERE status = 'dead_letter'"
+          );
+      }
+    );
+
+    test(
       'enqueue requires the caller transaction client',
       async () => {
         await expect(
@@ -328,6 +362,34 @@ describe(
         expect(sql)
           .toContain(
             "status = 'pending'"
+          );
+
+        expect(sql)
+          .toContain(
+            'pending_candidates'
+          );
+
+        expect(sql)
+          .toContain(
+            'stale_candidates'
+          );
+
+        expect(sql)
+          .toContain(
+            'UNION ALL'
+          );
+
+        expect(
+          (
+            sql.match(
+              /FOR UPDATE SKIP LOCKED/g
+            ) || []
+          ).length
+        ).toBe(2);
+
+        expect(sql)
+          .not.toContain(
+            "status = 'pending'\n                 AND available_at"
           );
       }
     );

@@ -320,27 +320,56 @@ async function claimOutboxBatch({
   return withTransaction(
     async (client) => {
       const result = await client.query(
-        `WITH candidates AS (
-           SELECT id
+        `WITH pending_candidates AS (
+           SELECT
+             id,
+             available_at,
+             created_at
            FROM outbox_events
            WHERE attempts < max_attempts
-             AND (
-               (
-                 status = 'pending'
-                 AND available_at <= NOW()
-               )
-               OR
-               (
-                 status = 'processing'
-                 AND locked_at <=
-                   NOW() -
-                   ($3::integer * INTERVAL '1 second')
-               )
-             )
+             AND status = 'pending'
+             AND available_at <= NOW()
            ORDER BY
              available_at ASC,
              created_at ASC
            FOR UPDATE SKIP LOCKED
+           LIMIT $1
+         ),
+         stale_candidates AS (
+           SELECT
+             id,
+             available_at,
+             created_at
+           FROM outbox_events
+           WHERE attempts < max_attempts
+             AND status = 'processing'
+             AND locked_at <=
+               NOW() -
+               ($3::integer * INTERVAL '1 second')
+           ORDER BY
+             available_at ASC,
+             created_at ASC
+           FOR UPDATE SKIP LOCKED
+           LIMIT $1
+         ),
+         candidates AS (
+           SELECT
+             id,
+             available_at,
+             created_at
+           FROM pending_candidates
+
+           UNION ALL
+
+           SELECT
+             id,
+             available_at,
+             created_at
+           FROM stale_candidates
+
+           ORDER BY
+             available_at ASC,
+             created_at ASC
            LIMIT $1
          )
          UPDATE outbox_events AS event

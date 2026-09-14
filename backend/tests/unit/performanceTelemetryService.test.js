@@ -236,6 +236,47 @@ describe('performance telemetry service', () => {
     });
   });
 
+  test('outbox telemetry avoids a full-table filtered aggregate', async () => {
+    await performanceSnapshot();
+
+    const outboxCall =
+      mockQuery.mock.calls.find(
+        ([sql]) =>
+          typeof sql === 'string' &&
+          sql.includes('FROM outbox_events')
+      );
+
+    expect(outboxCall).toBeDefined();
+
+    const sql = outboxCall[0];
+
+    expect(sql)
+      .not.toContain('COUNT(*) FILTER');
+
+    expect(sql)
+      .toContain(
+        "WHERE status = 'pending'"
+      );
+
+    expect(sql)
+      .toContain(
+        "WHERE status = 'processing'"
+      );
+
+    expect(sql)
+      .toContain(
+        "WHERE status = 'dead_letter'"
+      );
+
+    expect(sql)
+      .toContain(
+        'ORDER BY created_at ASC'
+      );
+
+    expect(sql)
+      .toContain('LIMIT 1');
+  });
+
   test('reports Redis unavailable without failing the snapshot', async () => {
     const snapshot =
       await performanceSnapshot();

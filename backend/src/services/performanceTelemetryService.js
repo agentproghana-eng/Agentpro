@@ -134,27 +134,36 @@ async function redisSnapshot() {
 async function outboxSnapshot() {
   const result = await query(
     `SELECT
-       COUNT(*) FILTER (
+       (
+         SELECT COUNT(*)::integer
+         FROM outbox_events
          WHERE status = 'pending'
-       )::integer AS pending,
-       COUNT(*) FILTER (
+       ) AS pending,
+       (
+         SELECT COUNT(*)::integer
+         FROM outbox_events
          WHERE status = 'processing'
-       )::integer AS processing,
-       COUNT(*) FILTER (
+       ) AS processing,
+       (
+         SELECT COUNT(*)::integer
+         FROM outbox_events
          WHERE status = 'dead_letter'
-       )::integer AS dead_letter,
+       ) AS dead_letter,
        COALESCE(
-         EXTRACT(
-           EPOCH FROM (
-             NOW() - MIN(created_at)
-               FILTER (
-                 WHERE status = 'pending'
+         (
+           SELECT
+             EXTRACT(
+               EPOCH FROM (
+                 NOW() - created_at
                )
-           )
+             )::double precision
+           FROM outbox_events
+           WHERE status = 'pending'
+           ORDER BY created_at ASC
+           LIMIT 1
          ),
          0
-       )::double precision AS oldest_pending_age_seconds
-     FROM outbox_events`
+       ) AS oldest_pending_age_seconds`
   );
 
   const row = result.rows[0] || {};
