@@ -38,6 +38,21 @@ function healthySnapshot() {
       waiting_requests: 0,
     },
 
+    database_timing: {
+      enabled: true,
+      window_seconds: 60,
+
+      execution: {
+        sample_count: 200,
+        p95_ms: 50,
+      },
+
+      acquisition_wait: {
+        sample_count: 200,
+        p95_ms: 5,
+      },
+    },
+
     redis: {
       status: 'ready',
       ping_ms: 2,
@@ -452,6 +467,94 @@ describe(
             (item) =>
               item.code ===
               'postgres_pool_waiting'
+          )
+        ).toBe(true);
+      }
+    );
+
+    test(
+      'detects elevated database execution p95',
+      () => {
+        const snapshot =
+          healthySnapshot();
+
+        snapshot
+          .database_timing
+          .execution
+          .p95_ms = 700;
+
+        const result =
+          evaluateOperationalAlerts(
+            snapshot
+          );
+
+        expect(
+          result.alerts.some(
+            (item) =>
+              item.code ===
+                'database_execution_p95_high' &&
+              item.severity ===
+                'warning'
+          )
+        ).toBe(true);
+      }
+    );
+
+    test(
+      'does not alert on database latency below minimum sample size',
+      () => {
+        const snapshot =
+          healthySnapshot();
+
+        snapshot
+          .database_timing
+          .execution
+          .sample_count = 19;
+
+        snapshot
+          .database_timing
+          .execution
+          .p95_ms = 5000;
+
+        const result =
+          evaluateOperationalAlerts(
+            snapshot
+          );
+
+        expect(
+          result.alerts.some(
+            (item) =>
+              item.code.startsWith(
+                'database_execution_p95'
+              )
+          )
+        ).toBe(false);
+      }
+    );
+
+    test(
+      'detects critical database acquisition wait p95',
+      () => {
+        const snapshot =
+          healthySnapshot();
+
+        snapshot
+          .database_timing
+          .acquisition_wait
+          .p95_ms = 800;
+
+        const result =
+          evaluateOperationalAlerts(
+            snapshot
+          );
+
+        expect(
+          result.alerts.some(
+            (item) =>
+              item.code ===
+                'database_acquisition_p95_critical' &&
+              item.severity ===
+                'critical'
           )
         ).toBe(true);
       }
