@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { body, query, validationResult } = require("express-validator");
 const transactionController = require("../controllers/transactionController");
+const cursorHistoryController = require("../controllers/cursorHistoryController");
 const {
   authenticate,
   authorize,
@@ -245,6 +246,17 @@ router.patch(
   handleValidation,
   authorize("agent", "business_owner", "manager"),
   transactionController.completeTransaction,
+);
+
+// GET /api/v1/transactions/cursor — Scale-safe transaction history
+//
+// This endpoint intentionally uses fixed chronological ordering and
+// cursor/keyset pagination. The legacy page-number endpoint remains
+// available while Flutter/Web clients migrate.
+router.get(
+  "/cursor",
+  authorize("superuser", "business_owner", "manager", "agent", "auditor"),
+  cursorHistoryController.listTransactions,
 );
 
 // GET /api/v1/transactions — List transactions
