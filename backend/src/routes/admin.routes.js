@@ -23,6 +23,11 @@ const {
   searchSupportTimeline,
 } = require('../services/supportTimelineService');
 const {
+  listFraudSignals,
+  getFraudSignal,
+  reviewFraudSignal,
+} = require('../services/fraudSignalReviewService');
+const {
   serializeDisabledTransactionTypes,
 } = require('../utils/featureFlagConfig');
 
@@ -153,6 +158,208 @@ router.get('/support/timeline', async (req, res) => {
       message:
         'Support timeline search failed',
     });
+  }
+});
+
+// ── Fraud Signal Review ───────────────────────────────────────
+//
+// Advisory only. These endpoints review detection records; they must not
+// block transactions, suspend users, or otherwise mutate customer state.
+router.get('/fraud-signals', async (req, res) => {
+  try {
+    const result =
+      await listFraudSignals({
+        status:
+          req.query.status,
+        severity:
+          req.query.severity,
+        limit:
+          req.query.limit,
+      });
+
+    return res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    const status =
+      Number.isInteger(
+        error.statusCode
+      )
+        ? error.statusCode
+        : 500;
+
+    if (status === 500) {
+      logger.error(
+        'Fraud signal queue error:',
+        {
+          errorCode:
+            error?.code,
+          requestId:
+            req.requestId,
+        }
+      );
+    }
+
+    return res
+      .status(status)
+      .json({
+        success: false,
+        code:
+          error?.code,
+        message:
+          status === 500
+            ? 'Fraud signal queue is temporarily unavailable'
+            : error.message,
+      });
+  }
+});
+
+router.get('/fraud-signals/:id', async (req, res) => {
+  try {
+    const signal =
+      await getFraudSignal({
+        id:
+          req.params.id,
+      });
+
+    return res.json({
+      success: true,
+      data: signal,
+    });
+  } catch (error) {
+    const status =
+      Number.isInteger(
+        error.statusCode
+      )
+        ? error.statusCode
+        : 500;
+
+    if (status === 500) {
+      logger.error(
+        'Fraud signal detail error:',
+        {
+          errorCode:
+            error?.code,
+          requestId:
+            req.requestId,
+        }
+      );
+    }
+
+    return res
+      .status(status)
+      .json({
+        success: false,
+        code:
+          error?.code,
+        message:
+          status === 500
+            ? 'Fraud signal is temporarily unavailable'
+            : error.message,
+      });
+  }
+});
+
+router.patch('/fraud-signals/:id/review', async (req, res) => {
+  try {
+    const result =
+      await withTransaction(
+        async client => {
+          const reviewed =
+            await reviewFraudSignal({
+              dbClient:
+                client,
+              id:
+                req.params.id,
+              status:
+                req.body?.status,
+              reviewedBy:
+                req.user.id,
+            });
+
+          await auditLog({
+            userId:
+              req.user.id,
+            companyId:
+              reviewed.signal
+                .company_id ||
+              null,
+            action:
+              'FRAUD_SIGNAL_REVIEWED',
+            entityType:
+              'fraud_signal',
+            entityId:
+              reviewed.signal.id,
+            oldValues: {
+              review_status:
+                reviewed.previous
+                  .review_status,
+            },
+            newValues: {
+              review_status:
+                reviewed.signal
+                  .review_status,
+              rule_id:
+                reviewed.signal
+                  .rule_id,
+              severity:
+                reviewed.signal
+                  .severity,
+              risk_score:
+                reviewed.signal
+                  .risk_score,
+            },
+            ipAddress:
+              req.ip,
+            requestId:
+              req.requestId,
+            dbClient:
+              client,
+            strict: true,
+          });
+
+          return reviewed.signal;
+        }
+      );
+
+    return res.json({
+      success: true,
+      data: result,
+      message:
+        'Fraud signal review recorded',
+    });
+  } catch (error) {
+    const status =
+      Number.isInteger(
+        error.statusCode
+      )
+        ? error.statusCode
+        : 500;
+
+    if (status === 500) {
+      logger.error(
+        'Fraud signal review error:',
+        {
+          errorCode:
+            error?.code,
+          requestId:
+            req.requestId,
+        }
+      );
+    }
+
+    return res
+      .status(status)
+      .json({
+        success: false,
+        code:
+          error?.code,
+        message:
+          status === 500
+            ? 'Fraud signal review failed'
+            : error.message,
+      });
   }
 });
 
