@@ -1,6 +1,9 @@
 const { query, withTransaction } = require('../config/database');
 const { logger } = require('../utils/logger');
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 const REPORT_REASONS = new Set([
   'spam',
   'fraud',
@@ -1050,6 +1053,332 @@ exports.listModerationHistory = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch moderation history',
+    });
+  }
+};
+
+// Cursor-backed superuser moderation list.
+// The page/offset endpoint remains for backward compatibility.
+exports.listModerationPostsCursor = async (req, res) => {
+  const {
+    encodeFeedCursor,
+    decodeFeedCursor,
+    InvalidFeedCursorError,
+  } = require("../utils/feedCursor");
+
+  const {
+    status,
+    post_type,
+    pinned,
+    official,
+    urgent,
+    search,
+  } = req.query;
+
+  const parsedLimit = Number.parseInt(req.query.limit, 10);
+  const limit = Number.isInteger(parsedLimit)
+    ? Math.min(Math.max(parsedLimit, 1), 100)
+    : 50;
+
+  const conditions = [];
+  const values = [];
+
+  const addCondition = (sql, value) => {
+    values.push(value);
+    conditions.push(sql.replace("?", `$${values.length}`));
+  };
+
+  if (status) {
+    addCondition("post.status = ?", status);
+  }
+
+  if (post_type) {
+    if (!POST_TYPES.has(post_type)) {
+      return res.status(422).json({
+        success: false,
+        message: "Invalid post type",
+      });
+    }
+
+    addCondition("post.post_type = ?", post_type);
+  }
+
+  if (pinned === "true" || pinned === "false") {
+    addCondition("post.is_pinned = ?", pinned === "true");
+  }
+
+  if (official === "true" || official === "false") {
+    addCondition("post.is_official = ?", official === "true");
+  }
+
+  if (urgent === "true" || urgent === "false") {
+    addCondition("post.is_urgent = ?", urgent === "true");
+  }
+
+  if (search?.trim()) {
+    const q = search.trim();
+
+    values.push(q, q, q, q);
+
+    const first = values.length - 3;
+
+    conditions.push(
+      `(post.content ILIKE '%' || $${first} || '%'
+        OR author.first_name ILIKE '%' || $${first + 1} || '%'
+        OR author.last_name ILIKE '%' || $${first + 2} || '%'
+        OR author.email ILIKE '%' || $${first + 3} || '%')`
+    );
+  }
+
+  try {
+    const cursor = decodeFeedCursor(req.query.cursor);
+
+    if (cursor) {
+      if (
+        typeof cursor.is_pinned !== "boolean" ||
+        typeof cursor.is_urgent !== "boolean" ||
+        typeof cursor.created_at !== "string" ||
+        typeof cursor.id !== "string" ||
+        !UUID_PATTERN.test(cursor.id) ||
+        Number.isNaN(Date.parse(cursor.created_at))
+      ) {
+        throw new InvalidFeedCursorError();
+      }
+
+      values.push(
+        cursor.is_pinned,
+        cursor.is_urgent,
+        cursor.created_at,
+        cursor.id
+      );
+
+      const pinnedParam = values.length - 3;
+      const urgentParam = values.length - 2;
+      const createdParam = values.length - 1;
+      const idParam = values.length;
+
+      conditions.push(
+        `(
+          post.is_pinned::int,
+          post.is_urgent::int,
+          post.created_at,
+          post.id
+        ) < (
+          $${pinnedParam}::boolean::int,
+          $${urgentParam}::boolean::int,
+          $${createdParam}::timestamptz,
+          $${idParam}::uuid
+        )`
+      );
+    }
+
+    const whereClause = conditions.length
+      ? `WHERE ${conditions.join(" AND ")}`
+      : "";
+
+    values.push(limit + 1);
+    const limitParameter = values.length;
+
+    const result = await query(
+      `SELECT
+         post.*,
+         author.first_name,
+         author.last_name,
+         author.email,
+         author.role,
+         (
+           SELECT COUNT(*)::int
+           FROM agent_post_comments comment
+           WHERE comment.post_id = post.id
+         ) AS comment_count,
+         (
+           SELECT COUNT(*)::int
+           FROM agent_post_reports report
+           WHERE report.post_id = post.id
+             AND report.status = 'pending'
+         ) AS pending_report_count
+       FROM agent_posts post
+       INNER JOIN users author
+         ON author.id = post.author_id
+       ${whereClause}
+       ORDER BY
+         post.is_pinned DESC,
+         post.is_urgent DESC,
+         post.created_at DESC,
+         post.id DESC
+       LIMIT $${limitParameter}`,
+      values
+    );
+
+    const hasMore = result.rows.length > limit;
+    const rows = hasMore
+      ? result.rows.slice(0, limit)
+      : result.rows;
+
+    const last = rows.at(-1);
+
+    res.json({
+      success: true,
+      data: rows,
+      pagination: {
+        limit,
+        has_more: hasMore,
+        next_cursor:
+          hasMore && last
+            ? encodeFeedCursor({
+                is_pinned: Boolean(last.is_pinned),
+                is_urgent: Boolean(last.is_urgent),
+                created_at: new Date(last.created_at).toISOString(),
+                id: last.id,
+              })
+            : null,
+      },
+    });
+  } catch (error) {
+    if (error instanceof InvalidFeedCursorError) {
+      return res.status(422).json({
+        success: false,
+        code: "INVALID_CURSOR",
+        message: "Invalid moderation cursor",
+      });
+    }
+
+    logger.error(
+      "List Agent Community moderation cursor posts error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch community posts",
+    });
+  }
+};
+
+exports.listModerationHistoryCursor = async (req, res) => {
+  const {
+    encodeFeedCursor,
+    decodeFeedCursor,
+    InvalidFeedCursorError,
+  } = require("../utils/feedCursor");
+
+  const {
+    post_id,
+    action,
+  } = req.query;
+
+  const parsedLimit = Number.parseInt(req.query.limit, 10);
+  const limit = Number.isInteger(parsedLimit)
+    ? Math.min(Math.max(parsedLimit, 1), 100)
+    : 50;
+
+  const conditions = [];
+  const values = [];
+
+  if (post_id) {
+    values.push(post_id);
+    conditions.push(`history.post_id = $${values.length}`);
+  }
+
+  if (action) {
+    values.push(action);
+    conditions.push(`history.action = $${values.length}`);
+  }
+
+  try {
+    const cursor = decodeFeedCursor(req.query.cursor);
+
+    if (cursor) {
+      if (
+        typeof cursor.created_at !== "string" ||
+        typeof cursor.id !== "string" ||
+        !UUID_PATTERN.test(cursor.id) ||
+        Number.isNaN(Date.parse(cursor.created_at))
+      ) {
+        throw new InvalidFeedCursorError();
+      }
+
+      values.push(cursor.created_at, cursor.id);
+
+      const createdParam = values.length - 1;
+      const idParam = values.length;
+
+      conditions.push(
+        `(history.created_at, history.id) <
+         ($${createdParam}::timestamptz, $${idParam}::uuid)`
+      );
+    }
+
+    const whereClause = conditions.length
+      ? `WHERE ${conditions.join(" AND ")}`
+      : "";
+
+    values.push(limit + 1);
+    const limitParameter = values.length;
+
+    const result = await query(
+      `SELECT
+         history.*,
+         post.content AS post_content,
+         author.first_name AS author_first_name,
+         author.last_name AS author_last_name,
+         moderator.first_name AS moderator_first_name,
+         moderator.last_name AS moderator_last_name,
+         moderator.email AS moderator_email
+       FROM agent_post_moderation_history history
+       INNER JOIN agent_posts post
+         ON post.id = history.post_id
+       INNER JOIN users author
+         ON author.id = post.author_id
+       INNER JOIN users moderator
+         ON moderator.id = history.moderator_id
+       ${whereClause}
+       ORDER BY
+         history.created_at DESC,
+         history.id DESC
+       LIMIT $${limitParameter}`,
+      values
+    );
+
+    const hasMore = result.rows.length > limit;
+    const rows = hasMore
+      ? result.rows.slice(0, limit)
+      : result.rows;
+
+    const last = rows.at(-1);
+
+    res.json({
+      success: true,
+      data: rows,
+      pagination: {
+        limit,
+        has_more: hasMore,
+        next_cursor:
+          hasMore && last
+            ? encodeFeedCursor({
+                created_at: new Date(last.created_at).toISOString(),
+                id: last.id,
+              })
+            : null,
+      },
+    });
+  } catch (error) {
+    if (error instanceof InvalidFeedCursorError) {
+      return res.status(422).json({
+        success: false,
+        code: "INVALID_CURSOR",
+        message: "Invalid moderation history cursor",
+      });
+    }
+
+    logger.error(
+      "List Agent Community moderation history cursor error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch moderation history",
     });
   }
 };

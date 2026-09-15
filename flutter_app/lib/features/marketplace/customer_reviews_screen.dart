@@ -12,11 +12,17 @@ class CustomerReviewsScreen extends StatefulWidget {
   State<CustomerReviewsScreen> createState() => _CustomerReviewsScreenState();
 }
 
-class _CustomerReviewsScreenState extends State<CustomerReviewsScreen> {
+class _CustomerReviewsScreenState
+    extends State<CustomerReviewsScreen> {
+  final ScrollController _scrollController = ScrollController();
+
   List<Map<String, dynamic>> _reviews = [];
   List<Map<String, dynamic>> _ads = [];
 
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  String? _nextCursor;
   String? _error;
   String? _selectedAdId;
   int? _selectedRating;
@@ -24,61 +30,116 @@ class _CustomerReviewsScreenState extends State<CustomerReviewsScreen> {
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_onScroll)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_hasMore || _loading || _loadingMore) return;
+
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 300) {
+      _load(loadMore: true);
+    }
+  }
+
+  Future<void> _load({bool loadMore = false}) async {
+    if (loadMore) {
+      if (_loadingMore || !_hasMore || _nextCursor == null) {
+        return;
+      }
+
+      setState(() => _loadingMore = true);
+    } else {
+      setState(() {
+        _loading = true;
+        _error = null;
+        _nextCursor = null;
+        _hasMore = false;
+      });
+    }
 
     try {
       final response = await ApiClient.instance.get(
-        '/marketplace/reviews/received',
+        '/marketplace/reviews/received/cursor',
         queryParameters: {
           if (_selectedAdId != null) 'ad_id': _selectedAdId,
           if (_selectedRating != null) 'rating': _selectedRating,
-          'limit': 100,
+          if (loadMore && _nextCursor != null)
+            'cursor': _nextCursor,
+          'limit': 20,
         },
       );
 
       final rawReviews = response.data['data'];
       final rawAds = response.data['filters']?['ads'];
+      final pagination = response.data['pagination'];
+
+      final incoming = rawReviews is List
+          ? rawReviews
+              .whereType<Map>()
+              .map(
+                (item) =>
+                    Map<String, dynamic>.from(item),
+              )
+              .toList()
+          : <Map<String, dynamic>>[];
 
       if (!mounted) return;
 
       setState(() {
-        _reviews = rawReviews is List
-            ? rawReviews
-                .whereType<Map>()
-                .map((item) => Map<String, dynamic>.from(item))
-                .toList()
-            : [];
+        if (loadMore) {
+          _reviews.addAll(incoming);
+        } else {
+          _reviews = incoming;
+        }
 
-        _ads = rawAds is List
-            ? rawAds
-                .whereType<Map>()
-                .map((item) => Map<String, dynamic>.from(item))
-                .toList()
-            : [];
+        if (rawAds is List) {
+          _ads = rawAds
+              .whereType<Map>()
+              .map(
+                (item) =>
+                    Map<String, dynamic>.from(item),
+              )
+              .toList();
+        }
+
+        _nextCursor = pagination?['next_cursor']?.toString();
+        _hasMore = pagination?['has_more'] == true;
 
         _loading = false;
+        _loadingMore = false;
       });
     } on DioException catch (e) {
       if (!mounted) return;
 
       setState(() {
-        _error =
-            e.response?.data?['message'] ?? 'Customer reviews could not load.';
+        if (!loadMore) {
+          _error = e.response?.data?['message'] ??
+              'Customer reviews could not load.';
+        }
+
         _loading = false;
+        _loadingMore = false;
       });
     } catch (_) {
       if (!mounted) return;
 
       setState(() {
-        _error = 'Customer reviews could not load.';
+        if (!loadMore) {
+          _error = 'Customer reviews could not load.';
+        }
+
         _loading = false;
+        _loadingMore = false;
       });
     }
   }
@@ -88,12 +149,14 @@ class _CustomerReviewsScreenState extends State<CustomerReviewsScreen> {
       _selectedAdId = null;
       _selectedRating = null;
     });
+
     _load();
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasFilters = _selectedAdId != null || _selectedRating != null;
+    final hasFilters =
+        _selectedAdId != null || _selectedRating != null;
 
     return Scaffold(
       appBar: AppBar(
@@ -109,6 +172,7 @@ class _CustomerReviewsScreenState extends State<CustomerReviewsScreen> {
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
+          controller: _scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
           children: [
@@ -117,7 +181,9 @@ class _CustomerReviewsScreenState extends State<CustomerReviewsScreen> {
             if (_loading)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 80),
-                child: Center(child: CircularProgressIndicator()),
+                child: Center(
+                  child: CircularProgressIndicator(),
+                ),
               )
             else if (_error != null)
               EmptyState(
@@ -130,16 +196,20 @@ class _CustomerReviewsScreenState extends State<CustomerReviewsScreen> {
             else if (_reviews.isEmpty)
               EmptyState(
                 icon: Icons.rate_review_outlined,
-                title: hasFilters ? 'No matching reviews' : 'No reviews yet',
+                title:
+                    hasFilters ? 'No matching reviews' : 'No reviews yet',
                 subtitle: hasFilters
                     ? 'Try changing or clearing the filters.'
                     : 'Reviews from customers will appear here.',
-                actionLabel: hasFilters ? 'Clear Filters' : null,
-                onAction: hasFilters ? _clearFilters : null,
+                actionLabel:
+                    hasFilters ? 'Clear Filters' : null,
+                onAction:
+                    hasFilters ? _clearFilters : null,
               )
             else ...[
               Text(
-                '${_reviews.length} review${_reviews.length == 1 ? '' : 's'}',
+                '${_reviews.length}${_hasMore ? '+' : ''} '
+                'review${_reviews.length == 1 && !_hasMore ? '' : 's'}',
                 style: TextStyle(
                   color: Theme.of(context)
                       .colorScheme
@@ -149,6 +219,13 @@ class _CustomerReviewsScreenState extends State<CustomerReviewsScreen> {
               ),
               const SizedBox(height: 8),
               ..._reviews.map(_ReviewCard.new),
+              if (_loadingMore)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                ),
             ],
           ],
         ),
