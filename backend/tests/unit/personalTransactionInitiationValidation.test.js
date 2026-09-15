@@ -41,6 +41,9 @@ jest.mock(
     listTransactions: jest.fn(
       (_req, res) => res.status(204).end(),
     ),
+    listTransactionsCursor: jest.fn(
+      (_req, res) => res.status(204).end(),
+    ),
     getTransaction: jest.fn(
       (_req, res) => res.status(204).end(),
     ),

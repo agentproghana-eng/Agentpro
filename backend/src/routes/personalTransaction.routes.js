@@ -479,6 +479,13 @@ router.get(
   personalTransactionController.listTransactions
 );
 
+// GET /api/v1/personal-transactions/history/cursor — Paid-only cursor history
+router.get(
+  '/history/cursor',
+  requirePaidPersonalPlan,
+  personalTransactionController.listTransactionsCursor
+);
+
 // GET /api/v1/personal-transactions/:transaction_id
 router.get('/:transaction_id', personalTransactionController.getTransaction);
 
