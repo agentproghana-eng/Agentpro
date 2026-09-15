@@ -120,6 +120,92 @@ export function CompaniesPage() {
     load();
   }, []);
 
+  const loadMorePosts = async () => {
+    if (
+      loadingMorePosts ||
+      !postsHasMore ||
+      !postsNextCursor
+    ) {
+      return;
+    }
+
+    setLoadingMorePosts(true);
+
+    try {
+      const response = await API.get(
+        '/agent-posts/moderation/posts/cursor',
+        {
+          params: {
+            limit: 50,
+            cursor: postsNextCursor,
+          },
+        },
+      );
+
+      setAllPosts((current) => [
+        ...current,
+        ...(response.data.data || []),
+      ]);
+
+      setPostsNextCursor(
+        response.data.pagination?.next_cursor || null,
+      );
+      setPostsHasMore(
+        response.data.pagination?.has_more === true,
+      );
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message ||
+          'More Community posts could not be loaded.',
+      );
+    } finally {
+      setLoadingMorePosts(false);
+    }
+  };
+
+  const loadMoreHistory = async () => {
+    if (
+      loadingMoreHistory ||
+      !historyHasMore ||
+      !historyNextCursor
+    ) {
+      return;
+    }
+
+    setLoadingMoreHistory(true);
+
+    try {
+      const response = await API.get(
+        '/agent-posts/moderation/history/cursor',
+        {
+          params: {
+            limit: 50,
+            cursor: historyNextCursor,
+          },
+        },
+      );
+
+      setModerationHistory((current) => [
+        ...current,
+        ...(response.data.data || []),
+      ]);
+
+      setHistoryNextCursor(
+        response.data.pagination?.next_cursor || null,
+      );
+      setHistoryHasMore(
+        response.data.pagination?.has_more === true,
+      );
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message ||
+          'More moderation history could not be loaded.',
+      );
+    } finally {
+      setLoadingMoreHistory(false);
+    }
+  };
+
   const filtered = companies.filter((company) => {
     const term = search.trim().toLowerCase();
 
@@ -742,6 +828,12 @@ export function CommunityModerationPage() {
   const [pendingPosts, setPendingPosts] = useState([]);
   const [allPosts, setAllPosts] = useState([]);
   const [moderationHistory, setModerationHistory] = useState([]);
+  const [postsNextCursor, setPostsNextCursor] = useState(null);
+  const [postsHasMore, setPostsHasMore] = useState(false);
+  const [historyNextCursor, setHistoryNextCursor] = useState(null);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [loadingMorePosts, setLoadingMorePosts] = useState(false);
+  const [loadingMoreHistory, setLoadingMoreHistory] = useState(false);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState(null);
   const [activeTab, setActiveTab] = useState('reports');
@@ -766,11 +858,11 @@ export function CommunityModerationPage() {
         }),
         API.get('/agent-posts/moderation/pending'),
         API.get('/personal-community/moderation/pending'),
-        API.get('/agent-posts/moderation/posts', {
-          params: { limit: 100 },
+        API.get('/agent-posts/moderation/posts/cursor', {
+          params: { limit: 50 },
         }),
-        API.get('/agent-posts/moderation/history', {
-          params: { limit: 100 },
+        API.get('/agent-posts/moderation/history/cursor', {
+          params: { limit: 50 },
         }),
       ]);
 
@@ -802,7 +894,20 @@ export function CommunityModerationPage() {
         ),
       );
       setAllPosts(postsResponse.data.data || []);
+      setPostsNextCursor(
+        postsResponse.data.pagination?.next_cursor || null,
+      );
+      setPostsHasMore(
+        postsResponse.data.pagination?.has_more === true,
+      );
+
       setModerationHistory(historyResponse.data.data || []);
+      setHistoryNextCursor(
+        historyResponse.data.pagination?.next_cursor || null,
+      );
+      setHistoryHasMore(
+        historyResponse.data.pagination?.has_more === true,
+      );
     } catch (error) {
       toast.error(
         error.response?.data?.message ||
@@ -1028,7 +1133,7 @@ export function CommunityModerationPage() {
               : 'border-transparent text-gray-500',
           ].join(' ')}
         >
-          All Posts ({allPosts.length})
+          All Posts ({allPosts.length}{postsHasMore ? '+' : ''})
         </button>
 
         <button
@@ -1041,7 +1146,7 @@ export function CommunityModerationPage() {
               : 'border-transparent text-gray-500',
           ].join(' ')}
         >
-          Moderation History ({moderationHistory.length})
+          Moderation History ({moderationHistory.length}{historyHasMore ? '+' : ''})
         </button>
       </div>
 
@@ -1583,6 +1688,19 @@ export function CommunityModerationPage() {
                 },
               ]}
             />
+
+            {postsHasMore && (
+              <div className="border-t border-gray-100 p-4 text-center">
+                <button
+                  type="button"
+                  onClick={loadMorePosts}
+                  disabled={loadingMorePosts}
+                  className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 disabled:opacity-50"
+                >
+                  {loadingMorePosts ? 'Loading...' : 'Load more posts'}
+                </button>
+              </div>
+            )}
           </div>
         </section>
       )}
@@ -1644,6 +1762,21 @@ export function CommunityModerationPage() {
               },
             ]}
           />
+
+          {historyHasMore && (
+            <div className="border-t border-gray-100 p-4 text-center">
+              <button
+                type="button"
+                onClick={loadMoreHistory}
+                disabled={loadingMoreHistory}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 disabled:opacity-50"
+              >
+                {loadingMoreHistory
+                  ? 'Loading...'
+                  : 'Load more history'}
+              </button>
+            </div>
+          )}
         </section>
       )}
     </div>

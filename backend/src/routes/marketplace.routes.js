@@ -628,6 +628,102 @@ mpRouter.get('/categories', async (req, res) => {
 // pending_payment, active, rejected, expired, removed). The public list endpoint
 // above only ever returns 'active' ads, so a user has no other way to
 // see or act on an ad they just submitted.
+
+mpRouter.get('/mine/cursor', async (req, res) => {
+  const {
+    encodeFeedCursor,
+    decodeFeedCursor,
+    InvalidFeedCursorError,
+  } = require('../utils/feedCursor');
+
+  const parsedLimit = Math.min(
+    Math.max(parseInt(req.query.limit, 10) || 20, 1),
+    100
+  );
+
+  try {
+    const cursor = decodeFeedCursor(req.query.cursor);
+
+    const params = [req.user.id];
+    let seekClause = '';
+
+    if (cursor) {
+      if (
+        typeof cursor.created_at !== 'string' ||
+        typeof cursor.id !== 'string' ||
+        !new RegExp(`^${UUID_PATH_SEGMENT}$`).test(cursor.id) ||
+        Number.isNaN(Date.parse(cursor.created_at))
+      ) {
+        throw new InvalidFeedCursorError();
+      }
+
+      params.push(cursor.created_at, cursor.id);
+
+      seekClause = `
+        AND (a.created_at, a.id) <
+            ($2::timestamptz, $3::uuid)
+      `;
+    }
+
+    params.push(parsedLimit + 1);
+    const limitParameter = params.length;
+
+    const result = await query(
+      `SELECT
+         a.*,
+         ac.name AS category_name
+       FROM advertisements a
+       LEFT JOIN ad_categories ac
+         ON ac.id = a.category_id
+       WHERE a.posted_by = $1
+       ${seekClause}
+       ORDER BY
+         a.created_at DESC,
+         a.id DESC
+       LIMIT $${limitParameter}`,
+      params
+    );
+
+    const hasMore = result.rows.length > parsedLimit;
+    const rows = hasMore
+      ? result.rows.slice(0, parsedLimit)
+      : result.rows;
+
+    const last = rows.at(-1);
+
+    res.json({
+      success: true,
+      data: rows,
+      pagination: {
+        limit: parsedLimit,
+        has_more: hasMore,
+        next_cursor:
+          hasMore && last
+            ? encodeFeedCursor({
+                created_at: new Date(last.created_at).toISOString(),
+                id: last.id,
+              })
+            : null,
+      },
+    });
+  } catch (error) {
+    if (error instanceof InvalidFeedCursorError) {
+      return res.status(422).json({
+        success: false,
+        code: 'INVALID_CURSOR',
+        message: 'Invalid marketplace ads cursor',
+      });
+    }
+
+    logger.error('GET /marketplace/mine/cursor error:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch your ads',
+    });
+  }
+});
+
 mpRouter.get('/mine', async (req, res) => {
   try {
     const result = await query(
@@ -959,6 +1055,166 @@ mpRouter.get('/dashboard', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch marketplace dashboard',
+    });
+  }
+});
+
+
+mpRouter.get('/reviews/received/cursor', async (req, res) => {
+  const {
+    encodeFeedCursor,
+    decodeFeedCursor,
+    InvalidFeedCursorError,
+  } = require('../utils/feedCursor');
+
+  const {
+    ad_id,
+    rating,
+  } = req.query;
+
+  const parsedLimit = Math.min(
+    Math.max(parseInt(req.query.limit, 10) || 20, 1),
+    100
+  );
+
+  try {
+    const cursor = decodeFeedCursor(req.query.cursor);
+
+    const conditions = ['a.posted_by = $1'];
+    const params = [req.user.id];
+    let index = 2;
+
+    if (ad_id) {
+      conditions.push(`a.id = $${index++}`);
+      params.push(ad_id);
+    }
+
+    if (rating) {
+      const parsedRating = parseInt(rating, 10);
+
+      if (
+        !Number.isInteger(parsedRating) ||
+        parsedRating < 1 ||
+        parsedRating > 5
+      ) {
+        return res.status(422).json({
+          success: false,
+          message: 'Rating must be between 1 and 5',
+        });
+      }
+
+      conditions.push(`ar.rating = $${index++}`);
+      params.push(parsedRating);
+    }
+
+    if (cursor) {
+      if (
+        typeof cursor.created_at !== 'string' ||
+        typeof cursor.id !== 'string' ||
+        !new RegExp(`^${UUID_PATH_SEGMENT}$`).test(cursor.id) ||
+        Number.isNaN(Date.parse(cursor.created_at))
+      ) {
+        throw new InvalidFeedCursorError();
+      }
+
+      const createdParameter = index++;
+      const idParameter = index++;
+
+      conditions.push(
+        `(ar.created_at, ar.id) <
+         ($${createdParameter}::timestamptz, $${idParameter}::uuid)`
+      );
+
+      params.push(cursor.created_at, cursor.id);
+    }
+
+    const where = `WHERE ${conditions.join(' AND ')}`;
+
+    const limitParameter = index++;
+    params.push(parsedLimit + 1);
+
+    const [reviews, ads] = await Promise.all([
+      query(
+        `SELECT
+           ar.id,
+           ar.advertisement_id,
+           ar.rating,
+           ar.review,
+           ar.created_at,
+           a.title AS ad_title,
+           u.first_name AS reviewer_first_name,
+           u.last_name AS reviewer_last_name,
+           u.profile_image_url AS reviewer_profile_image_url
+         FROM ad_ratings ar
+         INNER JOIN advertisements a
+           ON a.id = ar.advertisement_id
+         INNER JOIN users u
+           ON u.id = ar.rated_by
+         ${where}
+         ORDER BY
+           ar.created_at DESC,
+           ar.id DESC
+         LIMIT $${limitParameter}`,
+        params
+      ),
+      query(
+        `SELECT
+           a.id,
+           a.title,
+           COUNT(ar.id)::int AS review_count
+         FROM advertisements a
+         LEFT JOIN ad_ratings ar
+           ON ar.advertisement_id = a.id
+         WHERE a.posted_by = $1
+         GROUP BY a.id, a.title
+         HAVING COUNT(ar.id) > 0
+         ORDER BY a.title`,
+        [req.user.id]
+      ),
+    ]);
+
+    const hasMore = reviews.rows.length > parsedLimit;
+    const rows = hasMore
+      ? reviews.rows.slice(0, parsedLimit)
+      : reviews.rows;
+
+    const last = rows.at(-1);
+
+    res.json({
+      success: true,
+      data: rows,
+      filters: {
+        ads: ads.rows,
+      },
+      pagination: {
+        limit: parsedLimit,
+        has_more: hasMore,
+        next_cursor:
+          hasMore && last
+            ? encodeFeedCursor({
+                created_at: new Date(last.created_at).toISOString(),
+                id: last.id,
+              })
+            : null,
+      },
+    });
+  } catch (error) {
+    if (error instanceof InvalidFeedCursorError) {
+      return res.status(422).json({
+        success: false,
+        code: 'INVALID_CURSOR',
+        message: 'Invalid review cursor',
+      });
+    }
+
+    logger.error(
+      'GET /marketplace/reviews/received/cursor error:',
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch customer reviews',
     });
   }
 });
