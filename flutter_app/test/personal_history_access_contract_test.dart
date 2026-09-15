@@ -22,7 +22,7 @@ void main() {
 
         expect(
           source,
-          contains("'/personal-transactions/history'"),
+          contains("'/personal-transactions/history/cursor'"),
         );
 
         expect(
