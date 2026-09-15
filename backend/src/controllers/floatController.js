@@ -60,6 +60,73 @@ function isValidUuid(value) {
   );
 }
 
+
+function parseCursorLimit(value, fallback = 30) {
+  const parsed = Number.parseInt(value, 10);
+
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return fallback;
+  }
+
+  return Math.min(parsed, 100);
+}
+
+function encodeFloatCursor(row) {
+  if (!row?.created_at || !row?.id) {
+    return null;
+  }
+
+  return Buffer.from(
+    JSON.stringify({
+      created_at: row.created_at,
+      id: row.id,
+    }),
+    'utf8'
+  ).toString('base64url');
+}
+
+function decodeFloatCursor(value) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const decoded = JSON.parse(
+      Buffer.from(
+        String(value),
+        'base64url'
+      ).toString('utf8')
+    );
+
+    if (
+      !decoded ||
+      !decoded.created_at ||
+      Number.isNaN(
+        Date.parse(decoded.created_at)
+      ) ||
+      !isValidUuid(decoded.id)
+    ) {
+      return null;
+    }
+
+    return {
+      createdAt: decoded.created_at,
+      id: decoded.id,
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+function sendInvalidFloatCursor(res) {
+  return res.status(422).json({
+    success: false,
+    code: 'INVALID_CURSOR',
+    message:
+      'The pagination cursor is invalid or expired.',
+  });
+}
+
 function positiveTwoDecimalMoney(value) {
   const amount = positiveMoney(value);
 
@@ -917,6 +984,226 @@ exports.getFloatHistory = async (req, res) => {
 };
 
 
+// ── Float Movement History — Cursor ───────────────────────────
+
+exports.getFloatHistoryCursor = async (req, res) => {
+  const {
+    branch_id,
+    provider,
+    from_date,
+    to_date,
+    cursor,
+    limit,
+  } = req.query;
+
+  const parsedLimit =
+    parseCursorLimit(limit, 30);
+
+  const decodedCursor =
+    cursor
+      ? decodeFloatCursor(cursor)
+      : null;
+
+  if (cursor && !decodedCursor) {
+    return sendInvalidFloatCursor(res);
+  }
+
+  const parsedFromDate =
+    from_date === undefined
+      ? null
+      : parseDateFilter(from_date);
+
+  const parsedToDate =
+    to_date === undefined
+      ? null
+      : parseDateFilter(to_date);
+
+  if (
+    from_date !== undefined &&
+    parsedFromDate === undefined
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid from_date',
+    });
+  }
+
+  if (
+    to_date !== undefined &&
+    parsedToDate === undefined
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid to_date',
+    });
+  }
+
+  if (
+    parsedFromDate &&
+    parsedToDate &&
+    parsedFromDate.getTime() >
+      parsedToDate.getTime()
+  ) {
+    return res.status(400).json({
+      success: false,
+      message:
+        'from_date must be before or equal to to_date',
+    });
+  }
+
+  if (
+    provider &&
+    !VALID_PROVIDERS.has(provider)
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid provider',
+    });
+  }
+
+  try {
+    const conditions = [];
+    const params = [];
+    let idx = 1;
+
+    if (branch_id) {
+      conditions.push(
+        `fa.branch_id = $${idx++}`
+      );
+      params.push(branch_id);
+    }
+
+    if (provider) {
+      conditions.push(
+        `fa.provider = $${idx++}`
+      );
+      params.push(provider);
+    }
+
+    if (parsedFromDate) {
+      conditions.push(
+        `fm.created_at >= $${idx++}`
+      );
+      params.push(parsedFromDate);
+    }
+
+    if (parsedToDate) {
+      conditions.push(
+        `fm.created_at <= $${idx++}`
+      );
+      params.push(parsedToDate);
+    }
+
+    if (req.user.role !== 'superuser') {
+      conditions.push(
+        `b.company_id = $${idx++}`
+      );
+      params.push(req.user.company_id);
+    }
+
+    if (req.user.role === 'manager') {
+      conditions.push(
+        `EXISTS (
+           SELECT 1
+           FROM branch_managers bm
+           WHERE bm.branch_id = b.id
+             AND bm.manager_id = $${idx++}
+         )`
+      );
+
+      params.push(req.user.id);
+    }
+
+    if (decodedCursor) {
+      conditions.push(
+        `(fm.created_at, fm.id) <
+         ($${idx++}::timestamptz, $${idx++}::uuid)`
+      );
+
+      params.push(
+        decodedCursor.createdAt,
+        decodedCursor.id
+      );
+    }
+
+    const where =
+      conditions.length
+        ? `WHERE ${conditions.join(' AND ')}`
+        : '';
+
+    const fetchLimit =
+      parsedLimit + 1;
+
+    const limitParam = idx;
+
+    params.push(fetchLimit);
+
+    const result = await query(
+      `SELECT
+         fm.*,
+         fa.provider,
+         fa.branch_id,
+         b.name as branch_name,
+         u.first_name || ' ' ||
+           u.last_name as performed_by_name
+       FROM float_movements fm
+       INNER JOIN float_accounts fa
+         ON fm.float_account_id = fa.id
+       INNER JOIN branches b
+         ON fa.branch_id = b.id
+       LEFT JOIN users u
+         ON fm.performed_by = u.id
+       ${where}
+       ORDER BY
+         fm.created_at DESC,
+         fm.id DESC
+       LIMIT $${limitParam}`,
+      params
+    );
+
+    const hasMore =
+      result.rows.length > parsedLimit;
+
+    const rows =
+      hasMore
+        ? result.rows.slice(
+            0,
+            parsedLimit
+          )
+        : result.rows;
+
+    const nextCursor =
+      hasMore && rows.length > 0
+        ? encodeFloatCursor(
+            rows[rows.length - 1]
+          )
+        : null;
+
+    return res.json({
+      success: true,
+      data: rows,
+      meta: {
+        limit: parsedLimit,
+        has_more: hasMore,
+        next_cursor: nextCursor,
+      },
+    });
+  } catch (error) {
+    logger.error(
+      'Cursor float history error:',
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        'Failed to fetch float history',
+    });
+  }
+};
+
+
+
 // ── Update Low Float Threshold ────────────────────────────────
 
 exports.updateThreshold = async (req, res) => {
@@ -1180,6 +1467,204 @@ exports.listFloatRequests = async (req, res) => {
     });
   }
 };
+
+
+// ── List Float Requests — Cursor ──────────────────────────────
+
+exports.listFloatRequestsCursor = async (req, res) => {
+  const {
+    status,
+    cursor,
+    limit,
+  } = req.query;
+
+  const validStatuses = new Set([
+    'pending',
+    'approved',
+    'rejected',
+  ]);
+
+  if (
+    status &&
+    !validStatuses.has(status)
+  ) {
+    return res.status(400).json({
+      success: false,
+      message:
+        'Invalid float request status',
+    });
+  }
+
+  const parsedLimit =
+    parseCursorLimit(limit, 30);
+
+  const decodedCursor =
+    cursor
+      ? decodeFloatCursor(cursor)
+      : null;
+
+  if (cursor && !decodedCursor) {
+    return sendInvalidFloatCursor(res);
+  }
+
+  try {
+    const conditions = [];
+    const params = [];
+
+    params.push(req.user.company_id);
+    conditions.push(
+      `b.company_id = $${params.length}`
+    );
+
+    if (req.user.role === 'agent') {
+      params.push(req.user.id);
+
+      const userParam =
+        `$${params.length}`;
+
+      conditions.push(
+        `fr.requested_by = ${userParam}`
+      );
+
+      conditions.push(
+        `EXISTS (
+           SELECT 1
+           FROM agent_branches ab
+           WHERE ab.branch_id = fr.branch_id
+             AND ab.agent_id = ${userParam}
+         )`
+      );
+    }
+
+    if (req.user.role === 'manager') {
+      params.push(req.user.id);
+
+      conditions.push(
+        `EXISTS (
+           SELECT 1
+           FROM branch_managers bm
+           WHERE bm.branch_id = fr.branch_id
+             AND bm.manager_id = $${params.length}
+         )`
+      );
+    }
+
+    if (status) {
+      params.push(status);
+
+      conditions.push(
+        `fr.status = $${params.length}`
+      );
+    }
+
+    if (decodedCursor) {
+      params.push(
+        decodedCursor.createdAt
+      );
+      const createdAtParam =
+        `$${params.length}`;
+
+      params.push(
+        decodedCursor.id
+      );
+      const idParam =
+        `$${params.length}`;
+
+      conditions.push(
+        `(fr.created_at, fr.id) <
+         (${createdAtParam}::timestamptz, ${idParam}::uuid)`
+      );
+    }
+
+    const where =
+      `WHERE ${conditions.join(' AND ')}`;
+
+    const fetchLimit =
+      parsedLimit + 1;
+
+    params.push(fetchLimit);
+
+    const limitParam =
+      params.length;
+
+    const result = await query(
+      `SELECT
+         fr.id,
+         fr.branch_id,
+         b.name as branch_name,
+         fr.requested_by,
+         requester.first_name ||
+           ' ' ||
+           requester.last_name
+           as requested_by_name,
+         fr.provider,
+         fr.amount_requested,
+         fr.reason,
+         fr.status,
+         fr.reviewed_by,
+         reviewer.first_name ||
+           ' ' ||
+           reviewer.last_name
+           as reviewed_by_name,
+         fr.reviewed_at,
+         fr.review_notes,
+         fr.created_at
+       FROM float_requests fr
+       INNER JOIN branches b
+         ON b.id = fr.branch_id
+       INNER JOIN users requester
+         ON requester.id = fr.requested_by
+       LEFT JOIN users reviewer
+         ON reviewer.id = fr.reviewed_by
+       ${where}
+       ORDER BY
+         fr.created_at DESC,
+         fr.id DESC
+       LIMIT $${limitParam}`,
+      params
+    );
+
+    const hasMore =
+      result.rows.length > parsedLimit;
+
+    const rows =
+      hasMore
+        ? result.rows.slice(
+            0,
+            parsedLimit
+          )
+        : result.rows;
+
+    const nextCursor =
+      hasMore && rows.length > 0
+        ? encodeFloatCursor(
+            rows[rows.length - 1]
+          )
+        : null;
+
+    return res.json({
+      success: true,
+      data: rows,
+      meta: {
+        limit: parsedLimit,
+        has_more: hasMore,
+        next_cursor: nextCursor,
+      },
+    });
+  } catch (error) {
+    logger.error(
+      'Cursor float requests error:',
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        'Failed to fetch float requests',
+    });
+  }
+};
+
 
 
 // ── Submit Float Request (Agent → Manager) ────────────────────

@@ -20,8 +20,8 @@ class _FloatRequestsScreenState extends State<FloatRequestsScreen> {
 
   String? _statusFilter;
 
-  int _page = 1;
-  int _totalPages = 1;
+  String? _nextCursor;
+  bool _hasMore = true;
 
   bool _loading = true;
   bool _loadingMore = false;
@@ -54,7 +54,11 @@ class _FloatRequestsScreenState extends State<FloatRequestsScreen> {
 
   Future<void> _load({bool loadMore = false}) async {
     if (loadMore) {
-      if (_loadingMore || _page >= _totalPages) {
+      if (
+        _loadingMore ||
+        !_hasMore ||
+        _nextCursor == null
+      ) {
         return;
       }
 
@@ -68,17 +72,21 @@ class _FloatRequestsScreenState extends State<FloatRequestsScreen> {
       });
     }
 
-    final nextPage = loadMore ? _page + 1 : 1;
-
     try {
-      final queryParameters = <String, dynamic>{'page': nextPage, 'limit': 30};
+      final queryParameters =
+          <String, dynamic>{'limit': 30};
+
+      if (loadMore && _nextCursor != null) {
+        queryParameters['cursor'] =
+            _nextCursor;
+      }
 
       if (_statusFilter != null) {
         queryParameters['status'] = _statusFilter;
       }
 
       final res = await ApiClient.instance.get(
-        '/float/requests',
+        '/float/requests/cursor',
         queryParameters: queryParameters,
       );
 
@@ -93,9 +101,11 @@ class _FloatRequestsScreenState extends State<FloatRequestsScreen> {
       setState(() {
         _requests = loadMore ? [..._requests, ...data] : data;
 
-        _page = (meta?['page'] as num?)?.toInt() ?? nextPage;
+        _nextCursor =
+            meta?['next_cursor']?.toString();
 
-        _totalPages = (meta?['total_pages'] as num?)?.toInt() ?? 1;
+        _hasMore =
+            meta?['has_more'] == true;
 
         _loading = false;
         _loadingMore = false;
@@ -418,7 +428,7 @@ class _FloatRequestsScreenState extends State<FloatRequestsScreen> {
                               physics: const AlwaysScrollableScrollPhysics(),
                               padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
                               itemCount: _requests.length +
-                                  (_page < _totalPages ? 1 : 0),
+                                  (_hasMore ? 1 : 0),
                               itemBuilder: (context, index) {
                                 if (index == _requests.length) {
                                   return Padding(

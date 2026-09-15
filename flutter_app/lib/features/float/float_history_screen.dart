@@ -20,8 +20,8 @@ class _FloatHistoryScreenState extends State<FloatHistoryScreen> {
   String? _provider;
   DateTimeRange? _dateRange;
 
-  int _page = 1;
-  int _totalPages = 1;
+  String? _nextCursor;
+  bool _hasMore = true;
 
   bool _loading = true;
   bool _loadingMore = false;
@@ -35,7 +35,11 @@ class _FloatHistoryScreenState extends State<FloatHistoryScreen> {
 
   Future<void> _load({bool loadMore = false}) async {
     if (loadMore) {
-      if (_loadingMore || _page >= _totalPages) {
+      if (
+        _loadingMore ||
+        !_hasMore ||
+        _nextCursor == null
+      ) {
         return;
       }
 
@@ -49,10 +53,14 @@ class _FloatHistoryScreenState extends State<FloatHistoryScreen> {
       });
     }
 
-    final nextPage = loadMore ? _page + 1 : 1;
-
     try {
-      final queryParameters = <String, dynamic>{'page': nextPage, 'limit': 30};
+      final queryParameters =
+          <String, dynamic>{'limit': 30};
+
+      if (loadMore && _nextCursor != null) {
+        queryParameters['cursor'] =
+            _nextCursor;
+      }
 
       final branchId = widget.branchId;
       if (branchId != null && branchId.isNotEmpty) {
@@ -85,7 +93,7 @@ class _FloatHistoryScreenState extends State<FloatHistoryScreen> {
       }
 
       final res = await ApiClient.instance.get(
-        '/float/history',
+        '/float/history/cursor',
         queryParameters: queryParameters,
       );
 
@@ -100,8 +108,11 @@ class _FloatHistoryScreenState extends State<FloatHistoryScreen> {
       setState(() {
         _movements = loadMore ? [..._movements, ...data] : data;
 
-        _page = (meta?['page'] as num?)?.toInt() ?? nextPage;
-        _totalPages = (meta?['total_pages'] as num?)?.toInt() ?? 1;
+        _nextCursor =
+            meta?['next_cursor']?.toString();
+
+        _hasMore =
+            meta?['has_more'] == true;
 
         _loading = false;
         _loadingMore = false;
@@ -375,7 +386,7 @@ class _FloatHistoryScreenState extends State<FloatHistoryScreen> {
                                 Map<String, dynamic>.from(movement as Map),
                           ),
                         ),
-                      if (_page < _totalPages)
+                      if (_hasMore)
                         Padding(
                           padding: const EdgeInsets.only(top: 8, bottom: 24),
                           child: OutlinedButton(
