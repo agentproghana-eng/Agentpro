@@ -7,10 +7,9 @@ import '../../shared/theme/app_colors.dart';
 
 /// Owner/Manager-facing review of closed shifts, surfacing the
 /// variance between expected and physically-counted cash at close.
-/// Consumes GET /shifts, which already existed on the backend
-/// (pagination, agent_id/branch_id/flagged_only filters, a computed
-/// flagged boolean based on system_config's threshold) with no
-/// frontend screen calling it until now.
+/// Consumes GET /shifts/cursor using bounded cursor pagination.
+/// The backend preserves agent_id/branch_id/flagged_only filters and
+/// computes flagged status from system_config's variance threshold.
 class ShiftHistoryScreen extends StatefulWidget {
   const ShiftHistoryScreen({super.key});
   @override
@@ -22,8 +21,8 @@ class _ShiftHistoryScreenState extends State<ShiftHistoryScreen> {
   bool _flaggedOnly = false;
   bool _loading = true;
   bool _loadingMore = false;
-  int _page = 1;
-  int _totalPages = 1;
+  String? _nextCursor;
+  bool _hasMore = false;
   double _threshold = 20.00;
 
   @override
@@ -35,19 +34,28 @@ class _ShiftHistoryScreenState extends State<ShiftHistoryScreen> {
   Future<void> _load({bool loadMore = false}) async {
     setState(() => loadMore ? _loadingMore = true : _loading = true);
     try {
-      final nextPage = loadMore ? _page + 1 : 1;
-      final res = await ApiClient.instance.get('/shifts', queryParameters: {
-        'page': nextPage,
-        'limit': 20,
-        if (_flaggedOnly) 'flagged_only': 'true',
-      });
+      final res = await ApiClient.instance.get(
+        '/shifts/cursor',
+        queryParameters: {
+          'limit': 20,
+          if (_flaggedOnly) 'flagged_only': 'true',
+          if (loadMore && _nextCursor != null)
+            'cursor': _nextCursor,
+        },
+      );
       final data = (res.data['data'] as List?) ?? [];
-      final meta = res.data['meta'] as Map<String, dynamic>?;
+      final pagination =
+          res.data['pagination'] as Map<String, dynamic>?;
+      final meta =
+          res.data['meta'] as Map<String, dynamic>?;
       if (mounted) {
         setState(() {
-          _shifts = loadMore ? [..._shifts, ...data] : data;
-          _page = nextPage;
-          _totalPages = meta?['total_pages'] ?? 1;
+          _shifts =
+              loadMore ? [..._shifts, ...data] : data;
+          _nextCursor =
+              pagination?['next_cursor']?.toString();
+          _hasMore =
+              pagination?['has_more'] == true;
           _threshold =
               double.tryParse(meta?['threshold']?.toString() ?? '') ?? 20.00;
           _loading = false;
@@ -102,7 +110,7 @@ class _ShiftHistoryScreenState extends State<ShiftHistoryScreen> {
                       child: ListView.builder(
                         padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                         itemCount:
-                            _shifts.length + (_page < _totalPages ? 1 : 0),
+                            _shifts.length + (_hasMore ? 1 : 0),
                         itemBuilder: (context, i) {
                           if (i == _shifts.length) {
                             return Padding(

@@ -705,6 +705,231 @@ exports.closeShift = async (req, res) => {
   }
 };
 
+
+exports.listShiftsCursor = async (req, res) => {
+  const {
+    agent_id,
+    branch_id,
+    flagged_only,
+    cursor,
+    limit = 20,
+  } = req.query;
+
+  const parsedLimit = Math.min(
+    Math.max(parseInt(limit, 10) || 20, 1),
+    100
+  );
+
+  let decodedCursor = null;
+
+  if (cursor) {
+    try {
+      const parsed = JSON.parse(
+        Buffer.from(cursor, 'base64url').toString('utf8')
+      );
+
+      if (
+        !parsed ||
+        typeof parsed !== 'object' ||
+        typeof parsed.closed_at !== 'string' ||
+        typeof parsed.id !== 'string'
+      ) {
+        throw new Error('invalid cursor');
+      }
+
+      const closedAt = new Date(parsed.closed_at);
+
+      if (Number.isNaN(closedAt.getTime())) {
+        throw new Error('invalid cursor');
+      }
+
+      decodedCursor = {
+        closed_at: closedAt.toISOString(),
+        id: parsed.id,
+      };
+    } catch (_) {
+      return res.status(422).json({
+        success: false,
+        code: 'INVALID_CURSOR',
+        message: 'Invalid shift cursor',
+      });
+    }
+  }
+
+  try {
+    const threshold = await getVarianceThreshold();
+
+    const conditions = [
+      `s.status = 'closed'`,
+    ];
+    const params = [];
+    let idx = 1;
+
+    if (req.user.role !== 'superuser') {
+      conditions.push(
+        `s.company_id = $${idx++}`
+      );
+      params.push(req.user.company_id);
+    }
+
+    if (req.user.role === 'manager') {
+      conditions.push(
+        `EXISTS (
+           SELECT 1
+           FROM branch_managers bm
+           WHERE bm.branch_id = s.branch_id
+             AND bm.manager_id = $${idx++}
+         )`
+      );
+      params.push(req.user.id);
+    }
+
+    if (agent_id) {
+      conditions.push(
+        `s.agent_id = $${idx++}`
+      );
+      params.push(agent_id);
+    }
+
+    if (branch_id) {
+      conditions.push(
+        `s.branch_id = $${idx++}`
+      );
+      params.push(branch_id);
+    }
+
+    if (flagged_only === 'true') {
+      conditions.push(
+        `ABS(
+           COALESCE(
+             s.closing_cash_variance,
+             s.variance,
+             0
+           ) -
+           COALESCE(
+             s.opening_cash_variance,
+             0
+           )
+         ) >= $${idx++}`
+      );
+      params.push(threshold);
+    }
+
+    if (decodedCursor) {
+      conditions.push(
+        `(s.closed_at, s.id) <
+         ($${idx++}::timestamptz, $${idx++}::uuid)`
+      );
+
+      params.push(
+        decodedCursor.closed_at,
+        decodedCursor.id
+      );
+    }
+
+    const where =
+      `WHERE ${conditions.join(' AND ')}`;
+
+    const result = await query(
+      `SELECT
+         s.*,
+         COALESCE(
+           s.opening_cash_variance,
+           0
+         ) AS opening_ledger_variance,
+         COALESCE(
+           s.closing_cash_variance,
+           s.variance,
+           0
+         ) AS closing_ledger_variance,
+         (
+           COALESCE(
+             s.closing_cash_variance,
+             s.variance,
+             0
+           ) -
+           COALESCE(
+             s.opening_cash_variance,
+             0
+           )
+         ) AS net_shift_variance,
+         u.first_name,
+         u.last_name,
+         b.name AS branch_name
+       FROM shifts s
+       JOIN users u
+         ON u.id = s.agent_id
+       LEFT JOIN branches b
+         ON b.id = s.branch_id
+       ${where}
+       ORDER BY
+         s.closed_at DESC,
+         s.id DESC
+       LIMIT $${idx}`,
+      [...params, parsedLimit + 1]
+    );
+
+    const hasMore =
+      result.rows.length > parsedLimit;
+
+    const rows =
+      hasMore
+        ? result.rows.slice(0, parsedLimit)
+        : result.rows;
+
+    const data = rows.map((row) => ({
+      ...row,
+      flagged:
+        Math.abs(
+          Number(
+            row.net_shift_variance || 0
+          )
+        ) >= threshold,
+    }));
+
+    let nextCursor = null;
+
+    if (hasMore && rows.length > 0) {
+      const last = rows[rows.length - 1];
+
+      nextCursor = Buffer.from(
+        JSON.stringify({
+          closed_at: new Date(
+            last.closed_at
+          ).toISOString(),
+          id: last.id,
+        }),
+        'utf8'
+      ).toString('base64url');
+    }
+
+    return res.json({
+      success: true,
+      data,
+      pagination: {
+        limit: parsedLimit,
+        has_more: hasMore,
+        next_cursor: nextCursor,
+      },
+      meta: {
+        threshold,
+      },
+    });
+  } catch (error) {
+    logger.error(
+      'List shifts cursor error:',
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        'Failed to fetch shifts',
+    });
+  }
+};
+
+
 exports.listShifts = async (req, res) => {
   const { agent_id, branch_id, flagged_only, page = 1, limit = 20 } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
