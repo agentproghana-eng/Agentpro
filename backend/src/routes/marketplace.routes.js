@@ -1080,12 +1080,12 @@ mpRouter.get('/reviews/received/cursor', async (req, res) => {
   try {
     const cursor = decodeFeedCursor(req.query.cursor);
 
-    const conditions = ['a.posted_by = $1'];
+    const conditions = ['ar.seller_id = $1'];
     const params = [req.user.id];
     let index = 2;
 
     if (ad_id) {
-      conditions.push(`a.id = $${index++}`);
+      conditions.push(`ar.advertisement_id = $${index++}`);
       params.push(ad_id);
     }
 
@@ -1232,12 +1232,12 @@ mpRouter.get('/reviews/received', async (req, res) => {
   const offset = (parsedPage - 1) * parsedLimit;
 
   try {
-    const conditions = ['a.posted_by = $1'];
+    const conditions = ['ar.seller_id = $1'];
     const params = [req.user.id];
     let index = 2;
 
     if (ad_id) {
-      conditions.push(`a.id = $${index++}`);
+      conditions.push(`ar.advertisement_id = $${index++}`);
       params.push(ad_id);
     }
 
