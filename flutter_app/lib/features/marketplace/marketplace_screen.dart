@@ -181,10 +181,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         // short backend interruption while the public Marketplace is still
         // usable.
         final rawLatest = await _cachedMarketplaceGet(
-          'marketplace:home:latest',
-          '/marketplace',
+          'marketplace:home:latest:cursor',
+          '/marketplace/cursor',
           queryParameters: {
-            'sort': 'newest',
             'limit': 20,
           },
           forceRefresh: forceRefresh,
@@ -276,9 +275,14 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         return;
       }
 
+      final marketplacePath =
+          _sort == 'newest'
+              ? '/marketplace/cursor'
+              : '/marketplace';
+
       final responses = await Future.wait([
         ApiClient.instance.get(
-          '/marketplace',
+          marketplacePath,
           queryParameters: _queryParameters(),
         ),
         ApiClient.instance.get('/marketplace/saved/ids'),

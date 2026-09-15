@@ -593,3 +593,199 @@ exports.deletePost = async (req, res) => {
     res.status(500).json({ success: false, message: "Failed to delete post" });
   }
 };
+
+// Cursor feed used by scalable Community clients. The legacy page/offset
+// listFeed endpoint remains intact for backward compatibility.
+exports.listFeedCursor = async (req, res) => {
+  const {
+    encodeFeedCursor,
+    decodeFeedCursor,
+    InvalidFeedCursorError,
+  } = require("../utils/feedCursor");
+
+  const parsedLimit = Number.parseInt(req.query.limit, 10);
+  const limit = Number.isInteger(parsedLimit)
+    ? Math.min(Math.max(parsedLimit, 1), 50)
+    : 20;
+
+  const validTypes = new Set([
+    "general",
+    "question",
+    "network_issue",
+    "fraud_alert",
+    "business_tip",
+    "announcement",
+  ]);
+
+  const requestedType = req.query.type?.toString();
+  const postType =
+    requestedType && validTypes.has(requestedType)
+      ? requestedType
+      : null;
+
+  try {
+    const cursor = decodeFeedCursor(req.query.cursor);
+
+    const values = [
+      req.user.id,
+      postType,
+    ];
+
+    let seekClause = "";
+
+    if (cursor) {
+      if (
+        typeof cursor.is_pinned !== "boolean" ||
+        typeof cursor.is_urgent !== "boolean" ||
+        typeof cursor.created_at !== "string" ||
+        typeof cursor.id !== "string" ||
+        !UUID_PATTERN.test(cursor.id) ||
+        Number.isNaN(Date.parse(cursor.created_at))
+      ) {
+        throw new InvalidFeedCursorError();
+      }
+
+      values.push(
+        cursor.is_pinned,
+        cursor.is_urgent,
+        cursor.created_at,
+        cursor.id
+      );
+
+      const pinnedParam = values.length - 3;
+      const urgentParam = values.length - 2;
+      const createdParam = values.length - 1;
+      const idParam = values.length;
+
+      seekClause = `
+        AND (
+          p.is_pinned::int,
+          p.is_urgent::int,
+          p.created_at,
+          p.id
+        ) < (
+          $${pinnedParam}::boolean::int,
+          $${urgentParam}::boolean::int,
+          $${createdParam}::timestamptz,
+          $${idParam}::uuid
+        )
+      `;
+    }
+
+    values.push(limit + 1);
+    const limitParam = values.length;
+
+    const result = await query(
+      `SELECT
+         p.*,
+         u.first_name,
+         u.last_name,
+         u.role,
+
+         EXISTS (
+           SELECT 1
+           FROM agent_saved_posts saved
+           WHERE saved.post_id = p.id
+             AND saved.user_id = $1
+         ) AS is_saved,
+
+         (
+           SELECT json_object_agg(reaction_type, cnt)
+           FROM (
+             SELECT
+               reaction_type,
+               COUNT(*)::int AS cnt
+             FROM agent_post_likes
+             WHERE post_id = p.id
+             GROUP BY reaction_type
+           ) reaction_summary
+         ) AS reaction_counts,
+
+         (
+           SELECT COUNT(*)::int
+           FROM agent_post_comments comment
+           WHERE comment.post_id = p.id
+         ) AS comment_count,
+
+         (
+           SELECT reaction_type
+           FROM agent_post_likes reaction
+           WHERE reaction.post_id = p.id
+             AND reaction.user_id = $1
+         ) AS my_reaction
+
+       FROM agent_posts p
+       INNER JOIN users u
+         ON u.id = p.author_id
+
+       WHERE (
+         p.status = 'active'
+         OR (
+           p.status = 'pending_review'
+           AND p.author_id = $1
+         )
+       )
+       AND (
+         $2::community_post_type IS NULL
+         OR p.post_type = $2
+       )
+       AND NOT EXISTS (
+         SELECT 1
+         FROM agent_community_blocks block
+         WHERE block.blocker_id = $1
+           AND block.blocked_user_id = p.author_id
+       )
+
+       ${seekClause}
+
+       ORDER BY
+         p.is_pinned DESC,
+         p.is_urgent DESC,
+         p.created_at DESC,
+         p.id DESC
+
+       LIMIT $${limitParam}`,
+      values
+    );
+
+    const hasMore = result.rows.length > limit;
+    const rows = hasMore
+      ? result.rows.slice(0, limit)
+      : result.rows;
+
+    const last = rows.at(-1);
+
+    res.json({
+      success: true,
+      data: rows,
+      pagination: {
+        limit,
+        has_more: hasMore,
+        next_cursor:
+          hasMore && last
+            ? encodeFeedCursor({
+                is_pinned: Boolean(last.is_pinned),
+                is_urgent: Boolean(last.is_urgent),
+                created_at: new Date(last.created_at).toISOString(),
+                id: last.id,
+              })
+            : null,
+      },
+    });
+  } catch (error) {
+    if (error instanceof InvalidFeedCursorError) {
+      return res.status(422).json({
+        success: false,
+        code: "INVALID_CURSOR",
+        message: "Invalid feed cursor",
+      });
+    }
+
+    logger.error("List cursor feed error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch feed",
+    });
+  }
+};

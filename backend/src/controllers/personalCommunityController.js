@@ -451,3 +451,148 @@ exports.addComment = async (req, res) => {
     res.status(500).json({ success: false, message: "Failed to add comment" });
   }
 };
+
+// Cursor feed for Personal Community. The legacy /feed endpoint remains
+// available until all clients have migrated.
+exports.listFeedCursor = async (req, res) => {
+  const {
+    encodeFeedCursor,
+    decodeFeedCursor,
+    InvalidFeedCursorError,
+  } = require("../utils/feedCursor");
+
+  const parsedLimit = Number.parseInt(req.query.limit, 10);
+  const limit = Number.isInteger(parsedLimit)
+    ? Math.min(Math.max(parsedLimit, 1), 50)
+    : 20;
+
+  try {
+    const cursor = decodeFeedCursor(req.query.cursor);
+
+    const values = [
+      req.user.id,
+      "active",
+      "pending_review",
+    ];
+
+    let seekClause = "";
+
+    if (cursor) {
+      if (
+        typeof cursor.created_at !== "string" ||
+        typeof cursor.id !== "string" ||
+        !UUID_PATTERN.test(cursor.id) ||
+        Number.isNaN(Date.parse(cursor.created_at))
+      ) {
+        throw new InvalidFeedCursorError();
+      }
+
+      values.push(cursor.created_at, cursor.id);
+
+      const createdParam = values.length - 1;
+      const idParam = values.length;
+
+      seekClause = `
+        AND (
+          p.created_at,
+          p.id
+        ) < (
+          $${createdParam}::timestamptz,
+          $${idParam}::uuid
+        )
+      `;
+    }
+
+    values.push(limit + 1);
+    const limitParam = values.length;
+
+    const result = await query(
+      `SELECT
+         p.*,
+         u.first_name,
+         u.last_name,
+
+         (
+           SELECT json_object_agg(reaction_type, cnt)
+           FROM (
+             SELECT reaction_type, COUNT(*)::int AS cnt
+             FROM personal_post_likes
+             WHERE post_id = p.id
+             GROUP BY reaction_type
+           ) reaction_summary
+         ) AS reaction_counts,
+
+         (
+           SELECT COUNT(*)::int
+           FROM personal_post_comments c
+           WHERE c.post_id = p.id
+         ) AS comment_count,
+
+         (
+           SELECT reaction_type
+           FROM personal_post_likes l
+           WHERE l.post_id = p.id
+             AND l.user_id = $1
+         ) AS my_reaction
+
+       FROM personal_posts p
+       INNER JOIN users u
+         ON u.id = p.author_id
+
+       WHERE (
+         p.status = $2
+         OR (
+           p.status = $3
+           AND p.author_id = $1
+         )
+       )
+
+       ${seekClause}
+
+       ORDER BY
+         p.created_at DESC,
+         p.id DESC
+
+       LIMIT $${limitParam}`,
+      values
+    );
+
+    const hasMore = result.rows.length > limit;
+    const rows = hasMore
+      ? result.rows.slice(0, limit)
+      : result.rows;
+
+    const last = rows.at(-1);
+
+    res.json({
+      success: true,
+      data: rows,
+      pagination: {
+        limit,
+        has_more: hasMore,
+        next_cursor:
+          hasMore && last
+            ? encodeFeedCursor({
+                created_at: new Date(last.created_at).toISOString(),
+                id: last.id,
+              })
+            : null,
+      },
+    });
+  } catch (error) {
+    if (error instanceof InvalidFeedCursorError) {
+      return res.status(422).json({
+        success: false,
+        code: "INVALID_CURSOR",
+        message: "Invalid feed cursor",
+      });
+    }
+
+    logger.error("List personal cursor feed error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch feed",
+    });
+  }
+};

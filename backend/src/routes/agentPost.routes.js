@@ -79,6 +79,7 @@ router.delete(
   enhancementController.unblockUser
 );
 
+router.get("/cursor", agentPostController.listFeedCursor);
 router.get("/", agentPostController.listFeed);
 router.get("/:post_id", agentPostController.getPost);
 router.post("/", requireActiveSubscription, uploadLimiter, upload.single("audio"), agentPostController.createPost);
