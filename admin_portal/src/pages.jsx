@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import API from './lib/api.js';
 import toast from 'react-hot-toast';
@@ -755,6 +755,21 @@ export function CommunityModerationPage() {
   const [postTypeFilter, setPostTypeFilter] = useState('all');
   const [postSearch, setPostSearch] = useState('');
   const [communityFilter, setCommunityFilter] = useState('all');
+  const moderationFiltersInitialized = useRef(false);
+
+  const moderationPostParams = (cursor = null) => ({
+    limit: 50,
+    ...(postStatusFilter !== 'all'
+      ? { status: postStatusFilter }
+      : {}),
+    ...(postTypeFilter !== 'all'
+      ? { post_type: postTypeFilter }
+      : {}),
+    ...(postSearch.trim()
+      ? { search: postSearch.trim() }
+      : {}),
+    ...(cursor ? { cursor } : {}),
+  });
 
   const load = async () => {
     setLoading(true);
@@ -773,7 +788,7 @@ export function CommunityModerationPage() {
         API.get('/agent-posts/moderation/pending'),
         API.get('/personal-community/moderation/pending'),
         API.get('/agent-posts/moderation/posts/cursor', {
-          params: { limit: 50 },
+          params: moderationPostParams(),
         }),
         API.get('/agent-posts/moderation/history/cursor', {
           params: { limit: 50 },
@@ -836,6 +851,62 @@ export function CommunityModerationPage() {
     load();
   }, []);
 
+  useEffect(() => {
+    if (!moderationFiltersInitialized.current) {
+      moderationFiltersInitialized.current = true;
+      return;
+    }
+
+    let cancelled = false;
+
+    setLoading(true);
+    setPostsNextCursor(null);
+    setPostsHasMore(false);
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        const response = await API.get(
+          '/agent-posts/moderation/posts/cursor',
+          {
+            params: moderationPostParams(),
+          },
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        setAllPosts(response.data.data || []);
+        setPostsNextCursor(
+          response.data.pagination?.next_cursor || null,
+        );
+        setPostsHasMore(
+          response.data.pagination?.has_more === true,
+        );
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(
+            error.response?.data?.message ||
+              'Community posts could not be filtered.',
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }, postSearch.trim() ? 300 : 0);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [
+    postStatusFilter,
+    postTypeFilter,
+    postSearch,
+  ]);
+
   const loadMorePosts = async () => {
     if (
       loadingMorePosts ||
@@ -851,10 +922,7 @@ export function CommunityModerationPage() {
       const response = await API.get(
         '/agent-posts/moderation/posts/cursor',
         {
-          params: {
-            limit: 50,
-            cursor: postsNextCursor,
-          },
+          params: moderationPostParams(postsNextCursor),
         },
       );
 
@@ -1037,25 +1105,7 @@ export function CommunityModerationPage() {
       post.community === communityFilter,
   );
 
-  const filteredPosts = allPosts.filter((post) => {
-    const matchesStatus =
-      postStatusFilter === 'all' ||
-      post.status === postStatusFilter;
-
-    const matchesType =
-      postTypeFilter === 'all' ||
-      post.post_type === postTypeFilter;
-
-    const term = postSearch.trim().toLowerCase();
-    const matchesSearch =
-      !term ||
-      post.content?.toLowerCase().includes(term) ||
-      post.first_name?.toLowerCase().includes(term) ||
-      post.last_name?.toLowerCase().includes(term) ||
-      post.email?.toLowerCase().includes(term);
-
-    return matchesStatus && matchesType && matchesSearch;
-  });
+  const filteredPosts = allPosts;
 
   return (
     <div className="space-y-6">
