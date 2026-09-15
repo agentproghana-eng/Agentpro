@@ -23,6 +23,7 @@ const UUID_PATH_SEGMENT =
 
 const publicMarketplaceReadPatterns = [
   /^\/$/,
+  /^\/cursor$/,
   /^\/categories$/,
   /^\/featured-sellers$/,
   new RegExp(`^/sellers/${UUID_PATH_SEGMENT}$`),
@@ -362,6 +363,253 @@ mpRouter.get('/', async (req, res) => {
   } catch (e) {
     logger.error('GET /marketplace error:', e);
     res.status(500).json({
+      success: false,
+      message: 'Failed to fetch ads',
+    });
+  }
+});
+
+
+// Cursor-based newest Marketplace feed. Other Marketplace sort modes keep
+// using the legacy page endpoint because each requires its own stable
+// composite sort cursor.
+mpRouter.get('/cursor', async (req, res) => {
+  const {
+    encodeFeedCursor,
+    decodeFeedCursor,
+    InvalidFeedCursorError,
+  } = require('../utils/feedCursor');
+
+  const {
+    category_id,
+    search,
+    location,
+    min_price,
+    max_price,
+    min_rating,
+    limit = 20,
+  } = req.query;
+
+  const parsedLimit = Math.min(
+    Math.max(parseInt(limit, 10) || 20, 1),
+    100
+  );
+
+  try {
+    const cursor = decodeFeedCursor(req.query.cursor);
+
+    const conditions = [`a.status = 'active'`];
+    const params = [];
+    let index = 1;
+
+    if (category_id) {
+      conditions.push(`a.category_id = $${index++}`);
+      params.push(category_id);
+    }
+
+    if (search && search.trim()) {
+      conditions.push(
+        `(a.title ILIKE $${index}
+          OR a.description ILIKE $${index}
+          OR ac.name ILIKE $${index}
+          OR a.location ILIKE $${index})`
+      );
+      params.push(`%${search.trim()}%`);
+      index++;
+    }
+
+    if (location && location.trim()) {
+      conditions.push(`a.location ILIKE $${index++}`);
+      params.push(`%${location.trim()}%`);
+    }
+
+    if (min_price !== undefined && min_price !== '') {
+      const value = Number(min_price);
+
+      if (!Number.isFinite(value) || value < 0) {
+        return res.status(422).json({
+          success: false,
+          message: 'Minimum price must be a valid non-negative number',
+        });
+      }
+
+      conditions.push(`a.price >= $${index++}`);
+      params.push(value);
+    }
+
+    if (max_price !== undefined && max_price !== '') {
+      const value = Number(max_price);
+
+      if (!Number.isFinite(value) || value < 0) {
+        return res.status(422).json({
+          success: false,
+          message: 'Maximum price must be a valid non-negative number',
+        });
+      }
+
+      conditions.push(`a.price <= $${index++}`);
+      params.push(value);
+    }
+
+    if (
+      min_price !== undefined &&
+      min_price !== '' &&
+      max_price !== undefined &&
+      max_price !== '' &&
+      Number(min_price) > Number(max_price)
+    ) {
+      return res.status(422).json({
+        success: false,
+        message: 'Minimum price cannot exceed maximum price',
+      });
+    }
+
+    const parsedMinRating =
+      min_rating !== undefined && min_rating !== ''
+        ? Number(min_rating)
+        : null;
+
+    if (
+      parsedMinRating !== null &&
+      (
+        !Number.isFinite(parsedMinRating) ||
+        parsedMinRating < 1 ||
+        parsedMinRating > 5
+      )
+    ) {
+      return res.status(422).json({
+        success: false,
+        message: 'Minimum rating must be between 1 and 5',
+      });
+    }
+
+    if (cursor) {
+      if (
+        !Object.prototype.hasOwnProperty.call(cursor, 'published_at') ||
+        typeof cursor.id !== 'string' ||
+        !new RegExp(`^${UUID_PATH_SEGMENT}$`).test(cursor.id) ||
+        (
+          cursor.published_at !== null &&
+          (
+            typeof cursor.published_at !== 'string' ||
+            Number.isNaN(Date.parse(cursor.published_at))
+          )
+        )
+      ) {
+        throw new InvalidFeedCursorError();
+      }
+
+      if (cursor.published_at === null) {
+        conditions.push(
+          `a.published_at IS NULL
+           AND a.id < $${index++}::uuid`
+        );
+        params.push(cursor.id);
+      } else {
+        const publishedParameter = index++;
+        const idParameter = index++;
+
+        conditions.push(
+          `(
+             a.published_at < $${publishedParameter}::timestamptz
+             OR (
+               a.published_at = $${publishedParameter}::timestamptz
+               AND a.id < $${idParameter}::uuid
+             )
+             OR a.published_at IS NULL
+           )`
+        );
+
+        params.push(cursor.published_at, cursor.id);
+      }
+    }
+
+    const where = `WHERE ${conditions.join(' AND ')}`;
+
+    let having = '';
+
+    if (parsedMinRating !== null) {
+      having =
+        `HAVING COALESCE(AVG(ar.rating), 0) >= $${index++}`;
+      params.push(parsedMinRating);
+    }
+
+    const limitParameter = index++;
+    params.push(parsedLimit + 1);
+
+    const result = await query(
+      `SELECT
+         a.*,
+         ac.name AS category_name,
+         seller.first_name AS seller_first_name,
+         seller.last_name AS seller_last_name,
+         company.name AS company_name,
+         COALESCE(company.marketplace_verified, FALSE) AS seller_verified,
+         COALESCE(AVG(ar.rating), 0)::float AS avg_rating,
+         COUNT(ar.id)::int AS rating_count
+       FROM advertisements a
+       LEFT JOIN ad_categories ac
+         ON ac.id = a.category_id
+       INNER JOIN users seller
+         ON seller.id = a.posted_by
+       LEFT JOIN companies company
+         ON company.id = seller.company_id
+       LEFT JOIN ad_ratings ar
+         ON ar.advertisement_id = a.id
+       ${where}
+       GROUP BY
+         a.id,
+         ac.name,
+         seller.id,
+         seller.first_name,
+         seller.last_name,
+         company.id,
+         company.name,
+         company.marketplace_verified
+       ${having}
+       ORDER BY
+         a.published_at DESC NULLS LAST,
+         a.id DESC
+       LIMIT $${limitParameter}`,
+      params
+    );
+
+    const hasMore = result.rows.length > parsedLimit;
+    const rows = hasMore
+      ? result.rows.slice(0, parsedLimit)
+      : result.rows;
+
+    const last = rows.at(-1);
+
+    res.json({
+      success: true,
+      data: rows.map(publicAd),
+      meta: {
+        limit: parsedLimit,
+        has_more: hasMore,
+        next_cursor:
+          hasMore && last
+            ? encodeFeedCursor({
+                published_at: last.published_at
+                  ? new Date(last.published_at).toISOString()
+                  : null,
+                id: last.id,
+              })
+            : null,
+      },
+    });
+  } catch (error) {
+    if (error instanceof InvalidFeedCursorError) {
+      return res.status(422).json({
+        success: false,
+        code: 'INVALID_CURSOR',
+        message: 'Invalid marketplace cursor',
+      });
+    }
+
+    logger.error('GET /marketplace/cursor error:', error);
+
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch ads',
     });

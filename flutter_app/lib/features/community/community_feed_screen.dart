@@ -46,7 +46,7 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
   String _selectedFilter = 'all';
   String _selectedPostType = 'general';
 
-  int _page = 1;
+  String? _nextCursor;
 
   bool _isRecording = false;
   bool _hasRecording = false;
@@ -79,10 +79,10 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
     }
   }
 
-  Map<String, dynamic> _queryParameters(int page) {
+  Map<String, dynamic> _queryParameters({String? cursor}) {
     return {
-      'page': page,
       'limit': 20,
+      if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
       if (_selectedFilter != 'all') 'type': _selectedFilter,
     };
   }
@@ -92,14 +92,14 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
       setState(() {
         _loading = true;
         _error = null;
-        _page = 1;
+        _nextCursor = null;
       });
     }
 
     try {
       final response = await ApiClient.instance.get(
-        '/agent-posts',
-        queryParameters: _queryParameters(1),
+        '/agent-posts/cursor',
+        queryParameters: _queryParameters(),
       );
 
       final raw = response.data['data'];
@@ -113,6 +113,9 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
             : [];
 
         _hasMore = pagination is Map && pagination['has_more'] == true;
+        _nextCursor = pagination is Map
+            ? pagination['next_cursor']?.toString()
+            : null;
 
         _loading = false;
       });
@@ -132,11 +135,19 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
     setState(() => _loadingMore = true);
 
     try {
-      final nextPage = _page + 1;
+      final cursor = _nextCursor;
+
+      if (cursor == null || cursor.isEmpty) {
+        setState(() {
+          _hasMore = false;
+          _loadingMore = false;
+        });
+        return;
+      }
 
       final response = await ApiClient.instance.get(
-        '/agent-posts',
-        queryParameters: _queryParameters(nextPage),
+        '/agent-posts/cursor',
+        queryParameters: _queryParameters(cursor: cursor),
       );
 
       final raw = response.data['data'];
@@ -151,8 +162,10 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
           );
         }
 
-        _page = nextPage;
         _hasMore = pagination is Map && pagination['has_more'] == true;
+        _nextCursor = pagination is Map
+            ? pagination['next_cursor']?.toString()
+            : null;
       });
     } finally {
       if (mounted) {

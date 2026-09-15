@@ -33,7 +33,13 @@ class _PersonalCommunityFeedScreenState
     extends State<PersonalCommunityFeedScreen> {
   List<dynamic> _posts = [];
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = true;
+  String? _nextCursor;
+
   final _composerCtrl = TextEditingController();
+  final _scrollController = ScrollController();
+
   bool _posting = false;
 
   final _recorder = AudioRecorder();
@@ -46,6 +52,7 @@ class _PersonalCommunityFeedScreenState
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_handleScroll);
     _load();
   }
 
@@ -54,7 +61,17 @@ class _PersonalCommunityFeedScreenState
     _recordTimer?.cancel();
     _recorder.dispose();
     _composerCtrl.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _handleScroll() {
+    if (_scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent - 300 &&
+        !_loadingMore &&
+        _hasMore) {
+      _loadMore();
+    }
   }
 
   bool get _isPaid {
@@ -64,15 +81,81 @@ class _PersonalCommunityFeedScreenState
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _nextCursor = null;
+        _hasMore = true;
+      });
+    }
+
     try {
-      final res = await ApiClient.instance.get('/personal-community/feed');
+      final res = await ApiClient.instance.get(
+        '/personal-community/feed/cursor',
+        queryParameters: {'limit': 20},
+      );
+
+      if (!mounted) return;
+
+      final pagination = res.data['pagination'];
+
       setState(() {
         _posts = res.data['data'] ?? [];
+        _hasMore =
+            pagination is Map && pagination['has_more'] == true;
+        _nextCursor = pagination is Map
+            ? pagination['next_cursor']?.toString()
+            : null;
         _loading = false;
       });
-    } catch (e) {
-      setState(() => _loading = false);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || !_hasMore) return;
+
+    final cursor = _nextCursor;
+
+    if (cursor == null || cursor.isEmpty) {
+      setState(() => _hasMore = false);
+      return;
+    }
+
+    setState(() => _loadingMore = true);
+
+    try {
+      final res = await ApiClient.instance.get(
+        '/personal-community/feed/cursor',
+        queryParameters: {
+          'limit': 20,
+          'cursor': cursor,
+        },
+      );
+
+      if (!mounted) return;
+
+      final raw = res.data['data'];
+      final pagination = res.data['pagination'];
+
+      setState(() {
+        if (raw is List) {
+          _posts.addAll(raw);
+        }
+
+        _hasMore =
+            pagination is Map && pagination['has_more'] == true;
+        _nextCursor = pagination is Map
+            ? pagination['next_cursor']?.toString()
+            : null;
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _loadingMore = false);
+      }
     }
   }
 
@@ -288,6 +371,7 @@ class _PersonalCommunityFeedScreenState
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(
+                controller: _scrollController,
                 padding: const EdgeInsets.all(16),
                 children: [
                   _buildComposer(),
@@ -299,6 +383,13 @@ class _PersonalCommunityFeedScreenState
                       onOpen: () => context
                           .push('/personal-community/post/${p['id']}')
                           .then((_) => _load()),
+                    ),
+                  if (_loadingMore)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: Center(
+                        child: CircularProgressIndicator(),
+                      ),
                     ),
                 ],
               ),

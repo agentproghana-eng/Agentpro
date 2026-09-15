@@ -42,6 +42,7 @@ router.patch(
 // still applied per-route below exactly as before.
 router.use(requirePersonalAccount);
 
+router.get('/feed/cursor', personalCommunityController.listFeedCursor);
 router.get('/feed', personalCommunityController.listFeed);
 router.get('/posts/:post_id', personalCommunityController.getPost);
 router.post('/posts', requirePaidPersonalPlan, uploadLimiter, upload.single('audio'), personalCommunityController.createPost);
