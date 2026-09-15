@@ -349,8 +349,7 @@ class _PersonalTransactionHistoryScreenState
       return;
     }
 
-    final requestGeneration =
-        _requestGeneration;
+    final requestGeneration = _requestGeneration;
 
     setState(() => _loadingMore = true);
 
