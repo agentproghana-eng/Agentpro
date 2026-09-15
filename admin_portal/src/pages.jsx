@@ -120,92 +120,6 @@ export function CompaniesPage() {
     load();
   }, []);
 
-  const loadMorePosts = async () => {
-    if (
-      loadingMorePosts ||
-      !postsHasMore ||
-      !postsNextCursor
-    ) {
-      return;
-    }
-
-    setLoadingMorePosts(true);
-
-    try {
-      const response = await API.get(
-        '/agent-posts/moderation/posts/cursor',
-        {
-          params: {
-            limit: 50,
-            cursor: postsNextCursor,
-          },
-        },
-      );
-
-      setAllPosts((current) => [
-        ...current,
-        ...(response.data.data || []),
-      ]);
-
-      setPostsNextCursor(
-        response.data.pagination?.next_cursor || null,
-      );
-      setPostsHasMore(
-        response.data.pagination?.has_more === true,
-      );
-    } catch (error) {
-      toast.error(
-        error.response?.data?.message ||
-          'More Community posts could not be loaded.',
-      );
-    } finally {
-      setLoadingMorePosts(false);
-    }
-  };
-
-  const loadMoreHistory = async () => {
-    if (
-      loadingMoreHistory ||
-      !historyHasMore ||
-      !historyNextCursor
-    ) {
-      return;
-    }
-
-    setLoadingMoreHistory(true);
-
-    try {
-      const response = await API.get(
-        '/agent-posts/moderation/history/cursor',
-        {
-          params: {
-            limit: 50,
-            cursor: historyNextCursor,
-          },
-        },
-      );
-
-      setModerationHistory((current) => [
-        ...current,
-        ...(response.data.data || []),
-      ]);
-
-      setHistoryNextCursor(
-        response.data.pagination?.next_cursor || null,
-      );
-      setHistoryHasMore(
-        response.data.pagination?.has_more === true,
-      );
-    } catch (error) {
-      toast.error(
-        error.response?.data?.message ||
-          'More moderation history could not be loaded.',
-      );
-    } finally {
-      setLoadingMoreHistory(false);
-    }
-  };
-
   const filtered = companies.filter((company) => {
     const term = search.trim().toLowerCase();
 
@@ -921,6 +835,92 @@ export function CommunityModerationPage() {
   useEffect(() => {
     load();
   }, []);
+
+  const loadMorePosts = async () => {
+    if (
+      loadingMorePosts ||
+      !postsHasMore ||
+      !postsNextCursor
+    ) {
+      return;
+    }
+
+    setLoadingMorePosts(true);
+
+    try {
+      const response = await API.get(
+        '/agent-posts/moderation/posts/cursor',
+        {
+          params: {
+            limit: 50,
+            cursor: postsNextCursor,
+          },
+        },
+      );
+
+      setAllPosts((current) => [
+        ...current,
+        ...(response.data.data || []),
+      ]);
+
+      setPostsNextCursor(
+        response.data.pagination?.next_cursor || null,
+      );
+      setPostsHasMore(
+        response.data.pagination?.has_more === true,
+      );
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message ||
+          'More Community posts could not be loaded.',
+      );
+    } finally {
+      setLoadingMorePosts(false);
+    }
+  };
+
+  const loadMoreHistory = async () => {
+    if (
+      loadingMoreHistory ||
+      !historyHasMore ||
+      !historyNextCursor
+    ) {
+      return;
+    }
+
+    setLoadingMoreHistory(true);
+
+    try {
+      const response = await API.get(
+        '/agent-posts/moderation/history/cursor',
+        {
+          params: {
+            limit: 50,
+            cursor: historyNextCursor,
+          },
+        },
+      );
+
+      setModerationHistory((current) => [
+        ...current,
+        ...(response.data.data || []),
+      ]);
+
+      setHistoryNextCursor(
+        response.data.pagination?.next_cursor || null,
+      );
+      setHistoryHasMore(
+        response.data.pagination?.has_more === true,
+      );
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message ||
+          'More moderation history could not be loaded.',
+      );
+    } finally {
+      setLoadingMoreHistory(false);
+    }
+  };
 
   const resolveReport = async (
     report,

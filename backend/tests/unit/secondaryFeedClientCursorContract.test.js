@@ -68,4 +68,46 @@ describe('Secondary feed client cursor contract', () => {
       "API.get('/agent-posts/moderation/posts', {\n          params: { limit: 100 }"
     );
   });
+  test('Admin moderation cursor loaders live inside CommunityModerationPage', () => {
+    const text = source(
+      'admin_portal/src/pages.jsx'
+    );
+
+    const companiesStart = text.indexOf(
+      'export function CompaniesPage()'
+    );
+
+    const moderationStart = text.indexOf(
+      'export function CommunityModerationPage()'
+    );
+
+    expect(companiesStart).toBeGreaterThanOrEqual(0);
+    expect(moderationStart).toBeGreaterThan(companiesStart);
+
+    const companiesSection = text.slice(
+      companiesStart,
+      moderationStart
+    );
+
+    const moderationSection = text.slice(
+      moderationStart
+    );
+
+    expect(companiesSection).not.toContain(
+      'const loadMorePosts = async () =>'
+    );
+
+    expect(companiesSection).not.toContain(
+      'const loadMoreHistory = async () =>'
+    );
+
+    expect(moderationSection).toContain(
+      'const loadMorePosts = async () =>'
+    );
+
+    expect(moderationSection).toContain(
+      'const loadMoreHistory = async () =>'
+    );
+  });
+
 });
