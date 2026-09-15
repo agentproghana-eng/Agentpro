@@ -804,6 +804,420 @@ exports.listRecentTransactions = async (req, res) => {
 // Always scoped to the current user only - unlike the Agent side,
 // there is no manager/owner "view others' transactions" concept here.
 
+
+function parsePersonalCursorLimit(value, fallback = 20) {
+  const parsed = Number.parseInt(value, 10);
+
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return fallback;
+  }
+
+  return Math.min(parsed, 100);
+}
+
+function isPersonalCursorUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(value || '')
+  );
+}
+
+function encodePersonalHistoryCursor({
+  row,
+  sortBy,
+  sortOrder,
+}) {
+  if (!row?.id || !isPersonalCursorUuid(row.id)) {
+    return null;
+  }
+
+  let value;
+
+  if (sortBy === 'amount') {
+    value =
+      row.amount === null || row.amount === undefined
+        ? null
+        : String(row.amount);
+  } else {
+    if (!row.created_at) {
+      return null;
+    }
+
+    value = row.created_at;
+  }
+
+  return Buffer.from(
+    JSON.stringify({
+      sort_by: sortBy,
+      sort_order: sortOrder,
+      value,
+      id: row.id,
+    }),
+    'utf8'
+  ).toString('base64url');
+}
+
+function decodePersonalHistoryCursor({
+  cursor,
+  sortBy,
+  sortOrder,
+}) {
+  if (!cursor) {
+    return null;
+  }
+
+  try {
+    const decoded = JSON.parse(
+      Buffer.from(
+        String(cursor),
+        'base64url'
+      ).toString('utf8')
+    );
+
+    if (
+      !decoded ||
+      decoded.sort_by !== sortBy ||
+      decoded.sort_order !== sortOrder ||
+      !isPersonalCursorUuid(decoded.id)
+    ) {
+      return null;
+    }
+
+    if (sortBy === 'date') {
+      if (
+        !decoded.value ||
+        Number.isNaN(Date.parse(decoded.value))
+      ) {
+        return null;
+      }
+    } else if (
+      decoded.value !== null &&
+      (
+        decoded.value === '' ||
+        !Number.isFinite(Number(decoded.value))
+      )
+    ) {
+      return null;
+    }
+
+    return {
+      value: decoded.value,
+      id: decoded.id,
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+function sendInvalidPersonalHistoryCursor(res) {
+  return res.status(422).json({
+    success: false,
+    code: 'INVALID_CURSOR',
+    message:
+      'The pagination cursor is invalid or expired.',
+  });
+}
+
+// ─── List Personal Transactions — Cursor ──────────────────────
+
+exports.listTransactionsCursor = async (req, res) => {
+  const {
+    cursor,
+    limit,
+    provider,
+    transaction_type,
+    status,
+    search,
+    from_date,
+    to_date,
+    sim_iccid,
+    sim_slot,
+    sort_by = 'date',
+    sort_order = 'desc',
+  } = req.query;
+
+  const userId = req.user.id;
+
+  const normalizedSortBy =
+    sort_by === 'amount'
+      ? 'amount'
+      : 'date';
+
+  const normalizedSortOrder =
+    sort_order === 'asc'
+      ? 'asc'
+      : 'desc';
+
+  const parsedLimit =
+    parsePersonalCursorLimit(limit, 20);
+
+  const decodedCursor =
+    cursor
+      ? decodePersonalHistoryCursor({
+          cursor,
+          sortBy: normalizedSortBy,
+          sortOrder: normalizedSortOrder,
+        })
+      : null;
+
+  if (cursor && !decodedCursor) {
+    return sendInvalidPersonalHistoryCursor(res);
+  }
+
+  try {
+    const conditions = ['user_id = $1'];
+    const params = [userId];
+    let idx = 2;
+
+    if (provider) {
+      conditions.push(
+        `provider = $${idx++}`
+      );
+      params.push(provider);
+    }
+
+    if (transaction_type) {
+      conditions.push(
+        `transaction_type = $${idx++}`
+      );
+      params.push(transaction_type);
+    }
+
+    if (status) {
+      conditions.push(
+        `status = $${idx++}`
+      );
+      params.push(status);
+    }
+
+    if (sim_iccid) {
+      conditions.push(
+        `sim_iccid = $${idx++}`
+      );
+      params.push(sim_iccid);
+    }
+
+    if (
+      sim_slot !== undefined &&
+      sim_slot !== null &&
+      String(sim_slot).trim() !== ''
+    ) {
+      const parsedHistorySimSlot =
+        Number.parseInt(sim_slot, 10);
+
+      if (
+        Number.isInteger(parsedHistorySimSlot) &&
+        parsedHistorySimSlot >= 0
+      ) {
+        conditions.push(
+          `sim_slot = $${idx++}`
+        );
+        params.push(parsedHistorySimSlot);
+      }
+    }
+
+    if (from_date) {
+      const parsed = new Date(from_date);
+
+      if (!Number.isNaN(parsed.getTime())) {
+        conditions.push(
+          `created_at >= $${idx++}`
+        );
+        params.push(parsed);
+      }
+    }
+
+    if (to_date) {
+      const parsed = new Date(to_date);
+
+      if (!Number.isNaN(parsed.getTime())) {
+        conditions.push(
+          `created_at <= $${idx++}`
+        );
+        params.push(parsed);
+      }
+    }
+
+    const normalizedSearch =
+      typeof search === 'string'
+        ? search.trim()
+        : '';
+
+    if (normalizedSearch) {
+      const pattern =
+        `%${normalizedSearch}%`;
+
+      conditions.push(`(
+        reference ILIKE $${idx}
+        OR COALESCE(recipient_phone, '') ILIKE $${idx}
+        OR COALESCE(network_reference, '') ILIKE $${idx}
+        OR COALESCE(notes, '') ILIKE $${idx}
+      )`);
+
+      params.push(pattern);
+      idx += 1;
+    }
+
+    if (decodedCursor) {
+      if (normalizedSortBy === 'date') {
+        const valueParam = `$${idx++}`;
+        const idParam = `$${idx++}`;
+
+        params.push(
+          decodedCursor.value,
+          decodedCursor.id
+        );
+
+        if (normalizedSortOrder === 'desc') {
+          conditions.push(`(
+            created_at < ${valueParam}::timestamptz
+            OR (
+              created_at = ${valueParam}::timestamptz
+              AND id < ${idParam}::uuid
+            )
+          )`);
+        } else {
+          conditions.push(`(
+            created_at > ${valueParam}::timestamptz
+            OR (
+              created_at = ${valueParam}::timestamptz
+              AND id < ${idParam}::uuid
+            )
+          )`);
+        }
+      } else if (decodedCursor.value === null) {
+        const idParam = `$${idx++}`;
+
+        params.push(decodedCursor.id);
+
+        if (normalizedSortOrder === 'desc') {
+          conditions.push(`(
+            (
+              amount IS NULL
+              AND id < ${idParam}::uuid
+            )
+            OR amount IS NOT NULL
+          )`);
+        } else {
+          conditions.push(`(
+            amount IS NULL
+            AND id < ${idParam}::uuid
+          )`);
+        }
+      } else {
+        const valueParam = `$${idx++}`;
+        const idParam = `$${idx++}`;
+
+        params.push(
+          decodedCursor.value,
+          decodedCursor.id
+        );
+
+        if (normalizedSortOrder === 'desc') {
+          conditions.push(`(
+            amount IS NOT NULL
+            AND (
+              amount < ${valueParam}::numeric
+              OR (
+                amount = ${valueParam}::numeric
+                AND id < ${idParam}::uuid
+              )
+            )
+          )`);
+        } else {
+          conditions.push(`(
+            (
+              amount IS NOT NULL
+              AND (
+                amount > ${valueParam}::numeric
+                OR (
+                  amount = ${valueParam}::numeric
+                  AND id < ${idParam}::uuid
+                )
+              )
+            )
+            OR amount IS NULL
+          )`);
+        }
+      }
+    }
+
+    const where =
+      `WHERE ${conditions.join(' AND ')}`;
+
+    const fetchLimit =
+      parsedLimit + 1;
+
+    const limitParam = idx;
+
+    params.push(fetchLimit);
+
+    let orderBy;
+
+    if (normalizedSortBy === 'amount') {
+      orderBy =
+        normalizedSortOrder === 'desc'
+          ? 'amount DESC NULLS FIRST, id DESC'
+          : 'amount ASC NULLS LAST, id DESC';
+    } else {
+      orderBy =
+        normalizedSortOrder === 'desc'
+          ? 'created_at DESC, id DESC'
+          : 'created_at ASC, id DESC';
+    }
+
+    const result = await query(
+      `SELECT *
+       FROM personal_transactions
+       ${where}
+       ORDER BY ${orderBy}
+       LIMIT $${limitParam}`,
+      params
+    );
+
+    const hasMore =
+      result.rows.length > parsedLimit;
+
+    const rows =
+      hasMore
+        ? result.rows.slice(
+            0,
+            parsedLimit
+          )
+        : result.rows;
+
+    const nextCursor =
+      hasMore && rows.length > 0
+        ? encodePersonalHistoryCursor({
+            row: rows[rows.length - 1],
+            sortBy: normalizedSortBy,
+            sortOrder: normalizedSortOrder,
+          })
+        : null;
+
+    return res.json({
+      success: true,
+      data: rows,
+      meta: {
+        limit: parsedLimit,
+        has_more: hasMore,
+        next_cursor: nextCursor,
+      },
+    });
+  } catch (error) {
+    logger.error(
+      'List personal transactions cursor error:',
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        'Failed to fetch transactions',
+    });
+  }
+};
+
+
 exports.listTransactions = async (req, res) => {
   const {
     page = 1,
