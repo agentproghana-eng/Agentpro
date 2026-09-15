@@ -13,6 +13,7 @@ router.use(authenticate, requireActiveSubscription);
 router.post('/open', authorize('agent', 'business_owner', 'manager'), shiftController.openShift);
 router.get('/current', authorize('agent', 'business_owner', 'manager'), shiftController.getCurrentShift);
 router.post('/:shift_id/close', authorize('agent', 'business_owner', 'manager'), shiftController.closeShift);
+router.get('/cursor', authorize('superuser', 'business_owner', 'manager'), shiftController.listShiftsCursor);
 router.get('/', authorize('superuser', 'business_owner', 'manager'), shiftController.listShifts);
 
 module.exports = router;
