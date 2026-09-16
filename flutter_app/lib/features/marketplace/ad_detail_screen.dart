@@ -1500,8 +1500,66 @@ class _AdPaymentSheetState extends State<_AdPaymentSheet> {
     return fallback;
   }
 
+  Future<bool> _confirmPaystackPayment() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Confirm AgentPro Payment'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Payment for'),
+            const SizedBox(height: 4),
+            const Text(
+              'AgentPro Marketplace Listing Fee',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Amount: GH₵ ${widget.fee.toStringAsFixed(2)}',
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'This payment publishes your approved listing '
+              'on AgentPro Marketplace.',
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Processed securely by Paystack for COREINTEL SYSTEMS.',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, true),
+            child: const Text('Continue to Paystack'),
+          ),
+        ],
+      ),
+    );
+
+    return confirmed == true;
+  }
+
   Future<void> _startPaystack() async {
     if (_paystackBusy) return;
+
+    final confirmed = await _confirmPaystackPayment();
+
+    if (!confirmed || !mounted) return;
 
     setState(() => _paystackBusy = true);
 

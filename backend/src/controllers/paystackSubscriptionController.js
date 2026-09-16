@@ -291,8 +291,17 @@ exports.initializeBusiness = async (req, res) => {
       reference: payment.provider_reference,
       metadata: {
         account_mode: "business",
+        payment_kind: "subscription",
+        payment_for: "AgentPro Business Subscription",
         payment_id: payment.id,
         company_id: companyId,
+        custom_fields: [
+          {
+            display_name: "Payment For",
+            variable_name: "payment_for",
+            value: "AgentPro Business Subscription",
+          },
+        ],
       },
     });
 
@@ -481,8 +490,17 @@ exports.initializePersonal = async (req, res) => {
       reference: payment.provider_reference,
       metadata: {
         account_mode: "personal",
+        payment_kind: "subscription",
+        payment_for: "AgentPro Personal Subscription",
         payment_id: payment.id,
         user_id: req.user.id,
+        custom_fields: [
+          {
+            display_name: "Payment For",
+            variable_name: "payment_for",
+            value: "AgentPro Personal Subscription",
+          },
+        ],
       },
     });
 
