@@ -34,8 +34,8 @@ class _PersonalTransactionHistoryScreenState
 
   List<dynamic> _transactions = [];
 
-  int _page = 1;
-  int _totalPages = 1;
+  String? _nextCursor;
+  bool _hasMore = true;
   int _total = 0;
 
   bool _loading = true;
@@ -244,10 +244,12 @@ class _PersonalTransactionHistoryScreenState
     }
   }
 
-  Map<String, dynamic> _queryParameters(int page) {
+  Map<String, dynamic> _queryParameters({
+    String? cursor,
+  }) {
     return {
-      'page': page,
       'limit': 20,
+      if (cursor != null) 'cursor': cursor,
       'sort_by': _sortBy,
       'sort_order': _sortOrder,
       if (_providerFilter != 'all') 'provider': _providerFilter,
@@ -283,6 +285,8 @@ class _PersonalTransactionHistoryScreenState
     setState(() {
       _error = null;
       _loadingMore = false;
+      _nextCursor = null;
+      _hasMore = true;
 
       if (refreshing) {
         _refreshing = true;
@@ -294,8 +298,8 @@ class _PersonalTransactionHistoryScreenState
 
     try {
       final response = await ApiClient.instance.get(
-        '/personal-transactions/history',
-        queryParameters: _queryParameters(1),
+        '/personal-transactions/history/cursor',
+        queryParameters: _queryParameters(),
       );
 
       final data = (response.data['data'] as List?) ?? const [];
@@ -307,9 +311,11 @@ class _PersonalTransactionHistoryScreenState
 
       setState(() {
         _transactions = data;
-        _page = 1;
-        _totalPages = (meta?['total_pages'] as num?)?.toInt() ?? 1;
-        _total = (meta?['total'] as num?)?.toInt() ?? data.length;
+        _nextCursor =
+            meta?['next_cursor']?.toString();
+        _hasMore =
+            meta?['has_more'] == true;
+        _total = data.length;
         _loading = false;
         _refreshing = false;
       });
@@ -327,7 +333,19 @@ class _PersonalTransactionHistoryScreenState
   }
 
   Future<void> _loadMore() async {
-    if (_loading || _loadingMore || _page >= _totalPages || !_isPaid) {
+    if (
+      _loading ||
+      _loadingMore ||
+      !_hasMore ||
+      !_isPaid
+    ) {
+      return;
+    }
+
+    final cursor = _nextCursor;
+
+    if (cursor == null || cursor.isEmpty) {
+      setState(() => _hasMore = false);
       return;
     }
 
@@ -335,30 +353,45 @@ class _PersonalTransactionHistoryScreenState
 
     setState(() => _loadingMore = true);
 
-    final nextPage = _page + 1;
-
     try {
       final response = await ApiClient.instance.get(
-        '/personal-transactions/history',
-        queryParameters: _queryParameters(nextPage),
+        '/personal-transactions/history/cursor',
+        queryParameters: _queryParameters(
+          cursor: cursor,
+        ),
       );
 
-      final data = (response.data['data'] as List?) ?? const [];
-      final meta = response.data['meta'] as Map<String, dynamic>?;
+      final data =
+          (response.data['data'] as List?) ??
+              const [];
 
-      if (!mounted || requestGeneration != _requestGeneration) {
+      final meta =
+          response.data['meta']
+              as Map<String, dynamic>?;
+
+      if (
+        !mounted ||
+        requestGeneration !=
+            _requestGeneration
+      ) {
         return;
       }
 
       setState(() {
         _transactions.addAll(data);
-        _page = nextPage;
-        _totalPages = (meta?['total_pages'] as num?)?.toInt() ?? _totalPages;
-        _total = (meta?['total'] as num?)?.toInt() ?? _total;
+        _nextCursor =
+            meta?['next_cursor']?.toString();
+        _hasMore =
+            meta?['has_more'] == true;
+        _total = _transactions.length;
         _loadingMore = false;
       });
     } catch (_) {
-      if (!mounted || requestGeneration != _requestGeneration) {
+      if (
+        !mounted ||
+        requestGeneration !=
+            _requestGeneration
+      ) {
         return;
       }
 
@@ -1002,7 +1035,9 @@ class _PersonalTransactionHistoryScreenState
                 Text(
                   _loading
                       ? 'Loading transactions…'
-                      : '$_total ${_total == 1 ? 'transaction' : 'transactions'}',
+                      : _hasMore
+                          ? '$_total+ transactions loaded'
+                          : '$_total ${_total == 1 ? 'transaction' : 'transactions'}',
                   style: TextStyle(
                     fontSize: 12,
                     color: context.appSecondaryText,
