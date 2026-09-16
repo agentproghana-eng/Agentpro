@@ -6,6 +6,7 @@ const router =
 
 const {
   body,
+  param,
   validationResult,
 } = require(
   'express-validator',
@@ -98,6 +99,24 @@ router.post(
 router.get(
   '/conversations',
   aiController.listConversations,
+);
+
+router.get(
+  '/conversations/cursor',
+  aiController.listConversationsCursor,
+);
+
+router.get(
+  '/conversations/:conversation_id/messages/cursor',
+  [
+    param('conversation_id')
+      .isUUID()
+      .withMessage(
+        'Invalid conversation ID',
+      ),
+  ],
+  handleValidation,
+  aiController.listConversationMessagesCursor,
 );
 
 router.get(
