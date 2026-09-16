@@ -176,6 +176,91 @@ exports.changePassword = async (req, res) => {
   }
 };
 
+
+const STAFF_CURSOR_VERSION = 1;
+const DEFAULT_STAFF_CURSOR_LIMIT = 20;
+const MAX_STAFF_CURSOR_LIMIT = 100;
+
+function parseStaffCursorLimit(value) {
+  const parsed = Number.parseInt(value, 10);
+
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return DEFAULT_STAFF_CURSOR_LIMIT;
+  }
+
+  return Math.min(parsed, MAX_STAFF_CURSOR_LIMIT);
+}
+
+function isStaffCursorUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(value || ""),
+  );
+}
+
+function encodeStaffCursor(row) {
+  if (!row?.created_at || !row?.id) {
+    return null;
+  }
+
+  const value = new Date(row.created_at).toISOString();
+
+  return Buffer.from(
+    JSON.stringify({
+      v: STAFF_CURSOR_VERSION,
+      kind: "users",
+      value,
+      id: row.id,
+    }),
+    "utf8",
+  ).toString("base64url");
+}
+
+function decodeStaffCursor(cursor) {
+  if (!cursor) {
+    return null;
+  }
+
+  try {
+    const decoded = JSON.parse(
+      Buffer.from(String(cursor), "base64url").toString("utf8"),
+    );
+
+    if (
+      !decoded ||
+      decoded.v !== STAFF_CURSOR_VERSION ||
+      decoded.kind !== "users" ||
+      typeof decoded.value !== "string" ||
+      !isStaffCursorUuid(decoded.id)
+    ) {
+      return false;
+    }
+
+    const parsedDate = new Date(decoded.value);
+
+    if (
+      Number.isNaN(parsedDate.getTime()) ||
+      parsedDate.toISOString() !== decoded.value
+    ) {
+      return false;
+    }
+
+    return {
+      value: decoded.value,
+      id: decoded.id,
+    };
+  } catch (_) {
+    return false;
+  }
+}
+
+function invalidStaffCursor(res) {
+  return res.status(422).json({
+    success: false,
+    code: "INVALID_CURSOR",
+    message: "The pagination cursor is invalid or expired.",
+  });
+}
+
 exports.listUsers = async (req, res) => {
   const {
     role,
@@ -319,6 +404,210 @@ exports.listUsers = async (req, res) => {
   } catch (error) {
     logger.error("List users error:", error);
     res.status(500).json({ success: false, message: "Failed to fetch users" });
+  }
+};
+
+
+exports.listUsersCursor = async (req, res) => {
+  const {
+    role,
+    status,
+    branch_id,
+    company_id,
+    personal_only,
+    cursor,
+    limit,
+  } = req.query;
+
+  const parsedLimit = parseStaffCursorLimit(limit);
+  const decodedCursor = cursor
+    ? decodeStaffCursor(cursor)
+    : null;
+
+  if (cursor && decodedCursor === false) {
+    return invalidStaffCursor(res);
+  }
+
+  try {
+    const conditions = [];
+    const params = [];
+    let idx = 1;
+
+    if (req.user.role !== "superuser") {
+      conditions.push(`u.company_id = $${idx++}`);
+      params.push(req.user.company_id);
+    }
+
+    if (req.user.role === "manager") {
+      conditions.push(`u.role = 'agent'`);
+      conditions.push(`u.id IN (
+        SELECT ab.agent_id
+        FROM agent_branches ab
+        WHERE ab.branch_id IN (
+          SELECT branch_id
+          FROM branch_managers
+          WHERE manager_id = $${idx++}
+        )
+      )`);
+      params.push(req.user.id);
+    }
+
+    if (role) {
+      conditions.push(`u.role = $${idx++}`);
+      params.push(role);
+    }
+
+    if (status) {
+      conditions.push(`u.status = $${idx++}`);
+      params.push(status);
+    }
+
+    if (company_id) {
+      conditions.push(`u.company_id = $${idx++}`);
+      params.push(company_id);
+    }
+
+    if (personal_only === "true") {
+      conditions.push(`EXISTS (
+        SELECT 1
+        FROM personal_subscriptions ps_filter
+        WHERE ps_filter.user_id = u.id
+      )`);
+    }
+
+    if (branch_id) {
+      conditions.push(`EXISTS (
+        SELECT 1
+        FROM agent_branches ab_filter
+        WHERE ab_filter.agent_id = u.id
+          AND ab_filter.branch_id = $${idx++}
+      )`);
+      params.push(branch_id);
+    }
+
+    if (decodedCursor) {
+      conditions.push(`(
+        u.created_at < $${idx}::timestamptz
+        OR (
+          u.created_at = $${idx}::timestamptz
+          AND u.id < $${idx + 1}::uuid
+        )
+      )`);
+
+      params.push(
+        decodedCursor.value,
+        decodedCursor.id,
+      );
+      idx += 2;
+    }
+
+    const where =
+      conditions.length > 0
+        ? `WHERE ${conditions.join(" AND ")}`
+        : "";
+
+    const limitParam = idx++;
+    params.push(parsedLimit + 1);
+
+    const result = await query(
+      `SELECT
+         u.id,
+         u.role,
+         u.first_name,
+         u.last_name,
+         u.email,
+         u.phone,
+         u.status,
+         u.created_at,
+         u.last_login_at,
+         u.profile_image_url,
+         u.company_id,
+         c.name AS company_name,
+         business_subscription.plan AS subscription_plan,
+         business_subscription.status AS subscription_status,
+         business_subscription.expires_at AS subscription_expires_at,
+         ps.plan AS personal_subscription_plan,
+         ps.expires_at AS personal_subscription_expires_at,
+         CASE
+           WHEN ps.user_id IS NULL THEN NULL
+           WHEN ps.plan = 'paid'
+             AND ps.expires_at > NOW()
+             THEN 'active'
+           WHEN ps.plan = 'paid' THEN 'expired'
+           ELSE 'free'
+         END AS personal_subscription_status,
+         assigned_branch.branch_id,
+         assigned_branch.branch_name
+       FROM users u
+       LEFT JOIN companies c
+         ON u.company_id = c.id
+       LEFT JOIN personal_subscriptions ps
+         ON ps.user_id = u.id
+       LEFT JOIN LATERAL (
+         SELECT
+           s.plan,
+           s.status,
+           s.expires_at
+         FROM subscriptions s
+         WHERE s.company_id = u.company_id
+         ORDER BY s.created_at DESC
+         LIMIT 1
+       ) business_subscription ON true
+       LEFT JOIN LATERAL (
+         SELECT
+           ab.branch_id,
+           b.name AS branch_name
+         FROM agent_branches ab
+         INNER JOIN branches b
+           ON b.id = ab.branch_id
+         WHERE ab.agent_id = u.id
+         ORDER BY
+           ab.is_primary DESC,
+           ab.assigned_at ASC,
+           ab.id ASC
+         LIMIT 1
+       ) assigned_branch ON true
+       ${where}
+       ORDER BY
+         u.created_at DESC,
+         u.id DESC
+       LIMIT $${limitParam}`,
+      params,
+    );
+
+    const hasMore =
+      result.rows.length > parsedLimit;
+
+    const rows = hasMore
+      ? result.rows.slice(0, parsedLimit)
+      : result.rows;
+
+    const nextCursor =
+      hasMore && rows.length > 0
+        ? encodeStaffCursor(
+            rows[rows.length - 1],
+          )
+        : null;
+
+    return res.json({
+      success: true,
+      data: rows,
+      meta: {
+        limit: parsedLimit,
+        has_more: hasMore,
+        next_cursor: nextCursor,
+      },
+    });
+  } catch (error) {
+    logger.error(
+      "List users cursor error:",
+      error,
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch users",
+    });
   }
 };
 
