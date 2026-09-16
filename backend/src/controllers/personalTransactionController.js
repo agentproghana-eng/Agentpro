@@ -816,9 +816,33 @@ function parsePersonalCursorLimit(value, fallback = 20) {
 }
 
 function isPersonalCursorUuid(value) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
     String(value || '')
   );
+}
+
+function isPersonalCursorDecimal(value) {
+  return (
+    typeof value === 'string' &&
+    /^-?\d+(?:\.\d+)?$/.test(value)
+  );
+}
+
+function normalizePersonalCursorDate(value) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed =
+    value instanceof Date
+      ? value
+      : new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed.toISOString();
 }
 
 function encodePersonalHistoryCursor({
@@ -837,16 +861,27 @@ function encodePersonalHistoryCursor({
       row.amount === null || row.amount === undefined
         ? null
         : String(row.amount);
-  } else {
-    if (!row.created_at) {
+
+    if (
+      value !== null &&
+      !isPersonalCursorDecimal(value)
+    ) {
       return null;
     }
+  } else {
+    value =
+      normalizePersonalCursorDate(
+        row.created_at
+      );
 
-    value = row.created_at;
+    if (!value) {
+      return null;
+    }
   }
 
   return Buffer.from(
     JSON.stringify({
+      v: 1,
       sort_by: sortBy,
       sort_order: sortOrder,
       value,
@@ -875,6 +910,7 @@ function decodePersonalHistoryCursor({
 
     if (
       !decoded ||
+      decoded.v !== 1 ||
       decoded.sort_by !== sortBy ||
       decoded.sort_order !== sortOrder ||
       !isPersonalCursorUuid(decoded.id)
@@ -884,16 +920,26 @@ function decodePersonalHistoryCursor({
 
     if (sortBy === 'date') {
       if (
-        !decoded.value ||
-        Number.isNaN(Date.parse(decoded.value))
+        typeof decoded.value !== 'string'
+      ) {
+        return null;
+      }
+
+      const normalized =
+        normalizePersonalCursorDate(
+          decoded.value
+        );
+
+      if (
+        !normalized ||
+        normalized !== decoded.value
       ) {
         return null;
       }
     } else if (
       decoded.value !== null &&
-      (
-        decoded.value === '' ||
-        !Number.isFinite(Number(decoded.value))
+      !isPersonalCursorDecimal(
+        decoded.value
       )
     ) {
       return null;
