@@ -2561,10 +2561,18 @@ mpRouter.post("/:ad_id/payment/paystack/initialize", async (req, res) => {
       reference: prepared.payment.provider_reference,
       metadata: {
         payment_kind: "business_hub",
+        payment_for: "AgentPro Marketplace Listing Fee",
         payment_id: prepared.payment.id,
         advertisement_id: prepared.ad.id,
         user_id: req.user.id,
         company_id: prepared.ad.company_id || null,
+        custom_fields: [
+          {
+            display_name: "Payment For",
+            variable_name: "payment_for",
+            value: "AgentPro Marketplace Listing Fee",
+          },
+        ],
       },
     });
 
