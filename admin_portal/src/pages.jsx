@@ -2576,20 +2576,60 @@ export function FlowsPage() {
 export function AuditLogsPage() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
   const [filters, setFilters] = useState({ action: '', from_date: '', to_date: '' });
 
-  const load = async () => {
-    setLoading(true);
+  const load = async ({ cursor = null, append = false } = {}) => {
+    if (append) setLoadingMore(true);
+    else setLoading(true);
+
     try {
-      const params = {};
+      const params = { limit: 50 };
       if (filters.action) params.action = filters.action;
       if (filters.from_date) params.from_date = filters.from_date;
       if (filters.to_date) params.to_date = filters.to_date;
-      const res = await API.get('/admin/audit-logs', { params });
-      setLogs(res.data.data || []);
-    } catch (_) { toast.error('Failed to load audit logs'); }
-    finally { setLoading(false); }
+      if (cursor) params.cursor = cursor;
+
+      const res = await API.get('/admin/audit-logs/cursor', { params });
+      const rows = res.data.data || [];
+      const meta = res.data.meta || {};
+
+      if (append) {
+        setLogs(current => {
+          const seen = new Set(current.map(row => row.id));
+          return [
+            ...current,
+            ...rows.filter(row => !seen.has(row.id)),
+          ];
+        });
+      } else {
+        setLogs(rows);
+      }
+
+      setNextCursor(meta.next_cursor || null);
+      setHasMore(meta.has_more === true);
+    } catch (_) {
+      toast.error('Failed to load audit logs');
+    } finally {
+      if (append) setLoadingMore(false);
+      else setLoading(false);
+    }
   };
+
+  const applyFilters = () => {
+    setLogs([]);
+    setNextCursor(null);
+    setHasMore(false);
+    load();
+  };
+
+  const loadMore = () => {
+    if (!nextCursor || loadingMore) return;
+    load({ cursor: nextCursor, append: true });
+  };
+
   useEffect(() => { load(); }, []);
 
   const resultColor = { success: 'text-green-600', failure: 'text-red-600' };
@@ -2618,7 +2658,7 @@ export function AuditLogsPage() {
             onChange={e => setFilters(f => ({ ...f, to_date: e.target.value }))}
             className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
         </div>
-        <button onClick={load}
+        <button onClick={applyFilters}
           className="bg-primary text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-primary-dark transition">
           Apply
         </button>
@@ -2674,6 +2714,18 @@ export function AuditLogsPage() {
               ) : '—' },
           ]}
         />
+
+        {hasMore && (
+          <div className="border-t border-gray-100 p-4 flex justify-center">
+            <button
+              onClick={loadMore}
+              disabled={loadingMore || !nextCursor}
+              className="border border-gray-200 bg-white px-4 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed transition"
+            >
+              {loadingMore ? 'Loading...' : 'Load More'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
