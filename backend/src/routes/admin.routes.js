@@ -1154,6 +1154,207 @@ router.patch('/ussd-flows/:id', async (req, res) => {
 });
 
 // ── Audit Logs ────────────────────────────────────────────────
+const AUDIT_CURSOR_KIND = 'audit_logs';
+
+function encodeAuditCursor(row) {
+  return Buffer.from(
+    JSON.stringify({
+      v: 1,
+      kind: AUDIT_CURSOR_KIND,
+      value: new Date(row.created_at).toISOString(),
+      id: row.id,
+    }),
+    'utf8'
+  ).toString('base64url');
+}
+
+function decodeAuditCursor(raw) {
+  if (!raw || typeof raw !== 'string') {
+    return null;
+  }
+
+  try {
+    const decoded = JSON.parse(
+      Buffer.from(raw, 'base64url').toString('utf8')
+    );
+
+    if (
+      decoded?.v !== 1 ||
+      decoded?.kind !== AUDIT_CURSOR_KIND ||
+      typeof decoded?.value !== 'string' ||
+      typeof decoded?.id !== 'string'
+    ) {
+      return null;
+    }
+
+    const date = new Date(decoded.value);
+
+    if (
+      Number.isNaN(date.getTime()) ||
+      date.toISOString() !== decoded.value
+    ) {
+      return null;
+    }
+
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+        .test(decoded.id)
+    ) {
+      return null;
+    }
+
+    return {
+      value: decoded.value,
+      id: decoded.id,
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+router.get('/audit-logs/cursor', async (req, res) => {
+  const {
+    company_id,
+    user_id,
+    action,
+    from_date,
+    to_date,
+    cursor,
+  } = req.query;
+
+  const parsedLimit = Math.min(
+    Math.max(parseInt(req.query.limit || '50', 10) || 50, 1),
+    100
+  );
+
+  const decodedCursor =
+    cursor === undefined
+      ? null
+      : decodeAuditCursor(cursor);
+
+  if (cursor !== undefined && !decodedCursor) {
+    return res.status(422).json({
+      success: false,
+      code: 'INVALID_CURSOR',
+      message:
+        'The pagination cursor is invalid or expired.',
+    });
+  }
+
+  try {
+    const conditions = [];
+    const params = [];
+    let idx = 1;
+
+    if (company_id) {
+      conditions.push(`al.company_id = $${idx++}`);
+      params.push(company_id);
+    }
+
+    if (user_id) {
+      conditions.push(`al.user_id = $${idx++}`);
+      params.push(user_id);
+    }
+
+    if (action) {
+      conditions.push(`al.action = $${idx++}`);
+      params.push(action);
+    }
+
+    if (from_date) {
+      conditions.push(`al.created_at >= $${idx++}`);
+      params.push(from_date);
+    }
+
+    if (to_date) {
+      conditions.push(`al.created_at <= $${idx++}`);
+      params.push(to_date);
+    }
+
+    if (decodedCursor) {
+      const timestampParam = idx++;
+      const idParam = idx++;
+
+      conditions.push(
+        `(
+          al.created_at < $${timestampParam}::timestamptz
+          OR (
+            al.created_at = $${timestampParam}::timestamptz
+            AND al.id < $${idParam}::uuid
+          )
+        )`
+      );
+
+      params.push(
+        decodedCursor.value,
+        decodedCursor.id
+      );
+    }
+
+    const where =
+      conditions.length
+        ? `WHERE ${conditions.join(' AND ')}`
+        : '';
+
+    const limitParam = idx++;
+
+    const result = await query(
+      `SELECT
+         al.*,
+         u.email AS user_email,
+         u.role AS user_role
+       FROM audit_logs al
+       LEFT JOIN users u
+         ON al.user_id = u.id
+       ${where}
+       ORDER BY
+         al.created_at DESC,
+         al.id DESC
+       LIMIT $${limitParam}`,
+      [
+        ...params,
+        parsedLimit + 1,
+      ]
+    );
+
+    const hasMore =
+      result.rows.length > parsedLimit;
+
+    const rows =
+      hasMore
+        ? result.rows.slice(0, parsedLimit)
+        : result.rows;
+
+    const nextCursor =
+      hasMore && rows.length
+        ? encodeAuditCursor(rows[rows.length - 1])
+        : null;
+
+    return res.json({
+      success: true,
+      data: rows,
+      meta: {
+        limit: parsedLimit,
+        has_more: hasMore,
+        next_cursor: nextCursor,
+      },
+    });
+  } catch (error) {
+    logger.error(
+      'Fetch audit log cursor page error:',
+      {
+        errorCode: error?.code,
+        requestId: req.requestId,
+      }
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch audit logs',
+    });
+  }
+});
+
 router.get('/audit-logs', async (req, res) => {
   const { company_id, user_id, action, from_date, to_date, page = 1, limit = 50 } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
