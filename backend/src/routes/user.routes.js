@@ -105,6 +105,14 @@ const reassignBranchValidation = [
 
 userRouter.use(authenticate);
 
+// Scale-safe staff directory. Keep the legacy page-number
+// endpoint available until all clients have migrated.
+userRouter.get(
+  '/cursor',
+  authorize('superuser', 'business_owner', 'manager'),
+  (req, res) => userController.listUsersCursor(req, res)
+);
+
 userRouter.get(
   '/',
   authorize('superuser', 'business_owner', 'manager'),
