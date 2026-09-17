@@ -59,7 +59,7 @@ export function PortalShell({
     {
       id: "community" as const,
       href: "/hub/community",
-      label: "Community Hub",
+      label: "Community",
       Icon: UsersRound,
     },
     ...(hasBusinessWorkspace
@@ -78,9 +78,26 @@ export function PortalShell({
     <div className="ic-portal-shell">
       <header className="ic-portal-topbar">
         <div className="ic-portal-brand">
-          <Link href="/">Coreintel</Link>
+          <Link href="/" className="ic-portal-company-brand">
+            Coreintel
+          </Link>
 
-          <span>AgentPro</span>
+          <span
+            className="ic-portal-brand-divider"
+            aria-hidden="true"
+          />
+
+          <Link
+            href="/hub"
+            className="ic-portal-agentpro-brand"
+            aria-label="AgentPro — One App Every Business"
+          >
+            <strong>
+              <span>Agent</span><em>Pro</em>
+            </strong>
+
+            <small>One App Every Business</small>
+          </Link>
         </div>
 
         <div className="ic-portal-topbar-actions">

@@ -2589,6 +2589,87 @@ select:focus-visible {
   backdrop-filter: blur(18px);
 }
 
+
+/* AgentPro product identity */
+.ic-portal-brand {
+  gap: 14px;
+  align-items: center;
+}
+
+.ic-portal-company-brand {
+  flex: 0 0 auto;
+}
+
+.ic-portal-brand-divider {
+  width: 1px;
+  height: 30px;
+  flex: 0 0 auto;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--ic-gold-400),
+    transparent
+  );
+}
+
+.ic-portal-agentpro-brand {
+  display: inline-grid;
+  gap: 1px;
+  text-decoration: none;
+  line-height: 1;
+}
+
+.ic-portal-agentpro-brand strong {
+  display: inline-flex;
+  align-items: baseline;
+  font-size: 1.3rem;
+  font-weight: 850;
+  letter-spacing: -0.045em;
+}
+
+.ic-portal-agentpro-brand strong span {
+  color: var(--ic-teal-800);
+}
+
+.ic-portal-agentpro-brand strong em {
+  color: var(--ic-gold-500, #c99724);
+  font-style: normal;
+}
+
+.ic-portal-agentpro-brand small {
+  color: var(--ic-muted);
+  font-size: 0.53rem;
+  font-weight: 750;
+  letter-spacing: 0.045em;
+  white-space: nowrap;
+}
+
+.ic-portal-agentpro-brand:hover strong span {
+  color: var(--ic-teal-700);
+}
+
+.ic-portal-agentpro-brand:hover strong em {
+  filter: brightness(0.92);
+}
+
+@media (max-width: 640px) {
+  .ic-portal-brand {
+    gap: 9px;
+  }
+
+  .ic-portal-brand-divider {
+    height: 25px;
+  }
+
+  .ic-portal-agentpro-brand strong {
+    font-size: 1.08rem;
+  }
+
+  .ic-portal-agentpro-brand small {
+    font-size: 0.46rem;
+  }
+}
+
 .ic-portal-brand {
   display: flex;
   align-items: center;
