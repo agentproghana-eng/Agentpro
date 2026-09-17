@@ -1,57 +1,26 @@
 .composer {
-  margin: 22px 0;
-  padding: 24px;
+  margin: 8px 0 4px;
+  padding: 16px;
   border: 1px solid var(--ic-line);
-  border-radius: var(--ic-radius);
+  border-radius: 18px;
   background: var(--ic-surface);
   box-shadow: var(--ic-shadow-sm);
 }
 
 .heading {
   display: flex;
-  align-items: flex-start;
-  gap: 14px;
-}
-
-.heading h2,
-.heading p {
-  margin: 0;
+  align-items: center;
 }
 
 .heading h2 {
-  margin-top: 2px;
+  margin: 0;
   color: var(--ic-ink);
-  font-size: 1.18rem;
+  font-size: 1rem;
   line-height: 1.3;
 }
 
-.heading > div > p:last-child {
-  margin-top: 5px;
-  color: var(--ic-muted);
-  font-size: 0.9rem;
-}
-
-.icon {
-  width: 42px;
-  height: 42px;
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 13px;
-  background: var(--ic-teal-50);
-  color: var(--ic-teal-700);
-}
-
-.eyebrow {
-  color: var(--ic-teal-700) !important;
-  font-size: 0.72rem !important;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .form {
-  margin-top: 19px;
+  margin-top: 11px;
 }
 
 .contentField {
@@ -60,14 +29,14 @@
 
 .contentField textarea {
   width: 100%;
-  min-height: 132px;
+  min-height: 84px;
   resize: vertical;
-  padding: 15px 16px;
+  padding: 12px 13px;
   border: 1px solid var(--ic-line);
-  border-radius: 15px;
+  border-radius: 12px;
   background: var(--ic-soft);
   color: var(--ic-ink);
-  line-height: 1.55;
+  line-height: 1.45;
 }
 
 .contentField textarea::placeholder {
@@ -80,51 +49,53 @@
 }
 
 .footer {
-  margin-top: 13px;
+  margin-top: 9px;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
 }
 
 .controls {
   display: flex;
   align-items: flex-end;
-  gap: 14px;
+  gap: 10px;
 }
 
 .typeField {
   display: grid;
-  gap: 5px;
+  gap: 3px;
   color: var(--ic-muted);
-  font-size: 0.74rem;
+  font-size: 0.69rem;
   font-weight: 750;
 }
 
 .typeField select {
-  min-width: 170px;
-  padding: 9px 34px 9px 11px;
+  min-width: 140px;
+  min-height: 36px;
+  padding: 6px 30px 6px 9px;
   border: 1px solid var(--ic-line);
-  border-radius: 11px;
+  border-radius: 9px;
   background: var(--ic-surface);
   color: var(--ic-ink);
 }
 
 .counter {
-  padding-bottom: 9px;
+  padding-bottom: 7px;
   color: var(--ic-muted);
-  font-size: 0.75rem;
+  font-size: 0.7rem;
 }
 
 .submit {
-  min-height: 42px;
+  min-height: 38px;
+  min-width: 88px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 10px 16px;
+  gap: 7px;
+  padding: 8px 14px;
   border: 0;
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--ic-teal-700);
   color: white;
   font-weight: 800;
@@ -136,22 +107,16 @@
 }
 
 .submit:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
   cursor: not-allowed;
-}
-
-.accessNote {
-  margin: 12px 0 0;
-  color: var(--ic-muted);
-  font-size: 0.76rem;
 }
 
 .error,
 .success {
-  margin: 12px 0 0;
-  padding: 10px 12px;
-  border-radius: 11px;
-  font-size: 0.84rem;
+  margin: 9px 0 0;
+  padding: 8px 10px;
+  border-radius: 9px;
+  font-size: 0.8rem;
   font-weight: 650;
 }
 
@@ -166,22 +131,23 @@
 }
 
 .locked {
-  margin-top: 18px;
+  margin-top: 11px;
   display: grid;
-  gap: 3px;
-  padding: 14px 15px;
+  gap: 2px;
+  padding: 10px 12px;
   border: 1px solid var(--ic-gold-400);
-  border-radius: 13px;
+  border-radius: 11px;
   background: var(--ic-gold-100);
 }
 
 .locked strong {
   color: var(--ic-charcoal);
+  font-size: 0.86rem;
 }
 
 .locked span {
   color: var(--ic-muted);
-  font-size: 0.84rem;
+  font-size: 0.76rem;
 }
 
 .spinner {
@@ -206,13 +172,20 @@
 
 @media (max-width: 640px) {
   .composer {
-    padding: 18px;
+    padding: 13px;
   }
 
-  .footer,
-  .controls {
+  .footer {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .controls {
+    justify-content: space-between;
+  }
+
+  .typeField {
+    flex: 1;
   }
 
   .typeField select {
@@ -220,7 +193,8 @@
   }
 
   .counter {
-    padding-bottom: 0;
+    align-self: flex-end;
+    padding-bottom: 7px;
   }
 
   .submit {
