@@ -300,6 +300,251 @@ exports.register = async (req, res) => {
   }
 };
 
+// ─── Marketplace Seller Registration ───────────────────────
+//
+// This path is deliberately separate from Mobile Money onboarding.
+//
+// Marketplace access:
+//   user.status    = active
+//   user.role      = marketplace_seller
+//
+// Mobile Money access:
+//   company.status = pending
+//   subscription   = NONE
+//
+// A later Mobile Money application must go through the proper
+// approval workflow before the account can receive a MoMo role.
+
+exports.registerMarketplaceSeller = async (req, res) => {
+  const {
+    company_name,
+    first_name,
+    last_name,
+    phone,
+    email,
+    password,
+  } = req.body;
+
+  try {
+    const normalizedEmail =
+      email.toLowerCase();
+
+    const passwordHash = await bcrypt.hash(
+      password,
+      parseInt(process.env.BCRYPT_ROUNDS) || 12,
+    );
+
+    const registration = await withTransaction(
+      async (client) => {
+        const companyResult = await client.query(
+          `INSERT INTO companies (
+             name,
+             phone,
+             email,
+             status
+           )
+           VALUES ($1, $2, $3, 'pending')
+           RETURNING
+             id,
+             name,
+             status`,
+          [
+            company_name,
+            phone,
+            normalizedEmail,
+          ],
+        );
+
+        const company = companyResult.rows[0];
+
+        const userResult = await client.query(
+          `INSERT INTO users (
+             company_id,
+             role,
+             first_name,
+             last_name,
+             email,
+             phone,
+             password_hash,
+             status
+           )
+           VALUES (
+             $1,
+             'marketplace_seller',
+             $2,
+             $3,
+             $4,
+             $5,
+             $6,
+             'active'
+           )
+           RETURNING
+             id,
+             company_id,
+             role,
+             first_name,
+             last_name,
+             email,
+             phone,
+             profile_image_url,
+             must_change_password`,
+          [
+            company.id,
+            first_name,
+            last_name,
+            normalizedEmail,
+            phone,
+            passwordHash,
+          ],
+        );
+
+        const user = userResult.rows[0];
+
+        // Marketplace registration deliberately creates NO business
+        // subscription and NO MoMo branch.
+
+        const refreshToken =
+          generateRefreshToken(user);
+
+        const tokenDigest =
+          digestRefreshToken(refreshToken);
+
+        const tokenHash = await bcrypt.hash(
+          tokenDigest,
+          8,
+        );
+
+        const sessionResult =
+          await client.query(
+            `INSERT INTO refresh_tokens (
+               user_id,
+               token_hash,
+               token_digest,
+               expires_at
+             )
+             VALUES ($1, $2, $3, $4)
+             RETURNING id`,
+            [
+              user.id,
+              tokenHash,
+              tokenDigest,
+              getRefreshTokenExpiry(),
+            ],
+          );
+
+        const accessToken =
+          generateAccessToken(
+            user,
+            sessionResult.rows[0].id,
+          );
+
+        await auditLog({
+          userId: user.id,
+          companyId: company.id,
+          action:
+            'MARKETPLACE_SELLER_REGISTERED',
+          entityType: 'user',
+          entityId: user.id,
+          newValues: {
+            role: 'marketplace_seller',
+            company_name,
+            source: 'web_marketplace',
+            marketplace_access: true,
+            operational_business_access:
+              false,
+          },
+          ipAddress: req.ip,
+          userAgent:
+            req.headers['user-agent'],
+          requestId: req.requestId,
+          dbClient: client,
+          strict: true,
+        });
+
+        return {
+          company,
+          user,
+          accessToken,
+          refreshToken,
+        };
+      },
+    );
+
+    logger.info(
+      'Marketplace seller registration completed',
+    );
+
+    return res.status(201).json({
+      success: true,
+      message:
+        'Marketplace seller account created successfully.',
+      data: {
+        access_token:
+          registration.accessToken,
+        refresh_token:
+          registration.refreshToken,
+        user: {
+          id: registration.user.id,
+          company_id:
+            registration.user.company_id,
+          company_name:
+            registration.company.name,
+          company_status:
+            registration.company.status,
+          role:
+            registration.user.role,
+          first_name:
+            registration.user.first_name,
+          last_name:
+            registration.user.last_name,
+          email:
+            registration.user.email,
+          phone:
+            registration.user.phone,
+          profile_image_url:
+            registration.user
+              .profile_image_url,
+          must_change_password:
+            registration.user
+              .must_change_password,
+          marketplace_access: true,
+          operational_business_access:
+            false,
+        },
+      },
+    });
+  } catch (error) {
+    if (error?.code === '23505') {
+      logger.info(
+        'Marketplace seller registration conflict suppressed',
+      );
+
+      return res.status(409).json({
+        success: false,
+        code:
+          'REGISTRATION_UNAVAILABLE',
+        message:
+          'Unable to create this account. Sign in or recover your password if you may already have AgentPro access.',
+      });
+    }
+
+    logger.error(
+      'Marketplace seller registration failed',
+      {
+        code:
+          error?.code ||
+          'UNEXPECTED',
+      },
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        'Your Marketplace account could not be created. Please try again.',
+    });
+  }
+};
+
 // ─── Personal Subscriber Registration ────────────────────────
 // Lightweight, no company involved and no superuser approval gate -
 // unlike the Business Owner path above, a Personal account activates

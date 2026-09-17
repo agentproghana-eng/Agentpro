@@ -59,6 +59,7 @@ describe('Offline transaction trust authorization', () => {
             plan: 'business',
             status: 'active',
             expires_at: '2099-06-30T23:59:59.000Z',
+            company_status: 'active',
           },
         ],
       });
@@ -242,6 +243,7 @@ describe('Offline transaction trust authorization', () => {
             status: 'active',
             expires_at:
               '2099-06-30T23:59:59.000Z',
+            company_status: 'active',
           },
         ],
       });

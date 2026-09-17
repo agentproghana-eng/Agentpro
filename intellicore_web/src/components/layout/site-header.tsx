@@ -34,7 +34,7 @@ export async function SiteHeader() {
   return (
     <header className="ic-header">
       <div className="ic-shell ic-header-inner">
-        <AgentProBrand compact />
+        <AgentProBrand ecosystem />
 
         <nav className="ic-desktop-nav" aria-label="Primary navigation">
           {navigation.map((item) => (
@@ -45,6 +45,12 @@ export async function SiteHeader() {
         </nav>
 
         <div className="ic-header-actions">
+          {!hasSession && (
+            <Link className="ic-create-account" href="/register">
+              Create Account
+            </Link>
+          )}
+
           <Link className="ic-sign-in" href={sessionHref}>
             {sessionLabel}
           </Link>
@@ -65,6 +71,8 @@ export async function SiteHeader() {
                 {item.label}
               </Link>
             ))}
+
+            {!hasSession && <Link href="/register">Create Account</Link>}
 
             <Link href={sessionHref}>{sessionLabel}</Link>
 

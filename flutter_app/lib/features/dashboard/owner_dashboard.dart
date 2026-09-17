@@ -5,7 +5,8 @@ import '../../core/auth/auth_bloc.dart';
 import '../../shared/theme/app_theme.dart';
 import 'home_tab.dart';
 import '../community/community_feed_screen.dart';
-import '../marketplace/marketplace_screen.dart';
+import '../business/business_hub_screen.dart';
+import '../business/agents_hub_screen.dart';
 import '../../shared/widgets/more_tile.dart';
 
 class OwnerDashboard extends StatefulWidget {
@@ -23,37 +24,57 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
     final user =
         authState is AuthAuthenticated ? authState.user : <String, dynamic>{};
 
+    final isAuditor =
+        user['role'] == 'auditor';
+
+    final pages = <Widget>[
+      HomeTab(user: user),
+      if (!isAuditor)
+        const CommunityFeedScreen(),
+      const BusinessHubScreen(),
+      const AgentsHubScreen(),
+      _OwnerMoreTab(),
+    ];
+
+    final destinations =
+        <NavigationDestination>[
+      const NavigationDestination(
+        icon: Icon(Icons.home_outlined),
+        selectedIcon: Icon(Icons.home),
+        label: 'Home',
+      ),
+      if (!isAuditor)
+        const NavigationDestination(
+          icon: Icon(Icons.people_outline),
+          selectedIcon: Icon(Icons.people),
+          label: 'Community',
+        ),
+      const NavigationDestination(
+        icon: Icon(Icons.business_center_outlined),
+        selectedIcon: Icon(Icons.business_center),
+        label: 'Business Hub',
+      ),
+      const NavigationDestination(
+        icon: Icon(Icons.analytics_outlined),
+        selectedIcon: Icon(Icons.analytics),
+        label: 'Agents Hub',
+      ),
+      const NavigationDestination(
+        icon: Icon(Icons.more_horiz),
+        label: 'More',
+      ),
+    ];
+
     return Scaffold(
       body: IndexedStack(
         index: _navIndex,
-        children: [
-          HomeTab(user: user),
-          const CommunityFeedScreen(),
-          const MarketplaceScreen(),
-          _OwnerMoreTab(),
-        ],
+        children: pages,
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _navIndex,
-        onDestinationSelected: (i) => setState(() => _navIndex = i),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.people_outline),
-            selectedIcon: Icon(Icons.people),
-            label: 'Community',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.storefront_outlined),
-            selectedIcon: Icon(Icons.storefront),
-            label: 'Business Hub',
-          ),
-          NavigationDestination(icon: Icon(Icons.more_horiz), label: 'More'),
-        ],
+        onDestinationSelected: (i) =>
+            setState(() => _navIndex = i),
+        destinations: destinations,
       ),
     );
   }

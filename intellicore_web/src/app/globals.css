@@ -5713,3 +5713,149 @@ body {
     transform: none;
   }
 }
+
+/* ==========================================================
+   AGENTPRO ECOSYSTEM BRAND + MARKETPLACE REGISTRATION
+   ========================================================== */
+
+.ic-brand-ecosystem {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: max-content;
+  text-decoration: none;
+}
+
+.ic-ecosystem-company {
+  color: var(--ic-ink);
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+}
+
+.ic-ecosystem-divider {
+  width: 1px;
+  height: 32px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgba(7, 83, 75, 0.24),
+    transparent
+  );
+}
+
+.ic-ecosystem-product {
+  display: grid;
+  gap: 1px;
+  line-height: 1;
+}
+
+.ic-ecosystem-product strong {
+  display: inline-flex;
+  align-items: baseline;
+  font-size: 1rem;
+  font-style: normal;
+  letter-spacing: -0.045em;
+}
+
+.ic-ecosystem-product strong span {
+  color: var(--ic-ink);
+}
+
+.ic-ecosystem-product strong em {
+  color: var(--ic-teal-700);
+  font-style: normal;
+}
+
+.ic-ecosystem-product small {
+  color: #a27600;
+  font-size: 0.56rem;
+  font-weight: 760;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.ic-create-account {
+  padding: 8px 11px;
+  border: 1px solid rgba(0, 121, 107, 0.18);
+  border-radius: 10px;
+  color: var(--ic-teal-800);
+  font-size: 0.78rem;
+  font-weight: 760;
+  text-decoration: none;
+}
+
+.ic-create-account:hover {
+  border-color: rgba(0, 121, 107, 0.34);
+  background: rgba(0, 121, 107, 0.05);
+}
+
+.ic-register-note {
+  padding: 13px 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  border: 1px solid rgba(0, 121, 107, 0.13);
+  border-radius: 13px;
+  background: rgba(0, 121, 107, 0.045);
+  color: var(--ic-teal-800);
+}
+
+.ic-register-note > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.ic-register-note > div {
+  display: grid;
+  gap: 3px;
+}
+
+.ic-register-note strong {
+  font-size: 0.82rem;
+}
+
+.ic-register-note span {
+  color: var(--ic-muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.ic-register-name-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ic-register-password-help {
+  margin: -4px 0 2px;
+  color: var(--ic-muted);
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 780px) {
+  .ic-brand-ecosystem {
+    gap: 8px;
+  }
+
+  .ic-ecosystem-company {
+    font-size: 0.9rem;
+  }
+
+  .ic-ecosystem-divider {
+    height: 27px;
+  }
+
+  .ic-ecosystem-product strong {
+    font-size: 0.9rem;
+  }
+
+  .ic-ecosystem-product small {
+    font-size: 0.5rem;
+  }
+
+  .ic-register-name-grid {
+    grid-template-columns: 1fr;
+  }
+}
