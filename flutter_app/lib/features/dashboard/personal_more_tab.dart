@@ -33,6 +33,8 @@ class PersonalMoreTab extends StatelessWidget {
         return '/owner';
       case 'auditor':
         return '/owner';
+      case 'marketplace_seller':
+        return '/seller';
       default:
         return '/agent';
     }

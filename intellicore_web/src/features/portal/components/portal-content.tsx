@@ -30,83 +30,153 @@ function roleLabel(role: string | null | undefined) {
 }
 
 export function PortalOverview({ user }: Props) {
-  const hasBusinessWorkspace = Boolean(user.company_id || user.company_name);
+  const agentCommunityAccess = [
+    "business_owner",
+    "manager",
+    "agent",
+  ].includes(user.role ?? "");
+
+  const personalCommunityAccess =
+    Boolean(user.personal_subscription_plan);
+
+  const hasCommunityAccess =
+    agentCommunityAccess ||
+    personalCommunityAccess;
+
+  const hasAgentsHubAccess = [
+    "business_owner",
+    "manager",
+    "agent",
+    "auditor",
+  ].includes(user.role ?? "");
 
   return (
     <>
       <section className="ic-portal-hero">
-        <p className="ic-eyebrow">AgentPro workspace</p>
+        <p className="ic-eyebrow">
+          AgentPro workspace
+        </p>
 
-        <h1>Welcome, {firstName(user)}.</h1>
+        <h1>
+          Welcome, {firstName(user)}.
+        </h1>
 
         <p>
-          Move between your community connections and business workspace from
-          one authenticated AgentPro experience.
+          Manage Marketplace activity and,
+          where approved, your AgentPro Mobile
+          Money operations from one account.
         </p>
       </section>
 
-      <section className="ic-portal-grid" aria-label="AgentPro hubs">
-        <Link href="/hub/community" className="ic-portal-feature-card">
+      <section
+        className="ic-portal-grid"
+        aria-label="AgentPro hubs"
+      >
+        <Link
+          href="/marketplace"
+          className="ic-portal-feature-card"
+        >
           <span className="ic-portal-feature-icon">
-            <UsersRound size={22} />
+            <BriefcaseBusiness size={22} />
           </span>
 
           <div>
-            <p className="ic-eyebrow">Community</p>
+            <p className="ic-eyebrow">
+              Marketplace
+            </p>
 
-            <h2>Community Hub</h2>
+            <h2>Business Hub</h2>
 
             <p>
-              Join Agent Community conversations or access your Personal
-              Community based on your AgentPro account.
+              Browse Marketplace, manage seller
+              activity and grow your presence on
+              AgentPro.
             </p>
           </div>
 
           <span className="ic-portal-card-action">
-            Open Community Hub
+            Open Business Hub
             <ArrowRight size={16} />
           </span>
         </Link>
 
-        {hasBusinessWorkspace ? (
-          <Link href="/hub/business" className="ic-portal-feature-card">
+        {hasCommunityAccess ? (
+          <Link
+            href="/hub/community"
+            className="ic-portal-feature-card"
+          >
             <span className="ic-portal-feature-icon">
-              <Building2 size={22} />
+              <UsersRound size={22} />
             </span>
 
             <div>
-              <p className="ic-eyebrow">Business</p>
+              <p className="ic-eyebrow">
+                Community
+              </p>
 
-              <h2>Business Hub</h2>
+              <h2>Community Hub</h2>
 
               <p>
-                Enter your private business workspace for operations, people and
-                business insights.
+                Open the community available to
+                your approved AgentPro account
+                capabilities.
               </p>
             </div>
 
             <span className="ic-portal-card-action">
-              Open Business Hub
+              Open Community
               <ArrowRight size={16} />
             </span>
           </Link>
         ) : (
           <article className="ic-portal-feature-card is-muted">
             <span className="ic-portal-feature-icon">
+              <UsersRound size={22} />
+            </span>
+
+            <div>
+              <p className="ic-eyebrow">
+                Community
+              </p>
+
+              <h2>Community</h2>
+
+              <p>
+                Community access is not enabled
+                for this account.
+              </p>
+            </div>
+          </article>
+        )}
+
+        {hasAgentsHubAccess && (
+          <Link
+            href="/hub/agents"
+            className="ic-portal-feature-card"
+          >
+            <span className="ic-portal-feature-icon">
               <Building2 size={22} />
             </span>
 
             <div>
-              <p className="ic-eyebrow">Business</p>
+              <p className="ic-eyebrow">
+                Mobile Money
+              </p>
 
-              <h2>Business Hub</h2>
+              <h2>Agents Hub</h2>
 
               <p>
-                A business workspace will appear here when one is linked to your
-                AgentPro account.
+                Open your approved Mobile Money
+                workspace for operations,
+                transactions and business insight.
               </p>
             </div>
-          </article>
+
+            <span className="ic-portal-card-action">
+              Open Agents Hub
+              <ArrowRight size={16} />
+            </span>
+          </Link>
         )}
       </section>
 
@@ -119,7 +189,10 @@ export function PortalOverview({ user }: Props) {
 
             <strong>Verified</strong>
 
-            <p>Your web session is being validated through AgentPro.</p>
+            <p>
+              Your web session is being validated
+              through AgentPro.
+            </p>
           </div>
         </article>
 
@@ -129,7 +202,10 @@ export function PortalOverview({ user }: Props) {
           <div>
             <span>Current workspace</span>
 
-            <strong>{user.company_name || "Personal AgentPro"}</strong>
+            <strong>
+              {user.company_name ||
+                "Personal AgentPro"}
+            </strong>
 
             <p>{roleLabel(user.role)}</p>
           </div>
@@ -144,24 +220,27 @@ export function CommunityHubView({ user }: Props) {
 }
 
 export function BusinessHubView({ user }: Props) {
-  const hasBusinessWorkspace = Boolean(
-    user.company_id || user.company_name,
-  );
+  const hasAgentsHubAccess = [
+    "business_owner",
+    "manager",
+    "agent",
+    "auditor",
+  ].includes(user.role ?? "");
 
-  if (!hasBusinessWorkspace) {
+  if (!hasAgentsHubAccess) {
     return (
       <>
         <section className="ic-portal-hero">
           <p className="ic-eyebrow">
-            Business workspace
+            Mobile Money workspace
           </p>
 
-          <h1>Business Hub</h1>
+          <h1>Agents Hub</h1>
 
           <p>
-            Link a business to your AgentPro account
-            to view operational activity, reports and
-            business information here.
+            Agents Hub is available only to
+            approved AgentPro Mobile Money
+            business accounts.
           </p>
         </section>
 
@@ -170,13 +249,13 @@ export function BusinessHubView({ user }: Props) {
 
           <div>
             <strong>
-              No business workspace is linked.
+              Agents Hub access is not enabled.
             </strong>
 
             <p>
-              AgentPro will show business information
-              only after your account has an active
-              business membership.
+              Marketplace seller access remains
+              separate from Mobile Money
+              operational permissions.
             </p>
           </div>
         </section>

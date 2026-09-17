@@ -26,6 +26,47 @@ const handleValidation = (req, res, next) => {
   next();
 };
 
+// POST /api/v1/auth/register-marketplace-seller
+//
+// Public Marketplace registration creates only a Marketplace seller.
+// The client cannot supply a role and cannot self-register as a
+// business_owner, manager, agent, auditor or superuser.
+router.post('/register-marketplace-seller', authLimiter, [
+  body('company_name')
+    .trim()
+    .notEmpty()
+    .withMessage('Business name is required')
+    .isLength({ max: 160 })
+    .withMessage('Business name is too long'),
+  body('first_name')
+    .trim()
+    .notEmpty()
+    .withMessage('First name is required')
+    .isLength({ max: 80 })
+    .withMessage('First name is too long'),
+  body('last_name')
+    .trim()
+    .notEmpty()
+    .withMessage('Last name is required')
+    .isLength({ max: 80 })
+    .withMessage('Last name is too long'),
+  body('email')
+    .isEmail()
+    .normalizeEmail()
+    .withMessage('Valid email is required'),
+  body('phone')
+    .trim()
+    .matches(/^\+?[0-9]{10,15}$/)
+    .withMessage('Enter a valid phone number'),
+  body('password')
+    .isLength({ min: 8, max: 200 })
+    .withMessage('Password must be at least 8 characters')
+    .matches(/[A-Z]/)
+    .withMessage('Password must contain an uppercase letter')
+    .matches(/[0-9]/)
+    .withMessage('Password must contain a number'),
+], handleValidation, authController.registerMarketplaceSeller);
+
 // POST /api/v1/auth/register
 router.post('/register', authLimiter, [
   body('company_name').trim().notEmpty().withMessage('Company name is required'),

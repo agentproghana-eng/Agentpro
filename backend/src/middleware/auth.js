@@ -370,8 +370,83 @@ const requireSameCompany = async (req, res, next) => {
   next();
 };
 
+const BUSINESS_OPERATION_ROLES = new Set([
+  'business_owner',
+  'manager',
+  'agent',
+  'auditor',
+]);
+
 /**
- * Check active subscription for business features
+ * Require an approved/active Mobile Money business membership.
+ *
+ * This is intentionally independent from subscription status so it can
+ * protect read-only Agent Community access too.
+ */
+const requireApprovedMomoBusiness = async (
+  req,
+  res,
+  next
+) => {
+  if (req.user.role === 'superuser') {
+    return next();
+  }
+
+  if (
+    !BUSINESS_OPERATION_ROLES.has(
+      req.user.role
+    ) ||
+    !req.user.company_id
+  ) {
+    return res.status(403).json({
+      success: false,
+      code: 'MOMO_BUSINESS_REQUIRED',
+      message:
+        'Approved AgentPro Mobile Money business access is required.',
+    });
+  }
+
+  try {
+    const companyResult =
+      await query(
+        `SELECT status
+         FROM companies
+         WHERE id = $1
+         LIMIT 1`,
+        [req.user.company_id]
+      );
+
+    if (
+      companyResult.rows.length === 0 ||
+      companyResult.rows[0].status !==
+        'active'
+    ) {
+      return res.status(403).json({
+        success: false,
+        code:
+          'MOMO_BUSINESS_NOT_APPROVED',
+        message:
+          'Your Mobile Money business is not approved for this feature.',
+      });
+    }
+
+    return next();
+  } catch (error) {
+    logger.error(
+      'MoMo business approval check error:',
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        'Failed to verify Mobile Money business access',
+    });
+  }
+};
+
+/**
+ * Check active subscription for Mobile Money business features.
  */
 const requireActiveSubscription = async (req, res, next) => {
   if (req.user.role === 'superuser') {
@@ -384,12 +459,33 @@ const requireActiveSubscription = async (req, res, next) => {
     return next();
   }
 
+  if (
+    !BUSINESS_OPERATION_ROLES.has(
+      req.user.role
+    ) ||
+    !req.user.company_id
+  ) {
+    return res.status(403).json({
+      success: false,
+      code: 'BUSINESS_ROLE_REQUIRED',
+      message:
+        'This feature is available only to approved AgentPro Mobile Money business accounts.',
+    });
+  }
+
   try {
     const result = await query(
-      `SELECT s.plan, s.status, s.expires_at
+      `SELECT
+         s.plan,
+         s.status,
+         s.expires_at,
+         c.status AS company_status
        FROM subscriptions s
+       JOIN companies c
+         ON c.id = s.company_id
        WHERE s.company_id = $1
-       ORDER BY s.created_at DESC LIMIT 1`,
+       ORDER BY s.created_at DESC
+       LIMIT 1`,
       [req.user.company_id]
     );
 
@@ -402,6 +498,16 @@ const requireActiveSubscription = async (req, res, next) => {
     }
 
     const sub = result.rows[0];
+
+    if (sub.company_status !== 'active') {
+      return res.status(403).json({
+        success: false,
+        code:
+          'MOMO_BUSINESS_NOT_APPROVED',
+        message:
+          'Your Mobile Money business has not been approved for operational access.',
+      });
+    }
 
     if (sub.status === 'suspended') {
       return res.status(403).json({
@@ -550,6 +656,7 @@ module.exports = {
   authenticate,
   authorize,
   requireSameCompany,
+  requireApprovedMomoBusiness,
   requireActiveSubscription,
   requirePersonalAccount,
   requirePaidPersonalPlan,

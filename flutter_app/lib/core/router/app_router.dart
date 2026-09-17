@@ -30,6 +30,7 @@ import '../../features/balances/pending_approvals_screen.dart';
 import '../../features/support/support_screen.dart';
 import '../../features/support/help_guide_screen.dart';
 import '../../features/dashboard/personal_dashboard.dart';
+import '../../features/dashboard/marketplace_seller_dashboard.dart';
 import '../../features/transactions/personal_transaction_screen.dart';
 import '../../features/subscription/personal_subscription_screen.dart';
 import '../../features/personal_community/personal_community_feed_screen.dart';
@@ -49,6 +50,7 @@ import '../../features/reports/reports_screen.dart';
 import '../../features/ai_assistant/ai_assistant_screen.dart';
 import '../../features/subscription/subscription_screen.dart';
 import '../../features/business/business_hub_screen.dart';
+import '../../features/business/agents_hub_screen.dart';
 import '../../features/marketplace/marketplace_screen.dart';
 import '../../features/marketplace/post_ad_screen.dart';
 import '../../features/marketplace/my_ads_screen.dart';
@@ -111,6 +113,60 @@ class AppRouter {
           final hasPersonalCapability =
               authState.user['personal_subscription_plan'] != null;
 
+          const momoRoles = <String>{
+            'business_owner',
+            'manager',
+            'agent',
+            'auditor',
+          };
+
+          const agentCommunityRoles = <String>{
+            'business_owner',
+            'manager',
+            'agent',
+          };
+
+          const momoOnlyPrefixes = <String>[
+            '/transactions',
+            '/sync',
+            '/float',
+            '/float-overview',
+            '/my-balance',
+            '/balances',
+            '/ussd-settings',
+            '/ussd-flows',
+            '/shifts',
+            '/reports',
+            '/subscription',
+            '/branches',
+            '/users',
+            '/agents-hub',
+          ];
+
+          final isMomoOnlyRoute =
+              momoOnlyPrefixes.any(
+            (prefix) =>
+                location == prefix ||
+                location.startsWith(
+                  '$prefix/',
+                ),
+          );
+
+          if (location.startsWith('/community') &&
+              !agentCommunityRoles.contains(role)) {
+            return _homeForRole(authState);
+          }
+
+          if (isMomoOnlyRoute &&
+              !momoRoles.contains(role)) {
+            return _homeForRole(authState);
+          }
+
+          if (location == '/seller' &&
+              role != 'marketplace_seller') {
+            return _homeForRole(authState);
+          }
+
           if (location.startsWith('/personal-') && !hasPersonalCapability) {
             return role == 'customer'
                 ? '/unsupported-account'
@@ -162,6 +218,16 @@ class AppRouter {
         GoRoute(path: '/agent', builder: (_, __) => const AgentDashboard()),
         GoRoute(path: '/manager', builder: (_, __) => const ManagerDashboard()),
         GoRoute(path: '/owner', builder: (_, __) => const OwnerDashboard()),
+        GoRoute(
+          path: '/seller',
+          builder: (_, __) =>
+              const MarketplaceSellerDashboard(),
+        ),
+        GoRoute(
+          path: '/agents-hub',
+          builder: (_, __) =>
+              const AgentsHubScreen(),
+        ),
 
         // Transactions
         GoRoute(
@@ -556,6 +622,8 @@ class AppRouter {
         return '/owner'; // auditor uses owner view (read-only)
       case 'customer':
         return '/personal-home';
+      case 'marketplace_seller':
+        return '/seller';
       default:
         return '/unsupported-account';
     }

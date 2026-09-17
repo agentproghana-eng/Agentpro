@@ -486,9 +486,13 @@ export function LoginForm({ returnPath }: Props) {
       </button>
 
       <div className="ic-auth-support">
-        <span>Need an AgentPro account?</span>
+        <span>New to AgentPro Marketplace?</span>
 
-        <Link href="/agentpro#get-agentpro">Get AgentPro</Link>
+        <Link
+          href={`/register?next=${encodeURIComponent(returnPath)}`}
+        >
+          Create Business Account
+        </Link>
       </div>
     </form>
   );

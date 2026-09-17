@@ -47,13 +47,13 @@ export default function AuthLayout({
 
       <section className="ic-auth-content">
         <div className="ic-auth-content-top">
-          <Link href="/">Back to Coreintel</Link>
+          <Link href="/">Back to AgentPro</Link>
         </div>
 
         <div className="ic-auth-card">{children}</div>
 
         <p className="ic-auth-footer-note">
-          AgentPro is a product of Coreintel Systems.
+          AgentPro is a product of CoreIntel Systems.
         </p>
       </section>
     </main>

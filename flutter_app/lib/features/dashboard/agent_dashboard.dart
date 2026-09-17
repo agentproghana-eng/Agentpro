@@ -5,7 +5,8 @@ import '../../core/auth/auth_bloc.dart';
 import '../../shared/theme/app_theme.dart';
 import 'home_tab.dart';
 import '../community/community_feed_screen.dart';
-import '../marketplace/marketplace_screen.dart';
+import '../business/business_hub_screen.dart';
+import '../business/agents_hub_screen.dart';
 import '../../shared/widgets/more_tile.dart';
 
 class AgentDashboard extends StatefulWidget {
@@ -29,7 +30,8 @@ class _AgentDashboardState extends State<AgentDashboard> {
         children: [
           HomeTab(user: user),
           const CommunityFeedScreen(),
-          const MarketplaceScreen(),
+          const BusinessHubScreen(),
+          const AgentsHubScreen(),
           const _MoreTab(),
         ],
       ),
@@ -48,9 +50,14 @@ class _AgentDashboardState extends State<AgentDashboard> {
             label: 'Community',
           ),
           NavigationDestination(
-            icon: Icon(Icons.storefront_outlined),
-            selectedIcon: Icon(Icons.storefront),
+            icon: Icon(Icons.business_center_outlined),
+            selectedIcon: Icon(Icons.business_center),
             label: 'Business Hub',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.analytics_outlined),
+            selectedIcon: Icon(Icons.analytics),
+            label: 'Agents Hub',
           ),
           NavigationDestination(icon: Icon(Icons.more_horiz), label: 'More'),
         ],

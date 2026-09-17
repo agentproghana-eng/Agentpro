@@ -3,7 +3,12 @@ const router = express.Router();
 const multer = require("multer");
 const agentPostController = require("../controllers/agentPostController");
 const enhancementController = require("../controllers/agentCommunityEnhancementController");
-const { authenticate, authorize, requireActiveSubscription } = require("../middleware/auth");
+const {
+  authenticate,
+  authorize,
+  requireApprovedMomoBusiness,
+  requireActiveSubscription,
+} = require("../middleware/auth");
 const { uploadLimiter } = require("../middleware/rateLimit");
 
 // Voice notes: memoryStorage (no local disk writes - the buffer is
@@ -73,7 +78,12 @@ router.patch(
 
 // Agent Community member routes.
 router.use(
-  authorize("business_owner", "manager", "agent")
+  authorize(
+    "business_owner",
+    "manager",
+    "agent"
+  ),
+  requireApprovedMomoBusiness
 );
 
 // Static routes must appear before /:post_id.

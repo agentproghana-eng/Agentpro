@@ -74,7 +74,7 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Business Tools'),
+        title: const Text('Business Hub'),
         actions: [
           IconButton(
             tooltip: 'Refresh',
@@ -90,7 +90,7 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
           padding: const EdgeInsets.all(16),
           children: [
             const Text(
-              'Business Performance',
+              'Seller Performance',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -98,7 +98,7 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Track the reach and status of your advertisements.',
+              'Track your Marketplace reach, customers and advertisements.',
               style: TextStyle(
                 color: Theme.of(context)
                     .colorScheme
