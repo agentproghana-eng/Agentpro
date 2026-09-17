@@ -2,7 +2,6 @@
 
 import {
   LoaderCircle,
-  MessageSquarePlus,
   Send,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -199,29 +198,9 @@ export function CommunityComposer({
       aria-labelledby="community-composer-title"
     >
       <div className={styles.heading}>
-        <span className={styles.icon}>
-          <MessageSquarePlus
-            size={20}
-            aria-hidden="true"
-          />
-        </span>
-
-        <div>
-          <p className={styles.eyebrow}>
-            {kind === "agent"
-              ? "Agent Community"
-              : "Personal Community"}
-          </p>
-
-          <h2 id="community-composer-title">
-            Create a post
-          </h2>
-
-          <p>
-            Share a useful update, question or discussion
-            with your AgentPro community.
-          </p>
-        </div>
+        <h2 id="community-composer-title">
+          New post
+        </h2>
       </div>
 
       {personalLocked ? (
@@ -229,14 +208,9 @@ export function CommunityComposer({
           className={styles.locked}
           role="status"
         >
-          <strong>
-            Paid Personal membership is required to post.
-          </strong>
+          <strong>Paid Personal plan required to post.</strong>
 
-          <span>
-            Free Personal members can continue to view and
-            react to Community posts.
-          </span>
+          <span>You can still view and react on the Free plan.</span>
         </div>
       ) : (
         <form
@@ -251,7 +225,7 @@ export function CommunityComposer({
             <textarea
               value={content}
               maxLength={MAX_CONTENT_LENGTH}
-              rows={5}
+              rows={3}
               disabled={submitting}
               onChange={(event) => {
                 setContent(event.target.value);
@@ -260,8 +234,8 @@ export function CommunityComposer({
               }}
               placeholder={
                 kind === "agent"
-                  ? "Share an update, ask a question or help another agent…"
-                  : "Share something with the Personal Community…"
+                  ? "Share an update or ask a question…"
+                  : "Share something…"
               }
             />
           </label>
@@ -270,7 +244,7 @@ export function CommunityComposer({
             <div className={styles.controls}>
               {kind === "agent" && (
                 <label className={styles.typeField}>
-                  <span>Post type</span>
+                  <span>Type</span>
 
                   <select
                     value={postType}
@@ -321,16 +295,9 @@ export function CommunityComposer({
 
               {submitting
                 ? "Posting…"
-                : "Post to Community"}
+                : "Post"}
             </button>
           </div>
-
-          {kind === "agent" && (
-            <p className={styles.accessNote}>
-              Posting remains subject to AgentPro&apos;s
-              active business-subscription rules.
-            </p>
-          )}
 
           {error && (
             <p

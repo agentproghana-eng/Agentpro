@@ -13,6 +13,8 @@ import type {
   CommunityReaction,
 } from "@/features/community/types";
 
+import hubStyles from "./community-hub.module.css";
+
 type Props = {
   user: Partial<AgentProUser>;
 };
@@ -114,6 +116,8 @@ function FeedCard({
   reacting: boolean;
   onReact: (post: CommunityPost, reaction: CommunityReaction) => void;
 }) {
+  const reactions = reactionTotal(post);
+
   return (
     <article className="ic-community-post-card">
       <div className="ic-community-post-header">
@@ -152,7 +156,11 @@ function FeedCard({
       )}
 
       <div className="ic-community-post-meta">
-        <span>{reactionTotal(post)} reactions</span>
+        {reactions > 0 && (
+          <span>
+            {reactions} {reactions === 1 ? "reaction" : "reactions"}
+          </span>
+        )}
 
         <Link
           href={`/hub/community/${kind}/${encodeURIComponent(post.id)}`}
@@ -348,15 +356,12 @@ export function CommunityHub({ user }: Props) {
   const personalPaid = isPaidPersonal(user);
 
   return (
-    <>
+    <div className={hubStyles.page}>
       <section className="ic-portal-hero">
-        <p className="ic-eyebrow">AgentPro community</p>
-
-        <h1>Community Hub</h1>
+        <h1>Community</h1>
 
         <p>
-          Join the Agent Community for business-network conversations or your
-          Personal Community for everyday member discussions.
+          Share, connect and join the conversation.
         </p>
       </section>
 
@@ -366,15 +371,12 @@ export function CommunityHub({ user }: Props) {
             <button
               type="button"
               className={active === "agent" ? "is-active" : undefined}
+              aria-label="Open Agent Community"
               onClick={() => setActive("agent")}
             >
-              <UsersRound size={18} />
+              <UsersRound size={17} />
 
-              <span>
-                <strong>Agent Community</strong>
-
-                <small>Agents, managers and business owners</small>
-              </span>
+              <strong>Agent</strong>
             </button>
           )}
 
@@ -382,19 +384,12 @@ export function CommunityHub({ user }: Props) {
             <button
               type="button"
               className={active === "personal" ? "is-active" : undefined}
+              aria-label="Open Personal Community"
               onClick={() => setActive("personal")}
             >
-              <UserRound size={18} />
+              <UserRound size={17} />
 
-              <span>
-                <strong>Personal Community</strong>
-
-                <small>
-                  {personalPaid
-                    ? "Paid Personal membership"
-                    : "Free Personal membership"}
-                </small>
-              </span>
+              <strong>Personal</strong>
             </button>
           )}
         </section>
@@ -435,17 +430,11 @@ export function CommunityHub({ user }: Props) {
       {hasCommunity && (
         <section className="ic-community-feed">
           <div className="ic-community-feed-heading">
-            <div>
-              <p className="ic-eyebrow">
-                {active === "agent" ? "Agent Community" : "Personal Community"}
-              </p>
-
-              <h2>Community feed</h2>
-            </div>
+            <h2>Latest</h2>
 
             {active === "personal" && !personalPaid && (
               <span className="ic-community-plan-badge">
-                Free: view & react
+                Free plan
               </span>
             )}
           </div>
@@ -457,7 +446,7 @@ export function CommunityHub({ user }: Props) {
           )}
 
           {loading && (
-            <div className="ic-community-state">Loading community…</div>
+            <div className="ic-community-state">Loading…</div>
           )}
 
           {!loading && error && (
@@ -465,7 +454,7 @@ export function CommunityHub({ user }: Props) {
           )}
 
           {!loading && !error && posts.length === 0 && (
-            <div className="ic-community-state">No community posts yet.</div>
+            <div className="ic-community-state">No posts yet.</div>
           )}
 
           {!loading &&
@@ -481,6 +470,6 @@ export function CommunityHub({ user }: Props) {
             ))}
         </section>
       )}
-    </>
+    </div>
   );
 }
