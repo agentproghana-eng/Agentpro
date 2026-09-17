@@ -5397,3 +5397,93 @@ select:focus-visible {
     gap: 12px;
   }
 }
+
+/* ── AgentPro Community visual polish ───────────────────────── */
+
+@media (min-width: 900px) {
+  .ic-portal-topbar {
+    min-height: 82px;
+    padding-inline: clamp(26px, 3.4vw, 54px);
+  }
+
+  .ic-portal-brand {
+    gap: 16px;
+  }
+
+  .ic-portal-company-brand {
+    font-size: 1.34rem;
+    font-weight: 850;
+    letter-spacing: -0.035em;
+  }
+
+  .ic-portal-brand-divider {
+    height: 40px;
+  }
+
+  .ic-portal-agentpro-brand strong {
+    font-size: 1.46rem;
+    line-height: 0.95;
+    letter-spacing: -0.05em;
+  }
+
+  .ic-portal-agentpro-brand small {
+    margin-top: 5px;
+    font-size: 0.66rem;
+    line-height: 1.05;
+    letter-spacing: 0.025em;
+  }
+
+  .ic-portal-topbar-actions {
+    gap: 15px;
+  }
+
+  .ic-portal-user {
+    gap: 11px;
+  }
+
+  .ic-portal-user-avatar {
+    width: 44px;
+    height: 44px;
+    flex-basis: 44px;
+    font-size: 0.92rem;
+  }
+
+  .ic-portal-identity strong {
+    font-size: 0.88rem;
+  }
+
+  .ic-portal-identity span {
+    margin-top: 2px;
+    font-size: 0.7rem;
+  }
+
+  .ic-portal-signout {
+    min-height: 42px;
+    padding-inline: 14px;
+  }
+
+  .ic-portal-layout {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .ic-portal-main {
+    width: 100%;
+    max-width: 1320px;
+    padding: 42px clamp(28px, 4vw, 58px) 72px;
+  }
+
+  .ic-portal-sidebar {
+    padding-top: 34px;
+  }
+
+  .ic-portal-nav a {
+    min-height: 46px;
+    font-size: 0.82rem;
+  }
+}
+
+@media (min-width: 1280px) {
+  .ic-portal-main {
+    max-width: 1380px;
+  }
+}

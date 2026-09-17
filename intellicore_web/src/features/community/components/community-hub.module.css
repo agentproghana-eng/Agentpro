@@ -687,3 +687,132 @@
     grid-template-columns: 32px minmax(80px, 1fr) auto;
   }
 }
+
+/* ── Approved mock-up scale polish ───────────────────────────── */
+
+@media (min-width: 900px) {
+  .page {
+    gap: 18px;
+  }
+
+  .hero {
+    min-height: 148px;
+    padding: 31px 34px;
+    border-radius: 26px;
+  }
+
+  .hero h1 {
+    font-size: clamp(2.45rem, 3.5vw, 3rem);
+  }
+
+  .hero p {
+    margin-top: 10px;
+    font-size: 1rem;
+  }
+
+  .hero > span {
+    font-size: 0.78rem;
+    letter-spacing: 0.045em;
+  }
+
+  .switcher {
+    gap: 11px;
+  }
+
+  .switcher button {
+    min-width: 190px;
+    min-height: 52px;
+    padding-inline: 22px;
+  }
+
+  .switcher button strong {
+    font-size: 0.92rem;
+  }
+
+  .feedHeading {
+    min-height: 52px;
+    margin-bottom: 12px;
+  }
+
+  .feedHeading h2 {
+    font-size: 1.22rem;
+  }
+
+  .sortControl select {
+    min-height: 40px;
+    padding-inline: 15px 38px;
+    font-size: 0.8rem;
+  }
+
+  .postCard {
+    padding: 23px 24px;
+    border-radius: 22px;
+  }
+
+  .postCard + .postCard {
+    margin-top: 15px;
+  }
+
+  .avatar {
+    width: 46px;
+    height: 46px;
+    flex-basis: 46px;
+    font-size: 1rem;
+  }
+
+  .authorMeta strong {
+    font-size: 0.98rem;
+  }
+
+  .authorMeta span {
+    font-size: 0.76rem;
+  }
+
+  .postContent {
+    margin-block: 16px 14px;
+    font-size: 0.97rem;
+    line-height: 1.58;
+  }
+
+  .audioPlayer {
+    width: min(100%, 680px);
+    min-height: 54px;
+    grid-template-columns: 38px minmax(160px, 1fr) auto;
+    gap: 12px;
+    padding: 8px 13px;
+  }
+
+  .audioPlayer > button {
+    width: 36px;
+    height: 36px;
+  }
+
+  .audioTime {
+    font-size: 0.74rem;
+  }
+
+  .engagementSummary {
+    min-height: 32px;
+    font-size: 0.76rem;
+  }
+
+  .postActions {
+    min-height: 48px;
+    gap: 12px;
+    padding-top: 11px;
+  }
+
+  .reactControl summary,
+  .commentAction,
+  .shareAction {
+    min-height: 40px;
+    padding: 8px 13px;
+    font-size: 0.82rem;
+  }
+
+  .reactionPicker button {
+    width: 38px;
+    height: 38px;
+    font-size: 1.1rem;
+  }
+}
