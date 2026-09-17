@@ -21,7 +21,7 @@ export function AgentProBrand({ compact = false }: Props) {
       <span className="ic-brand-copy">
         <strong>AgentPro</strong>
 
-        {!compact && <span>Marketplace · Business · Community</span>}
+        {!compact && <span>One App Every Business.</span>}
       </span>
     </Link>
   );

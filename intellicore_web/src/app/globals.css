@@ -22,7 +22,7 @@
   --ic-surface: #ffffff;
   --ic-line: #dce6e3;
 
-  --ic-shell: 1180px;
+  --ic-shell: 1280px;
   --ic-radius-sm: 14px;
   --ic-radius: 22px;
   --ic-radius-lg: 30px;
@@ -5485,5 +5485,231 @@ select:focus-visible {
 @media (min-width: 1280px) {
   .ic-portal-main {
     max-width: 1380px;
+  }
+}
+
+
+/* ==========================================================
+   AGENTPRO WEB EXPERIENCE FOUNDATION
+   Shared visual refinement for public web surfaces.
+   ========================================================== */
+
+:root {
+  --ic-page-gutter: clamp(18px, 4vw, 52px);
+  --ic-surface-raised: rgba(255, 255, 255, 0.96);
+  --ic-surface-subtle: #f8fbfa;
+  --ic-line-soft: rgba(7, 83, 75, 0.09);
+
+  --ic-shadow-card:
+    0 1px 2px rgba(7, 63, 58, 0.04),
+    0 14px 38px rgba(7, 63, 58, 0.07);
+
+  --ic-shadow-hover:
+    0 2px 4px rgba(7, 63, 58, 0.05),
+    0 22px 48px rgba(7, 63, 58, 0.11);
+}
+
+body {
+  background:
+    radial-gradient(
+      circle at 92% 3%,
+      rgba(214, 173, 56, 0.055),
+      transparent 24rem
+    ),
+    linear-gradient(180deg, #fbfdfc 0%, var(--ic-soft) 34rem);
+}
+
+.ic-shell {
+  width: min(
+    calc(100% - (var(--ic-page-gutter) * 2)),
+    var(--ic-shell)
+  );
+}
+
+.ic-header {
+  border-bottom-color: rgba(7, 83, 75, 0.08);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 1px 0 rgba(7, 63, 58, 0.02);
+  backdrop-filter: blur(22px) saturate(145%);
+}
+
+.ic-header-inner {
+  min-height: 82px;
+}
+
+.ic-brand {
+  gap: 12px;
+}
+
+.ic-brand-mark {
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgba(214, 173, 56, 0.34);
+  border-radius: 15px;
+  background:
+    radial-gradient(
+      circle at 28% 20%,
+      rgba(255, 255, 255, 0.18),
+      transparent 38%
+    ),
+    linear-gradient(
+      145deg,
+      var(--ic-teal-700),
+      var(--ic-teal-950)
+    );
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+    0 9px 24px rgba(7, 83, 75, 0.15);
+}
+
+.ic-brand-copy strong {
+  font-size: 1.06rem;
+  font-weight: 860;
+  letter-spacing: -0.035em;
+}
+
+.ic-brand-copy span {
+  margin-top: 4px;
+  color: var(--ic-gold-700);
+  font-size: 0.62rem;
+  font-weight: 720;
+  letter-spacing: 0.015em;
+}
+
+.ic-desktop-nav {
+  gap: clamp(18px, 2.4vw, 30px);
+}
+
+.ic-desktop-nav > a,
+.ic-nav-more summary {
+  position: relative;
+  font-size: 0.84rem;
+  font-weight: 720;
+}
+
+.ic-desktop-nav > a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 100%;
+  bottom: -9px;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--ic-teal-700),
+    var(--ic-gold-500)
+  );
+  transition: right 160ms ease;
+}
+
+.ic-desktop-nav > a:hover::after,
+.ic-desktop-nav > a:focus-visible::after {
+  right: 0;
+}
+
+.ic-footer {
+  border-top: 1px solid rgba(7, 83, 75, 0.08);
+  background:
+    radial-gradient(
+      circle at 8% 8%,
+      rgba(214, 173, 56, 0.08),
+      transparent 24rem
+    ),
+    #ffffff;
+}
+
+/* Marketplace visual density and responsive canvas */
+
+.ic-market-home-section,
+.ic-market-results {
+  min-width: 0;
+}
+
+.ic-market-home-grid {
+  gap: clamp(14px, 1.8vw, 22px);
+}
+
+.ic-market-card-shell {
+  min-width: 0;
+}
+
+.ic-market-card {
+  overflow: hidden;
+  border-color: var(--ic-line-soft);
+  box-shadow: var(--ic-shadow-card);
+  transition:
+    transform 170ms ease,
+    box-shadow 170ms ease,
+    border-color 170ms ease;
+}
+
+.ic-market-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(7, 121, 107, 0.18);
+  box-shadow: var(--ic-shadow-hover);
+}
+
+.ic-market-card-image {
+  background-color: #eef4f2;
+}
+
+.ic-market-card-body {
+  padding: clamp(15px, 1.7vw, 20px);
+}
+
+.ic-market-card-heading h2 {
+  letter-spacing: -0.025em;
+}
+
+.ic-market-home-heading {
+  margin-bottom: clamp(18px, 2vw, 26px);
+}
+
+.ic-market-home-heading h2 {
+  letter-spacing: -0.035em;
+}
+
+@media (min-width: 1180px) {
+  .ic-market-home-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 760px) and (max-width: 1179px) {
+  .ic-market-home-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 540px) and (max-width: 759px) {
+  .ic-market-home-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  :root {
+    --ic-page-gutter: 18px;
+  }
+
+  .ic-header-inner {
+    min-height: 70px;
+  }
+
+  .ic-brand-mark {
+    width: 42px;
+    height: 42px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ic-market-card,
+  .ic-desktop-nav > a::after {
+    transition: none;
+  }
+
+  .ic-market-card:hover {
+    transform: none;
   }
 }

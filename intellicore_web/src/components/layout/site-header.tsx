@@ -26,7 +26,7 @@ export async function SiteHeader() {
   ] as const;
 
   const sessionHref = hasSession ? "/hub" : "/login";
-  const sessionLabel = hasSession ? "My Hub" : "Sign In";
+  const sessionLabel = hasSession ? "My AgentPro" : "Sign In";
   const postAdHref = hasSession
     ? "/marketplace/post"
     : "/login?next=%2Fmarketplace%2Fpost";
