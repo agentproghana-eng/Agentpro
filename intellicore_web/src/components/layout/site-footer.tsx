@@ -11,8 +11,8 @@ export function SiteFooter() {
           <AgentProBrand />
 
           <p>
-            Marketplace, business tools and communities for everyday commerce
-            across Ghana.
+            One App Every Business. Discover products, connect with people,
+            manage business activity and grow with AgentPro.
           </p>
         </div>
 
@@ -32,7 +32,7 @@ export function SiteFooter() {
       <div className="ic-shell ic-footer-bottom">
         <span>© {new Date().getFullYear()} AgentPro Ghana.</span>
 
-        <span>AgentPro is a product of Coreintel Systems.</span>
+        <span>AgentPro is a product of CoreIntel Systems.</span>
 
         <a href={`mailto:${siteConfig.supportEmail}`}>
           {siteConfig.supportEmail}

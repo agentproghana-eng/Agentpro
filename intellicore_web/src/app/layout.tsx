@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import { siteConfig } from "@/config/site";
 
 import "./globals.css";
+import "@/features/marketplace/marketplace.css";
+import "@/features/business/business-dashboard.css";
 
 const defaultTitle =
   "AgentPro Ghana | Marketplace, Business & Community";

@@ -3,15 +3,13 @@ import {
   ArrowRight,
   BriefcaseBusiness,
   Building2,
-  ClipboardList,
-  FileBarChart,
   ShieldCheck,
-  UserRoundCog,
   UsersRound,
 } from "lucide-react";
 
 import type { AgentProUser } from "@/features/auth/types";
 import { CommunityHub } from "@/features/community/components/community-hub";
+import { BusinessDashboard } from "@/features/business/components/business-dashboard";
 
 type Props = {
   user: Partial<AgentProUser>;
@@ -146,109 +144,45 @@ export function CommunityHubView({ user }: Props) {
 }
 
 export function BusinessHubView({ user }: Props) {
-  const hasBusinessWorkspace = Boolean(user.company_id || user.company_name);
+  const hasBusinessWorkspace = Boolean(
+    user.company_id || user.company_name,
+  );
 
-  return (
-    <>
-      <section className="ic-portal-hero">
-        <p className="ic-eyebrow">Private workspace</p>
+  if (!hasBusinessWorkspace) {
+    return (
+      <>
+        <section className="ic-portal-hero">
+          <p className="ic-eyebrow">
+            Business workspace
+          </p>
 
-        <h1>Business Hub</h1>
+          <h1>Business Hub</h1>
 
-        <p>
-          Your authenticated home for business operations, people, records and
-          future AgentPro web tools.
-        </p>
-      </section>
+          <p>
+            Link a business to your AgentPro account
+            to view operational activity, reports and
+            business information here.
+          </p>
+        </section>
 
-      {!hasBusinessWorkspace && (
         <section className="ic-portal-notice">
           <Building2 size={21} />
 
           <div>
-            <strong>No business workspace is linked yet.</strong>
+            <strong>
+              No business workspace is linked.
+            </strong>
 
             <p>
-              Business data will only be shown after AgentPro confirms the
-              account&apos;s business membership.
+              AgentPro will show business information
+              only after your account has an active
+              business membership.
             </p>
           </div>
         </section>
-      )}
+      </>
+    );
+  }
 
-      <section className="ic-portal-business-context">
-        <div>
-          <span>Current business</span>
-
-          <strong>{user.company_name || "Not linked"}</strong>
-        </div>
-
-        <div>
-          <span>Account role</span>
-
-          <strong>{roleLabel(user.role)}</strong>
-        </div>
-      </section>
-
-      <section className="ic-portal-grid ic-portal-grid-three">
-        <article className="ic-portal-mini-card">
-          <ClipboardList size={20} />
-
-          <h3>Operations</h3>
-
-          <p>
-            A focused place for business activity and operational workflows.
-          </p>
-
-          <span>Foundation ready</span>
-        </article>
-
-        <article className="ic-portal-mini-card">
-          <UserRoundCog size={20} />
-
-          <h3>People & roles</h3>
-
-          <p>
-            Role-aware access for owners, managers, agents and other team
-            members.
-          </p>
-
-          <span>Foundation ready</span>
-        </article>
-
-        <article className="ic-portal-mini-card">
-          <FileBarChart size={20} />
-
-          <h3>Reports & insights</h3>
-
-          <p>
-            Business reporting and insights will enter through this private
-            workspace.
-          </p>
-
-          <span>Coming next</span>
-        </article>
-      </section>
-
-      <section className="ic-portal-highlight">
-        <div>
-          <span className="ic-portal-feature-icon">
-            <ShieldCheck size={22} />
-          </span>
-
-          <div>
-            <p className="ic-eyebrow">Access model</p>
-
-            <h2>Backend-authoritative permissions.</h2>
-
-            <p>
-              The portal can adapt its interface to account context, but
-              AgentPro remains authoritative for business membership and
-              authorization.
-            </p>
-          </div>
-        </div>
-      </section>
-    </>
-  );
+  return <BusinessDashboard user={user} />;
 }

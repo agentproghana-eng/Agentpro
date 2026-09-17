@@ -842,9 +842,17 @@ export function MarketplaceBrowse({
     ),
   );
 
-  const latestAds = showMarketplaceHome
+  const deDuplicatedLatestAds = showMarketplaceHome
     ? ads.filter((ad) => !specialListingIds.has(ad.id))
     : ads;
+
+  // Never leave Latest Ads visually empty just because every current
+  // listing also appears in a discovery collection such as Recently Viewed.
+  // A small marketplace should still feel populated and useful.
+  const latestAds =
+    showMarketplaceHome && deDuplicatedLatestAds.length === 0 && ads.length > 0
+      ? ads
+      : deDuplicatedLatestAds;
 
   const activeFilterCount =
     Number(Boolean(applied.search.trim())) +
