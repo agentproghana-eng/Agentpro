@@ -4505,6 +4505,11 @@ function MarketplacePage() {
     setUpdatingId,
   ] = useState(null);
 
+  const [
+    imageViewer,
+    setImageViewer,
+  ] = useState(null);
+
   const load = async () => {
     const response =
       await API.get(
@@ -4903,6 +4908,18 @@ function MarketplacePage() {
                 ad.momo_reference,
               );
 
+            const images =
+              Array.isArray(
+                ad.image_urls,
+              )
+                ? ad.image_urls.filter(
+                    image =>
+                      typeof image ===
+                        'string' &&
+                      image.trim(),
+                  )
+                : [];
+
             return (
               <div
                 key={ad.id}
@@ -4985,6 +5002,197 @@ function MarketplacePage() {
                 >
                   {ad.description}
                 </p>
+
+                <section
+                  className="
+                    mt-5
+                    rounded-xl
+                    border
+                    border-gray-200
+                    bg-gray-50
+                    p-4
+                  "
+                >
+                  <div
+                    className="
+                      flex
+                      flex-wrap
+                      items-center
+                      justify-between
+                      gap-2
+                    "
+                  >
+                    <div>
+                      <h4
+                        className="
+                          font-semibold
+                          text-gray-900
+                        "
+                      >
+                        Listing photos
+                        {' '}
+                        ({images.length})
+                      </h4>
+
+                      <p
+                        className="
+                          mt-1
+                          text-xs
+                          text-gray-500
+                        "
+                      >
+                        Review every image
+                        before approving the
+                        listing. Photo 1 is
+                        the cover image shown
+                        first to buyers.
+                      </p>
+                    </div>
+                  </div>
+
+                  {images.length === 0 ? (
+                    <div
+                      className="
+                        mt-4
+                        rounded-lg
+                        border
+                        border-amber-200
+                        bg-amber-50
+                        p-3
+                        text-sm
+                        text-amber-800
+                      "
+                    >
+                      No listing photos are
+                      attached. This may be a
+                      legacy listing created
+                      before photos became
+                      mandatory.
+                    </div>
+                  ) : (
+                    <div
+                      className="
+                        mt-4
+                        grid
+                        grid-cols-2
+                        gap-3
+                        sm:grid-cols-3
+                        lg:grid-cols-4
+                      "
+                    >
+                      {images.map(
+                        (
+                          image,
+                          imageIndex,
+                        ) => (
+                          <button
+                            key={
+                              `${ad.id}-${imageIndex}`
+                            }
+                            type="button"
+                            onClick={() =>
+                              setImageViewer({
+                                images,
+                                index:
+                                  imageIndex,
+                                title:
+                                  ad.title,
+                              })
+                            }
+                            className="
+                              overflow-hidden
+                              rounded-xl
+                              border
+                              border-gray-200
+                              bg-white
+                              text-left
+                              shadow-sm
+                              transition
+                              hover:border-primary
+                              hover:shadow-md
+                              focus:outline-none
+                              focus:ring-2
+                              focus:ring-primary
+                            "
+                          >
+                            <div
+                              className="
+                                relative
+                                aspect-[4/3]
+                                overflow-hidden
+                                bg-gray-100
+                              "
+                            >
+                              <img
+                                src={image}
+                                alt={
+                                  `${ad.title} photo ${imageIndex + 1}`
+                                }
+                                loading="lazy"
+                                className="
+                                  h-full
+                                  w-full
+                                  object-cover
+                                "
+                              />
+
+                              {imageIndex ===
+                                0 && (
+                                <span
+                                  className="
+                                    absolute
+                                    left-2
+                                    top-2
+                                    rounded-full
+                                    bg-primary
+                                    px-2
+                                    py-1
+                                    text-[10px]
+                                    font-semibold
+                                    text-white
+                                    shadow
+                                  "
+                                >
+                                  Cover
+                                </span>
+                              )}
+                            </div>
+
+                            <div
+                              className="
+                                px-3
+                                py-2
+                              "
+                            >
+                              <p
+                                className="
+                                  text-xs
+                                  font-semibold
+                                  text-gray-800
+                                "
+                              >
+                                {imageIndex ===
+                                0
+                                  ? 'Cover image'
+                                  : `Photo ${imageIndex + 1}`}
+                              </p>
+
+                              <p
+                                className="
+                                  mt-0.5
+                                  text-[11px]
+                                  text-gray-500
+                                "
+                              >
+                                Click to inspect
+                              </p>
+                            </div>
+                          </button>
+                        ),
+                      )}
+                    </div>
+                  )}
+                </section>
 
                 {ad.status ===
                   'pending_review' && (
@@ -5391,6 +5599,257 @@ function MarketplacePage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {imageViewer && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Listing photo viewer"
+          onClick={() =>
+            setImageViewer(null)
+          }
+          className="
+            fixed
+            inset-0
+            z-[100]
+            flex
+            items-center
+            justify-center
+            bg-black/80
+            p-4
+          "
+        >
+          <div
+            onClick={event =>
+              event.stopPropagation()
+            }
+            className="
+              flex
+              max-h-[94vh]
+              w-full
+              max-w-5xl
+              flex-col
+              overflow-hidden
+              rounded-2xl
+              bg-white
+              shadow-2xl
+            "
+          >
+            <div
+              className="
+                flex
+                flex-wrap
+                items-center
+                justify-between
+                gap-3
+                border-b
+                border-gray-200
+                px-4
+                py-3
+              "
+            >
+              <div>
+                <p
+                  className="
+                    font-semibold
+                    text-gray-900
+                  "
+                >
+                  {imageViewer.title}
+                </p>
+
+                <p
+                  className="
+                    text-xs
+                    text-gray-500
+                  "
+                >
+                  Photo
+                  {' '}
+                  {imageViewer.index + 1}
+                  {' '}
+                  of
+                  {' '}
+                  {imageViewer.images.length}
+                  {imageViewer.index ===
+                    0
+                    ? ' · Cover image'
+                    : ''}
+                </p>
+              </div>
+
+              <div
+                className="
+                  flex
+                  items-center
+                  gap-2
+                "
+              >
+                <a
+                  href={
+                    imageViewer.images[
+                      imageViewer.index
+                    ]
+                  }
+                  target="_blank"
+                  rel="noreferrer"
+                  className="
+                    rounded-lg
+                    border
+                    border-gray-200
+                    px-3
+                    py-2
+                    text-xs
+                    font-semibold
+                    text-gray-700
+                    hover:bg-gray-50
+                  "
+                >
+                  Open original
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setImageViewer(null)
+                  }
+                  className="
+                    rounded-lg
+                    bg-gray-100
+                    px-3
+                    py-2
+                    text-xs
+                    font-semibold
+                    text-gray-700
+                    hover:bg-gray-200
+                  "
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            <div
+              className="
+                flex
+                min-h-0
+                flex-1
+                items-center
+                justify-center
+                bg-gray-950
+                p-3
+              "
+            >
+              <img
+                src={
+                  imageViewer.images[
+                    imageViewer.index
+                  ]
+                }
+                alt={
+                  `${imageViewer.title} full-size listing photo ${imageViewer.index + 1}`
+                }
+                className="
+                  max-h-[72vh]
+                  max-w-full
+                  object-contain
+                "
+              />
+            </div>
+
+            <div
+              className="
+                flex
+                items-center
+                justify-between
+                gap-3
+                border-t
+                border-gray-200
+                px-4
+                py-3
+              "
+            >
+              <button
+                type="button"
+                disabled={
+                  imageViewer.index ===
+                  0
+                }
+                onClick={() =>
+                  setImageViewer(
+                    current => ({
+                      ...current,
+                      index:
+                        current.index -
+                        1,
+                    }),
+                  )
+                }
+                className="
+                  rounded-lg
+                  border
+                  border-gray-200
+                  px-4
+                  py-2
+                  text-sm
+                  font-semibold
+                  text-gray-700
+                  hover:bg-gray-50
+                  disabled:cursor-not-allowed
+                  disabled:opacity-40
+                "
+              >
+                Previous
+              </button>
+
+              <span
+                className="
+                  text-xs
+                  text-gray-500
+                "
+              >
+                Review all photos before
+                approving the listing.
+              </span>
+
+              <button
+                type="button"
+                disabled={
+                  imageViewer.index ===
+                  imageViewer.images
+                    .length -
+                    1
+                }
+                onClick={() =>
+                  setImageViewer(
+                    current => ({
+                      ...current,
+                      index:
+                        current.index +
+                        1,
+                    }),
+                  )
+                }
+                className="
+                  rounded-lg
+                  border
+                  border-gray-200
+                  px-4
+                  py-2
+                  text-sm
+                  font-semibold
+                  text-gray-700
+                  hover:bg-gray-50
+                  disabled:cursor-not-allowed
+                  disabled:opacity-40
+                "
+              >
+                Next
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

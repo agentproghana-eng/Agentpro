@@ -38,6 +38,10 @@ describe('Multer upload security contracts', () => {
     expect(marketplace).toContain(
       "upload.array('images', 8)"
     );
+
+    expect(marketplace).toContain(
+      'At least one photo is required'
+    );
   });
 
   test('Personal Community voice notes remain memory-only and bounded', () => {

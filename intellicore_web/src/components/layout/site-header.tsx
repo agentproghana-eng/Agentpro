@@ -27,6 +27,9 @@ export async function SiteHeader() {
 
   const sessionHref = hasSession ? "/hub" : "/login";
   const sessionLabel = hasSession ? "My Hub" : "Sign In";
+  const postAdHref = hasSession
+    ? "/marketplace/post"
+    : "/login?next=%2Fmarketplace%2Fpost";
 
   return (
     <header className="ic-header">
@@ -46,7 +49,7 @@ export async function SiteHeader() {
             {sessionLabel}
           </Link>
 
-          <ButtonLink href="/login">Post Ad</ButtonLink>
+          <ButtonLink href={postAdHref}>Post Ad</ButtonLink>
         </div>
 
         <details className="ic-mobile-nav">
@@ -65,7 +68,7 @@ export async function SiteHeader() {
 
             <Link href={sessionHref}>{sessionLabel}</Link>
 
-            <Link className="ic-mobile-primary" href="/login">
+            <Link className="ic-mobile-primary" href={postAdHref}>
               Post Ad
             </Link>
           </nav>

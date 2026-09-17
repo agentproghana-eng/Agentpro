@@ -116,7 +116,14 @@ class _PostAdScreenState extends State<PostAdScreen> {
               await MultipartFile.fromFile(img.path, filename: img.name),
         )),
       });
-      final res = await ApiClient.instance.post('/marketplace', data: formData);
+      final res = await ApiClient.instance.post(
+        '/marketplace',
+        data: formData,
+        options: Options(
+          sendTimeout: const Duration(seconds: 120),
+          receiveTimeout: const Duration(seconds: 60),
+        ),
+      );
 
       if (!mounted) return;
       final ad = res.data['data'];

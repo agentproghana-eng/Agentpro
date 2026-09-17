@@ -27,6 +27,16 @@ void main() {
 
     expect(
       source,
+      contains('sendTimeout: const Duration(seconds: 120)'),
+    );
+
+    expect(
+      source,
+      contains('receiveTimeout: const Duration(seconds: 60)'),
+    );
+
+    expect(
+      source,
       contains('maxWidth: _maxAdImageDimension'),
     );
 

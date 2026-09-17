@@ -63,6 +63,35 @@ describe(
     );
 
     test(
+      "Admin can inspect all Marketplace listing photos before approval",
+      () => {
+        expect(admin).toContain(
+          "Listing photos"
+        );
+
+        expect(admin).toContain(
+          "ad.image_urls"
+        );
+
+        expect(admin).toContain(
+          "Cover image"
+        );
+
+        expect(admin).toContain(
+          "Click to inspect"
+        );
+
+        expect(admin).toContain(
+          "Open original"
+        );
+
+        expect(admin).toContain(
+          "Listing photo viewer"
+        );
+      }
+    );
+
+    test(
       "Admin separates waiting-for-payment from submitted-payment work",
       () => {
         expect(admin).toContain(
