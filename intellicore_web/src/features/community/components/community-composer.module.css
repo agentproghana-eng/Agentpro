@@ -201,3 +201,43 @@
     width: 100%;
   }
 }
+
+/* ── Approved mock-up scale polish ───────────────────────────── */
+
+@media (min-width: 900px) {
+  .composer {
+    margin-top: 9px;
+    padding: 20px;
+    border-radius: 21px;
+  }
+
+  .contentField textarea {
+    min-height: 116px;
+    padding: 18px 19px;
+    border-radius: 16px;
+    font-size: 0.94rem;
+  }
+
+  .footer {
+    margin-top: 11px;
+  }
+
+  .typeField {
+    gap: 5px;
+    font-size: 0.72rem;
+  }
+
+  .typeField select {
+    min-width: 210px;
+    min-height: 42px;
+    padding-inline: 13px 36px;
+    font-size: 0.8rem;
+  }
+
+  .submit {
+    min-width: 126px;
+    min-height: 48px;
+    padding-inline: 17px;
+    font-size: 0.88rem;
+  }
+}

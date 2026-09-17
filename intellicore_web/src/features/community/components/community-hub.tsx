@@ -570,7 +570,7 @@ function FeedCard({
           <details className={hubStyles.reactControl}>
             <summary>
               <span aria-hidden="true">{selectedReaction?.emoji ?? "♡"}</span>
-              {selectedReaction?.label ?? "React"}
+              React
               <ChevronDown size={14} />
             </summary>
 
