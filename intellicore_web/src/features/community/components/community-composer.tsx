@@ -195,14 +195,8 @@ export function CommunityComposer({
   return (
     <section
       className={styles.composer}
-      aria-labelledby="community-composer-title"
+      aria-label="Create a Community post"
     >
-      <div className={styles.heading}>
-        <h2 id="community-composer-title">
-          New post
-        </h2>
-      </div>
-
       {personalLocked ? (
         <div
           className={styles.locked}
@@ -267,10 +261,12 @@ export function CommunityComposer({
                 </label>
               )}
 
-              <span className={styles.counter}>
-                {content.length.toLocaleString()}
-                /{MAX_CONTENT_LENGTH.toLocaleString()}
-              </span>
+              {content.length >= 8000 && (
+                <span className={styles.counter}>
+                  {content.length.toLocaleString()}
+                  /{MAX_CONTENT_LENGTH.toLocaleString()}
+                </span>
+              )}
             </div>
 
             <button

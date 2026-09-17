@@ -79,7 +79,7 @@ export function PortalShell({
       <header className="ic-portal-topbar">
         <div className="ic-portal-brand">
           <Link href="/" className="ic-portal-company-brand">
-            Coreintel
+            CoreIntel
           </Link>
 
           <span
@@ -101,10 +101,16 @@ export function PortalShell({
         </div>
 
         <div className="ic-portal-topbar-actions">
-          <div className="ic-portal-identity">
-            <strong>{displayName(user)}</strong>
+          <div className="ic-portal-user">
+            <div className="ic-portal-user-avatar" aria-hidden="true">
+              {displayName(user).slice(0, 1).toUpperCase()}
+            </div>
 
-            <span>{roleLabel(user.role)}</span>
+            <div className="ic-portal-identity">
+              <strong>{displayName(user)}</strong>
+
+              <span>{roleLabel(user.role)}</span>
+            </div>
           </div>
 
           <button
@@ -150,13 +156,6 @@ export function PortalShell({
             </Link>
           </nav>
 
-          <div className="ic-portal-account-card">
-            <span>Workspace</span>
-
-            <strong>{user.company_name || "Personal AgentPro"}</strong>
-
-            <small>{roleLabel(user.role)}</small>
-          </div>
         </aside>
 
         <main className="ic-portal-main">{children}</main>

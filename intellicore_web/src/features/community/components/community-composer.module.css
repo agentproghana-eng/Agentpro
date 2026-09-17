@@ -1,8 +1,8 @@
 .composer {
   margin: 8px 0 4px;
-  padding: 16px;
+  padding: 18px;
   border: 1px solid var(--ic-line);
-  border-radius: 18px;
+  border-radius: 20px;
   background: var(--ic-surface);
   box-shadow: var(--ic-shadow-sm);
 }
@@ -20,7 +20,7 @@
 }
 
 .form {
-  margin-top: 11px;
+  margin-top: 0;
 }
 
 .contentField {
@@ -29,11 +29,11 @@
 
 .contentField textarea {
   width: 100%;
-  min-height: 84px;
+  min-height: 104px;
   resize: vertical;
-  padding: 12px 13px;
+  padding: 17px 18px;
   border: 1px solid var(--ic-line);
-  border-radius: 12px;
+  border-radius: 16px;
   background: var(--ic-soft);
   color: var(--ic-ink);
   line-height: 1.45;
@@ -71,11 +71,11 @@
 }
 
 .typeField select {
-  min-width: 140px;
-  min-height: 36px;
-  padding: 6px 30px 6px 9px;
+  min-width: 190px;
+  min-height: 38px;
+  padding: 7px 34px 7px 13px;
   border: 1px solid var(--ic-line);
-  border-radius: 9px;
+  border-radius: 999px;
   background: var(--ic-surface);
   color: var(--ic-ink);
 }
@@ -87,16 +87,16 @@
 }
 
 .submit {
-  min-height: 38px;
-  min-width: 88px;
+  min-height: 48px;
+  min-width: 116px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
   padding: 8px 14px;
   border: 0;
-  border-radius: 10px;
-  background: var(--ic-teal-700);
+  border-radius: 12px;
+  background: var(--ic-teal-800);
   color: white;
   font-weight: 800;
   cursor: pointer;
