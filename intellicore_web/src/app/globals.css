@@ -2699,6 +2699,27 @@ select:focus-visible {
   gap: 16px;
 }
 
+
+.ic-portal-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ic-portal-user-avatar {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: grid;
+  place-items: center;
+  border: 2px solid rgba(201, 151, 36, 0.48);
+  border-radius: 50%;
+  background: linear-gradient(145deg, #f5fbf9, #d7eee9);
+  color: var(--ic-teal-900);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
 .ic-portal-identity {
   display: grid;
   justify-items: end;
