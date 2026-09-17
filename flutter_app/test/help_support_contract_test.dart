@@ -485,6 +485,11 @@ void main() {
 
       expect(
         source,
+        contains('1 to 8 photos'),
+      );
+
+      expect(
+        source,
         isNot(
           contains('Photos are optional'),
         ),

@@ -36,14 +36,27 @@ class _PostAdScreenState extends State<PostAdScreen> {
   bool _loadingCategories = true;
   bool _submitting = false;
 
+  static const int _maxAdPhotos = 8;
+  static const double _maxAdImageDimension = 2000;
+
   final _picker = ImagePicker();
   final List<XFile> _selectedImages = [];
 
   Future<void> _pickImage() async {
-    if (_selectedImages.length >= 3) return;
-    final image =
-        await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
-    if (image != null && mounted) setState(() => _selectedImages.add(image));
+    if (_selectedImages.length >= _maxAdPhotos) return;
+
+    final image = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80,
+      maxWidth: _maxAdImageDimension,
+      maxHeight: _maxAdImageDimension,
+    );
+
+    if (image != null &&
+        mounted &&
+        _selectedImages.length < _maxAdPhotos) {
+      setState(() => _selectedImages.add(image));
+    }
   }
 
   void _removeImage(int index) {
@@ -194,7 +207,7 @@ class _PostAdScreenState extends State<PostAdScreen> {
                         : null,
                   ),
                   const SizedBox(height: 14),
-                  const Text('Photos (1–3 required)',
+                  const Text('Photos (1–8 required)',
                       style:
                           TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                   const SizedBox(height: 8),
@@ -233,7 +246,7 @@ class _PostAdScreenState extends State<PostAdScreen> {
                                     ),
                                   ]),
                                 )),
-                        if (_selectedImages.length < 3)
+                        if (_selectedImages.length < _maxAdPhotos)
                           GestureDetector(
                             onTap: _pickImage,
                             child: Container(

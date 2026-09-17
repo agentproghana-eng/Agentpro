@@ -36,7 +36,7 @@ describe('Multer upload security contracts', () => {
     );
 
     expect(marketplace).toContain(
-      "upload.array('images', 3)"
+      "upload.array('images', 8)"
     );
   });
 
