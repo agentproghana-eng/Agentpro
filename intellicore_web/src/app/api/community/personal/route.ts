@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import {
+  readJson,
+  validateJsonMutation,
+} from "@/features/auth/server/request-security";
+import {
   authenticatedCommunityRequest,
   communityResponse,
 } from "@/features/community/server/session-request";
@@ -9,6 +13,7 @@ const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
 const MAX_PAGE = 100_000;
 const MAX_LIMIT = 50;
+const MAX_CONTENT_LENGTH = 10_000;
 
 function normalizedPositiveInteger(
   raw: string | null,
@@ -32,6 +37,22 @@ function normalizedPositiveInteger(
   return Math.min(parsed, maximum);
 }
 
+function postError(
+  message: string,
+  code = "INVALID_COMMUNITY_POST",
+) {
+  return NextResponse.json(
+    {
+      success: false,
+      code,
+      message,
+    },
+    {
+      status: 422,
+    },
+  );
+}
+
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
 
@@ -48,6 +69,75 @@ export async function GET(request: NextRequest) {
     const result = await authenticatedCommunityRequest(
       request,
       `/personal-community/feed?${output.toString()}`,
+    );
+
+    return communityResponse(result);
+  } catch {
+    return NextResponse.json(
+      {
+        success: false,
+        code: "COMMUNITY_UNAVAILABLE",
+        message: "Community is temporarily unavailable.",
+      },
+      {
+        status: 503,
+      },
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  const rejected = validateJsonMutation(
+    request,
+    "Community post",
+  );
+
+  if (rejected) {
+    return rejected;
+  }
+
+  const parsed = await readJson(request);
+
+  if (!parsed.ok) {
+    return parsed.response;
+  }
+
+  if (
+    typeof parsed.value !== "object" ||
+    parsed.value === null ||
+    Array.isArray(parsed.value)
+  ) {
+    return postError("Write something before posting.");
+  }
+
+  const value = parsed.value as Record<string, unknown>;
+
+  const content =
+    typeof value.content === "string"
+      ? value.content.trim()
+      : "";
+
+  if (!content) {
+    return postError("Write something before posting.");
+  }
+
+  if (content.length > MAX_CONTENT_LENGTH) {
+    return postError(
+      `Community posts must be ${MAX_CONTENT_LENGTH.toLocaleString()} characters or fewer.`,
+      "COMMUNITY_POST_TOO_LONG",
+    );
+  }
+
+  try {
+    const result = await authenticatedCommunityRequest(
+      request,
+      "/personal-community/posts",
+      {
+        method: "POST",
+        body: {
+          content,
+        },
+      },
     );
 
     return communityResponse(result);

@@ -1,0 +1,229 @@
+.composer {
+  margin: 22px 0;
+  padding: 24px;
+  border: 1px solid var(--ic-line);
+  border-radius: var(--ic-radius);
+  background: var(--ic-surface);
+  box-shadow: var(--ic-shadow-sm);
+}
+
+.heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.heading h2,
+.heading p {
+  margin: 0;
+}
+
+.heading h2 {
+  margin-top: 2px;
+  color: var(--ic-ink);
+  font-size: 1.18rem;
+  line-height: 1.3;
+}
+
+.heading > div > p:last-child {
+  margin-top: 5px;
+  color: var(--ic-muted);
+  font-size: 0.9rem;
+}
+
+.icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 13px;
+  background: var(--ic-teal-50);
+  color: var(--ic-teal-700);
+}
+
+.eyebrow {
+  color: var(--ic-teal-700) !important;
+  font-size: 0.72rem !important;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.form {
+  margin-top: 19px;
+}
+
+.contentField {
+  display: block;
+}
+
+.contentField textarea {
+  width: 100%;
+  min-height: 132px;
+  resize: vertical;
+  padding: 15px 16px;
+  border: 1px solid var(--ic-line);
+  border-radius: 15px;
+  background: var(--ic-soft);
+  color: var(--ic-ink);
+  line-height: 1.55;
+}
+
+.contentField textarea::placeholder {
+  color: var(--ic-muted);
+}
+
+.contentField textarea:focus {
+  border-color: var(--ic-teal-600);
+  background: var(--ic-surface);
+}
+
+.footer {
+  margin-top: 13px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+}
+
+.typeField {
+  display: grid;
+  gap: 5px;
+  color: var(--ic-muted);
+  font-size: 0.74rem;
+  font-weight: 750;
+}
+
+.typeField select {
+  min-width: 170px;
+  padding: 9px 34px 9px 11px;
+  border: 1px solid var(--ic-line);
+  border-radius: 11px;
+  background: var(--ic-surface);
+  color: var(--ic-ink);
+}
+
+.counter {
+  padding-bottom: 9px;
+  color: var(--ic-muted);
+  font-size: 0.75rem;
+}
+
+.submit {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--ic-teal-700);
+  color: white;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.submit:hover:not(:disabled) {
+  background: var(--ic-teal-800);
+}
+
+.submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.accessNote {
+  margin: 12px 0 0;
+  color: var(--ic-muted);
+  font-size: 0.76rem;
+}
+
+.error,
+.success {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 11px;
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+
+.error {
+  background: #fff1f0;
+  color: var(--ic-error);
+}
+
+.success {
+  background: var(--ic-teal-50);
+  color: var(--ic-teal-900);
+}
+
+.locked {
+  margin-top: 18px;
+  display: grid;
+  gap: 3px;
+  padding: 14px 15px;
+  border: 1px solid var(--ic-gold-400);
+  border-radius: 13px;
+  background: var(--ic-gold-100);
+}
+
+.locked strong {
+  color: var(--ic-charcoal);
+}
+
+.locked span {
+  color: var(--ic-muted);
+  font-size: 0.84rem;
+}
+
+.spinner {
+  animation: spin 0.85s linear infinite;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 640px) {
+  .composer {
+    padding: 18px;
+  }
+
+  .footer,
+  .controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .typeField select {
+    width: 100%;
+  }
+
+  .counter {
+    padding-bottom: 0;
+  }
+
+  .submit {
+    width: 100%;
+  }
+}

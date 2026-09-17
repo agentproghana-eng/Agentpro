@@ -5,6 +5,7 @@ import { MessageCircle, UserRound, UsersRound } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import type { AgentProUser } from "@/features/auth/types";
+import { CommunityComposer } from "@/features/community/components/community-composer";
 import type {
   CommunityFeedEnvelope,
   CommunityKind,
@@ -397,6 +398,23 @@ export function CommunityHub({ user }: Props) {
             </button>
           )}
         </section>
+      )}
+
+
+      {hasCommunity && (
+        <CommunityComposer
+          key={active}
+          user={user}
+          kind={active}
+          onCreated={(post) => {
+            setPosts((current) => [
+              post,
+              ...current.filter(
+                (item) => item.id !== post.id,
+              ),
+            ]);
+          }}
+        />
       )}
 
       {!hasCommunity && (
