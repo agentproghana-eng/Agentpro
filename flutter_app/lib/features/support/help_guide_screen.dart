@@ -177,7 +177,7 @@ final List<HelpSection> _helpSections = [
         HelpItem(
           question: 'How do I post an ad?',
           answer:
-              'Tap "Post Ad" and fill in a title, description, category, price (optional — leave blank for "Contact for price"), location, and contact phone. Add 1 to 3 photos of what you are offering — at least one photo is required. Then submit for review.',
+              'Tap "Post Ad" and fill in a title, description, category, price (optional — leave blank for "Contact for price"), location, and contact phone. Add 1 to 8 photos of what you are offering — at least one photo is required. Then submit for review.',
         ),
         HelpItem(
           question: 'What happens after I submit an ad?',

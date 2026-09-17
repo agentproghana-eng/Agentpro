@@ -1,6 +1,7 @@
 import { applyWebRateLimitIdentity } from "@/features/security/server/rate-limit-identity";
 
 const MARKETPLACE_TIMEOUT_MS = 15_000;
+const MARKETPLACE_UPLOAD_TIMEOUT_MS = 60_000;
 
 export type MarketplaceBackendEnvelope = {
   success?: boolean;
@@ -89,8 +90,14 @@ export async function backendMarketplaceRequest(
     accept: "application/json",
   });
 
-  if (options.body !== undefined) {
+  const isMultipartBody = options.body instanceof FormData;
+  let requestBody: BodyInit | undefined;
+
+  if (options.body instanceof FormData) {
+    requestBody = options.body;
+  } else if (options.body !== undefined) {
     headers.set("content-type", "application/json");
+    requestBody = JSON.stringify(options.body);
   }
 
   if (options.accessToken) {
@@ -108,9 +115,13 @@ export async function backendMarketplaceRequest(
   const response = await fetch(marketplaceEndpoint(path), {
     method: options.method ?? "GET",
     headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    body: requestBody,
     cache: "no-store",
-    signal: AbortSignal.timeout(MARKETPLACE_TIMEOUT_MS),
+    signal: AbortSignal.timeout(
+      isMultipartBody
+        ? MARKETPLACE_UPLOAD_TIMEOUT_MS
+        : MARKETPLACE_TIMEOUT_MS,
+    ),
   });
 
   return {

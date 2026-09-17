@@ -70,7 +70,7 @@ describe("Upload abuse rate limiting", () => {
     );
 
     expect(source).toMatch(
-      /mpRouter\.post\(\s*["']\/["'],\s*uploadLimiter,\s*upload\.array\(["']images["'],\s*3\)/,
+      /mpRouter\.post\(\s*["']\/["'],\s*uploadLimiter,\s*upload\.array\(["']images["'],\s*8\)/,
     );
   });
 });

@@ -35,7 +35,10 @@ export const footerNavigation = {
   Marketplace: [
     { label: "Browse Marketplace", href: "/" },
     { label: "All Listings", href: "/marketplace" },
-    { label: "Sign In to Post", href: "/login" },
+    {
+      label: "Sign In to Post",
+      href: "/login?next=%2Fmarketplace%2Fpost",
+    },
   ],
   AgentPro: [
     { label: "AgentPro", href: "/agentpro" },

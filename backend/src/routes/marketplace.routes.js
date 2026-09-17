@@ -142,8 +142,8 @@ mpRouter.use(marketplaceAccess);
 
 // Ad photos: memoryStorage (buffer piped straight to Cloudinary, no
 // local disk writes), image MIME types only, capped at 5MB each and
-// 3 images max per ad - matches the "1–3 photos" design confirmed
-// earlier for this feature.
+// 8 images max per ad - gives sellers enough useful product views
+// while keeping upload, storage and moderation costs bounded.
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -2334,29 +2334,33 @@ mpRouter.delete('/:ad_id', async (req, res) => {
   }
 });
 
-// Submit an ad. Photos are optional (upload.array tolerates zero
-// files fine) but capped at 3 - anything beyond that is silently
-// ignored by multer's array limit rather than erroring, which is the
-// right behavior here (better to accept the first 3 than reject the
-// whole submission over an agent picking a 4th photo).
-mpRouter.post('/', uploadLimiter, upload.array('images', 3), async (req, res) => {
+// Submit an ad. Every Marketplace listing requires 1–8 photos.
+// Mobile and web clients enforce the same contract before submission,
+// while multer remains the backend-authoritative upper bound.
+mpRouter.post('/', uploadLimiter, upload.array('images', 8), async (req, res) => {
   const { title, description, price, category_id, location, contact_phone } = req.body;
   try {
+    const files = Array.isArray(req.files) ? req.files : [];
+
+    if (files.length < 1) {
+      return res.status(422).json({
+        success: false,
+        message: 'At least one photo is required',
+      });
+    }
+
     const feeConfig = await query("SELECT value FROM system_config WHERE key = 'ad_fee_percent'");
     const feePercent = parseFloat(feeConfig.rows[0]?.value || 0.01);
     const publishingFee = price ? Math.round(parseFloat(price) * feePercent * 100) / 100 : 0;
 
-    let imageUrls = [];
-    if (req.files && req.files.length > 0) {
-      imageUrls = await Promise.all(
-        req.files.map(file =>
-          uploadFile(`data:${file.mimetype};base64,${file.buffer.toString('base64')}`, {
-            folder: 'ads',
-            resource_type: 'image',
-          })
-        )
-      );
-    }
+    const imageUrls = await Promise.all(
+      files.map((file) =>
+        uploadFile(`data:${file.mimetype};base64,${file.buffer.toString('base64')}`, {
+          folder: 'ads',
+          resource_type: 'image',
+        })
+      )
+    );
 
     const result = await query(
       `INSERT INTO advertisements (posted_by, company_id, category_id, title, description, price, location, contact_phone, publishing_fee, fee_percent, status, image_urls)
