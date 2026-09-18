@@ -460,3 +460,622 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ==========================================================
+   MARKETPLACE HOMEPAGE FINAL POLISH
+   ========================================================== */
+
+.ic-market-hero-actions {
+  width: min(100%, 980px);
+  margin-top: 17px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ic-market-hero-primary-action,
+.ic-market-hero-secondary-action {
+  min-height: 44px;
+  padding: 0 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 12px;
+  font-size: 0.82rem;
+  font-weight: 780;
+  text-decoration: none;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.ic-market-hero-primary-action {
+  border: 1px solid rgba(0, 121, 107, 0.18);
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--ic-teal-900);
+  box-shadow: 0 8px 24px rgba(7, 63, 58, 0.06);
+}
+
+.ic-market-hero-secondary-action {
+  border: 1px solid rgba(214, 173, 56, 0.24);
+  background: rgba(255, 252, 242, 0.88);
+  color: #725800;
+}
+
+.ic-market-hero-primary-action:hover,
+.ic-market-hero-secondary-action:hover {
+  transform: translateY(-1px);
+}
+
+.ic-market-hero-primary-action:hover {
+  border-color: rgba(0, 121, 107, 0.34);
+  background: #ffffff;
+  box-shadow: 0 10px 28px rgba(7, 63, 58, 0.09);
+}
+
+.ic-market-hero-secondary-action:hover {
+  border-color: rgba(214, 173, 56, 0.42);
+  background: #fffdf7;
+}
+
+.ic-market-hero-primary-action:focus-visible,
+.ic-market-hero-secondary-action:focus-visible {
+  outline: 3px solid rgba(201, 162, 39, 0.28);
+  outline-offset: 2px;
+}
+
+.ic-market-hero-trust {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #63736e;
+  font-size: 0.76rem;
+  font-weight: 680;
+}
+
+.ic-market-hero-trust svg {
+  color: var(--ic-teal-700);
+}
+
+/*
+ * Keep the hero focused on discovery.
+ * Search remains the strongest CTA; selling and app download are
+ * deliberately secondary.
+ */
+@media (max-width: 700px) {
+  .ic-market-hero {
+    padding-top: 36px;
+  }
+
+  .ic-market-hero-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .ic-market-hero-primary-action,
+  .ic-market-hero-secondary-action {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 11px;
+    font-size: 0.76rem;
+  }
+
+  .ic-market-hero-trust {
+    grid-column: 1 / -1;
+    min-height: auto;
+    padding: 3px 2px 0;
+    font-size: 0.7rem;
+  }
+
+  /*
+   * Product-led mobile density:
+   * keep two cards across on normal phones, like established
+   * marketplace/shopping experiences.
+   */
+  .ic-market-home-grid,
+  .ic-market-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .ic-market-card-body {
+    padding: 11px;
+  }
+
+  .ic-market-card-heading {
+    gap: 5px;
+  }
+
+  .ic-market-card-heading h2 {
+    font-size: 0.84rem;
+    line-height: 1.22;
+  }
+
+  .ic-market-card-heading strong {
+    font-size: 0.82rem;
+  }
+
+  .ic-market-description {
+    display: none;
+  }
+
+  .ic-market-location {
+    margin-top: 7px;
+    font-size: 0.68rem;
+  }
+
+  .ic-market-card-footer {
+    margin-top: 11px;
+    gap: 5px;
+  }
+
+  .ic-market-seller {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 0.66rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ic-market-rating {
+    font-size: 0.66rem;
+  }
+
+  .ic-market-save {
+    top: 9px;
+    right: 9px;
+    width: 36px;
+    height: 36px;
+  }
+}
+
+/*
+ * Override the older one-card phone breakpoint.
+ * Even compact phones retain a useful marketplace browsing density.
+ */
+@media (max-width: 430px) {
+  .ic-market-home-grid,
+  .ic-market-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 360px) {
+  .ic-market-home-grid,
+  .ic-market-grid {
+    gap: 8px;
+  }
+
+  .ic-market-card-body {
+    padding: 9px;
+  }
+
+  .ic-market-category-chip {
+    font-size: 0.58rem;
+  }
+
+  .ic-market-hero-primary-action,
+  .ic-market-hero-secondary-action {
+    font-size: 0.7rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ic-market-hero-primary-action,
+  .ic-market-hero-secondary-action {
+    transition: none;
+  }
+
+  .ic-market-hero-primary-action:hover,
+  .ic-market-hero-secondary-action:hover {
+    transform: none;
+  }
+}
+
+/* ==========================================================
+   MARKETPLACE MOBILE FILTER SHEET
+   ========================================================== */
+
+.ic-market-mobile-filter-trigger,
+.ic-market-filter-backdrop,
+.ic-market-filter-close {
+  display: none;
+}
+
+.ic-market-filter-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 700px) {
+  .ic-market-mobile-filter-trigger {
+    min-height: 46px;
+    padding: 0 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    justify-self: start;
+    border: 1px solid rgba(7, 83, 75, 0.13);
+    border-radius: 12px;
+    background: #ffffff;
+    color: var(--ic-teal-900);
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 780;
+    box-shadow: 0 7px 22px rgba(7, 63, 58, 0.06);
+    cursor: pointer;
+  }
+
+  .ic-market-mobile-filter-trigger strong {
+    min-width: 21px;
+    height: 21px;
+    padding-inline: 5px;
+    display: inline-grid;
+    place-items: center;
+    border-radius: 999px;
+    background: var(--ic-teal-700);
+    color: #ffffff;
+    font-size: 0.66rem;
+    line-height: 1;
+  }
+
+  .ic-market-mobile-filter-trigger:focus-visible {
+    outline: 3px solid rgba(201, 162, 39, 0.28);
+    outline-offset: 2px;
+  }
+
+  .ic-market-filter-backdrop {
+    position: fixed;
+    z-index: 1000;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: rgba(9, 30, 27, 0.5);
+    backdrop-filter: blur(4px);
+    cursor: default;
+  }
+
+  /*
+   * Override the ordinary in-flow sidebar only on phones.
+   * Desktop and tablet remain unchanged.
+   */
+  .ic-market-filters {
+    position: fixed;
+    z-index: 1001;
+    top: auto;
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    max-height: min(78vh, 650px);
+    overflow: auto;
+    overscroll-behavior: contain;
+    border-radius: 22px;
+    background: #ffffff;
+    box-shadow:
+      0 -4px 20px rgba(7, 63, 58, 0.08),
+      0 24px 70px rgba(7, 63, 58, 0.22);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(
+      calc(100% + 30px)
+    );
+    transition:
+      transform 190ms ease,
+      opacity 160ms ease;
+  }
+
+  .ic-market-filters.is-mobile-open {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+
+  .ic-market-filter-heading {
+    position: sticky;
+    z-index: 2;
+    top: 0;
+    padding: 16px 16px 13px;
+    border-bottom: 1px solid rgba(7, 83, 75, 0.08);
+    background: rgba(255, 255, 255, 0.97);
+    backdrop-filter: blur(12px);
+  }
+
+  .ic-market-filter-heading-actions {
+    gap: 4px;
+  }
+
+  .ic-market-filter-close {
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid rgba(7, 83, 75, 0.11);
+    border-radius: 999px;
+    background: rgba(0, 121, 107, 0.05);
+    color: var(--ic-teal-900);
+    cursor: pointer;
+  }
+
+  .ic-market-filter-close:focus-visible {
+    outline: 3px solid rgba(201, 162, 39, 0.28);
+    outline-offset: 2px;
+  }
+
+  .ic-market-filters form {
+    padding: 15px 16px 18px;
+  }
+
+  .ic-market-filters input,
+  .ic-market-filters select {
+    min-height: 48px;
+  }
+
+  .ic-market-apply {
+    min-height: 48px;
+    margin-top: 3px;
+  }
+}
+
+@media (max-width: 420px) {
+  .ic-market-filters {
+    right: 0;
+    bottom: 0;
+    left: 0;
+    max-height: 82vh;
+    border-radius: 24px 24px 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ic-market-filters {
+    transition: none;
+  }
+}
+
+
+/* ==========================================================
+   MARKETPLACE BUYER JOURNEY POLISH
+   ========================================================== */
+
+.ic-market-gallery {
+  display: block;
+  overflow: hidden;
+}
+
+.ic-market-gallery-stage {
+  position: relative;
+  min-width: 0;
+  background: #eef3f1;
+}
+
+.ic-market-gallery-primary {
+  width: 100%;
+  min-height: 0;
+  aspect-ratio: 16 / 10;
+}
+
+.ic-market-gallery-count {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  min-height: 32px;
+  padding: 0 11px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-radius: 999px;
+  background: rgba(9, 30, 27, 0.72);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 760;
+  backdrop-filter: blur(8px);
+}
+
+.ic-market-gallery-thumbs {
+  padding: 10px;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-rows: none;
+  gap: 8px;
+  border-top: 1px solid rgba(7, 83, 75, 0.08);
+  background: #fff;
+}
+
+.ic-market-gallery-thumbs > button {
+  min-width: 0;
+  aspect-ratio: 4 / 3;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 11px;
+  background-color: #eef3f1;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  cursor: pointer;
+  opacity: 0.74;
+}
+
+.ic-market-gallery-thumbs > button:hover,
+.ic-market-gallery-thumbs > button.is-active {
+  opacity: 1;
+}
+
+.ic-market-gallery-thumbs > button.is-active {
+  border-color: var(--ic-teal-700);
+}
+
+.ic-market-gallery-thumbs > button:focus-visible {
+  outline: 3px solid rgba(201, 162, 39, 0.3);
+  outline-offset: 2px;
+}
+
+.ic-market-detail-content,
+.ic-market-seller-panel {
+  border-color: rgba(7, 83, 75, 0.09);
+  box-shadow: var(--ic-shadow-card);
+}
+
+.ic-market-detail-price {
+  font-size: clamp(1.25rem, 2vw, 1.55rem);
+  font-weight: 820;
+  letter-spacing: -0.025em;
+}
+
+.ic-market-mobile-contact {
+  display: none;
+}
+
+/*
+ * Override the older global phone-card rule so the new
+ * two-column Marketplace layout actually remains vertical.
+ */
+@media (max-width: 700px) {
+  .ic-market-home-grid .ic-market-card,
+  .ic-market-grid .ic-market-card,
+  .ic-market-storefront-grid .ic-market-card,
+  .ic-market-collection-grid .ic-market-card {
+    display: block;
+    grid-template-columns: none;
+  }
+
+  .ic-market-home-grid .ic-market-card-image,
+  .ic-market-grid .ic-market-card-image,
+  .ic-market-storefront-grid .ic-market-card-image,
+  .ic-market-collection-grid .ic-market-card-image {
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    aspect-ratio: 4 / 3;
+  }
+
+  .ic-market-gallery-primary {
+    aspect-ratio: 4 / 3;
+  }
+
+  .ic-market-gallery-thumbs {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 9px;
+    scrollbar-width: none;
+  }
+
+  .ic-market-gallery-thumbs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ic-market-gallery-thumbs > button {
+    flex: 0 0 78px;
+    width: 78px;
+  }
+
+  .ic-market-detail-page {
+    padding-top: 26px;
+  }
+
+  .ic-market-detail-content {
+    margin-top: 12px;
+    padding: 18px;
+  }
+
+  .ic-market-detail-title-row h1 {
+    font-size: clamp(1.7rem, 8.5vw, 2.35rem);
+  }
+
+  .ic-market-mobile-contact {
+    width: 100%;
+    min-height: 48px;
+    margin-top: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--ic-teal-700);
+    color: #fff;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .ic-market-seller-panel {
+    scroll-margin-top: 82px;
+    padding: 18px;
+  }
+}
+
+
+/* ==========================================================
+   MARKETPLACE OWNER STATUS POLISH
+   ========================================================== */
+
+.ic-market-owner-status {
+  margin-top: 18px;
+  padding: 13px 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid rgba(7, 83, 75, 0.12);
+  border-radius: 13px;
+  background: rgba(0, 121, 107, 0.045);
+  color: var(--ic-teal-900);
+}
+
+.ic-market-owner-status > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.ic-market-owner-status > div {
+  min-width: 0;
+}
+
+.ic-market-owner-status strong {
+  font-size: 0.82rem;
+}
+
+.ic-market-owner-status p {
+  margin: 3px 0 0;
+  color: var(--ic-muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.ic-market-owner-status[data-status="active"] {
+  border-color: rgba(0, 121, 107, 0.18);
+  background: rgba(0, 121, 107, 0.07);
+}
+
+.ic-market-owner-status[data-status="pending_review"],
+.ic-market-owner-status[data-status="pending_payment"] {
+  border-color: rgba(201, 162, 39, 0.25);
+  background: rgba(201, 162, 39, 0.07);
+}
+
+.ic-market-owner-status[data-status="rejected"],
+.ic-market-owner-status[data-status="suspended"] {
+  border-color: rgba(166, 61, 49, 0.2);
+  background: rgba(166, 61, 49, 0.055);
+  color: #7c3027;
+}
+
+.ic-market-owner-status[data-status="expired"] {
+  border-color: rgba(83, 98, 94, 0.18);
+  background: rgba(83, 98, 94, 0.055);
+  color: #495853;
+}
