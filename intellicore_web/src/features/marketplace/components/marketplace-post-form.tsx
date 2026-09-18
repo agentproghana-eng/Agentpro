@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   Trash2,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   type ChangeEvent,
@@ -400,6 +401,11 @@ export function MarketplacePostForm() {
   return (
     <main id="main-content" className={styles.page}>
       <div className={styles.shell}>
+        <Link href="/" className={styles.backLink}>
+          <ArrowLeft size={17} aria-hidden="true" />
+          Back to Marketplace
+        </Link>
+
         <section className={styles.hero}>
           <p className={styles.eyebrow}>AgentPro Marketplace</p>
           <h1>Post an Ad</h1>
@@ -413,6 +419,26 @@ export function MarketplacePostForm() {
             <span>
               AgentPro reviews listings to help keep the
               Marketplace useful and trustworthy.
+            </span>
+          </div>
+
+          <div
+            className={styles.postingGuide}
+            aria-label="Marketplace publishing process"
+          >
+            <span>
+              <strong>1</strong>
+              Add details
+            </span>
+
+            <span>
+              <strong>2</strong>
+              Review photos
+            </span>
+
+            <span>
+              <strong>3</strong>
+              Submit for review
             </span>
           </div>
         </section>
@@ -508,6 +534,12 @@ export function MarketplacePostForm() {
                   autoComplete="tel"
                   placeholder="Phone buyers can contact"
                 />
+
+                <small className={styles.fieldHelp}>
+                  Your phone number is kept out of the public
+                  web listing. Buyers contact you through
+                  AgentPro.
+                </small>
               </label>
             </div>
 

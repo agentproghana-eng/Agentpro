@@ -415,3 +415,142 @@
     flex-direction: column;
   }
 }
+
+
+/* ==========================================================
+   SELLER POSTING UX POLISH
+   ========================================================== */
+
+.backLink {
+  width: fit-content;
+  margin-bottom: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ic-teal-800);
+  font-size: 0.8rem;
+  font-weight: 760;
+  text-decoration: none;
+}
+
+.backLink:hover {
+  color: var(--ic-teal-700);
+}
+
+.backLink:focus-visible {
+  outline: 3px solid rgba(201, 162, 39, 0.28);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+.postingGuide {
+  margin-top: 22px;
+  padding-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  border-top: 1px solid rgba(7, 83, 75, 0.08);
+}
+
+.postingGuide > span {
+  min-height: 38px;
+  padding: 6px 11px 6px 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(7, 83, 75, 0.09);
+  border-radius: 999px;
+  background: #fbfdfc;
+  color: #53625e;
+  font-size: 0.72rem;
+  font-weight: 720;
+}
+
+.postingGuide strong {
+  width: 25px;
+  height: 25px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ic-teal-700);
+  color: #fff;
+  font-size: 0.66rem;
+}
+
+.fieldHelp {
+  margin-top: -1px;
+  color: var(--ic-muted);
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.photoCard {
+  box-shadow:
+    0 1px 2px rgba(7, 63, 58, 0.03),
+    0 8px 22px rgba(7, 63, 58, 0.055);
+}
+
+.preview {
+  border-bottom: 1px solid rgba(7, 83, 75, 0.06);
+}
+
+.submitRow {
+  position: relative;
+}
+
+@media (max-width: 700px) {
+  .hero h1 {
+    font-size: clamp(2.25rem, 12vw, 3.4rem);
+  }
+
+  .postingGuide {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+
+  .postingGuide > span {
+    width: 100%;
+    border-radius: 12px;
+  }
+
+  .submitRow {
+    position: sticky;
+    z-index: 5;
+    bottom: 8px;
+    border-color: rgba(7, 83, 75, 0.12);
+    box-shadow:
+      0 -3px 16px rgba(7, 63, 58, 0.05),
+      0 16px 38px rgba(7, 63, 58, 0.12);
+  }
+}
+
+/*
+ * Keep photo review dense enough to compare cover/order on
+ * ordinary phones. The previous <=420px rule collapsed to one
+ * oversized photo per row.
+ */
+@media (max-width: 420px) {
+  .photoGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+  }
+
+  .photoMeta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .photoActions {
+    padding-inline: 6px;
+  }
+
+  .photoActions button {
+    width: 30px;
+  }
+
+  .uploadRow {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

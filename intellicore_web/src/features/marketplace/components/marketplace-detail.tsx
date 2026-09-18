@@ -66,6 +66,58 @@ function loginReturn(adId: string) {
   return `/login?next=${encodeURIComponent(`/marketplace/${adId}`)}`;
 }
 
+function listingStatusContent(status: string) {
+  const states: Record<
+    string,
+    {
+      label: string;
+      message: string;
+    }
+  > = {
+    draft: {
+      label: "Draft",
+      message: "This listing has not been submitted yet.",
+    },
+    pending_review: {
+      label: "Pending review",
+      message:
+        "AgentPro is reviewing this listing before it becomes visible to buyers.",
+    },
+    pending_payment: {
+      label: "Approved — payment required",
+      message:
+        "The listing passed review and is waiting for the required publishing payment.",
+    },
+    active: {
+      label: "Live",
+      message:
+        "This listing is currently visible to Marketplace buyers.",
+    },
+    expired: {
+      label: "Expired",
+      message:
+        "This listing is no longer visible because its publishing period ended.",
+    },
+    rejected: {
+      label: "Not approved",
+      message:
+        "This listing was not approved for Marketplace publication.",
+    },
+    suspended: {
+      label: "Suspended",
+      message:
+        "This listing is temporarily unavailable on the Marketplace.",
+    },
+  };
+
+  return (
+    states[status] ?? {
+      label: status.replaceAll("_", " "),
+      message: "This is the current status of your Marketplace listing.",
+    }
+  );
+}
+
 export function MarketplaceDetail({ adId }: Props) {
   const [ad, setAd] = useState<MarketplaceAdvertisement | null>(null);
   const [loading, setLoading] = useState(true);
@@ -76,6 +128,10 @@ export function MarketplaceDetail({ adId }: Props) {
   const [authenticated, setAuthenticated] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [imageSelection, setImageSelection] = useState({
+    adId,
+    index: 0,
+  });
 
   const [showEnquiry, setShowEnquiry] = useState(false);
   const [message, setMessage] = useState("");
@@ -195,6 +251,14 @@ export function MarketplaceDetail({ adId }: Props) {
       )
     : [];
 
+  const selectedImageIndex =
+    imageSelection.adId === adId
+      ? Math.min(
+          imageSelection.index,
+          Math.max(images.length - 1, 0),
+        )
+      : 0;
+
   function requireSession() {
     window.location.assign(loginReturn(adId));
   }
@@ -239,6 +303,25 @@ export function MarketplaceDetail({ adId }: Props) {
 
     setShowEnquiry(true);
     setEnquiryError(null);
+  }
+
+  function openMobileEnquiry() {
+    if (!authenticated) {
+      requireSession();
+      return;
+    }
+
+    setShowEnquiry(true);
+    setEnquiryError(null);
+
+    window.setTimeout(() => {
+      document
+        .getElementById("marketplace-seller-panel")
+        ?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+    }, 0);
   }
 
   async function sendEnquiry(event: FormEvent<HTMLFormElement>) {
@@ -353,6 +436,10 @@ export function MarketplaceDetail({ adId }: Props) {
   const itemRatingCount = Number(ad.rating_count ?? 0);
   const sellerRating = Number(ad.seller_average_rating ?? 0);
   const sellerReviewCount = Number(ad.seller_review_count ?? 0);
+  const ownerStatus =
+    ad.is_owner && ad.status
+      ? listingStatusContent(ad.status)
+      : null;
 
   return (
     <main id="main-content" className="ic-market-detail-page">
@@ -367,21 +454,56 @@ export function MarketplaceDetail({ adId }: Props) {
             <div className="ic-market-gallery">
               {images.length > 0 ? (
                 <>
-                  <div
-                    className="ic-market-gallery-primary"
-                    style={{ backgroundImage: `url("${images[0]}")` }}
-                    role="img"
-                    aria-label={ad.title}
-                  />
+                  <div className="ic-market-gallery-stage">
+                    <div
+                      className="ic-market-gallery-primary"
+                      style={{
+                        backgroundImage: `url("${
+                          images[selectedImageIndex] ?? images[0]
+                        }")`,
+                      }}
+                      role="img"
+                      aria-label={`${ad.title} photo ${
+                        selectedImageIndex + 1
+                      }`}
+                    />
+
+                    {images.length > 1 && (
+                      <span className="ic-market-gallery-count">
+                        {selectedImageIndex + 1}
+                        {" / "}
+                        {images.length}
+                      </span>
+                    )}
+                  </div>
 
                   {images.length > 1 && (
-                    <div className="ic-market-gallery-thumbs">
-                      {images.slice(1, 3).map((image) => (
-                        <div
-                          key={image}
-                          style={{ backgroundImage: `url("${image}")` }}
-                          role="img"
-                          aria-label={ad.title}
+                    <div
+                      className="ic-market-gallery-thumbs"
+                      aria-label="Listing photos"
+                    >
+                      {images.slice(0, 6).map((image, index) => (
+                        <button
+                          key={`${image}-${index}`}
+                          type="button"
+                          className={
+                            selectedImageIndex === index
+                              ? "is-active"
+                              : undefined
+                          }
+                          style={{
+                            backgroundImage: `url("${image}")`,
+                          }}
+                          onClick={() =>
+                            setImageSelection({
+                              adId,
+                              index,
+                            })
+                          }
+                          aria-label={`View photo ${
+                            index + 1
+                          } of ${images.length}`}
+                          aria-pressed={selectedImageIndex === index}
                         />
                       ))}
                     </div>
@@ -453,6 +575,32 @@ export function MarketplaceDetail({ adId }: Props) {
                 )}
               </div>
 
+              {ownerStatus && (
+                <div
+                  className="ic-market-owner-status"
+                  data-status={ad.status}
+                  role="status"
+                >
+                  <ShieldCheck size={19} aria-hidden="true" />
+
+                  <div>
+                    <strong>{ownerStatus.label}</strong>
+                    <p>{ownerStatus.message}</p>
+                  </div>
+                </div>
+              )}
+
+              {!ad.is_owner && (
+                <button
+                  type="button"
+                  className="ic-market-mobile-contact"
+                  onClick={openMobileEnquiry}
+                >
+                  <MessageSquareText size={18} aria-hidden="true" />
+                  Contact seller
+                </button>
+              )}
+
               <div className="ic-market-description-full">
                 <h2>About this listing</h2>
 
@@ -464,7 +612,10 @@ export function MarketplaceDetail({ adId }: Props) {
             </article>
           </section>
 
-          <aside className="ic-market-seller-panel">
+          <aside
+            id="marketplace-seller-panel"
+            className="ic-market-seller-panel"
+          >
             <div className="ic-market-seller-heading">
               <div className="ic-market-seller-avatar">
                 {ad.company_logo_url || ad.seller_profile_image_url ? (

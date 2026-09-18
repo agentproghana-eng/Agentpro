@@ -11,6 +11,7 @@ export type MarketplaceAdvertisement = {
   video_url?: string | null;
   published_at?: string | null;
   expires_at?: string | null;
+  status?: string | null;
   views_count?: number | null;
   seller_id?: string | null;
   seller_first_name?: string | null;

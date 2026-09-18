@@ -9,8 +9,11 @@ import {
   Bookmark,
   ChevronLeft,
   ChevronRight,
+  Download,
   MapPin,
+  PlusCircle,
   Search,
+  ShieldCheck,
   SlidersHorizontal,
   Star,
   Store,
@@ -461,6 +464,9 @@ export function MarketplaceBrowse({
     ads: MarketplaceAdvertisement[];
   } | null>(null);
 
+  const [mobileFiltersOpen, setMobileFiltersOpen] =
+    useState(false);
+
   const hasDiscoveryFilters =
     Boolean(applied.search.trim()) ||
     Boolean(applied.categoryId) ||
@@ -471,6 +477,37 @@ export function MarketplaceBrowse({
     applied.sort !== "newest";
 
   const showMarketplaceHome = !hasDiscoveryFilters && page === 1;
+
+  useEffect(() => {
+    if (!mobileFiltersOpen) {
+      return;
+    }
+
+    const previousOverflow =
+      document.body.style.overflow;
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setMobileFiltersOpen(false);
+      }
+    }
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener(
+      "keydown",
+      onKeyDown,
+    );
+
+    return () => {
+      document.body.style.overflow =
+        previousOverflow;
+
+      window.removeEventListener(
+        "keydown",
+        onKeyDown,
+      );
+    };
+  }, [mobileFiltersOpen]);
 
   useEffect(() => {
     let active = true;
@@ -699,6 +736,7 @@ export function MarketplaceBrowse({
     event.preventDefault();
     setPage(1);
     setApplied(filters);
+    setMobileFiltersOpen(false);
   }
 
   function loginForMarketplace() {
@@ -823,6 +861,7 @@ export function MarketplaceBrowse({
     setFilters(EMPTY_FILTERS);
     setApplied(EMPTY_FILTERS);
     setPage(1);
+    setMobileFiltersOpen(false);
   }
 
   function applySort(sort: string) {
@@ -922,6 +961,32 @@ export function MarketplaceBrowse({
               Search
             </button>
           </form>
+
+          <div
+            className="ic-market-hero-actions"
+            aria-label="Marketplace actions"
+          >
+            <Link
+              href="/marketplace/post"
+              className="ic-market-hero-primary-action"
+            >
+              <PlusCircle size={18} aria-hidden="true" />
+              Post an ad
+            </Link>
+
+            <a
+              href="/download/agentpro-latest.apk"
+              className="ic-market-hero-secondary-action"
+            >
+              <Download size={18} aria-hidden="true" />
+              Get Android app
+            </a>
+
+            <span className="ic-market-hero-trust">
+              <ShieldCheck size={17} aria-hidden="true" />
+              Buy, sell and discover across Ghana
+            </span>
+          </div>
         </div>
       </section>
 
@@ -974,16 +1039,75 @@ export function MarketplaceBrowse({
 
       <section className="ic-market-body">
         <div className="ic-shell ic-market-layout">
-          <aside className="ic-market-filters">
+          <button
+            type="button"
+            className="ic-market-mobile-filter-trigger"
+            onClick={() => setMobileFiltersOpen(true)}
+            aria-expanded={mobileFiltersOpen}
+            aria-controls="marketplace-filter-panel"
+          >
+            <SlidersHorizontal
+              size={18}
+              aria-hidden="true"
+            />
+
+            <span>Filters</span>
+
+            {activeFilterCount > 0 && (
+              <strong>
+                {activeFilterCount}
+              </strong>
+            )}
+          </button>
+
+          {mobileFiltersOpen && (
+            <button
+              type="button"
+              className="ic-market-filter-backdrop"
+              onClick={() =>
+                setMobileFiltersOpen(false)
+              }
+              aria-label="Close Marketplace filters"
+            />
+          )}
+
+          <aside
+            id="marketplace-filter-panel"
+            className={`ic-market-filters${
+              mobileFiltersOpen
+                ? " is-mobile-open"
+                : ""
+            }`}
+            aria-label="Marketplace filters"
+          >
             <div className="ic-market-filter-heading">
               <div>
                 <SlidersHorizontal size={18} aria-hidden="true" />
                 <strong>Filters</strong>
               </div>
 
-              <button type="button" onClick={resetFilters}>
-                Clear
-              </button>
+              <div className="ic-market-filter-heading-actions">
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                >
+                  Clear
+                </button>
+
+                <button
+                  type="button"
+                  className="ic-market-filter-close"
+                  onClick={() =>
+                    setMobileFiltersOpen(false)
+                  }
+                  aria-label="Close filters"
+                >
+                  <X
+                    size={19}
+                    aria-hidden="true"
+                  />
+                </button>
+              </div>
             </div>
 
             <form onSubmit={submit}>
