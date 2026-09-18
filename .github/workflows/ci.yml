@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_android:
-        description: 'Publish a fresh signed Android APK from master'
+        description: 'Publish a fresh signed Android APK and build the Play Store AAB from master'
         required: false
         default: false
         type: boolean
@@ -597,6 +597,44 @@ jobs:
         with:
           name: release-apk
           path: flutter_app/build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Build Play Store AAB
+        working-directory: flutter_app
+        run: |
+          flutter build appbundle --release \
+            --build-number "$GITHUB_RUN_NUMBER" \
+            --dart-define=AGENTPRO_SOURCE_COMMIT="$GITHUB_SHA"
+
+      - name: Verify signed Play Store AAB
+        working-directory: flutter_app
+        run: |
+          set -euo pipefail
+
+          AAB="build/app/outputs/bundle/release/app-release.aab"
+
+          test -s "$AAB"
+
+          jarsigner \
+            -verify \
+            -strict \
+            -certs \
+            "$AAB"
+
+          keytool \
+            -printcert \
+            -jarfile "$AAB"
+
+          sha256sum "$AAB"
+
+          echo "SIGNED_PLAY_STORE_AAB=PASS"
+          echo "PLAY_STORE_AAB_SOURCE_COMMIT=$GITHUB_SHA"
+          echo "PLAY_STORE_AAB_BUILD_NUMBER=$GITHUB_RUN_NUMBER"
+
+      - name: Upload Play Store AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: play-store-aab
+          path: flutter_app/build/app/outputs/bundle/release/app-release.aab
 
 
   # ── Rolling Signed Android Release ─────────────────────────
