@@ -2784,6 +2784,124 @@ exports.deleteAccount = async (
             'image',
           );
 
+          let marketplaceCompanyRetired =
+            false;
+
+          if (
+            user.role ===
+              'marketplace_seller' &&
+            user.company_id
+          ) {
+            const marketplaceCompanyResult =
+              await client.query(
+                `SELECT
+                   c.id,
+                   c.logo_url
+                 FROM companies c
+                 WHERE c.id = $1
+                   AND c.status <>
+                     'deactivated'
+                   AND NOT EXISTS (
+                     SELECT 1
+                     FROM users other_user
+                     WHERE
+                       other_user.company_id =
+                         c.id
+                       AND other_user.id <> $2
+                       AND
+                         other_user.account_deleted_at
+                           IS NULL
+                       AND other_user.status <>
+                         'deactivated'
+                   )
+                   AND NOT EXISTS (
+                     SELECT 1
+                     FROM subscriptions s
+                     WHERE s.company_id =
+                       c.id
+                   )
+                   AND NOT EXISTS (
+                     SELECT 1
+                     FROM branches b
+                     WHERE b.company_id =
+                       c.id
+                   )
+                 FOR UPDATE OF c`,
+                [
+                  user.company_id,
+                  user.id,
+                ],
+              );
+
+            if (
+              marketplaceCompanyResult
+                .rows.length > 0
+            ) {
+              const marketplaceCompany =
+                marketplaceCompanyResult
+                  .rows[0];
+
+              addDeletionMediaAsset(
+                mediaAssets,
+                marketplaceCompany.logo_url,
+                'image',
+              );
+
+              await client.query(
+                `UPDATE companies
+                 SET
+                   name =
+                     'Deleted Marketplace Storefront ' ||
+                     LEFT(
+                       REPLACE(
+                         id::text,
+                         '-',
+                         ''
+                       ),
+                       12
+                     ),
+                   registration_number =
+                     NULL,
+                   phone = 'deleted',
+                   email =
+                     'deleted+' ||
+                     REPLACE(
+                       id::text,
+                       '-',
+                       ''
+                     ) ||
+                     '@deleted.agentpro.invalid',
+                   address = NULL,
+                   logo_url = NULL,
+                   status = 'deactivated',
+                   approved_at = NULL,
+                   approved_by = NULL,
+                   marketplace_verified =
+                     FALSE,
+                   marketplace_verified_at =
+                     NULL,
+                   marketplace_verified_by =
+                     NULL,
+                   marketplace_featured =
+                     FALSE,
+                   marketplace_featured_priority =
+                     0,
+                   marketplace_featured_at =
+                     NULL,
+                   marketplace_featured_by =
+                     NULL,
+                   updated_at = NOW()
+                 WHERE id = $1`,
+                [
+                  marketplaceCompany.id,
+                ],
+              );
+
+              marketplaceCompanyRetired =
+                true;
+            }
+          }
+
           const adMediaResult =
             await client.query(
               `SELECT
@@ -3087,6 +3205,8 @@ exports.deleteAccount = async (
             entityId: user.id,
             newValues: {
               account_deleted: true,
+              marketplace_company_retired:
+                marketplaceCompanyRetired,
               retained_records: [
                 'financial',
                 'transaction',
@@ -3110,6 +3230,7 @@ exports.deleteAccount = async (
             statusCode: 200,
             success: true,
             mediaAssets,
+            marketplaceCompanyRetired,
           };
         },
       );
@@ -3187,6 +3308,8 @@ exports.deleteAccount = async (
       data: {
         media_cleanup_pending:
           mediaCleanupFailures > 0,
+        marketplace_company_retired:
+          deletion.marketplaceCompanyRetired,
         retained_record_categories: [
           'financial',
           'transaction',

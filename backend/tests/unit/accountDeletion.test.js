@@ -109,6 +109,7 @@ async function makeLockedUser(
 function makeClient({
   user,
   openShift = false,
+  marketplaceCompany = null,
 } = {}) {
   const client = {
     query: jest.fn(
@@ -119,6 +120,9 @@ function makeClient({
         if (
           normalized.includes(
             'FROM users'
+          ) &&
+          normalized.includes(
+            'WHERE id = $1'
           ) &&
           normalized.includes(
             'FOR UPDATE'
@@ -140,6 +144,28 @@ function makeClient({
             rows: openShift
               ? [{ id: 'shift-1' }]
               : [],
+          };
+        }
+
+        if (
+          normalized.includes(
+            'FROM companies c'
+          ) &&
+          normalized.includes(
+            'FOR UPDATE OF c'
+          ) &&
+          normalized.includes(
+            'FROM subscriptions s'
+          ) &&
+          normalized.includes(
+            'FROM branches b'
+          )
+        ) {
+          return {
+            rows:
+              marketplaceCompany
+                ? [marketplaceCompany]
+                : [],
           };
         }
 
@@ -325,6 +351,210 @@ describe(
             resource_type:
               'image',
             invalidate: true,
+          }),
+        );
+      },
+    );
+
+    test(
+      'retires an unshared Marketplace-only storefront when its seller deletes the account',
+      async () => {
+        const companyId =
+          '33333333-3333-4333-8333-333333333333';
+
+        const user =
+          await makeLockedUser({
+            role:
+              'marketplace_seller',
+            company_id:
+              companyId,
+          });
+
+        const client =
+          makeClient({
+            user,
+            marketplaceCompany: {
+              id: companyId,
+              logo_url:
+                'https://res.cloudinary.com/demo/image/upload/v1/agentpro/companies/storefront.jpg',
+            },
+          });
+
+        mockWithTransaction
+          .mockImplementation(
+            async (callback) =>
+              callback(client),
+          );
+
+        const res =
+          makeResponse();
+
+        await authController
+          .deleteAccount(
+            makeRequest(),
+            res,
+          );
+
+        expect(
+          res.status
+        ).toHaveBeenCalledWith(
+          200
+        );
+
+        expect(
+          res.json
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            success: true,
+            code:
+              'ACCOUNT_DELETED',
+            data:
+              expect.objectContaining({
+                marketplace_company_retired:
+                  true,
+              }),
+          }),
+        );
+
+        const sql =
+          client.query.mock.calls
+            .map(
+              ([statement]) =>
+                String(statement),
+            )
+            .join('\n');
+
+        expect(sql).toContain(
+          'FOR UPDATE OF c'
+        );
+
+        expect(sql).toContain(
+          'FROM subscriptions s'
+        );
+
+        expect(sql).toContain(
+          'FROM branches b'
+        );
+
+        expect(sql).toContain(
+          'UPDATE companies'
+        );
+
+        expect(sql).toContain(
+          "'Deleted Marketplace Storefront '"
+        );
+
+        expect(sql).toContain(
+          "status = 'deactivated'"
+        );
+
+        expect(sql).toContain(
+          'marketplace_verified ='
+        );
+
+        expect(sql).toContain(
+          'marketplace_featured ='
+        );
+
+        expect(
+          mockAuditLog
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            newValues:
+              expect.objectContaining({
+                marketplace_company_retired:
+                  true,
+              }),
+            dbClient: client,
+            strict: true,
+          }),
+        );
+
+        expect(
+          mockDeleteCloudinaryFile
+        ).toHaveBeenCalledWith(
+          'agentpro/companies/storefront',
+          expect.objectContaining({
+            resource_type:
+              'image',
+            invalidate: true,
+          }),
+        );
+      },
+    );
+
+    test(
+      'preserves a Marketplace company when the pure-storefront retirement guard does not qualify it',
+      async () => {
+        const user =
+          await makeLockedUser({
+            role:
+              'marketplace_seller',
+            company_id:
+              '44444444-4444-4444-8444-444444444444',
+          });
+
+        const client =
+          makeClient({
+            user,
+            marketplaceCompany:
+              null,
+          });
+
+        mockWithTransaction
+          .mockImplementation(
+            async (callback) =>
+              callback(client),
+          );
+
+        const res =
+          makeResponse();
+
+        await authController
+          .deleteAccount(
+            makeRequest(),
+            res,
+          );
+
+        expect(
+          res.status
+        ).toHaveBeenCalledWith(
+          200
+        );
+
+        const sql =
+          client.query.mock.calls
+            .map(
+              ([statement]) =>
+                String(statement),
+            )
+            .join('\n');
+
+        expect(sql).not.toContain(
+          'UPDATE companies\n                 SET'
+        );
+
+        expect(
+          mockAuditLog
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            newValues:
+              expect.objectContaining({
+                marketplace_company_retired:
+                  false,
+              }),
+          }),
+        );
+
+        expect(
+          res.json
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data:
+              expect.objectContaining({
+                marketplace_company_retired:
+                  false,
+              }),
           }),
         );
       },
