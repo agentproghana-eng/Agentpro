@@ -7,7 +7,9 @@ String readSource(String relativePath) {
 }
 
 String compactSource(String source) {
-  return source.replaceAll(RegExp(r'\s+'), '');
+  return source
+      .replaceAll(RegExp(r'\s+'), '')
+      .replaceAll(',)', ')');
 }
 
 void main() {
@@ -202,7 +204,7 @@ void main() {
       );
     });
 
-    test('Settings preserves active mode when opening Support', () {
+    test('Settings preserves active mode while Support remains under More', () {
       final personal = readSource(
         'lib/features/dashboard/personal_more_tab.dart',
       );
@@ -251,14 +253,27 @@ void main() {
         contains('final bool isPersonal'),
       );
 
+      // Contact Support intentionally lives under More rather than
+      // being duplicated inside Settings.
       expect(
         settings,
-        contains("'/support?mode=personal'"),
+        isNot(
+          contains("'/support?mode=personal'"),
+        ),
       );
 
       expect(
         settings,
-        contains("'/support?mode=business'"),
+        isNot(
+          contains("'/support?mode=business'"),
+        ),
+      );
+
+      expect(
+        settings,
+        isNot(
+          contains("'Contact Support'"),
+        ),
       );
 
       expect(
