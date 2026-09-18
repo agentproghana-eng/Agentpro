@@ -19,6 +19,6 @@ export default async function AgentsHubPage() {
   );
 
   return (
-    <HubSessionGate section="business" />
+    <HubSessionGate section="agents" />
   );
 }

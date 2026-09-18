@@ -10,7 +10,7 @@ import {
 
 import type { AgentProUser } from "@/features/auth/types";
 
-export type PortalSection = "overview" | "community" | "business";
+export type PortalSection = "overview" | "community" | "business" | "agents";
 
 type Props = {
   user: Partial<AgentProUser>;
@@ -45,9 +45,22 @@ export function PortalShell({
   onLogout,
   children,
 }: Props) {
-  const hasBusinessWorkspace =
+  const role = user.role ?? "";
+
+  const hasMarketplaceWorkspace =
     Boolean(user.company_id || user.company_name) ||
-    ["superuser", "administrator"].includes(user.role ?? "");
+    [
+      "marketplace_seller",
+      "superuser",
+      "administrator",
+    ].includes(role);
+
+  const hasAgentsHubAccess = [
+    "business_owner",
+    "manager",
+    "agent",
+    "auditor",
+  ].includes(role);
 
   const navigation = [
     {
@@ -62,12 +75,22 @@ export function PortalShell({
       label: "Community",
       Icon: UsersRound,
     },
-    ...(hasBusinessWorkspace
+    ...(hasMarketplaceWorkspace
       ? [
           {
             id: "business" as const,
             href: "/hub/business",
             label: "Business Hub",
+            Icon: Store,
+          },
+        ]
+      : []),
+    ...(hasAgentsHubAccess
+      ? [
+          {
+            id: "agents" as const,
+            href: "/hub/agents",
+            label: "Agents Hub",
             Icon: Building2,
           },
         ]

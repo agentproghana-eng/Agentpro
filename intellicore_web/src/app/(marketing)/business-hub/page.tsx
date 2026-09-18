@@ -3,75 +3,83 @@ import type { Metadata } from "next";
 import { PublicInfoPage } from "@/components/marketing/public-info-page";
 import { createPageMetadata } from "@/lib/metadata";
 
-export const metadata: Metadata = createPageMetadata({
-  title: "Business Hub",
-  description:
-    "AgentPro Business Hub is the private, role-aware workspace for running and understanding a business.",
-  path: "/business-hub",
-});
+export const metadata: Metadata =
+  createPageMetadata({
+    title: "Business Hub",
+    description:
+      "Manage Marketplace listings, buyer interest and seller performance with AgentPro Business Hub.",
+    path: "/business-hub",
+  });
 
 const sections = [
   {
-    eyebrow: "Business dashboard",
-    title: "See performance and what needs attention.",
+    eyebrow: "Seller performance",
+    title:
+      "Know how your Marketplace storefront is performing.",
     items: [
       {
-        title: "Today's performance",
+        title: "Listing performance",
         description:
-          "Surface useful revenue, transaction and operational context.",
+          "Track views, saves, enquiries and the listings attracting the most buyer interest.",
       },
       {
-        title: "Balances",
+        title: "Buyer activity",
         description:
-          "Display authorised balance information within the correct business context.",
+          "See recent Marketplace interest and identify new enquiries that need attention.",
       },
       {
-        title: "Alerts",
+        title: "Seller reputation",
         description:
-          "Bring pending actions and important business events forward.",
+          "Follow ratings and reviews that help buyers understand your storefront.",
       },
       {
-        title: "Recent activity",
-        description: "Show relevant recent actions across the business.",
+        title: "Attention signals",
+        description:
+          "Spot listings that are expiring or are receiving little engagement.",
       },
     ],
   },
   {
-    eyebrow: "Business management",
-    title: "Private operations remain private.",
+    eyebrow: "Marketplace management",
+    title:
+      "Manage your listings from one workspace.",
     items: [
       {
-        title: "Transactions",
+        title: "My Ads",
         description:
-          "Review and manage authorised operational transaction information.",
+          "See active, pending, expired and other listing statuses without losing track of submitted ads.",
       },
       {
-        title: "Reports",
-        description: "Understand business performance through useful reports.",
-      },
-      {
-        title: "Staff",
-        description: "Support business roles and operational accountability.",
-      },
-      {
-        title: "Permissions",
+        title: "Post an Ad",
         description:
-          "Backend authorization determines what each business member can access.",
+          "Create new Marketplace listings with reviewed photos and clear product details.",
+      },
+      {
+        title: "Publishing status",
+        description:
+          "Follow review and publishing progress before a listing becomes visible to buyers.",
+      },
+      {
+        title: "Storefront growth",
+        description:
+          "Use real Marketplace activity to improve the listings that need attention.",
       },
     ],
   },
   {
-    eyebrow: "Multi-business",
-    title: "One account can work across multiple authorised businesses.",
+    eyebrow: "Separate by design",
+    title:
+      "Marketplace Business Hub is not Mobile Money Agents Hub.",
     items: [
       {
-        title: "Business switcher",
-        description: "Move between organisations without mixing their data.",
+        title: "Business Hub",
+        description:
+          "Marketplace seller tools, listings and storefront performance.",
       },
       {
-        title: "Business isolation",
+        title: "Agents Hub",
         description:
-          "Never display one organisation's private information in another business context.",
+          "Mobile Money operations remain available only to approved AgentPro agent-business roles.",
       },
     ],
   },
@@ -81,21 +89,21 @@ export default function BusinessHubPage() {
   return (
     <PublicInfoPage
       eyebrow="AgentPro Business Hub"
-      title="How is your business performing, and what needs attention?"
-      description="Business Hub is the web extension of the private AgentPro business experience for authorised owners, managers and teams."
+      title="Run your Marketplace storefront with better visibility."
+      description="Business Hub is the private Marketplace seller workspace for managing ads, buyer interest and storefront performance."
       primaryAction={{
         label: "Sign In to Business Hub",
         href: "/login?next=/hub/business",
       }}
       secondaryAction={{
-        label: "Explore AgentPro",
-        href: "/agentpro",
+        label: "Browse Marketplace",
+        href: "/",
       }}
       highlights={[
-        "Private business workspace",
-        "Role-aware access",
-        "Multi-business support",
-        "Reports and performance",
+        "My Ads and listing status",
+        "Views, saves and enquiries",
+        "Seller ratings",
+        "Marketplace performance",
       ]}
       sections={sections}
     />

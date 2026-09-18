@@ -255,7 +255,7 @@ export function BusinessDashboard({
 
       if (result.kind === "unauthorized") {
         window.location.replace(
-          "/login?next=%2Fhub%2Fbusiness",
+          "/login?next=%2Fhub%2Fagents",
         );
 
         return;
@@ -286,7 +286,7 @@ export function BusinessDashboard({
 
     if (result.kind === "unauthorized") {
       window.location.replace(
-        "/login?next=%2Fhub%2Fbusiness",
+        "/login?next=%2Fhub%2Fagents",
       );
 
       return;
