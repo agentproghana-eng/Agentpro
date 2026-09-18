@@ -7,10 +7,11 @@ import { Loader2, ShieldCheck } from "lucide-react";
 import type { AgentProUser } from "@/features/auth/types";
 import { CommunityPostDetail } from "@/features/community/components/community-post-detail";
 import {
-  BusinessHubView,
+  AgentsHubView,
   CommunityHubView,
   PortalOverview,
 } from "@/features/portal/components/portal-content";
+import { MarketplaceBusinessHub } from "@/features/marketplace/components/marketplace-business-hub";
 import {
   PortalShell,
   type PortalSection,
@@ -301,7 +302,13 @@ export function HubSessionGate({
           <CommunityHubView user={user} />
         ))}
 
-      {section === "business" && <BusinessHubView user={user} />}
+      {section === "business" && (
+        <MarketplaceBusinessHub user={user} />
+      )}
+
+      {section === "agents" && (
+        <AgentsHubView user={user} />
+      )}
 
       {section === "overview" && <PortalOverview user={user} />}
     </PortalShell>

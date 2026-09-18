@@ -73,7 +73,7 @@ export function PortalOverview({ user }: Props) {
         aria-label="AgentPro hubs"
       >
         <Link
-          href="/marketplace"
+          href="/hub/business"
           className="ic-portal-feature-card"
         >
           <span className="ic-portal-feature-icon">
@@ -219,7 +219,7 @@ export function CommunityHubView({ user }: Props) {
   return <CommunityHub user={user} />;
 }
 
-export function BusinessHubView({ user }: Props) {
+export function AgentsHubView({ user }: Props) {
   const hasAgentsHubAccess = [
     "business_owner",
     "manager",
