@@ -34,10 +34,13 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
   List<Map<String, dynamic>> _posts = [];
 
   final _composerController = TextEditingController();
+  final _composerFocusNode = FocusNode();
+  final _composerKey = GlobalKey();
   final _scrollController = ScrollController();
   final _recorder = AudioRecorder();
 
   bool _loading = true;
+  bool _showComposerShortcut = false;
   bool _loadingMore = false;
   bool _posting = false;
   bool _hasMore = true;
@@ -66,16 +69,74 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
     _recordTimer?.cancel();
     _recorder.dispose();
     _composerController.dispose();
+    _composerFocusNode.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
   void _handleScroll() {
+    _syncComposerShortcut();
+
     if (_scrollController.position.pixels >=
             _scrollController.position.maxScrollExtent - 300 &&
         !_loadingMore &&
         _hasMore) {
       _loadMore();
+    }
+  }
+
+  void _syncComposerShortcut() {
+    if (!mounted) return;
+
+    final composerContext = _composerKey.currentContext;
+    final renderObject = composerContext?.findRenderObject();
+
+    if (renderObject is! RenderBox || !renderObject.hasSize) {
+      return;
+    }
+
+    final top = renderObject.localToGlobal(Offset.zero).dy;
+    final bottom = top + renderObject.size.height;
+
+    final unavailableAbove =
+        MediaQuery.of(context).padding.top +
+        kToolbarHeight +
+        8;
+
+    final shouldShow =
+        bottom <= unavailableAbove;
+
+    if (shouldShow != _showComposerShortcut) {
+      setState(() {
+        _showComposerShortcut = shouldShow;
+      });
+    }
+  }
+
+  Future<void> _scrollToComposer() async {
+    final composerContext = _composerKey.currentContext;
+
+    if (composerContext != null) {
+      await Scrollable.ensureVisible(
+        composerContext,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+        alignment: 0.05,
+      );
+    } else if (_scrollController.hasClients) {
+      await _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+      );
+    }
+
+    if (
+      mounted &&
+      !_isRecording &&
+      !_hasRecording
+    ) {
+      _composerFocusNode.requestFocus();
     }
   }
 
@@ -706,6 +767,7 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
             const SizedBox(height: 10),
             TextField(
               controller: _composerController,
+              focusNode: _composerFocusNode,
               minLines: 2,
               maxLines: 5,
               decoration: const InputDecoration(
@@ -756,6 +818,14 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
           ),
         ],
       ),
+      floatingActionButton:
+          _showComposerShortcut
+              ? FloatingActionButton.extended(
+                  onPressed: _scrollToComposer,
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('New post'),
+                )
+              : null,
       body: RefreshIndicator(
         onRefresh: _load,
         child: CustomScrollView(
@@ -773,7 +843,10 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
                 children: [
                   _buildFilters(),
                   const SizedBox(height: 12),
-                  _buildComposer(),
+                  KeyedSubtree(
+                    key: _composerKey,
+                    child: _buildComposer(),
+                  ),
                   const SizedBox(height: 14),
                 ],
               ),

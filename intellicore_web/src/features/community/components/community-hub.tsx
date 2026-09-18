@@ -641,6 +641,43 @@ export function CommunityHub({ user }: Props) {
   const [reactionError, setReactionError] = useState<string | null>(null);
   const [reactingPostId, setReactingPostId] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
+  const [composerVisible, setComposerVisible] = useState(true);
+  const composerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!hasCommunity) {
+      return;
+    }
+
+    const composer = composerRef.current;
+
+    if (
+      !composer ||
+      typeof IntersectionObserver === "undefined"
+    ) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setComposerVisible(entry.isIntersecting);
+      },
+      {
+        /*
+         * Portal navigation occupies the upper part of the viewport.
+         * Consider the composer unavailable once it disappears behind it.
+         */
+        rootMargin: "-150px 0px 0px 0px",
+        threshold: 0.05,
+      },
+    );
+
+    observer.observe(composer);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [active, hasCommunity]);
 
   useEffect(() => {
     if (!hasCommunity) {
@@ -784,6 +821,39 @@ export function CommunityHub({ user }: Props) {
 
   const personalPaid = isPaidPersonal(user);
 
+  const activeCanPost =
+    active === "agent"
+      ? agentEligible
+      : personalPaid;
+
+  function scrollToComposer() {
+    const composer = composerRef.current;
+
+    if (!composer) {
+      return;
+    }
+
+    const reducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+
+    composer.scrollIntoView({
+      behavior: reducedMotion ? "auto" : "smooth",
+      block: "start",
+    });
+
+    window.setTimeout(
+      () => {
+        composer
+          .querySelector<HTMLTextAreaElement>("textarea")
+          ?.focus({
+            preventScroll: true,
+          });
+      },
+      reducedMotion ? 0 : 350,
+    );
+  }
+
   return (
     <div className={hubStyles.page}>
       <section className={hubStyles.hero}>
@@ -824,17 +894,22 @@ export function CommunityHub({ user }: Props) {
       )}
 
       {hasCommunity && (
-        <CommunityComposer
-          key={active}
-          user={user}
-          kind={active}
-          onCreated={(post) => {
-            setPosts((current) => [
-              post,
-              ...current.filter((item) => item.id !== post.id),
-            ]);
-          }}
-        />
+        <div
+          ref={composerRef}
+          className={hubStyles.composerAnchor}
+        >
+          <CommunityComposer
+            key={active}
+            user={user}
+            kind={active}
+            onCreated={(post) => {
+              setPosts((current) => [
+                post,
+                ...current.filter((item) => item.id !== post.id),
+              ]);
+            }}
+          />
+        </div>
       )}
 
       {!hasCommunity && (
@@ -910,6 +985,24 @@ export function CommunityHub({ user }: Props) {
             ))}
         </section>
       )}
+
+      {hasCommunity &&
+        activeCanPost &&
+        !composerVisible && (
+          <button
+            type="button"
+            className={hubStyles.composerShortcut}
+            onClick={scrollToComposer}
+            aria-label="Create a Community post"
+          >
+            <MessageCircle
+              size={18}
+              aria-hidden="true"
+            />
+
+            <span>New post</span>
+          </button>
+        )}
     </div>
   );
 }
