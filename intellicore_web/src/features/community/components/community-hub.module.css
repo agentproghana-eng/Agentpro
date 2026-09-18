@@ -816,3 +816,147 @@
     font-size: 1.1rem;
   }
 }
+
+/* ==========================================================
+   COMMUNITY PERSISTENT POST ACCESS
+   Phone + tablet + desktop production UX.
+   ========================================================== */
+
+.composerAnchor {
+  scroll-margin-top: 170px;
+}
+
+.composerShortcut {
+  position: fixed;
+  z-index: 90;
+  right: 26px;
+  bottom: 26px;
+  min-height: 42px;
+  padding: 0 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid rgba(214, 173, 56, 0.42);
+  border-radius: 999px;
+  background: var(--ic-teal-800);
+  color: white;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 820;
+  box-shadow:
+    0 5px 13px rgba(7, 63, 58, 0.13),
+    0 16px 36px rgba(7, 63, 58, 0.2);
+  cursor: pointer;
+}
+
+.composerShortcut:hover {
+  background: var(--ic-teal-900);
+}
+
+.composerShortcut:focus-visible {
+  outline: 3px solid rgba(214, 173, 56, 0.36);
+  outline-offset: 3px;
+}
+
+.composerShortcut svg {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 900px) {
+  .composerShortcut {
+    right: max(
+      18px,
+      env(safe-area-inset-right)
+    );
+    bottom: max(
+      20px,
+      calc(env(safe-area-inset-bottom) + 14px)
+    );
+    min-height: 48px;
+    padding-inline: 18px;
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 760px) {
+  .page {
+    padding-bottom: 72px;
+  }
+}
+
+/*
+ * Production phone QA:
+ * keep social actions compact instead of stacking three full-width rows.
+ */
+@media (max-width: 540px) {
+  .feedHeading {
+    align-items: center;
+    flex-direction: row;
+    gap: 10px;
+  }
+
+  .feedHeading > div {
+    min-width: 0;
+  }
+
+  .sortControl {
+    margin-left: auto;
+  }
+
+  .sortControl select {
+    max-width: 150px;
+    min-height: 38px;
+    padding: 7px 30px 7px 10px;
+    font-size: 0.7rem;
+  }
+
+  .engagementSummary {
+    align-items: center;
+    flex-direction: row;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+
+  .postActions {
+    grid-template-columns:
+      repeat(3, minmax(0, 1fr));
+    gap: 3px;
+  }
+
+  .reactControl {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .reactControl summary,
+  .commentAction,
+  .shareAction {
+    width: 100%;
+    min-width: 0;
+    min-height: 38px;
+    padding: 6px 3px;
+    justify-content: center;
+    gap: 4px;
+    font-size: 0.69rem;
+    white-space: nowrap;
+  }
+
+  .shareAction {
+    justify-self: stretch;
+  }
+
+  .reactionPicker {
+    left: 0;
+    max-width: calc(100vw - 50px);
+    overflow-x: auto;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composerShortcut {
+    transition: none;
+  }
+}

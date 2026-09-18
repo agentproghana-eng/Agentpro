@@ -38,9 +38,12 @@ class _PersonalCommunityFeedScreenState
   String? _nextCursor;
 
   final _composerCtrl = TextEditingController();
+  final _composerFocusNode = FocusNode();
+  final _composerKey = GlobalKey();
   final _scrollController = ScrollController();
 
   bool _posting = false;
+  bool _showComposerShortcut = false;
 
   final _recorder = AudioRecorder();
   bool _isRecording = false;
@@ -61,16 +64,75 @@ class _PersonalCommunityFeedScreenState
     _recordTimer?.cancel();
     _recorder.dispose();
     _composerCtrl.dispose();
+    _composerFocusNode.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
   void _handleScroll() {
+    _syncComposerShortcut();
+
     if (_scrollController.position.pixels >=
             _scrollController.position.maxScrollExtent - 300 &&
         !_loadingMore &&
         _hasMore) {
       _loadMore();
+    }
+  }
+
+  void _syncComposerShortcut() {
+    if (!mounted) return;
+
+    final composerContext = _composerKey.currentContext;
+    final renderObject = composerContext?.findRenderObject();
+
+    if (renderObject is! RenderBox || !renderObject.hasSize) {
+      return;
+    }
+
+    final top = renderObject.localToGlobal(Offset.zero).dy;
+    final bottom = top + renderObject.size.height;
+
+    final unavailableAbove =
+        MediaQuery.of(context).padding.top +
+        kToolbarHeight +
+        8;
+
+    final shouldShow =
+        bottom <= unavailableAbove;
+
+    if (shouldShow != _showComposerShortcut) {
+      setState(() {
+        _showComposerShortcut = shouldShow;
+      });
+    }
+  }
+
+  Future<void> _scrollToComposer() async {
+    final composerContext = _composerKey.currentContext;
+
+    if (composerContext != null) {
+      await Scrollable.ensureVisible(
+        composerContext,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+        alignment: 0.05,
+      );
+    } else if (_scrollController.hasClients) {
+      await _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+      );
+    }
+
+    if (
+      mounted &&
+      _isPaid &&
+      !_isRecording &&
+      !_hasRecording
+    ) {
+      _composerFocusNode.requestFocus();
     }
   }
 
@@ -344,6 +406,7 @@ class _PersonalCommunityFeedScreenState
         Expanded(
             child: TextField(
                 controller: _composerCtrl,
+                focusNode: _composerFocusNode,
                 decoration: const InputDecoration(
                     hintText: 'Share something...', border: InputBorder.none))),
         IconButton(
@@ -366,6 +429,14 @@ class _PersonalCommunityFeedScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Personal Community')),
+      floatingActionButton:
+          _isPaid && _showComposerShortcut
+              ? FloatingActionButton.extended(
+                  onPressed: _scrollToComposer,
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('New post'),
+                )
+              : null,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -374,7 +445,10 @@ class _PersonalCommunityFeedScreenState
                 controller: _scrollController,
                 padding: const EdgeInsets.all(16),
                 children: [
-                  _buildComposer(),
+                  KeyedSubtree(
+                    key: _composerKey,
+                    child: _buildComposer(),
+                  ),
                   const SizedBox(height: 16),
                   for (final p in _posts)
                     _PersonalPostCard(
