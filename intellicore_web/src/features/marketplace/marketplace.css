@@ -1079,3 +1079,417 @@
   background: rgba(83, 98, 94, 0.055);
   color: #495853;
 }
+
+/* ==========================================================
+   MARKETPLACE RESPONSIVE COMMERCE FINAL PASS
+   Phone + iPad + desktop alignment from production QA.
+   ========================================================== */
+
+.ic-market-home-grid,
+.ic-market-grid {
+  display: grid;
+  width: 100%;
+  align-items: stretch;
+  gap: clamp(12px, 1.6vw, 20px);
+}
+
+.ic-market-home-grid > .ic-market-card-shell,
+.ic-market-grid > .ic-market-card-shell {
+  width: 100%;
+  min-width: 0;
+}
+
+.ic-market-card-shell > .ic-market-save {
+  min-width: 0;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+}
+
+.ic-market-card-shell > .ic-market-save svg {
+  flex: 0 0 auto;
+}
+
+.ic-market-card-heading h2 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.ic-market-description {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.ic-market-search label {
+  min-width: 0;
+}
+
+.ic-market-search input {
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+
+/*
+ * Desktop and iPad landscape use the three-card grid shown during
+ * loading. Discovery and Latest Ads now use the same visual width.
+ */
+@media (min-width: 1025px) {
+  .ic-market-home-grid,
+  .ic-market-grid {
+    grid-template-columns:
+      repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1025px) and (max-width: 1279px) {
+  .ic-market-layout {
+    grid-template-columns:
+      220px minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  .ic-market-filters {
+    top: 98px;
+  }
+}
+
+/*
+ * Tablet portrait:
+ * remove the permanent filter column so listings get the screen width.
+ * Filtering uses the same accessible sheet interaction as phones.
+ */
+@media (max-width: 1024px) {
+  .ic-market-layout {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .ic-market-home-grid,
+  .ic-market-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .ic-market-mobile-filter-trigger {
+    min-height: 44px;
+    padding: 0 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    justify-self: start;
+    gap: 8px;
+    border: 1px solid rgba(7, 83, 75, 0.13);
+    border-radius: 12px;
+    background: #ffffff;
+    color: var(--ic-teal-900);
+    font: inherit;
+    font-size: 0.79rem;
+    font-weight: 780;
+    box-shadow: 0 7px 22px rgba(7, 63, 58, 0.06);
+    cursor: pointer;
+  }
+
+  .ic-market-mobile-filter-trigger strong {
+    min-width: 21px;
+    height: 21px;
+    padding-inline: 5px;
+    display: inline-grid;
+    place-items: center;
+    border-radius: 999px;
+    background: var(--ic-teal-700);
+    color: white;
+    font-size: 0.65rem;
+  }
+
+  .ic-market-filter-backdrop {
+    position: fixed;
+    z-index: 1000;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    display: block;
+    border: 0;
+    background: rgba(9, 30, 27, 0.5);
+    backdrop-filter: blur(4px);
+  }
+
+  .ic-market-filters {
+    position: fixed;
+    z-index: 1001;
+    top: auto;
+    right: 16px;
+    bottom: 16px;
+    left: auto;
+    width: min(520px, calc(100vw - 32px));
+    max-height: min(78vh, 680px);
+    padding: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    border-radius: 22px;
+    background: white;
+    box-shadow:
+      0 -4px 20px rgba(7, 63, 58, 0.08),
+      0 24px 70px rgba(7, 63, 58, 0.22);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(calc(100% + 34px));
+    transition:
+      transform 190ms ease,
+      opacity 160ms ease;
+  }
+
+  .ic-market-filters.is-mobile-open {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+
+  .ic-market-filter-heading {
+    position: sticky;
+    z-index: 2;
+    top: 0;
+    margin: 0;
+    padding: 15px 16px 13px;
+    border-bottom: 1px solid rgba(7, 83, 75, 0.08);
+    background: rgba(255, 255, 255, 0.97);
+    backdrop-filter: blur(12px);
+  }
+
+  .ic-market-filter-close {
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid rgba(7, 83, 75, 0.11);
+    border-radius: 999px;
+    background: rgba(0, 121, 107, 0.05);
+    color: var(--ic-teal-900);
+    cursor: pointer;
+  }
+
+  .ic-market-filters form {
+    padding: 15px 16px 18px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 13px;
+  }
+
+  .ic-market-price-grid {
+    width: 100%;
+  }
+
+  .ic-market-filters input,
+  .ic-market-filters select,
+  .ic-market-apply {
+    min-height: 46px;
+  }
+}
+
+@media (max-width: 700px) {
+  .ic-market-hero {
+    padding: 30px 0 26px;
+  }
+
+  .ic-market-hero h1 {
+    font-size: clamp(2.35rem, 11vw, 3.15rem);
+    line-height: 0.98;
+  }
+
+  .ic-market-hero > .ic-shell > p:not(.ic-eyebrow) {
+    margin-top: 10px;
+    font-size: 0.9rem;
+  }
+
+  .ic-market-hero .ic-market-search {
+    margin-top: 18px;
+  }
+
+  .ic-market-search {
+    padding: 6px;
+    gap: 6px;
+  }
+
+  .ic-market-search label {
+    min-height: 46px;
+    padding-inline: 11px;
+  }
+
+  .ic-market-search button {
+    min-height: 46px;
+  }
+
+  .ic-market-hero-actions {
+    margin-top: 12px;
+    gap: 8px;
+  }
+
+  .ic-market-hero-primary-action,
+  .ic-market-hero-secondary-action {
+    min-height: 41px;
+  }
+
+  .ic-market-hero-trust {
+    min-height: 34px;
+    grid-column: 1 / -1;
+  }
+
+  .ic-market-categories {
+    padding-bottom: 8px;
+  }
+
+  .ic-market-category-list {
+    gap: 7px;
+    padding-bottom: 5px;
+  }
+
+  .ic-market-category-list button {
+    min-height: 35px;
+    padding: 7px 12px;
+    font-size: 0.7rem;
+  }
+
+  .ic-market-body {
+    padding: 20px 0 48px;
+  }
+
+  .ic-market-layout {
+    gap: 16px;
+  }
+
+  .ic-market-home-sections {
+    gap: 25px;
+    margin-bottom: 26px;
+  }
+
+  .ic-market-home-heading {
+    margin-bottom: 12px;
+  }
+
+  .ic-market-home-heading h2,
+  .ic-market-results-toolbar h2 {
+    font-size: clamp(1.45rem, 7vw, 1.8rem);
+  }
+
+  .ic-market-home-heading p {
+    font-size: 0.77rem;
+  }
+
+  /*
+   * Override the legacy horizontal mobile card rule from globals.css.
+   * Phone Marketplace cards remain compact vertical commerce cards.
+   */
+  .ic-market-home-grid .ic-market-card,
+  .ic-market-grid .ic-market-card {
+    display: block;
+    grid-template-columns: none;
+  }
+
+  .ic-market-home-grid .ic-market-card-image,
+  .ic-market-grid .ic-market-card-image {
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    aspect-ratio: 4 / 3;
+  }
+
+  .ic-market-card-body {
+    padding: 10px;
+  }
+
+  .ic-market-card-heading {
+    gap: 5px;
+  }
+
+  .ic-market-card-heading h2 {
+    margin-bottom: 4px;
+    font-size: 0.82rem;
+    -webkit-line-clamp: 1;
+  }
+
+  .ic-market-card-heading strong {
+    font-size: 0.82rem;
+  }
+
+  .ic-market-card-heading > svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .ic-market-location {
+    margin-top: 8px;
+    font-size: 0.67rem;
+  }
+
+  .ic-market-description {
+    display: none;
+  }
+
+  .ic-market-card-footer {
+    margin-top: 10px;
+    padding-top: 9px;
+    gap: 4px;
+  }
+
+  .ic-market-seller,
+  .ic-market-rating {
+    font-size: 0.63rem;
+  }
+
+  .ic-market-card-shell > .ic-market-save {
+    top: 8px;
+    right: 8px;
+    min-width: 0;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+  }
+
+  .ic-market-card-shell > .ic-market-save svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .ic-market-results-toolbar {
+    margin-top: 30px;
+    padding-top: 21px;
+    gap: 13px;
+  }
+
+  .ic-market-results-toolbar label select {
+    min-height: 42px;
+  }
+
+  .ic-market-mobile-filter-trigger {
+    min-height: 42px;
+  }
+
+  .ic-market-filters {
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    width: auto;
+    max-height: 80vh;
+  }
+}
+
+@media (max-width: 340px) {
+  .ic-market-home-grid,
+  .ic-market-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ic-market-filters {
+    transition: none;
+  }
+}

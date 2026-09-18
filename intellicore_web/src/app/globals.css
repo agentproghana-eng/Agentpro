@@ -5859,3 +5859,121 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* ==========================================================
+   PUBLIC HEADER + COMPACT FOOTER FINAL PASS
+   Production phone / iPad QA.
+   ========================================================== */
+
+.ic-footer {
+  margin-top: 44px;
+}
+
+.ic-footer-grid {
+  padding: 28px 0 22px;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+  gap: clamp(24px, 4vw, 58px);
+}
+
+.ic-footer-column {
+  gap: 6px;
+}
+
+.ic-footer-column strong {
+  margin-bottom: 3px;
+  font-size: 0.73rem;
+}
+
+.ic-footer-column a {
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.ic-footer-bottom {
+  min-height: 0;
+  padding: 14px 0 17px;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  font-size: 0.63rem;
+}
+
+.ic-footer-bottom a {
+  margin-left: 0;
+  color: var(--ic-teal-800);
+  font-weight: 760;
+  text-decoration: none;
+}
+
+.ic-footer-bottom a:hover {
+  text-decoration: underline;
+}
+
+@media (min-width: 701px) and (max-width: 900px) {
+  .ic-footer-grid {
+    grid-template-columns:
+      repeat(4, minmax(0, 1fr));
+    gap: 24px;
+  }
+}
+
+@media (max-width: 700px) {
+  .ic-header-inner {
+    min-height: 64px;
+    gap: 10px;
+  }
+
+  .ic-brand-ecosystem {
+    gap: 7px;
+  }
+
+  .ic-ecosystem-company {
+    font-size: 0.84rem;
+  }
+
+  .ic-ecosystem-divider {
+    height: 24px;
+  }
+
+  .ic-ecosystem-product strong {
+    font-size: 0.84rem;
+  }
+
+  .ic-ecosystem-product small {
+    font-size: 0.47rem;
+  }
+
+  .ic-mobile-nav > summary {
+    width: 40px;
+    height: 40px;
+  }
+
+  .ic-footer {
+    margin-top: 28px;
+  }
+
+  .ic-footer-grid {
+    padding: 23px 0 18px;
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+    gap: 21px 26px;
+  }
+
+  .ic-footer-column {
+    gap: 5px;
+  }
+
+  .ic-footer-column strong {
+    font-size: 0.71rem;
+  }
+
+  .ic-footer-column a {
+    font-size: 0.67rem;
+  }
+
+  .ic-footer-bottom {
+    padding: 13px 0 17px;
+    display: grid;
+    gap: 4px;
+  }
+}

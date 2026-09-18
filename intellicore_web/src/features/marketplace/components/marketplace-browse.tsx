@@ -48,6 +48,8 @@ const EMPTY_FILTERS: Filters = {
   sort: "newest",
 };
 
+const DISCOVERY_MINIMUM_INVENTORY = 6;
+
 function parseInitialFilters(): Filters {
   if (typeof window === "undefined") {
     return EMPTY_FILTERS;
@@ -875,23 +877,72 @@ export function MarketplaceBrowse({
     setPage(1);
   }
 
-  const specialListingIds = new Set(
-    [...topRated, ...trending, ...recommended, ...recentlyViewed].map(
-      (ad) => ad.id,
-    ),
-  );
+  /*
+   * A very small Marketplace should not repeat the same advertisement
+   * through Trending, Recently Viewed and Latest Ads.
+   *
+   * Keep Latest Ads as the primary catalogue while inventory is growing.
+   * Discovery collections become useful once enough distinct listings exist.
+   */
+  const discoveryCollectionsEnabled =
+    showMarketplaceHome &&
+    total >= DISCOVERY_MINIMUM_INVENTORY;
 
-  const deDuplicatedLatestAds = showMarketplaceHome
-    ? ads.filter((ad) => !specialListingIds.has(ad.id))
-    : ads;
+  const {
+    homeTopRated,
+    homeTrending,
+    homeRecommended,
+    homeRecentlyViewed,
+  } = (() => {
+    if (!discoveryCollectionsEnabled) {
+      return {
+        homeTopRated: [] as MarketplaceAdvertisement[],
+        homeTrending: [] as MarketplaceAdvertisement[],
+        homeRecommended: [] as MarketplaceAdvertisement[],
+        homeRecentlyViewed: [] as MarketplaceAdvertisement[],
+      };
+    }
 
-  // Never leave Latest Ads visually empty just because every current
-  // listing also appears in a discovery collection such as Recently Viewed.
-  // A small marketplace should still feel populated and useful.
-  const latestAds =
-    showMarketplaceHome && deDuplicatedLatestAds.length === 0 && ads.length > 0
-      ? ads
-      : deDuplicatedLatestAds;
+    /*
+     * Reserve the first few newest advertisements so the first discovery
+     * section does not immediately repeat the same cards shown in Latest Ads.
+     */
+    const seen = new Set(
+      ads
+        .slice(0, Math.min(3, ads.length))
+        .map((ad) => ad.id),
+    );
+
+    function takeUnique(
+      source: MarketplaceAdvertisement[],
+    ) {
+      const selected: MarketplaceAdvertisement[] = [];
+
+      for (const ad of source) {
+        if (seen.has(ad.id)) {
+          continue;
+        }
+
+        seen.add(ad.id);
+        selected.push(ad);
+
+        if (selected.length === 4) {
+          break;
+        }
+      }
+
+      return selected;
+    }
+
+    return {
+      homeTopRated: takeUnique(topRated),
+      homeTrending: takeUnique(trending),
+      homeRecommended: takeUnique(recommended),
+      homeRecentlyViewed: takeUnique(recentlyViewed),
+    };
+  })();
+
+  const latestAds = ads;
 
   const activeFilterCount =
     Number(Boolean(applied.search.trim())) +
@@ -934,7 +985,7 @@ export function MarketplaceBrowse({
                     search: event.target.value,
                   }))
                 }
-                placeholder="Search products, services or location"
+                placeholder="Search Marketplace"
                 aria-label="Search Marketplace"
               />
             </label>
@@ -1213,12 +1264,14 @@ export function MarketplaceBrowse({
               </div>
             )}
 
-            {showMarketplaceHome && !error && (
+            {showMarketplaceHome &&
+              discoveryCollectionsEnabled &&
+              !error && (
               <div className="ic-market-home-sections">
                 <MarketplaceHomeSection
                   title="Top Rated"
                   subtitle="Popular items with strong buyer reviews"
-                  ads={topRated.slice(0, 4)}
+                  ads={homeTopRated}
                   savedIds={savedIds}
                   savingIds={savingIds}
                   onToggleSaved={toggleSaved}
@@ -1229,7 +1282,7 @@ export function MarketplaceBrowse({
                 <MarketplaceHomeSection
                   title="Trending Now"
                   subtitle="Items getting the most attention"
-                  ads={trending.slice(0, 4)}
+                  ads={homeTrending}
                   savedIds={savedIds}
                   savingIds={savingIds}
                   onToggleSaved={toggleSaved}
@@ -1237,11 +1290,11 @@ export function MarketplaceBrowse({
                   onViewAll={() => applySort("most_viewed")}
                 />
 
-                {recommended.length > 0 && (
+                {homeRecommended.length > 0 && (
                   <MarketplaceHomeSection
                     title="Recommended for You"
                     subtitle="Suggestions based on your browsing"
-                    ads={recommended.slice(0, 4)}
+                    ads={homeRecommended}
                     savedIds={savedIds}
                     savingIds={savingIds}
                     onToggleSaved={toggleSaved}
@@ -1256,11 +1309,11 @@ export function MarketplaceBrowse({
                   />
                 )}
 
-                {recentlyViewed.length > 0 && (
+                {homeRecentlyViewed.length > 0 && (
                   <MarketplaceHomeSection
                     title="Recently Viewed"
                     subtitle="Continue exploring items you opened"
-                    ads={recentlyViewed.slice(0, 4)}
+                    ads={homeRecentlyViewed}
                     savedIds={savedIds}
                     savingIds={savingIds}
                     onToggleSaved={toggleSaved}
