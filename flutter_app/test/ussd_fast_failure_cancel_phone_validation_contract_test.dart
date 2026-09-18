@@ -95,6 +95,22 @@ void main() {
       service,
       contains('Transaction cancelled by user at PIN prompt'),
     );
+    expect(
+      service,
+      contains('Transaction cancelled by user before PIN'),
+    );
+    expect(
+      service,
+      contains('Transaction cancelled by user after PIN'),
+    );
+    expect(
+      service,
+      contains('handleExplicitProviderCancel'),
+    );
+    expect(
+      service,
+      contains('postPinProviderProgressObserved'),
+    );
 
     expect(
       ussd,
@@ -137,7 +153,17 @@ void main() {
     );
     expect(
       progress,
-      contains("Navigator.of(context).pop('cancelled')"),
+      contains("context.pop('cancelled')"),
+    );
+    expect(
+      progress,
+      contains('context.canPop()'),
+    );
+    expect(
+      progress,
+      contains(
+        'A definite provider cancellation must close the backend record',
+      ),
     );
     expect(
       progress,

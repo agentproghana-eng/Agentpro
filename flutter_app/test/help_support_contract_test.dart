@@ -6,6 +6,12 @@ String readSource(String relativePath) {
   return File(relativePath).readAsStringSync();
 }
 
+String compactSource(String source) {
+  return source
+      .replaceAll(RegExp(r'\s+'), '')
+      .replaceAll(',)', ')');
+}
+
 void main() {
   group('Help and Support contracts', () {
     test('More screens pass the active account mode into Support', () {
@@ -14,7 +20,7 @@ void main() {
       );
 
       expect(
-        personal,
+        compactSource(personal),
         contains("context.push('/support?mode=personal')"),
       );
 
@@ -26,7 +32,7 @@ void main() {
         final source = readSource(path);
 
         expect(
-          source,
+          compactSource(source),
           contains("context.push('/support?mode=business')"),
           reason: '$path must open Support in Agent-SIM mode.',
         );
@@ -198,7 +204,7 @@ void main() {
       );
     });
 
-    test('Settings preserves active mode when opening Support', () {
+    test('Settings preserves active mode while Support remains under More', () {
       final personal = readSource(
         'lib/features/dashboard/personal_more_tab.dart',
       );
@@ -219,13 +225,13 @@ void main() {
       );
 
       expect(
-        personal,
+        compactSource(personal),
         contains("context.push('/settings?mode=personal')"),
       );
 
       for (final source in <String>[owner, manager, agent]) {
         expect(
-          source,
+          compactSource(source),
           contains("context.push('/settings?mode=business')"),
         );
       }
@@ -247,14 +253,27 @@ void main() {
         contains('final bool isPersonal'),
       );
 
+      // Contact Support intentionally lives under More rather than
+      // being duplicated inside Settings.
       expect(
         settings,
-        contains("'/support?mode=personal'"),
+        isNot(
+          contains("'/support?mode=personal'"),
+        ),
       );
 
       expect(
         settings,
-        contains("'/support?mode=business'"),
+        isNot(
+          contains("'/support?mode=business'"),
+        ),
+      );
+
+      expect(
+        settings,
+        isNot(
+          contains("'Contact Support'"),
+        ),
       );
 
       expect(

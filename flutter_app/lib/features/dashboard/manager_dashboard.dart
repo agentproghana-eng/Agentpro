@@ -1,28 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../core/auth/auth_bloc.dart';
 import '../../shared/theme/app_theme.dart';
-import 'home_tab.dart';
-import '../community/community_feed_screen.dart';
-import '../business/business_hub_screen.dart';
-import '../business/agents_hub_screen.dart';
 import '../../shared/widgets/more_tile.dart';
+import '../community/community_feed_screen.dart';
+import '../marketplace/marketplace_screen.dart';
+import 'home_tab.dart';
 
 class ManagerDashboard extends StatefulWidget {
   const ManagerDashboard({super.key});
+
   @override
-  State<ManagerDashboard> createState() => _ManagerDashboardState();
+  State<ManagerDashboard> createState() =>
+      _ManagerDashboardState();
 }
 
-class _ManagerDashboardState extends State<ManagerDashboard> {
+class _ManagerDashboardState
+    extends State<ManagerDashboard> {
   int _navIndex = 0;
 
   @override
   Widget build(BuildContext context) {
-    final authState = context.watch<AuthBloc>().state;
+    final authState =
+        context.watch<AuthBloc>().state;
+
     final user =
-        authState is AuthAuthenticated ? authState.user : <String, dynamic>{};
+        authState is AuthAuthenticated
+            ? authState.user
+            : <String, dynamic>{};
 
     return Scaffold(
       body: IndexedStack(
@@ -30,14 +37,15 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         children: [
           HomeTab(user: user),
           const CommunityFeedScreen(),
-          const BusinessHubScreen(),
-          const AgentsHubScreen(),
-          _ManagerMoreTab(),
+          const MarketplaceScreen(),
+          const _ManagerMoreTab(),
         ],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _navIndex,
-        onDestinationSelected: (i) => setState(() => _navIndex = i),
+        onDestinationSelected: (index) {
+          setState(() => _navIndex = index);
+        },
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
@@ -50,67 +58,52 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
             label: 'Community',
           ),
           NavigationDestination(
-            icon: Icon(Icons.business_center_outlined),
-            selectedIcon: Icon(Icons.business_center),
+            icon: Icon(Icons.storefront_outlined),
+            selectedIcon: Icon(Icons.storefront),
             label: 'Business Hub',
           ),
           NavigationDestination(
-            icon: Icon(Icons.analytics_outlined),
-            selectedIcon: Icon(Icons.analytics),
-            label: 'Agents Hub',
+            icon: Icon(Icons.more_horiz),
+            label: 'More',
           ),
-          NavigationDestination(icon: Icon(Icons.more_horiz), label: 'More'),
         ],
       ),
     );
   }
 }
 
-// ── More Tab ──────────────────────────────────────────────────
-
 class _ManagerMoreTab extends StatelessWidget {
+  const _ManagerMoreTab();
+
   @override
   Widget build(BuildContext context) {
-    final authState = context.watch<AuthBloc>().state;
+    final authState =
+        context.watch<AuthBloc>().state;
+
     final user =
-        authState is AuthAuthenticated ? authState.user : <String, dynamic>{};
+        authState is AuthAuthenticated
+            ? authState.user
+            : <String, dynamic>{};
 
     return Scaffold(
-      appBar: AppBar(title: const Text('More')),
+      appBar: AppBar(
+        title: const Text('More'),
+      ),
       body: ListView(
         children: [
-          const MoreGroupLabel('Money & Operations'),
-          MoreTile(
-            Icons.receipt_long_outlined,
-            'Transaction History',
-            () => context.push('/transactions/history'),
-            subtitle: 'Review transactions across your operations',
+          const MoreGroupLabel(
+            'Money & Operations',
           ),
           MoreTile(
-            Icons.account_balance_wallet_outlined,
-            'Float Balances',
-            () => context.push('/float'),
-            subtitle: 'Monitor branch treasury float for your managed branches',
+            Icons.dashboard_customize_outlined,
+            'Agent Hub',
+            () => context.push('/agents-hub'),
+            subtitle:
+                'Transactions, reports, float and shift reconciliation',
           ),
-          MoreTile(
-            Icons.request_page_outlined,
-            'Float Requests',
-            () => context.push('/float/requests'),
-            subtitle: 'Review float requests for your managed branches',
+          const MoreGroupLabel(
+            'Tools & Automation',
           ),
-          MoreTile(
-            Icons.bar_chart_outlined,
-            'Reports',
-            () => context.push('/reports'),
-            subtitle: 'View operational and transaction performance',
-          ),
-          MoreTile(
-            Icons.fact_check_outlined,
-            'Shift Reconciliation',
-            () => context.push('/shifts/history'),
-            subtitle: 'Review completed shifts and reconcile balances',
-          ),
-          const MoreGroupLabel('Tools & Automation'),
           MoreTile(
             Icons.wifi_tethering,
             'USSD Automation',
@@ -123,45 +116,87 @@ class _ManagerMoreTab extends StatelessWidget {
             Icons.people_outlined,
             'Staff Management',
             () => context.push('/users'),
-            subtitle: 'Manage staff access, roles and activity',
+            subtitle:
+                'Manage staff access, roles and activity',
           ),
           MoreTile(
             Icons.store_outlined,
             'Branches',
             () => context.push('/branches'),
-            subtitle: 'View your managed business locations',
+            subtitle:
+                'View your managed business locations',
           ),
           const MoreGroupLabel('Account'),
-          if (user['personal_subscription_plan'] != null)
+          if (user['personal_subscription_plan'] !=
+              null)
             MoreTile(
               Icons.swap_horiz_rounded,
               'Switch to Personal Mode',
               () => context.go('/personal-home'),
-              subtitle: 'Open your Personal AgentPro workspace',
+              subtitle:
+                  'Open your Personal AgentPro workspace',
             ),
           MoreTile(
             Icons.settings_outlined,
             'Settings',
-            () => context.push('/settings?mode=business'),
-            subtitle: 'Manage preferences, security and app configuration',
+            () => context.push(
+              '/settings?mode=business',
+            ),
+            subtitle:
+                'Manage preferences, security and app configuration',
           ),
-          const MoreGroupLabel('Help & Support'),
+          const MoreGroupLabel(
+            'Help & Support',
+          ),
           MoreTile(
             Icons.support_agent_outlined,
             'Help & Support',
-            () => context.push('/support?mode=business'),
-            subtitle: 'Guides, assistance and support options',
+            () => context.push(
+              '/support?mode=business',
+            ),
+            subtitle:
+                'Guides, assistance and support options',
           ),
-          const Divider(),
-          MoreTile(Icons.logout, 'Sign Out', () async {
-            final confirmed = await confirmSignOut(context);
+          const MoreGroupLabel('Session'),
+          MoreTile(
+            Icons.lock_outline,
+            'End Session',
+            () async {
+              final confirmed =
+                  await confirmEndSession(context);
 
-            if (!context.mounted || !confirmed) {
-              return;
-            }
+              if (!context.mounted ||
+                  !confirmed) {
+                return;
+              }
 
-            context.read<AuthBloc>().add(AuthLogoutEvent());
-          }, color: AppTheme.errorColor),
+              context
+                  .read<AuthBloc>()
+                  .add(AuthLockEvent());
+            },
+            subtitle:
+                'Lock this session without fully signing out',
+          ),
+          MoreTile(
+            Icons.logout,
+            'Sign Out',
+            () async {
+              final confirmed =
+                  await confirmSignOut(context);
+
+              if (!context.mounted ||
+                  !confirmed) {
+                return;
+              }
+
+              context
+                  .read<AuthBloc>()
+                  .add(AuthLogoutEvent());
+            },
+            color: AppTheme.errorColor,
+            subtitle:
+                'Sign out fully and remove this local session',
+          ),
         ],
       ),
     );

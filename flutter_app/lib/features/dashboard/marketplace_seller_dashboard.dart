@@ -149,7 +149,32 @@ class _SellerMore
             subtitle:
                 'Get AgentPro assistance',
           ),
-          const Divider(),
+          const MoreGroupLabel(
+            'Session',
+          ),
+          MoreTile(
+            Icons.lock_outline,
+            'End Session',
+            () async {
+              final confirmed =
+                  await confirmEndSession(
+                context,
+              );
+
+              if (!context.mounted ||
+                  !confirmed) {
+                return;
+              }
+
+              context
+                  .read<AuthBloc>()
+                  .add(
+                    AuthLockEvent(),
+                  );
+            },
+            subtitle:
+                'Lock this session without fully signing out',
+          ),
           MoreTile(
             Icons.logout,
             'Sign Out',

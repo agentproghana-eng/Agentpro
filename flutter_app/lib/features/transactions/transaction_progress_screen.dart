@@ -184,6 +184,12 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
   StreamSubscription? _accessibilityProgressSubscription;
 
   Map<String, dynamic>? _resolvedTransaction;
+
+  // Exact server-resolved Flow Builder configuration used by this attempt.
+  String? _activeFlowId;
+  int? _activeFlowStepCount;
+  bool _activeFlowReachedPinPrompt = false;
+
   USSDStatus _outcome = USSDStatus.failed;
   String? _failureReason;
   Map<String, dynamic>? _completedTransaction;
@@ -271,6 +277,10 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
   Future<void> _startUSSD() async {
     final provider = widget.data['provider'] as String;
+
+    _activeFlowId = null;
+    _activeFlowStepCount = null;
+    _activeFlowReachedPinPrompt = false;
 
     if (_offlineIdentity == null) {
       _showStartupFailure(
@@ -858,8 +868,16 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     if (result.outcome == USSDStatus.cancelled) {
       await _engineProgressSubscription?.cancel();
 
-      if (mounted) {
-        Navigator.of(context).pop('cancelled');
+      // A definite provider cancellation must close the backend record
+      // instead of leaving the transaction initiated or processing.
+      await _reportResult(
+        transactionId,
+        result,
+        autoReturnAfterAmbiguousResult: false,
+      );
+
+      if (mounted && context.canPop()) {
+        context.pop('cancelled');
       }
 
       return;
@@ -953,6 +971,23 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
     final steps =
         rawSteps.map((step) => Map<String, dynamic>.from(step as Map)).toList();
+
+    final resolvedFlowId =
+        flowData['id']
+            ?.toString()
+            .trim() ??
+        '';
+
+    _activeFlowId =
+        resolvedFlowId.isEmpty
+            ? null
+            : resolvedFlowId;
+
+    _activeFlowStepCount =
+        steps.length;
+
+    _activeFlowReachedPinPrompt =
+        false;
 
     // Never trust historical/offline configuration solely because it came
     // from the scoped cache or database. Validate again at the final device
@@ -1113,8 +1148,16 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     if (result.outcome == USSDStatus.cancelled) {
       await _engineProgressSubscription?.cancel();
 
-      if (mounted) {
-        Navigator.of(context).pop('cancelled');
+      // A definite provider cancellation must close the backend record
+      // instead of leaving the transaction initiated or processing.
+      await _reportResult(
+        transactionId,
+        result,
+        autoReturnAfterAmbiguousResult: false,
+      );
+
+      if (mounted && context.canPop()) {
+        context.pop('cancelled');
       }
 
       return;
@@ -1361,13 +1404,68 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       selections: selections,
     );
 
+    _activeFlowReachedPinPrompt =
+        accessEngine.reachedPinPrompt;
+
+    if (result.flowStepCount != null) {
+      _activeFlowStepCount =
+          result.flowStepCount;
+    }
+
     accessEngine.dispose();
 
     if (result.outcome == USSDStatus.cancelled) {
-      await _engineProgressSubscription?.cancel();
+      await _accessibilityProgressSubscription?.cancel();
+
+      // Before PIN, or while still on the PIN screen, provider Cancel is
+      // a definite terminal cancellation.
+      await _reportResult(
+        transactionId,
+        result,
+        autoReturnAfterAmbiguousResult: false,
+      );
+
+      if (mounted && context.canPop()) {
+        context.pop('cancelled');
+      }
+
+      return;
+    }
+
+    final isExplicitPostPinCancellation =
+        result.outcome ==
+            USSDStatus.pendingConfirmation &&
+        (
+          result.failureReason
+                  ?.toLowerCase()
+                  .contains(
+                    'cancelled by user after pin',
+                  ) ??
+              false
+        );
+
+    if (isExplicitPostPinCancellation) {
+      await _reportResult(
+        transactionId,
+        result,
+        autoReturnAfterAmbiguousResult: false,
+      );
 
       if (mounted) {
-        Navigator.of(context).pop('cancelled');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'The provider prompt was cancelled after PIN. '
+              'Verify the network outcome before retrying.',
+            ),
+          ),
+        );
+
+        if (context.canPop()) {
+          context.pop(
+            'pending_confirmation',
+          );
+        }
       }
 
       return;
@@ -1569,6 +1667,52 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     USSDResult result, {
     bool autoReturnAfterAmbiguousResult = true,
   }) async {
+    Map<String, dynamic>? flowHealth;
+
+    final flowId =
+        _activeFlowId;
+
+    final stepCount =
+        result.flowStepCount ??
+        _activeFlowStepCount;
+
+    if (
+        flowId != null &&
+        stepCount != null &&
+        stepCount > 0) {
+      final mismatchStepIndex =
+          result.flowMismatchStepIndex;
+
+      if (mismatchStepIndex != null) {
+        flowHealth =
+            <String, dynamic>{
+          'flow_id':
+              flowId,
+          'event':
+              'mismatch',
+          'step_count':
+              stepCount,
+          'mismatch_step_index':
+              mismatchStepIndex,
+        };
+      } else if (
+          _activeFlowReachedPinPrompt ||
+          result.outcome ==
+              USSDStatus.success) {
+        // Reaching PIN proves every required pre-PIN matcher worked.
+        // A successful PIN-less flow is equivalent healthy evidence.
+        flowHealth =
+            <String, dynamic>{
+          'flow_id':
+              flowId,
+          'event':
+              'healthy',
+          'step_count':
+              stepCount,
+        };
+      }
+    }
+
     // Map the engine's outcome to the backend's status values directly —
     // do NOT collapse pendingConfirmation into 'failed'. That distinction
     // is the entire point of this status: we genuinely don't know if the
@@ -1627,6 +1771,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
           'network_reference': result.networkReference,
           'failure_reason': result.failureReason,
           'ussd_session_log': result.sessionLog,
+          if (flowHealth != null)
+            'flow_health': flowHealth,
         },
       );
 

@@ -19,6 +19,9 @@ const {
   sanitizeUSSDLog,
   sanitizeFailureReason,
 } = require('./transactionController');
+const {
+  recordUssdFlowHealthSignal,
+} = require('../services/ussdFlowHealthService');
 
 const normalizePersonalOperationString = (value) =>
   value === null || value === undefined
@@ -563,6 +566,7 @@ exports.completeTransaction = async (req, res) => {
     network_reference,
     failure_reason,
     ussd_session_log, // USSD trace WITHOUT PIN (flutter removes PIN step log)
+    flow_health,
     notes
   } = req.body;
   const userId = req.user.id;
@@ -693,6 +697,8 @@ exports.completeTransaction = async (req, res) => {
           outcome: 'completed',
           transaction: result.rows[0],
           provider: tx.provider,
+          transactionType:
+            tx.transaction_type,
         };
       });
 
@@ -709,6 +715,49 @@ exports.completeTransaction = async (req, res) => {
         message:
           `Transaction already ${completion.status}`,
       });
+    }
+
+    try {
+      await recordUssdFlowHealthSignal({
+        payload:
+          flow_health,
+        transactionId:
+          transaction_id,
+        mode:
+          'personal',
+        userId,
+        companyId:
+          null,
+        businessSimRole:
+          null,
+        provider:
+          completion.provider,
+        transactionType:
+          completion.transactionType,
+        completionStatus:
+          status,
+        appBuild:
+          req.get(
+            'X-AgentPro-App-Build'
+          ),
+        sourceCommit:
+          req.get(
+            'X-AgentPro-Source-Commit'
+          ),
+      });
+    } catch (healthError) {
+      // Flow-health monitoring is observability only.
+      // It must never turn an already-persisted transaction
+      // completion into a client-visible financial failure.
+      logger.warn(
+        'Personal USSD flow health signal ignored',
+        {
+          code:
+            healthError?.code,
+          requestId:
+            req.requestId,
+        }
+      );
     }
 
     recordTransactionTelemetryEvent({

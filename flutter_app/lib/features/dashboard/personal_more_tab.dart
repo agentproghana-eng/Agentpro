@@ -106,16 +106,36 @@ class PersonalMoreTab extends StatelessWidget {
             () => context.push('/support?mode=personal'),
             subtitle: 'Guides, assistance and support options',
           ),
-          const Divider(),
-          MoreTile(Icons.logout, 'Sign Out', () async {
-            final confirmed = await confirmSignOut(context);
+          const MoreGroupLabel('Session'),
+          MoreTile(
+            Icons.lock_outline,
+            'End Session',
+            () async {
+              final confirmed = await confirmEndSession(context);
 
-            if (!context.mounted || !confirmed) {
-              return;
-            }
+              if (!context.mounted || !confirmed) {
+                return;
+              }
 
-            context.read<AuthBloc>().add(AuthLogoutEvent());
-          }, color: AppTheme.errorColor),
+              context.read<AuthBloc>().add(AuthLockEvent());
+            },
+            subtitle: 'Lock this session without fully signing out',
+          ),
+          MoreTile(
+            Icons.logout,
+            'Sign Out',
+            () async {
+              final confirmed = await confirmSignOut(context);
+
+              if (!context.mounted || !confirmed) {
+                return;
+              }
+
+              context.read<AuthBloc>().add(AuthLogoutEvent());
+            },
+            color: AppTheme.errorColor,
+            subtitle: 'Sign out fully and remove this local session',
+          ),
         ],
       ),
     );

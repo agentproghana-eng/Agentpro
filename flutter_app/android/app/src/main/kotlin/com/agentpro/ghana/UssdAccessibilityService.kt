@@ -169,6 +169,12 @@ class UssdAccessibilityService : AccessibilityService() {
         @Volatile var isSessionActive: Boolean = false
         @Volatile var reachedPinPrompt: Boolean = false
 
+        // Becomes true only after the provider has moved away from the
+        // PIN-entry screen. Cancel at/before PIN is definite; Cancel after
+        // provider progression beyond PIN is financially ambiguous.
+        @Volatile private var postPinProviderProgressObserved:
+            Boolean = false
+
         // Duplicate-event suppression is session state too. lastScreenText
         // may contain raw provider text, while lastResponseValue may contain
         // a phone number, amount, operator ID, reference, or menu selection.
@@ -301,11 +307,13 @@ class UssdAccessibilityService : AccessibilityService() {
 
             isSessionActive = true
             reachedPinPrompt = false
+            postPinProviderProgressObserved = false
         }
 
         fun endSession() {
             isSessionActive = false
             reachedPinPrompt = false
+            postPinProviderProgressObserved = false
             pendingCustomerPhone = null
             pendingAmount = null
             pendingTransactionType = null
@@ -352,7 +360,13 @@ class UssdAccessibilityService : AccessibilityService() {
     interface UssdAccessibilityListener {
         fun onWaitingForPinPrompt()
         fun onPinPromptReached()
-        fun onResult(outcome: String, message: String)
+
+        fun onResult(
+            outcome: String,
+            message: String,
+            flowMismatchStepIndex: Int? = null,
+            flowStepCount: Int? = null
+        )
     }
 
     override fun onServiceConnected() {
@@ -380,53 +394,130 @@ class UssdAccessibilityService : AccessibilityService() {
         UssdForegroundService.stop(this)
     }
 
-    private fun handleExplicitPostPinCancel(
+    private fun isPinPromptScreen(
+        screenText: String
+    ): Boolean {
+        return (
+            screenText.contains("enter mm pin") ||
+            screenText.contains("enter your pin") ||
+            screenText.contains("enter pin")
+        )
+    }
+
+    private fun handleExplicitProviderCancel(
         event: AccessibilityEvent
     ): Boolean {
         if (
             !isSessionActive ||
-            !reachedPinPrompt ||
-            event.eventType != AccessibilityEvent.TYPE_VIEW_CLICKED
+            event.eventType !=
+                AccessibilityEvent.TYPE_VIEW_CLICKED
+        ) {
+            return false
+        }
+
+        val eventPackage =
+            event.packageName
+                ?.toString()
+
+        val sourcePackage =
+            event.source
+                ?.packageName
+                ?.toString()
+
+        // Never mistake an AgentPro UI Cancel control for the provider's
+        // native USSD Cancel button.
+        if (
+            eventPackage == packageName ||
+            sourcePackage == packageName
         ) {
             return false
         }
 
         val labels = buildList {
             event.text
-                .mapNotNull { it?.toString() }
+                .mapNotNull {
+                    it?.toString()
+                }
                 .forEach(::add)
 
             event.contentDescription
                 ?.toString()
                 ?.let(::add)
 
-            event.source?.text
+            event.source
+                ?.text
                 ?.toString()
                 ?.let(::add)
 
-            event.source?.contentDescription
+            event.source
+                ?.contentDescription
                 ?.toString()
                 ?.let(::add)
         }
 
-        val explicitCancel = labels.any { label ->
-            val normalized = normalizeUssdText(label).trim()
+        val explicitCancel =
+            labels.any { label ->
+                val normalized =
+                    normalizeUssdText(
+                        label
+                    ).trim()
 
-            normalized == "cancel" ||
-                normalized == "cancel ussd"
-        }
+                normalized == "cancel" ||
+                    normalized ==
+                        "cancel ussd"
+            }
 
         if (!explicitCancel) {
             return false
         }
 
-        listener?.onResult(
-            "cancelled",
-            "Transaction cancelled by user at PIN prompt"
-        )
+        val activeScreenText =
+            rootInActiveWindow
+                ?.let {
+                    collectText(it)
+                        .lowercase()
+                        .trim()
+                }
+                ?.let(
+                    ::normalizeUssdText
+                )
+                .orEmpty()
+
+        val movedBeyondPin =
+            reachedPinPrompt &&
+                (
+                    postPinProviderProgressObserved ||
+                    (
+                        activeScreenText
+                            .isNotBlank() &&
+                        !isPinPromptScreen(
+                            activeScreenText
+                        )
+                    )
+                )
+
+        if (movedBeyondPin) {
+            listener?.onResult(
+                "pending_confirmation",
+                "Transaction cancelled by user after PIN. " +
+                    "Verify the network outcome before retrying."
+            )
+        } else {
+            listener?.onResult(
+                "cancelled",
+                if (reachedPinPrompt) {
+                    "Transaction cancelled by user at PIN prompt"
+                } else {
+                    "Transaction cancelled by user before PIN"
+                }
+            )
+        }
 
         endSession()
-        UssdForegroundService.stop(this)
+
+        UssdForegroundService.stop(
+            this
+        )
 
         return true
     }
@@ -434,9 +525,10 @@ class UssdAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         if (!isSessionActive) return
 
-        // A positively identified Cancel-button click at the PIN boundary is
-        // safe to classify immediately. Merely losing the USSD window is not.
-        if (handleExplicitPostPinCancel(event)) {
+        // A positively identified provider Cancel stops every
+        // interactive transaction immediately. Before/at PIN it is a
+        // definite cancellation. Beyond PIN the outcome stays ambiguous.
+        if (handleExplicitProviderCancel(event)) {
             return
         }
 
@@ -677,6 +769,10 @@ class UssdAccessibilityService : AccessibilityService() {
     // This function deliberately receives only screenText, not the
     // Accessibility root node. That makes post-PIN input impossible here.
     private fun handleAfterPinPrompt(screenText: String) {
+        if (!isPinPromptScreen(screenText)) {
+            postPinProviderProgressObserved = true
+        }
+
         // MTN Agent Cash Out is a two-party approval flow:
         // 1. the agent enters the agent PIN on this device;
         // 2. the customer separately approves on the customer's device;
@@ -886,7 +982,9 @@ class UssdAccessibilityService : AccessibilityService() {
 
         listener?.onResult(
             "flow_mismatch",
-            "Provider menu no longer matches the configured USSD flow"
+            "Provider menu no longer matches the configured USSD flow",
+            currentStepIndex,
+            stepCount
         )
 
         endSession()
