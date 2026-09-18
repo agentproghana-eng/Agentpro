@@ -2024,6 +2024,8 @@ mpRouter.get('/sellers/:seller_id', async (req, res) => {
        LEFT JOIN ad_ratings ar
          ON ar.advertisement_id = a.id
        WHERE u.id = $1
+         AND u.account_deleted_at IS NULL
+         AND u.status <> 'deactivated'
        GROUP BY
          u.id,
          u.first_name,

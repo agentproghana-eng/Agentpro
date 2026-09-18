@@ -124,7 +124,7 @@ describe('marketplace public seller identity contract', () => {
     );
 
     expect(sellerSummary).toMatch(
-      /WHERE u\.id = \$1\s+GROUP BY/
+      /WHERE u\.id = \$1\s+AND u\.account_deleted_at IS NULL\s+AND u\.status <> 'deactivated'\s+GROUP BY/
     );
 
     expect(sellerSummary).toContain(
