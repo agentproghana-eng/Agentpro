@@ -3,14 +3,93 @@ name: AgentPro CI/CD
 on:
   push:
     branches: [master, develop]
+
   pull_request:
     branches: [master]
+
+  workflow_dispatch:
+    inputs:
+      publish_android:
+        description: 'Publish a fresh signed Android APK from master'
+        required: false
+        default: false
+        type: boolean
 
 env:
   NODE_VERSION: '24.19.0'
   FLUTTER_VERSION: '3.44.5'
 
 jobs:
+
+  # ── Mobile Release Change Detection ───────────────────────
+  # CI may run for every PR/push, but publishing a new public APK is
+  # deliberately separate. Normal backend/web/admin changes must not
+  # manufacture meaningless Android updates.
+  mobile-release-changes:
+    name: Detect Mobile Release Changes
+    if: >-
+      github.ref == 'refs/heads/master' &&
+      (github.event_name == 'push' ||
+       github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+
+    outputs:
+      should_publish: ${{ steps.mobile.outputs.should_publish }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect Android application changes
+        id: mobile
+        env:
+          FORCE_PUBLISH: ${{ inputs.publish_android }}
+        run: |
+          set -euo pipefail
+
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            if [ "${FORCE_PUBLISH:-false}" = "true" ]; then
+              echo "should_publish=true" >> "$GITHUB_OUTPUT"
+              echo "MOBILE_RELEASE_TRIGGER=MANUAL"
+            else
+              echo "should_publish=false" >> "$GITHUB_OUTPUT"
+              echo "MOBILE_RELEASE_TRIGGER=NONE"
+            fi
+
+            exit 0
+          fi
+
+          BEFORE="${{ github.event.before }}"
+          AFTER="${{ github.sha }}"
+
+          if [ -z "$BEFORE" ] ||
+             printf '%s' "$BEFORE" |
+               grep -Eq '^0+$'; then
+            BEFORE="$(
+              git rev-list \
+                --max-parents=0 \
+                "$AFTER" |
+              tail -n 1
+            )"
+          fi
+
+          git diff \
+            --name-only \
+            "$BEFORE" \
+            "$AFTER" \
+            > changed-files.txt
+
+          echo "===== CHANGED FILES ====="
+          cat changed-files.txt
+
+          if grep -Eq '^flutter_app/' changed-files.txt; then
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "MOBILE_RELEASE_TRIGGER=FLUTTER_CHANGE"
+          else
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "MOBILE_RELEASE_TRIGGER=NONE"
+          fi
 
   # ── Backend Tests ─────────────────────────────────────────
   backend-test:
@@ -455,7 +534,10 @@ jobs:
 
       - name: Build release APK
         working-directory: flutter_app
-        run: flutter build apk --release
+        run: |
+          flutter build apk --release \
+            --build-number "$GITHUB_RUN_NUMBER" \
+            --dart-define=AGENTPRO_SOURCE_COMMIT="$GITHUB_SHA"
 
       - name: Verify release Firebase resources
         working-directory: flutter_app
@@ -481,8 +563,164 @@ jobs:
 
           echo "FIREBASE_RELEASE_RESOURCES=PASS"
 
+      - name: Verify signed release APK
+        working-directory: flutter_app
+        run: |
+          set -euo pipefail
+
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+
+          APKSIGNER="$(
+            find "$ANDROID_HOME/build-tools" \
+              -type f \
+              -name apksigner \
+              | sort -V \
+              | tail -n 1
+          )"
+
+          test -s "$APK"
+          test -x "$APKSIGNER"
+
+          "$APKSIGNER" verify \
+            --verbose \
+            --print-certs \
+            "$APK"
+
+          sha256sum "$APK"
+
+          echo "SIGNED_RELEASE_APK=PASS"
+          echo "RELEASE_SOURCE_COMMIT=$GITHUB_SHA"
+          echo "RELEASE_BUILD_NUMBER=$GITHUB_RUN_NUMBER"
+
       - name: Upload release APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-apk
           path: flutter_app/build/app/outputs/flutter-apk/app-release.apk
+
+
+  # ── Rolling Signed Android Release ─────────────────────────
+  # A new public APK is published only when flutter_app/** changed on
+  # master, or when an operator deliberately invokes the manual release
+  # input. Normal website/backend/admin PRs do not publish Android updates.
+  android-release:
+    name: Publish Rolling Android Release
+
+    needs:
+      - mobile-release-changes
+      - backend-test
+      - backend-lint
+      - admin-build
+      - intellicore-web-build
+      - flutter-build
+
+    if: >-
+      github.ref == 'refs/heads/master' &&
+      needs.mobile-release-changes.outputs.should_publish == 'true'
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    concurrency:
+      group: agentpro-android-latest
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download signed release APK
+        uses: actions/download-artifact@v4
+        with:
+          name: release-apk
+          path: dist
+
+      - name: Prepare release provenance
+        run: |
+          set -euo pipefail
+
+          test -s dist/app-release.apk
+
+          mv \
+            dist/app-release.apk \
+            dist/agentpro-latest.apk
+
+          APP_VERSION="$(
+            awk '/^version:/ { print $2; exit }' \
+              flutter_app/pubspec.yaml |
+            cut -d+ -f1
+          )"
+
+          APK_SHA256="$(
+            sha256sum \
+              dist/agentpro-latest.apk |
+            awk '{ print $1 }'
+          )"
+
+          cat > dist/agentpro-latest.json <<EOF
+          {
+            "version": "${APP_VERSION}",
+            "build_number": ${GITHUB_RUN_NUMBER},
+            "source_commit": "${GITHUB_SHA}",
+            "sha256": "${APK_SHA256}"
+          }
+          EOF
+
+          cat > release-notes.md <<EOF
+          AgentPro signed Android production build.
+
+          - Version: ${APP_VERSION}
+          - Build: ${GITHUB_RUN_NUMBER}
+          - Source commit: ${GITHUB_SHA}
+          - SHA-256: ${APK_SHA256}
+          EOF
+
+          echo "APP_VERSION=$APP_VERSION"
+          echo "BUILD_NUMBER=$GITHUB_RUN_NUMBER"
+          echo "SOURCE_COMMIT=$GITHUB_SHA"
+          echo "APK_SHA256=$APK_SHA256"
+
+      - name: Publish rolling Android release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          TAG="android-latest"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            git tag -f "$TAG" "$GITHUB_SHA"
+
+            git push \
+              origin \
+              "refs/tags/$TAG" \
+              --force
+
+            gh release upload \
+              "$TAG" \
+              dist/agentpro-latest.apk \
+              dist/agentpro-latest.json \
+              --clobber
+
+            gh release edit \
+              "$TAG" \
+              --title \
+                "AgentPro Android — latest signed build" \
+              --notes-file \
+                release-notes.md
+          else
+            gh release create \
+              "$TAG" \
+              dist/agentpro-latest.apk \
+              dist/agentpro-latest.json \
+              --target "$GITHUB_SHA" \
+              --title \
+                "AgentPro Android — latest signed build" \
+              --notes-file \
+                release-notes.md
+          fi
+
+          echo "ANDROID_ROLLING_RELEASE=PASS"

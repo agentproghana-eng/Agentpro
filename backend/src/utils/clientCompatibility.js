@@ -35,6 +35,30 @@ function parseVersion(value) {
   ];
 }
 
+function parseBuildNumber(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim();
+
+  if (!/^[1-9]\d*$/.test(normalized)) {
+    return null;
+  }
+
+  const parsedBuildNumber =
+    Number(normalized);
+
+  if (
+    !Number.isSafeInteger(parsedBuildNumber) ||
+    parsedBuildNumber < 1
+  ) {
+    return null;
+  }
+
+  return parsedBuildNumber;
+}
+
 function compareVersions(left, right) {
   const leftParts = parseVersion(left);
   const rightParts = parseVersion(right);
@@ -74,18 +98,21 @@ function evaluateClientCompatibility(
 ) {
   const appVersion =
     normalizeHeader(metadata.appVersion);
+
+  const buildNumberRaw =
+    normalizeHeader(metadata.buildNumber);
+
   const apiVersionRaw =
     normalizeHeader(metadata.apiContractVersion);
+
   const platform =
     normalizeHeader(metadata.platform);
-  const buildNumber =
-    normalizeHeader(metadata.buildNumber);
 
   const hasCompatibilityMetadata =
     appVersion !== '' ||
+    buildNumberRaw !== '' ||
     apiVersionRaw !== '' ||
-    platform !== '' ||
-    buildNumber !== '';
+    platform !== '';
 
   if (!hasCompatibilityMetadata) {
     return {
@@ -97,13 +124,15 @@ function evaluateClientCompatibility(
 
   if (
     appVersion === '' ||
+    buildNumberRaw === '' ||
     apiVersionRaw === '' ||
     platform === ''
   ) {
     return {
       status: STATUS.CLIENT_METADATA_INVALID,
       enforce: true,
-      reason: 'Required AgentPro compatibility headers are incomplete.',
+      reason:
+        'Required AgentPro compatibility headers are incomplete.',
     };
   }
 
@@ -112,6 +141,17 @@ function evaluateClientCompatibility(
       status: STATUS.CLIENT_METADATA_INVALID,
       enforce: true,
       reason: 'App version must use major.minor.patch format.',
+    };
+  }
+
+  const buildNumber =
+    parseBuildNumber(buildNumberRaw);
+
+  if (buildNumber === null) {
+    return {
+      status: STATUS.CLIENT_METADATA_INVALID,
+      enforce: true,
+      reason: 'App build number must be a positive integer.',
     };
   }
 
@@ -133,7 +173,8 @@ function evaluateClientCompatibility(
     return {
       status: STATUS.API_INCOMPATIBLE,
       enforce: true,
-      reason: 'Client API contract is not supported by this backend.',
+      reason:
+        'Client API contract is not supported by this backend.',
     };
   }
 
@@ -141,12 +182,15 @@ function evaluateClientCompatibility(
     compareVersions(
       appVersion,
       policy.forcedUpgradeBelowVersion
-    ) < 0
+    ) < 0 ||
+    buildNumber <
+      policy.forcedUpgradeBelowBuildNumber
   ) {
     return {
       status: STATUS.UPDATE_REQUIRED,
       enforce: true,
-      reason: 'This AgentPro version must be upgraded before continuing.',
+      reason:
+        'This AgentPro build must be upgraded before continuing.',
     };
   }
 
@@ -154,12 +198,15 @@ function evaluateClientCompatibility(
     compareVersions(
       appVersion,
       policy.minimumSupportedAppVersion
-    ) < 0
+    ) < 0 ||
+    buildNumber <
+      policy.minimumSupportedBuildNumber
   ) {
     return {
       status: STATUS.UPDATE_REQUIRED,
       enforce: true,
-      reason: 'This AgentPro version is no longer supported.',
+      reason:
+        'This AgentPro build is no longer supported.',
     };
   }
 
@@ -167,12 +214,14 @@ function evaluateClientCompatibility(
     compareVersions(
       appVersion,
       policy.recommendedAppVersion
-    ) < 0
+    ) < 0 ||
+    buildNumber <
+      policy.recommendedBuildNumber
   ) {
     return {
       status: STATUS.UPDATE_RECOMMENDED,
       enforce: false,
-      reason: 'A newer AgentPro version is recommended.',
+      reason: 'A newer AgentPro build is recommended.',
     };
   }
 
@@ -193,12 +242,15 @@ function readCompatibilityMetadata(req) {
       req.get('X-AgentPro-Platform'),
     apiContractVersion:
       req.get('X-AgentPro-API-Version'),
+    sourceCommit:
+      req.get('X-AgentPro-Source-Commit'),
   };
 }
 
 module.exports = {
   STATUS,
   parseVersion,
+  parseBuildNumber,
   compareVersions,
   evaluateClientCompatibility,
   readCompatibilityMetadata,

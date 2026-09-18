@@ -2,17 +2,16 @@ bool shouldFallbackToCachedUssdFlow({
   required bool hasHttpResponse,
   int? statusCode,
 }) {
-  // No HTTP response means the server could not be reached.
-  // A previously verified scoped cache may be used for resilience.
-  if (!hasHttpResponse) {
-    return true;
-  }
-
-  // Only transient failures may use stale cached automation.
+  // Cached Flow Builder configuration is authoritative only for a genuine
+  // offline transaction that was explicitly prepared by TransactionScreen.
   //
-  // Authoritative 4xx responses such as 403, 404 or 422 must never
-  // be bypassed by executing an older local flow.
-  return statusCode == 408 ||
-      statusCode == 429 ||
-      (statusCode != null && statusCode >= 500);
+  // An online-started financial transaction must never execute an older
+  // cached provider menu merely because the current resolver timed out,
+  // returned 429, or encountered a server error. Provider menus can change
+  // without an app release; stale automation is therefore more dangerous
+  // than asking the user to retry.
+  //
+  // Keep the parameters in this policy boundary so callers/tests explicitly
+  // document whether an HTTP response existed and what happened.
+  return false;
 }

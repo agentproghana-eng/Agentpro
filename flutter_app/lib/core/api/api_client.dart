@@ -28,6 +28,12 @@ class ClientCompatibilityBlock {
 class ApiClient {
   static const String _apiContractVersion = '1';
 
+  // CI injects the exact source revision that produced a production APK.
+  static const String _sourceCommit = String.fromEnvironment(
+    'AGENTPRO_SOURCE_COMMIT',
+    defaultValue: 'development',
+  );
+
   static final Future<Map<String, String>> _clientHeadersFuture =
       _loadClientHeaders();
 
@@ -83,6 +89,7 @@ class ApiClient {
         'X-AgentPro-App-Build': packageInfo.buildNumber,
         'X-AgentPro-Platform': _clientPlatform(),
         'X-AgentPro-API-Version': _apiContractVersion,
+        'X-AgentPro-Source-Commit': _sourceCommit,
       };
     } catch (_) {
       // Compatibility metadata must never become a new reason that the app
