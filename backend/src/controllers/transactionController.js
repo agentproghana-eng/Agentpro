@@ -6,6 +6,9 @@ const {
   recordTransactionTelemetryEvent,
 } = require("../services/transactionTelemetryService");
 const {
+  recordUssdFlowHealthSignal,
+} = require("../services/ussdFlowHealthService");
+const {
   calculateAndPostCommission,
 } = require("../services/commissionPostingService");
 const {
@@ -851,6 +854,7 @@ exports.completeTransaction = async (req, res) => {
     network_reference,
     failure_reason,
     ussd_session_log, // USSD trace WITHOUT PIN (flutter removes PIN step log)
+    flow_health,
   } = req.body;
 
   const agentId = req.user.id;
@@ -1207,6 +1211,48 @@ exports.completeTransaction = async (req, res) => {
       });
     }
 
+    try {
+      await recordUssdFlowHealthSignal({
+        payload:
+          flow_health,
+        transactionId:
+          transaction_id,
+        mode:
+          "business",
+        userId:
+          agentId,
+        companyId:
+          tx.company_id,
+        businessSimRole:
+          tx.sim_role || "agent",
+        provider:
+          tx.provider,
+        transactionType:
+          tx.transaction_type,
+        completionStatus:
+          finalStatus,
+        appBuild:
+          req.get(
+            "X-AgentPro-App-Build"
+          ),
+        sourceCommit:
+          req.get(
+            "X-AgentPro-Source-Commit"
+          ),
+      });
+    } catch (healthError) {
+      // Observability must never block or reverse financial completion.
+      logger.warn(
+        "Business USSD flow health signal ignored",
+        {
+          code:
+            healthError?.code,
+          requestId:
+            req.requestId,
+        },
+      );
+    }
+
     recordTransactionTelemetryEvent({
       mode: "business",
       provider: tx.provider,
@@ -1484,6 +1530,30 @@ function sanitizeFailureReason(reason, status) {
     return status === "pending_confirmation"
       ? "The transaction outcome could not be confirmed."
       : "The transaction failed.";
+  }
+
+  if (
+    normalized.includes(
+      "transaction cancelled by user before pin",
+    )
+  ) {
+    return "Transaction cancelled by the user before PIN entry.";
+  }
+
+  if (
+    normalized.includes(
+      "transaction cancelled by user at pin prompt",
+    )
+  ) {
+    return "Transaction cancelled by the user at the PIN prompt.";
+  }
+
+  if (
+    normalized.includes(
+      "transaction cancelled by user after pin",
+    )
+  ) {
+    return "The provider prompt was cancelled after PIN entry; verify the transaction outcome before retrying.";
   }
 
   if (

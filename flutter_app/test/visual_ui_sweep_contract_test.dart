@@ -66,24 +66,55 @@ void main() {
       );
     });
 
-    test('Agent More uses the destination name My Balance', () {
+    test('Agent More moves operations into Agent Hub', () {
       final agent = source(
         'lib/features/dashboard/agent_dashboard.dart',
       );
 
-      expect(
-        agent,
-        contains("'My Balance'"),
+      final hub = source(
+        'lib/features/business/agents_hub_screen.dart',
       );
 
       expect(
         agent,
-        contains("context.push('/my-balance')"),
+        contains("'Agent Hub'"),
       );
 
       expect(
         agent,
-        isNot(contains("'Float Balance'")),
+        contains("context.push('/agents-hub')"),
+      );
+
+      expect(
+        agent,
+        isNot(contains("'My Balance'")),
+      );
+
+      expect(
+        hub,
+        contains("'Transaction History'"),
+      );
+
+      expect(
+        hub,
+        contains("'Report & Insight'"),
+      );
+
+      expect(
+        hub,
+        contains("'Float'"),
+      );
+
+      expect(
+        hub,
+        contains("'Shift Reconciliation'"),
+      );
+
+      expect(
+        hub,
+        isNot(
+          contains("'Agent Community'"),
+        ),
       );
     });
 

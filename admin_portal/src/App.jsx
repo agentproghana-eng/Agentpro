@@ -1,4 +1,10 @@
-import { useState, useEffect, createContext, useContext } from 'react';
+import {
+  useState,
+  useEffect,
+  useRef,
+  createContext,
+  useContext,
+} from 'react';
 import {
   useMutation,
   useQuery,
@@ -1095,6 +1101,8 @@ function Layout({ children }) {
 
   return (
     <div className="flex h-screen bg-gray-100">
+      <UssdFlowHealthToastWatcher />
+
       {/* Sidebar */}
       <aside className={`${sidebarOpen ? 'w-56' : 'w-16'} bg-white shadow-md flex flex-col transition-all duration-200`}>
         <div className="p-4 flex items-center gap-3 border-b">
@@ -1282,12 +1290,547 @@ function DashboardPage() {
         })}
       </div>
 
+      <UssdFlowHealthAlerts />
       <OperationalHealthWidget />
       <PendingRegistrationsWidget />
     </div>
   );
 }
 
+
+// ── USSD Flow Health ─────────────────────────────────────────
+
+async function fetchUssdFlowHealth() {
+  const response =
+    await API.get(
+      '/admin/ussd-flow-health',
+      {
+        params: {
+          limit: 50,
+        },
+      },
+    );
+
+  return response.data.data || [];
+}
+
+function UssdFlowHealthToastWatcher() {
+  const initialized =
+    useRef(false);
+
+  const seenIncidentIds =
+    useRef(new Set());
+
+  const {
+    data: incidents = [],
+  } = useQuery({
+    queryKey: [
+      'admin',
+      'ussd-flow-health',
+    ],
+    queryFn:
+      fetchUssdFlowHealth,
+    refetchInterval:
+      15_000,
+    staleTime:
+      5_000,
+    refetchIntervalInBackground:
+      true,
+  });
+
+  useEffect(() => {
+    const currentIds =
+      new Set(
+        incidents.map(
+          incident =>
+            String(incident.id),
+        ),
+      );
+
+    if (!initialized.current) {
+      initialized.current =
+        true;
+
+      seenIncidentIds.current =
+        currentIds;
+
+      if (incidents.length > 0) {
+        toast(
+          `${incidents.length} possible USSD flow ${
+            incidents.length === 1
+              ? 'change needs'
+              : 'changes need'
+          } review.`,
+          {
+            icon: '⚠️',
+            duration: 8_000,
+          },
+        );
+      }
+
+      return;
+    }
+
+    const newIncidents =
+      incidents.filter(
+        incident =>
+          !seenIncidentIds
+            .current
+            .has(
+              String(incident.id),
+            ),
+      );
+
+    if (newIncidents.length > 0) {
+      const newest =
+        newIncidents[0];
+
+      const provider =
+        String(
+          newest.provider ||
+            'Provider',
+        ).toUpperCase();
+
+      const stepIndex =
+        Number(
+          newest
+            .mismatch_step_index,
+        );
+
+      const stepCount =
+        Number(
+          newest.step_count,
+        );
+
+      const location =
+        Number.isInteger(
+          stepIndex,
+        ) &&
+        Number.isInteger(
+          stepCount,
+        ) &&
+        stepIndex >= stepCount
+          ? 'after the final configured step'
+          : `at step ${stepIndex + 1}`;
+
+      toast(
+        `${provider} USSD flow may have changed ${location}.`,
+        {
+          icon: '⚠️',
+          duration: 10_000,
+        },
+      );
+    }
+
+    seenIncidentIds.current =
+      currentIds;
+  }, [incidents]);
+
+  return null;
+}
+
+function UssdFlowHealthAlerts() {
+  const navigate =
+    useNavigate();
+
+  const queryClient =
+    useQueryClient();
+
+  const {
+    data: incidents = [],
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({
+    queryKey: [
+      'admin',
+      'ussd-flow-health',
+    ],
+    queryFn:
+      fetchUssdFlowHealth,
+    refetchInterval:
+      15_000,
+    staleTime:
+      5_000,
+    refetchIntervalInBackground:
+      true,
+  });
+
+  const dismissMutation =
+    useMutation({
+      mutationFn:
+        async incidentId => {
+          const response =
+            await API.patch(
+              `/admin/ussd-flow-health/${incidentId}/dismiss`,
+            );
+
+          return response.data.data;
+        },
+
+      onSuccess:
+        async () => {
+          toast.success(
+            'Flow-health alert dismissed.',
+          );
+
+          await queryClient
+            .invalidateQueries({
+              queryKey: [
+                'admin',
+                'ussd-flow-health',
+              ],
+            });
+        },
+
+      onError:
+        mutationError => {
+          toast.error(
+            mutationError
+              ?.response
+              ?.data
+              ?.message ||
+              'Flow-health alert could not be dismissed.',
+          );
+        },
+    });
+
+  if (
+    isLoading ||
+    (
+      !isError &&
+      incidents.length === 0
+    )
+  ) {
+    return null;
+  }
+
+  if (isError) {
+    return (
+      <section
+        className="
+          mb-8 rounded-xl
+          border border-amber-200
+          bg-amber-50 p-5
+        "
+      >
+        <div
+          className="
+            flex flex-wrap
+            items-center
+            justify-between gap-3
+          "
+        >
+          <div>
+            <h3
+              className="
+                font-bold
+                text-amber-900
+              "
+            >
+              USSD Flow Health unavailable
+            </h3>
+
+            <p
+              className="
+                mt-1 text-sm
+                text-amber-800
+              "
+            >
+              {
+                error?.response
+                  ?.data
+                  ?.message ||
+                'AgentPro could not load provider-flow alerts.'
+              }
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="
+              rounded-lg
+              border border-amber-300
+              bg-white px-3 py-2
+              text-sm font-medium
+              text-amber-900
+            "
+          >
+            Retry
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section
+      className="
+        mb-8 rounded-xl
+        border border-amber-200
+        bg-amber-50 p-5
+        shadow-sm
+      "
+      aria-labelledby="ussd-flow-health-title"
+    >
+      <div
+        className="
+          flex flex-wrap
+          items-start
+          justify-between gap-3
+        "
+      >
+        <div>
+          <h3
+            id="ussd-flow-health-title"
+            className="
+              font-bold
+              text-amber-950
+            "
+          >
+            ⚠️ Possible provider flow changes
+          </h3>
+
+          <p
+            className="
+              mt-1 text-sm
+              text-amber-800
+            "
+          >
+            AgentPro stopped automation after repeated
+            provider screens no longer matched the
+            configured Flow Builder steps.
+          </p>
+        </div>
+
+        <span
+          className="
+            rounded-full
+            bg-amber-200
+            px-2.5 py-1
+            text-xs font-bold
+            text-amber-950
+          "
+        >
+          {incidents.length} open
+        </span>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        {incidents.map(
+          incident => {
+            const provider =
+              String(
+                incident.provider ||
+                  '',
+              ).toUpperCase();
+
+            const type =
+              String(
+                incident
+                  .transaction_type ||
+                  '',
+              ).replaceAll(
+                '_',
+                ' ',
+              );
+
+            const stepIndex =
+              Number(
+                incident
+                  .mismatch_step_index,
+              );
+
+            const stepCount =
+              Number(
+                incident
+                  .step_count,
+              );
+
+            const location =
+              Number.isInteger(
+                stepIndex,
+              ) &&
+              Number.isInteger(
+                stepCount,
+              ) &&
+              stepIndex >= stepCount
+                ? 'After the final configured step'
+                : `Step ${stepIndex + 1} stopped matching`;
+
+            return (
+              <article
+                key={incident.id}
+                className="
+                  rounded-xl
+                  border
+                  border-amber-200
+                  bg-white p-4
+                "
+              >
+                <div
+                  className="
+                    flex flex-wrap
+                    items-start
+                    justify-between
+                    gap-4
+                  "
+                >
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className="
+                        text-sm
+                        font-bold
+                        text-gray-900
+                      "
+                    >
+                      {provider}
+                      {' · '}
+                      {type}
+                    </p>
+
+                    <p
+                      className="
+                        mt-1 text-sm
+                        text-gray-600
+                      "
+                    >
+                      {location}.
+                      {' '}
+                      Detected{' '}
+                      {incident.occurrence_count}{' '}
+                      time{
+                        Number(
+                          incident.occurrence_count,
+                        ) === 1
+                          ? ''
+                          : 's'
+                      }.
+                    </p>
+
+                    <p
+                      className="
+                        mt-2 text-xs
+                        text-gray-400
+                      "
+                    >
+                      Last detected{' '}
+                      {
+                        incident.last_detected_at
+                          ? new Date(
+                              incident.last_detected_at,
+                            ).toLocaleString()
+                          : '—'
+                      }
+
+                      {
+                        incident.last_app_build
+                          ? ` · App build ${incident.last_app_build}`
+                          : ''
+                      }
+                    </p>
+
+                    {
+                      incident.last_source_commit && (
+                        <p
+                          className="
+                            mt-1 break-all
+                            text-xs text-gray-400
+                          "
+                        >
+                          Source{' '}
+                          {
+                            incident
+                              .last_source_commit
+                          }
+                        </p>
+                      )
+                    }
+
+                    {
+                      Array.isArray(
+                        incident.step_match_all,
+                      ) &&
+                      incident
+                        .step_match_all
+                        .length > 0 && (
+                        <p
+                          className="
+                            mt-2 text-xs
+                            text-gray-500
+                          "
+                        >
+                          Configured matcher:{' '}
+                          {
+                            incident
+                              .step_match_all
+                              .join(' + ')
+                          }
+                        </p>
+                      )
+                    }
+                  </div>
+
+                  <div
+                    className="
+                      flex shrink-0
+                      flex-wrap gap-2
+                    "
+                  >
+                    <button
+                      type="button"
+                      onClick={() =>
+                        navigate('/flows')
+                      }
+                      className="
+                        rounded-lg
+                        bg-primary
+                        px-3 py-2
+                        text-xs font-semibold
+                        text-white
+                      "
+                    >
+                      Review Flow
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        dismissMutation
+                          .mutate(
+                            incident.id,
+                          )
+                      }
+                      disabled={
+                        dismissMutation
+                          .isPending
+                      }
+                      className="
+                        rounded-lg
+                        border border-gray-200
+                        bg-white
+                        px-3 py-2
+                        text-xs font-semibold
+                        text-gray-600
+                        disabled:opacity-50
+                      "
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </article>
+            );
+          },
+        )}
+      </div>
+    </section>
+  );
+}
 
 // ── Operational Health Widget ─────────────────────────────────
 

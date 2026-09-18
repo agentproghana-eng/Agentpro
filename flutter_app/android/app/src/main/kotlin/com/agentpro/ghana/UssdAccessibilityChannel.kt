@@ -465,10 +465,29 @@ class UssdAccessibilityChannel(
         channel.invokeMethod("onPinPromptReached", null)
     }
 
-    override fun onResult(outcome: String, message: String) {
+    override fun onResult(
+        outcome: String,
+        message: String,
+        flowMismatchStepIndex: Int?,
+        flowStepCount: Int?
+    ) {
         val args = HashMap<String, Any>()
         args["outcome"] = outcome
         args["message"] = message
-        channel.invokeMethod("onResult", args)
+
+        if (flowMismatchStepIndex != null) {
+            args["flow_mismatch_step_index"] =
+                flowMismatchStepIndex
+        }
+
+        if (flowStepCount != null) {
+            args["flow_step_count"] =
+                flowStepCount
+        }
+
+        channel.invokeMethod(
+            "onResult",
+            args
+        )
     }
 }

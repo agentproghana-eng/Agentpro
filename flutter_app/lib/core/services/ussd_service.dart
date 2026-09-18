@@ -42,7 +42,7 @@ enum USSDStatus {
   processing,
   success,
   failed,
-  cancelled, // User explicitly cancelled at the visible PIN prompt
+  cancelled, // User explicitly cancelled a provider prompt before authorization completed
   pendingConfirmation, // Genuinely unknown outcome — needs manual verification
 }
 
@@ -95,11 +95,18 @@ class USSDResult {
   final String? failureReason;
   final List<Map<String, dynamic>> sessionLog; // NEVER contains PIN
 
+  // Privacy-safe Flow Builder structure only.
+  // Never contains provider screen text or transaction inputs.
+  final int? flowMismatchStepIndex;
+  final int? flowStepCount;
+
   const USSDResult({
     required this.outcome,
     this.networkReference,
     this.failureReason,
     required this.sessionLog,
+    this.flowMismatchStepIndex,
+    this.flowStepCount,
   });
 
   bool get success => outcome == USSDStatus.success;
@@ -472,6 +479,9 @@ class UssdAccessibilityEngine {
   Timer? _customerConfirmationTimeout;
   bool _pinPromptReached = false;
   bool _waitingForMtnCashOutPinPrompt = false;
+
+  bool get reachedPinPrompt =>
+      _pinPromptReached;
   bool _mtnCashOutSmsArmed = false;
   String? _activeMtnCashOutAmount;
 
@@ -631,6 +641,22 @@ class UssdAccessibilityEngine {
         final outcome = args['outcome'] as String? ?? 'failure';
         final nativeMessage = args['message']?.toString().trim() ?? '';
 
+        final rawMismatchStepIndex =
+            args['flow_mismatch_step_index'];
+
+        final rawFlowStepCount =
+            args['flow_step_count'];
+
+        final flowMismatchStepIndex =
+            rawMismatchStepIndex is num
+                ? rawMismatchStepIndex.toInt()
+                : null;
+
+        final flowStepCount =
+            rawFlowStepCount is num
+                ? rawFlowStepCount.toInt()
+                : null;
+
         if (outcome == 'awaiting_customer_confirmation') {
           _postPinTimeout?.cancel();
           _postPinTimeout = null;
@@ -738,6 +764,10 @@ class UssdAccessibilityEngine {
               outcome: mappedOutcome,
               failureReason: failureReason,
               sessionLog: const [],
+              flowMismatchStepIndex:
+                  flowMismatchStepIndex,
+              flowStepCount:
+                  flowStepCount,
             ),
           );
         }

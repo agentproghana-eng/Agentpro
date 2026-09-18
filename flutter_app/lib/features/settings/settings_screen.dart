@@ -178,6 +178,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _openTermsAndConditions() async {
+    final uri = Uri.parse(
+      'https://admin.agentproghana.com/terms-and-conditions/',
+    );
+
+    try {
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!launched && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not open the AgentPro Terms and Conditions.',
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not open the AgentPro Terms and Conditions.',
+            ),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
@@ -296,71 +329,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
             ],
           ),
-          const SizedBox(height: 20),
-          const _SettingsSectionHeader(title: 'About'),
-          _SettingsGroupCard(
-            children: [
-              _SettingsTile(
-                icon: Icons.info_outline,
-                title: 'Version',
-                subtitle: _appVersion.isEmpty ? '—' : _appVersion,
-              ),
-              const _SettingsDivider(),
-              _SettingsTile(
-                icon: Icons.privacy_tip_outlined,
-                title: 'Privacy Policy',
-                subtitle: 'How AgentPro handles your data',
-                onTap: _openPrivacyPolicy,
-              ),
-              const _SettingsDivider(),
-              _SettingsTile(
-                icon: Icons.support_agent,
-                title: 'Contact Support',
-                subtitle: 'Help, guides and contact options',
-                onTap: () => context.push(
-                  widget.isPersonal
-                      ? '/support?mode=personal'
-                      : '/support?mode=business',
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          const _SettingsSectionHeader(title: 'Session'),
-          _SettingsGroupCard(
-            children: [
-              _SettingsTile(
-                icon: Icons.logout,
-                iconColor: AppTheme.errorColor,
-                title: 'Sign Out',
-                titleColor: AppTheme.errorColor,
-                subtitle: 'End the current AgentPro session on this device',
-                onTap: () => showDialog(
-                  context: context,
-                  builder: (_) => AlertDialog(
-                    title: const Text('Sign Out'),
-                    content: const Text('Are you sure you want to sign out?'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancel'),
-                      ),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.errorColor,
-                        ),
-                        onPressed: () {
-                          Navigator.pop(context);
-                          context.read<AuthBloc>().add(AuthLogoutEvent());
-                        },
-                        child: const Text('Sign Out'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              if (role != 'superuser') ...[
-                const _SettingsDivider(),
+          if (role != 'superuser') ...[
+            const SizedBox(height: 20),
+            const _SettingsSectionHeader(
+              title: 'Account Management',
+            ),
+            _SettingsGroupCard(
+              children: [
                 _SettingsTile(
                   icon: Icons.delete_forever_outlined,
                   iconColor: AppTheme.errorColor,
@@ -371,6 +346,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: () => _openDeleteAccount(user),
                 ),
               ],
+            ),
+          ],
+          const SizedBox(height: 20),
+          const _SettingsSectionHeader(
+            title: 'Feedback',
+          ),
+          _SettingsGroupCard(
+            children: [
+              _SettingsTile(
+                icon: Icons.feedback_outlined,
+                title: 'Complaints & Feedback',
+                subtitle:
+                    'Send a complaint, suggestion or product feedback',
+                onTap: () =>
+                    context.push('/support/feedback'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          const _SettingsSectionHeader(title: 'About'),
+          _SettingsGroupCard(
+            children: [
+              _SettingsTile(
+                icon: Icons.privacy_tip_outlined,
+                title: 'Privacy Policy',
+                subtitle: 'How AgentPro handles your data',
+                onTap: _openPrivacyPolicy,
+              ),
+              const _SettingsDivider(),
+              _SettingsTile(
+                icon: Icons.description_outlined,
+                title: 'Terms and Conditions',
+                subtitle: 'Terms governing use of AgentPro',
+                onTap: _openTermsAndConditions,
+              ),
+              const _SettingsDivider(),
+              _SettingsTile(
+                icon: Icons.info_outline,
+                title: 'Version',
+                subtitle:
+                    _appVersion.isEmpty ? '—' : _appVersion,
+              ),
             ],
           ),
         ],

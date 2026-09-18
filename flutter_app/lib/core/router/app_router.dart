@@ -28,6 +28,7 @@ import '../../features/balances/commission_transfer_screen.dart';
 import '../../features/balances/cash_adjustment_screen.dart';
 import '../../features/balances/pending_approvals_screen.dart';
 import '../../features/support/support_screen.dart';
+import '../../features/support/feedback_screen.dart';
 import '../../features/support/help_guide_screen.dart';
 import '../../features/dashboard/personal_dashboard.dart';
 import '../../features/dashboard/marketplace_seller_dashboard.dart';
@@ -408,6 +409,10 @@ class AppRouter {
           builder: (_, state) => SupportScreen(
             isPersonal: state.uri.queryParameters['mode'] == 'personal',
           ),
+        ),
+        GoRoute(
+          path: '/support/feedback',
+          builder: (_, __) => const FeedbackScreen(),
         ),
         GoRoute(
             path: '/help-guide', builder: (_, __) => const HelpGuideScreen()),

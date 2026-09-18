@@ -95,6 +95,22 @@ void main() {
       service,
       contains('Transaction cancelled by user at PIN prompt'),
     );
+    expect(
+      service,
+      contains('Transaction cancelled by user before PIN'),
+    );
+    expect(
+      service,
+      contains('Transaction cancelled by user after PIN'),
+    );
+    expect(
+      service,
+      contains('handleExplicitProviderCancel'),
+    );
+    expect(
+      service,
+      contains('postPinProviderProgressObserved'),
+    );
 
     expect(
       ussd,

@@ -23,6 +23,10 @@ const {
   searchSupportTimeline,
 } = require('../services/supportTimelineService');
 const {
+  listOpenUssdFlowHealthIncidents,
+  dismissUssdFlowHealthIncident,
+} = require('../services/ussdFlowHealthService');
+const {
   listFraudSignals,
   getFraudSignal,
   reviewFraudSignal,
@@ -85,6 +89,133 @@ router.get('/operational-status', async (req, res) => {
     });
   }
 });
+
+// ── USSD Flow Health ─────────────────────────────────────────
+//
+// This router already requires authenticated superuser access.
+//
+// Devices report only:
+//   flow ID
+//   mismatch step index
+//   step count
+//   mobile build/source provenance
+//
+// Raw provider screens and customer transaction values never enter
+// this API or its incident table.
+router.get(
+  '/ussd-flow-health',
+  async (req, res) => {
+    try {
+      const incidents =
+        await listOpenUssdFlowHealthIncidents({
+          limit:
+            req.query.limit,
+        });
+
+      return res.json({
+        success: true,
+        data: incidents,
+      });
+    } catch (error) {
+      logger.error(
+        'USSD flow health list error:',
+        {
+          errorCode:
+            error?.code,
+          requestId:
+            req.requestId,
+        }
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          'USSD flow health is temporarily unavailable',
+      });
+    }
+  }
+);
+
+router.patch(
+  '/ussd-flow-health/:incident_id/dismiss',
+  async (req, res) => {
+    try {
+      const incident =
+        await dismissUssdFlowHealthIncident({
+          incidentId:
+            req.params.incident_id,
+          dismissedBy:
+            req.user.id,
+        });
+
+      if (!incident) {
+        return res.status(404).json({
+          success: false,
+          message:
+            'Open flow-health alert not found',
+        });
+      }
+
+      await auditLog({
+        userId:
+          req.user.id,
+        companyId:
+          null,
+        action:
+          'USSD_FLOW_HEALTH_ALERT_DISMISSED',
+        entityType:
+          'ussd_flow',
+        entityId:
+          incident.flow_id,
+        newValues: {
+          flow_health_incident_id:
+            incident.id,
+          status:
+            'dismissed',
+        },
+        ipAddress:
+          req.ip,
+        requestId:
+          req.requestId,
+        strict: true,
+      });
+
+      return res.json({
+        success: true,
+        data: incident,
+        message:
+          'Flow-health alert dismissed',
+      });
+    } catch (error) {
+      if (
+        error?.code ===
+          'FLOW_HEALTH_INVALID_DISMISSAL'
+      ) {
+        return res.status(422).json({
+          success: false,
+          message:
+            'Invalid flow-health alert',
+        });
+      }
+
+      logger.error(
+        'USSD flow health dismissal error:',
+        {
+          errorCode:
+            error?.code,
+          requestId:
+            req.requestId,
+        }
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          'Flow-health alert could not be dismissed',
+      });
+    }
+  }
+);
 
 // ── Support Timeline Search ───────────────────────────────────
 //

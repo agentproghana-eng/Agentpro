@@ -4,6 +4,36 @@ import '../../core/services/storage_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_colors.dart';
 
+Future<bool> confirmEndSession(BuildContext context) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('End Session'),
+      content: const Text(
+        'End the current AgentPro session on this device? '
+        'If phone authentication is enabled, you can unlock AgentPro '
+        'again without fully signing out.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            Navigator.of(dialogContext).pop(false);
+          },
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            Navigator.of(dialogContext).pop(true);
+          },
+          child: const Text('End Session'),
+        ),
+      ],
+    ),
+  );
+
+  return confirmed ?? false;
+}
+
 Future<bool> confirmSignOut(BuildContext context) async {
   final confirmed = await showDialog<bool>(
     context: context,
