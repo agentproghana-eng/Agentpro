@@ -11,12 +11,15 @@ AgentPro Android release unusable.
 
 ## Version dimensions
 
-AgentPro tracks four compatibility dimensions:
+AgentPro tracks semantic-version and exact-build compatibility:
 
 - `api_contract_version`
 - `minimum_supported_app_version`
 - `recommended_app_version`
 - `forced_upgrade_below_version`
+- `minimum_supported_build_number`
+- `recommended_build_number`
+- `forced_upgrade_below_build_number`
 
 The mobile client sends:
 
@@ -24,9 +27,58 @@ The mobile client sends:
 - `X-AgentPro-App-Build`
 - `X-AgentPro-Platform`
 - `X-AgentPro-API-Version`
+- `X-AgentPro-Source-Commit`
 
 Clients that predate these headers are temporarily classified as
 `LEGACY_SUPPORTED`.
+
+## Build-number compatibility
+
+Two Android APKs can have the same semantic version while containing
+different code. AgentPro therefore treats the Android build number as a
+first-class release identity.
+
+CI gives each production APK a monotonically increasing build number. The
+backend can independently configure:
+
+- `AGENTPRO_MIN_SUPPORTED_BUILD`
+- `AGENTPRO_RECOMMENDED_BUILD`
+- `AGENTPRO_FORCE_UPGRADE_BELOW_BUILD`
+
+This allows one stale or unsafe APK to be retired without incorrectly
+declaring the entire semantic version incompatible.
+
+## Release provenance
+
+Every CI production APK contains the exact Git source commit that produced
+it. The mobile client reports this as `X-AgentPro-Source-Commit`.
+
+The rolling Android release publishes a provenance manifest containing the
+semantic version, Android build number, source commit, and APK SHA-256.
+
+The public `/download/agentpro-latest.apk` route redirects to the signed
+rolling release instead of serving a frozen APK committed into the website
+source tree.
+
+Automatic public APK publication occurs only when `flutter_app/**` changes
+on `master`. Backend-only, admin-only, website-only, Marketplace-only and
+documentation-only changes do not create meaningless Android updates.
+
+An operator may deliberately request a fresh signed APK through the manual
+CI release input when required.
+
+## USSD flow freshness
+
+Normal provider menu changes remain server-driven and do not require an app
+release.
+
+The Admin Flow Builder performs a read-after-write verification before
+reporting a configuration as live.
+
+Online-started transactions resolve the current server flow and never fall
+back to stale cached Flow Builder configuration. Cached flow execution is
+reserved for an explicitly offline transaction protected by AgentPro's
+offline trust controls.
 
 ## Compatibility states
 

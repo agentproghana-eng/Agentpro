@@ -2192,6 +2192,67 @@ const VALUE_REQUIRED_FLOW_ACTIONS = ['send_digit', 'send_literal', 'auto_confirm
 
 // Mirrors the backend's validateFlowSteps exactly - this is a UX
 // convenience only, the server-side check is what actually matters.
+function normalizeFlowSnapshot(flow) {
+  const normalizeList = value =>
+    Array.isArray(value)
+      ? value.map(item => String(item))
+      : [];
+
+  const normalizeActionValue = value => {
+    if (
+      value === null ||
+      value === undefined ||
+      value === ''
+    ) {
+      return null;
+    }
+
+    return String(value);
+  };
+
+  return {
+    dial_code:
+      flow?.dial_code === null ||
+      flow?.dial_code === undefined
+        ? null
+        : String(flow.dial_code),
+
+    success_markers:
+      normalizeList(flow?.success_markers),
+
+    failure_markers:
+      normalizeList(flow?.failure_markers),
+
+    is_active:
+      flow?.is_active !== false,
+
+    steps:
+      Array.isArray(flow?.steps)
+        ? flow.steps.map(step => ({
+            match_all:
+              normalizeList(step?.match_all),
+            action:
+              String(step?.action || ''),
+            action_value:
+              normalizeActionValue(
+                step?.action_value,
+              ),
+          }))
+        : [],
+  };
+}
+
+function flowSnapshotsMatch(expected, actual) {
+  return (
+    JSON.stringify(
+      normalizeFlowSnapshot(expected),
+    ) ===
+    JSON.stringify(
+      normalizeFlowSnapshot(actual),
+    )
+  );
+}
+
 function validateFlowSteps(steps) {
   if (!Array.isArray(steps) || steps.length === 0) {
     return 'At least one step is required.';
@@ -2242,6 +2303,39 @@ export function FlowsPage() {
     finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
+
+  const verifyPersistedFlow = async (
+    flowId,
+    expected,
+  ) => {
+    const response =
+      await API.get(
+        `/admin/ussd-flows/${flowId}`,
+      );
+
+    const persisted =
+      response.data?.data;
+
+    if (
+      !persisted ||
+      !flowSnapshotsMatch(
+        expected,
+        persisted,
+      )
+    ) {
+      const error =
+        new Error(
+          'FLOW_READ_AFTER_WRITE_MISMATCH',
+        );
+
+      error.code =
+        'FLOW_READ_AFTER_WRITE_MISMATCH';
+
+      throw error;
+    }
+
+    return persisted;
+  };
 
   const startEdit = async (f) => {
     setValidationError(null);
@@ -2312,14 +2406,45 @@ export function FlowsPage() {
       return;
     }
     setSaving(true);
+
     try {
-      await API.patch(`/admin/ussd-flows/${editing.id}`, parsed);
-      toast.success('Flow updated ✅ (no app update needed)');
+      await API.patch(
+        `/admin/ussd-flows/${editing.id}`,
+        parsed,
+      );
+
+      await verifyPersistedFlow(
+        editing.id,
+        {
+          ...editing,
+          ...parsed,
+          steps: parsed.steps,
+        },
+      );
+
+      toast.success(
+        'Flow updated and verified live ✅',
+      );
+
       setEditing(null);
-      load();
+      await load();
     } catch (e) {
-      toast.error(e.response?.data?.message || 'Save failed');
-    } finally { setSaving(false); }
+      if (
+        e?.code ===
+        'FLOW_READ_AFTER_WRITE_MISMATCH'
+      ) {
+        toast.error(
+          'Flow save returned success, but the live read-back did not match. Do not test this flow yet.',
+        );
+      } else {
+        toast.error(
+          e.response?.data?.message ||
+          'Flow save or verification failed',
+        );
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
   const createFlow = async () => {
@@ -2345,23 +2470,77 @@ export function FlowsPage() {
       return;
     }
     setSaving(true);
+
     try {
-      await API.post('/admin/ussd-flows', {
-        provider: newProvider,
-        transaction_type: newType.trim(),
-        dial_code: newDialCode.trim(),
-        success_markers: parsed.success_markers || [],
-        failure_markers: parsed.failure_markers || [],
-        steps: parsed.steps,
-      });
-      toast.success('Flow created ✅ (no app update needed)');
+      const response =
+        await API.post(
+          '/admin/ussd-flows',
+          {
+            provider: newProvider,
+            transaction_type:
+              newType.trim(),
+            dial_code:
+              newDialCode.trim(),
+            success_markers:
+              parsed.success_markers || [],
+            failure_markers:
+              parsed.failure_markers || [],
+            steps:
+              parsed.steps,
+          },
+        );
+
+      const created =
+        response.data?.data;
+
+      if (!created?.id) {
+        throw new Error(
+          'FLOW_CREATE_ID_MISSING',
+        );
+      }
+
+      await verifyPersistedFlow(
+        created.id,
+        {
+          ...created,
+          dial_code:
+            newDialCode.trim(),
+          success_markers:
+            parsed.success_markers || [],
+          failure_markers:
+            parsed.failure_markers || [],
+          is_active: true,
+          steps:
+            parsed.steps,
+        },
+      );
+
+      toast.success(
+        'Flow created and verified live ✅',
+      );
+
       setCreating(false);
       setNewType('');
       setNewDialCode('');
-      load();
+
+      await load();
     } catch (e) {
-      toast.error(e.response?.data?.message || 'Create failed');
-    } finally { setSaving(false); }
+      if (
+        e?.code ===
+        'FLOW_READ_AFTER_WRITE_MISMATCH'
+      ) {
+        toast.error(
+          'Flow creation returned success, but the live read-back did not match. Do not test this flow yet.',
+        );
+      } else {
+        toast.error(
+          e.response?.data?.message ||
+          'Flow creation or verification failed',
+        );
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
   const providerColor = { mtn: 'text-yellow-600', telecel: 'text-red-600', at_money: 'text-blue-600' };
@@ -2378,8 +2557,9 @@ export function FlowsPage() {
         } />
 
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 text-sm text-amber-800">
-        <strong>⚡ Live Updates:</strong> Changes here take effect immediately on all devices —
-        no Play Store release needed. Each step fires when ALL of its <code className="mx-1 bg-amber-100 px-1 rounded">match_all</code> substrings
+        <strong>⚡ Live Updates:</strong> Saved changes are read back from the API before
+        this portal reports them as live. Supported online app builds resolve the current server flow —
+        no Play Store release is required for a normal provider-flow edit. Each step fires when ALL of its <code className="mx-1 bg-amber-100 px-1 rounded">match_all</code> substrings
         appear on the live USSD screen. Every flow must include a <code className="mx-1 bg-amber-100 px-1 rounded">pin_prompt</code> step —
         that's where automation stops and hands PIN entry to the agent and the real network screen.
         Wrong or guessed <code className="mx-1 bg-amber-100 px-1 rounded">match_all</code> text or

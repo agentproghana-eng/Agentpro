@@ -5,10 +5,12 @@ const express = require('express');
 const {
   MOBILE_COMPATIBILITY_POLICY,
 } = require('../config/clientCompatibility');
+
 const {
   evaluateClientCompatibility,
   readCompatibilityMetadata,
 } = require('../utils/clientCompatibility');
+
 const {
   setCompatibilityHeaders,
 } = require('../middleware/clientCompatibility');
@@ -32,25 +34,45 @@ router.get('/', (req, res) => {
     data: {
       api_contract_version:
         MOBILE_COMPATIBILITY_POLICY.apiContractVersion,
+
       minimum_supported_app_version:
         MOBILE_COMPATIBILITY_POLICY.minimumSupportedAppVersion,
+
       recommended_app_version:
         MOBILE_COMPATIBILITY_POLICY.recommendedAppVersion,
+
       forced_upgrade_below_version:
         MOBILE_COMPATIBILITY_POLICY.forcedUpgradeBelowVersion,
+
+      minimum_supported_build_number:
+        MOBILE_COMPATIBILITY_POLICY.minimumSupportedBuildNumber,
+
+      recommended_build_number:
+        MOBILE_COMPATIBILITY_POLICY.recommendedBuildNumber,
+
+      forced_upgrade_below_build_number:
+        MOBILE_COMPATIBILITY_POLICY.forcedUpgradeBelowBuildNumber,
+
       status: result.status,
       reason: result.reason,
+
       client: {
         app_version:
           metadata.appVersion || null,
+
         build_number:
           metadata.buildNumber || null,
+
         platform:
           metadata.platform || null,
+
         api_contract_version:
           metadata.apiContractVersion
             ? Number(metadata.apiContractVersion)
             : null,
+
+        source_commit:
+          metadata.sourceCommit || null,
       },
     },
   });

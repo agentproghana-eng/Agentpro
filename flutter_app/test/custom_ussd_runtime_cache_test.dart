@@ -7,19 +7,25 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 void main() {
   group('Custom USSD online cache policy', () {
-    test('network failure may fall back to cache', () {
-      expect(shouldFallbackToCachedUssdFlow(hasHttpResponse: false), isTrue);
+    test('network failure cannot execute stale cached automation', () {
+      expect(
+        shouldFallbackToCachedUssdFlow(
+          hasHttpResponse: false,
+        ),
+        isFalse,
+      );
     });
 
-    test('transient HTTP failures may fall back to cache', () {
+    test('transient HTTP failures cannot execute stale cached automation', () {
       for (final status in [408, 429, 500, 502, 503]) {
         expect(
           shouldFallbackToCachedUssdFlow(
             hasHttpResponse: true,
             statusCode: status,
           ),
-          isTrue,
-          reason: 'HTTP $status should permit temporary cache fallback',
+          isFalse,
+          reason:
+              'HTTP $status must fail closed instead of running stale provider automation',
         );
       }
     });
@@ -32,7 +38,8 @@ void main() {
             statusCode: status,
           ),
           isFalse,
-          reason: 'HTTP $status must not run stale cached automation',
+          reason:
+              'HTTP $status must not run stale cached automation',
         );
       }
     });

@@ -45,7 +45,6 @@ export default function HomePage() {
 
           <a
             href="/download/agentpro-latest.apk"
-            download
             style={{
               display: "inline-flex",
               alignItems: "center",

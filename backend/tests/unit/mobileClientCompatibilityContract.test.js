@@ -3,12 +3,25 @@ const path = require('path');
 
 const read = relativePath =>
   fs.readFileSync(
-    path.resolve(__dirname, '../../..', relativePath),
+    path.resolve(
+      __dirname,
+      '../../..',
+      relativePath
+    ),
     'utf8'
   );
 
-describe('AgentPro mobile compatibility integration contract', () => {
-  test('ApiClient sends formal client compatibility metadata', () => {
+const exists = relativePath =>
+  fs.existsSync(
+    path.resolve(
+      __dirname,
+      '../../..',
+      relativePath
+    )
+  );
+
+describe('AgentPro mobile release contract', () => {
+  test('mobile identifies version, build and source commit', () => {
     const source = read(
       'flutter_app/lib/core/api/api_client.dart'
     );
@@ -16,84 +29,105 @@ describe('AgentPro mobile compatibility integration contract', () => {
     expect(source).toContain(
       "'X-AgentPro-App-Version'"
     );
+
     expect(source).toContain(
       "'X-AgentPro-App-Build'"
     );
+
     expect(source).toContain(
-      "'X-AgentPro-Platform'"
+      "'X-AgentPro-Source-Commit'"
     );
+
     expect(source).toContain(
-      "'X-AgentPro-API-Version'"
+      "'AGENTPRO_SOURCE_COMMIT'"
     );
   });
 
-  test('ApiClient captures forced compatibility failures globally', () => {
+  test('CI generates unique signed release identity', () => {
     const source = read(
-      'flutter_app/lib/core/api/api_client.dart'
+      '.github/workflows/ci.yml'
     );
 
     expect(source).toContain(
-      'compatibilityBlock'
+      '--build-number "$GITHUB_RUN_NUMBER"'
     );
+
     expect(source).toContain(
-      "error.response?.statusCode != 426"
+      '--dart-define=AGENTPRO_SOURCE_COMMIT="$GITHUB_SHA"'
     );
+
     expect(source).toContain(
-      "code != 'UPDATE_REQUIRED'"
-    );
-    expect(source).toContain(
-      "code != 'API_INCOMPATIBLE'"
+      'Verify signed release APK'
     );
   });
 
-  test('app root gates normal navigation behind compatibility state', () => {
+  test('normal non-mobile changes do not publish Android releases', () => {
     const source = read(
-      'flutter_app/lib/main.dart'
+      '.github/workflows/ci.yml'
     );
 
     expect(source).toContain(
-      'ValueListenableBuilder<ClientCompatibilityBlock?>'
+      "grep -Eq '^flutter_app/' changed-files.txt"
     );
+
     expect(source).toContain(
-      'ApiClient.compatibilityBlock'
+      'needs.mobile-release-changes.outputs.should_publish'
     );
+
     expect(source).toContain(
-      'AppUpdateRequiredScreen'
+      'Publish Rolling Android Release'
     );
   });
 
-  test('forced-update screen cannot be dismissed with system back', () => {
+  test('public APK is rolling release rather than frozen repository binary', () => {
+    const route = read(
+      'intellicore_web/src/app/download/agentpro-latest.apk/route.ts'
+    );
+
+    expect(route).toContain(
+      'releases/download/android-latest/agentpro-latest.apk'
+    );
+
+    expect(
+      exists(
+        'intellicore_web/public/download/agentpro-latest.apk'
+      )
+    ).toBe(false);
+  });
+
+  test('admin verifies persisted flow before reporting live', () => {
     const source = read(
-      'flutter_app/lib/shared/widgets/app_update_required_screen.dart'
+      'admin_portal/src/pages.jsx'
     );
 
     expect(source).toContain(
-      'PopScope('
+      'verifyPersistedFlow'
     );
+
     expect(source).toContain(
-      'canPop: false'
+      'FLOW_READ_AFTER_WRITE_MISMATCH'
     );
+
     expect(source).toContain(
-      'https://agentproghana.com'
+      'Flow updated and verified live'
     );
   });
 
-  test('formal migration policy documents expand-and-contract rules', () => {
+  test('compatibility policy documents build identity', () => {
     const source = read(
       'docs/API_COMPATIBILITY.md'
     );
 
     expect(source).toContain(
-      'expand-and-contract'
+      'Build-number compatibility'
     );
+
     expect(source).toContain(
-      'Forced upgrades are exceptional'
+      'Release provenance'
     );
+
     expect(source).toContain(
-      'Breaking API changes'
-    );
-    expect(source).toContain(
-      'Deprecation lifecycle'
+      'USSD flow freshness'
     );
   });
 });

@@ -669,9 +669,10 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     }
 
     // Online-started transactions must ask the server for the current active
-    // Custom USSD flow before executing local automation. The local cache is
-    // only a transient-failure fallback and must never override an
-    // authoritative server response.
+    // Custom USSD flow before executing local automation. Cached Flow Builder
+    // configuration is reserved for the explicit genuine-offline path above.
+    // An online resolver failure must fail closed rather than execute stale
+    // provider automation.
     // A Free/expired Personal account must never execute a cached
     // Personal-owned override left behind from an earlier Paid session.
     // Its online resolver is authoritative and returns Global-only.
