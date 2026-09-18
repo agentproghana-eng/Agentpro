@@ -153,7 +153,17 @@ void main() {
     );
     expect(
       progress,
-      contains("Navigator.of(context).pop('cancelled')"),
+      contains("context.pop('cancelled')"),
+    );
+    expect(
+      progress,
+      contains('context.canPop()'),
+    );
+    expect(
+      progress,
+      contains(
+        'A definite provider cancellation must close the backend record',
+      ),
     );
     expect(
       progress,

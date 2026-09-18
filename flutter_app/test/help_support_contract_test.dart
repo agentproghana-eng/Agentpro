@@ -6,6 +6,10 @@ String readSource(String relativePath) {
   return File(relativePath).readAsStringSync();
 }
 
+String compactSource(String source) {
+  return source.replaceAll(RegExp(r'\s+'), '');
+}
+
 void main() {
   group('Help and Support contracts', () {
     test('More screens pass the active account mode into Support', () {
@@ -14,7 +18,7 @@ void main() {
       );
 
       expect(
-        personal,
+        compactSource(personal),
         contains("context.push('/support?mode=personal')"),
       );
 
@@ -26,7 +30,7 @@ void main() {
         final source = readSource(path);
 
         expect(
-          source,
+          compactSource(source),
           contains("context.push('/support?mode=business')"),
           reason: '$path must open Support in Agent-SIM mode.',
         );
@@ -219,13 +223,13 @@ void main() {
       );
 
       expect(
-        personal,
+        compactSource(personal),
         contains("context.push('/settings?mode=personal')"),
       );
 
       for (final source in <String>[owner, manager, agent]) {
         expect(
-          source,
+          compactSource(source),
           contains("context.push('/settings?mode=business')"),
         );
       }
