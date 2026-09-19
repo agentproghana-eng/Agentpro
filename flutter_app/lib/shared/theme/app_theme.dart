@@ -53,6 +53,25 @@ class AppTheme {
           fontWeight: FontWeight.w700,
         ),
       ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: const BorderSide(color: Color(0xFFE4EAE8)),
+        ),
+        titleTextStyle: GoogleFonts.inter(
+          color: const Color(0xFF1F2933),
+          fontSize: 20,
+          fontWeight: FontWeight.w800,
+        ),
+        contentTextStyle: GoogleFonts.inter(
+          color: const Color(0xFF52615D),
+          fontSize: 14,
+          height: 1.45,
+        ),
+      ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: primaryColor,
@@ -198,6 +217,25 @@ class AppTheme {
           color: secondaryColor,
           fontSize: 19,
           fontWeight: FontWeight.w700,
+        ),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: darkSurface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: const BorderSide(color: darkDivider),
+        ),
+        titleTextStyle: GoogleFonts.inter(
+          color: darkPrimaryText,
+          fontSize: 20,
+          fontWeight: FontWeight.w800,
+        ),
+        contentTextStyle: GoogleFonts.inter(
+          color: darkSecondaryText,
+          fontSize: 14,
+          height: 1.45,
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
