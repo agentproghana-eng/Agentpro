@@ -170,7 +170,7 @@ function drawWatermark(doc) {
   const pageHeight = doc.page.height;
   const watermarkColumns = 3;
   const watermarkRows = 5;
-  const wmWidth = 112;
+  const wmWidth = 126;
   const wmHeight = wmWidth * (154 / 544);
   const left = 45;
   const right = 45;
@@ -185,7 +185,7 @@ function drawWatermark(doc) {
     (pageHeight - top - bottom - (watermarkRows * wmHeight)) /
     (watermarkRows - 1);
 
-  doc.opacity(0.055);
+  doc.opacity(0.09);
 
   try {
     for (let row = 0; row < watermarkRows; row += 1) {
@@ -241,8 +241,11 @@ function drawReportBrandLockup(
   doc,
   {
     top = 8,
-    maxWidth = 190,
-    maxHeight = 36,
+    maxWidth = 230,
+    maxHeight = 54,
+    panelWidth = 256,
+    panelHeight = 62,
+    panelRadius = 12,
   } = {}
 ) {
   try {
@@ -266,10 +269,28 @@ function drawReportBrandLockup(
     const height =
       naturalHeight * scale;
 
+    const panelX =
+      (doc.page.width - panelWidth) / 2;
+
+    const panelY =
+      top - 2;
+
+    doc.roundedRect(
+      panelX,
+      panelY,
+      panelWidth,
+      panelHeight,
+      panelRadius
+    ).fill('#FFFFFF');
+
+    const logoY =
+      panelY +
+      (panelHeight - height) / 2;
+
     doc.image(
       logo,
       (doc.page.width - width) / 2,
-      top,
+      logoY,
       {
         width,
         height,
@@ -409,15 +430,17 @@ async function generateTransactionReportPDF({
       0,
       0,
       doc.page.width,
-      104
+      120
     ).fill(COLORS.primary);
 
     drawReportBrandLockup(
       doc,
       {
-        top: 8,
-        maxWidth: 190,
-        maxHeight: 36,
+        top: 6,
+        maxWidth: 230,
+        maxHeight: 54,
+        panelWidth: 256,
+        panelHeight: 62,
       }
     );
 
@@ -428,7 +451,7 @@ async function generateTransactionReportPDF({
         title ||
           'Business Transaction Report',
         40,
-        50,
+        72,
         {
           width:
             doc.page.width - 80,
@@ -441,17 +464,17 @@ async function generateTransactionReportPDF({
       .text(
         `Reporting Period: ${reportPeriodLabel(filters)}`,
         40,
-        73
+        92
       )
       .text(
         `Scope: ${filters.scope_label || 'All Branches'}`,
         40,
-        91
+        107
       )
       .text(
         `Generated: ${dateTimeStr(new Date())}`,
         300,
-        91,
+        107,
         {
           width: doc.page.width - 340,
           align: 'right',
@@ -528,7 +551,7 @@ async function generateTransactionReportPDF({
       ) /
       cardsPerRow;
 
-    const summaryTop = 118;
+    const summaryTop = 134;
 
     summaries.forEach(
       ([label, value], i) => {
@@ -872,15 +895,17 @@ async function generateCommissionReportPDF({ commissions, summary, title, groupB
       0,
       0,
       doc.page.width,
-      82
+      106
     ).fill(COLORS.primary);
 
     drawReportBrandLockup(
       doc,
       {
-        top: 8,
-        maxWidth: 176,
-        maxHeight: 30,
+        top: 6,
+        maxWidth: 212,
+        maxHeight: 50,
+        panelWidth: 238,
+        panelHeight: 58,
       }
     );
 
@@ -891,7 +916,7 @@ async function generateCommissionReportPDF({ commissions, summary, title, groupB
         title ||
           'Provider Commission Report',
         40,
-        43,
+        68,
         {
           width:
             doc.page.width - 80,
@@ -904,7 +929,7 @@ async function generateCommissionReportPDF({ commissions, summary, title, groupB
       .text(
         `Generated: ${dateTimeStr(new Date())}`,
         40,
-        62,
+        87,
         {
           width:
             doc.page.width - 80,
@@ -913,7 +938,7 @@ async function generateCommissionReportPDF({ commissions, summary, title, groupB
       );
 
     doc.fillColor(COLORS.text);
-    doc.y = 96;
+    doc.y = 120;
 
     // Summary
     doc.fontSize(9).font('Helvetica-Bold').text('Summary');
@@ -1109,15 +1134,17 @@ async function generatePersonalTransactionReportPDF({ transactions, summary, tit
       0,
       0,
       doc.page.width,
-      82
+      106
     ).fill(COLORS.primary);
 
     drawReportBrandLockup(
       doc,
       {
-        top: 8,
-        maxWidth: 176,
-        maxHeight: 30,
+        top: 6,
+        maxWidth: 212,
+        maxHeight: 50,
+        panelWidth: 238,
+        panelHeight: 58,
       }
     );
 
@@ -1128,7 +1155,7 @@ async function generatePersonalTransactionReportPDF({ transactions, summary, tit
         title ||
           'My Transaction Report',
         40,
-        43,
+        68,
         {
           width:
             doc.page.width - 80,
@@ -1141,7 +1168,7 @@ async function generatePersonalTransactionReportPDF({ transactions, summary, tit
       .text(
         `Generated: ${dateTimeStr(new Date())}`,
         40,
-        62,
+        87,
         {
           width:
             doc.page.width - 80,
@@ -1150,7 +1177,7 @@ async function generatePersonalTransactionReportPDF({ transactions, summary, tit
       );
 
     doc.fillColor(COLORS.text);
-    doc.y = 96;
+    doc.y = 120;
 
     // Summary Cards
     const summaries = [

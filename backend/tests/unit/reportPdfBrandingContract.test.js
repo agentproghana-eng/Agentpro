@@ -43,7 +43,7 @@ describe('report PDF branding contract', () => {
     );
 
     expect(source).toContain(
-      'doc.opacity(0.055);'
+      'doc.opacity(0.09);'
     );
 
     expect(source).toContain(
@@ -54,6 +54,14 @@ describe('report PDF branding contract', () => {
   test('uses the approved logo-wordmark lockup without a second AgentPro heading', () => {
     expect(source).toContain(
       'function drawReportBrandLockup('
+    );
+
+    expect(source).toContain(
+      'panelWidth = 256'
+    );
+
+    expect(source).toContain(
+      "fill('#FFFFFF')"
     );
 
     const business = section(
