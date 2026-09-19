@@ -47,7 +47,7 @@ void main() {
     expect(warningUi, contains('High amount'));
     expect(
       warningUi,
-      contains('You are about to transfer ${_formatGhs(amount)},'),
+      contains(r'You are about to transfer ${_formatGhs(amount)},'),
     );
     expect(
       warningUi,

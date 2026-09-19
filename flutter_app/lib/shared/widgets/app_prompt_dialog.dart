@@ -38,7 +38,7 @@ class AppPromptDialog extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: 420),
         padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
         decoration: BoxDecoration(
-          color: Theme.of(context).dialogBackgroundColor,
+          color: scheme.surface,
           borderRadius: BorderRadius.circular(28),
           border: Border.all(
             color: scheme.outline.withValues(alpha: 0.14),
