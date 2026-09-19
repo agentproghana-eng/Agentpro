@@ -8,7 +8,7 @@ import '../theme/app_theme.dart';
 /// Brand system:
 /// - Deep teal = primary identity
 /// - Gold = supporting accent
-/// - Shield = standalone icon
+/// - A-mark = standalone icon
 /// - AgentPro + tagline = full brand lockup
 class AgentProBrandLockup extends StatelessWidget {
   const AgentProBrandLockup({

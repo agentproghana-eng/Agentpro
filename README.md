@@ -1,5 +1,5 @@
 # AgentPro 🇬🇭
-### One App. Every Business.
+### One App Every Business
 
 **Version:** 2.0.0 | **Status:** Launch Hardening & Production Validation | **Confidential**
 

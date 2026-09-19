@@ -46,9 +46,9 @@ export function AgentProBrand({
       </span>
 
       <span className="ic-brand-copy">
-        <strong>AgentPro</strong>
+        <strong><span style={{ color: "var(--ic-teal-800)" }}>Agent</span><em style={{ color: "var(--ic-gold-600)", fontStyle: "normal" }}>Pro</em></strong>
 
-        {!compact && <span>One App Every Business.</span>}
+        {!compact && <span>One App Every Business</span>}
       </span>
     </Link>
   );

@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: AgentPro API
   description: |
-    REST API for AgentPro — One App. Every Mobile Money Business.
+    REST API for AgentPro — One App Every Business
 
     ## Authentication
     All protected endpoints require a Bearer JWT token in the Authorization header:

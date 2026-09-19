@@ -14,7 +14,7 @@ export const siteConfig = {
   },
   agentPro: {
     name: "AgentPro",
-    tagline: "One App Every Business.",
+    tagline: "One App Every Business",
   },
 } as const;
 

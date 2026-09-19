@@ -43,7 +43,7 @@ future Coreintel products.
 ### AgentPro
 
 Coreintel's flagship operating platform:
-One App. Every Business.
+One App Every Business
 
 ### Community Hub
 

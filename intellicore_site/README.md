@@ -9,7 +9,7 @@ Official corporate website source for:
 
 - Company: Coreintel Systems
 - Flagship product: AgentPro
-- AgentPro tagline: One App. Every Business.
+- AgentPro tagline: One App Every Business
 - Support: support@agentproghana.com
 
 ## Deployment
