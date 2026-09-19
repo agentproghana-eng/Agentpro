@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_android:
-        description: 'Publish a fresh signed Android APK from master'
+        description: 'Publish a fresh signed Android APK and build the Play Store AAB from master'
         required: false
         default: false
         type: boolean
@@ -597,6 +597,72 @@ jobs:
         with:
           name: release-apk
           path: flutter_app/build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Build Play Store AAB
+        working-directory: flutter_app
+        run: |
+          flutter build appbundle --release \
+            --build-number "$GITHUB_RUN_NUMBER" \
+            --dart-define=AGENTPRO_SOURCE_COMMIT="$GITHUB_SHA"
+
+      - name: Verify signed Play Store AAB
+        working-directory: flutter_app
+        run: |
+          set -euo pipefail
+
+          AAB="build/app/outputs/bundle/release/app-release.aab"
+          EXPECTED_CERT_SHA256="2681db686464d8632730f08415e6355e14750e39fd71e9e7d485ea4d410e4a08"
+
+          test -s "$AAB"
+
+          # Confirm the Android App Bundle is a structurally valid ZIP.
+          unzip -tqq "$AAB"
+
+          # Verify the JAR signature without strict trust-chain enforcement:
+          # Android upload certificates are normally self-signed, and
+          # strict verification converts that expected trust-chain warning into
+          # a non-zero exit status.
+          jarsigner \
+            -verify \
+            -certs \
+            "$AAB"
+
+          CERT_OUTPUT="$(\
+            keytool \
+              -printcert \
+              -jarfile "$AAB"
+          )"
+
+          printf '%s\n' "$CERT_OUTPUT"
+
+          AAB_CERT_SHA256="$(\
+            printf '%s\n' "$CERT_OUTPUT" |
+              awk '/SHA256:/ { print $2; exit }' |
+              tr -d ':' |
+              tr '[:upper:]' '[:lower:]'
+          )"
+
+          test -n "$AAB_CERT_SHA256"
+
+          if [ "$AAB_CERT_SHA256" != "$EXPECTED_CERT_SHA256" ]; then
+            echo "PLAY_STORE_AAB_CERTIFICATE_MATCH=FAIL"
+            echo "Expected: $EXPECTED_CERT_SHA256"
+            echo "Actual:   $AAB_CERT_SHA256"
+            exit 1
+          fi
+
+          sha256sum "$AAB"
+
+          echo "PLAY_STORE_AAB_CERTIFICATE_MATCH=PASS"
+          echo "SIGNED_PLAY_STORE_AAB=PASS"
+          echo "PLAY_STORE_AAB_SOURCE_COMMIT=$GITHUB_SHA"
+          echo "PLAY_STORE_AAB_BUILD_NUMBER=$GITHUB_RUN_NUMBER"
+
+      - name: Upload Play Store AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: play-store-aab
+          path: flutter_app/build/app/outputs/bundle/release/app-release.aab
 
 
   # ── Rolling Signed Android Release ─────────────────────────
