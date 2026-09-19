@@ -161,31 +161,126 @@ function statusColor(status) {
 }
 
 // ── Watermark ───────────────────────────────────────────────────
-// Draws the full logo (shield + wordmark) faintly behind page content,
-// rotated diagonally. Only used on the full A4 reports (Transaction,
-// Commission) — deliberately NOT on the small A6 receipt, which is
-// meant to be a clean, minimal document handed to a customer.
-// Must be called before any other content is drawn on the page, since
-// pdfkit draws in z-order and the watermark needs to sit underneath
-// the header/table, not on top of it.
+// Tiles the official AgentPro watermark faintly behind A4 report content.
+// The repeated pattern makes exported reports recognizably branded without
+// competing with table text or summary figures. Receipts remain deliberately
+// clean and do not use this watermark treatment.
 function drawWatermark(doc) {
   const pageWidth = doc.page.width;
   const pageHeight = doc.page.height;
-  const wmWidth = 260;
-  const wmHeight = wmWidth * (154 / 544); // matches the asset's actual aspect ratio
-  const centerX = pageWidth / 2;
-  const centerY = pageHeight / 2;
+  const watermarkColumns = 3;
+  const watermarkRows = 5;
+  const wmWidth = 112;
+  const wmHeight = wmWidth * (154 / 544);
+  const left = 45;
+  const right = 45;
+  const top = 125;
+  const bottom = 85;
 
-  doc.save();
-  doc.opacity(0.12);
-  doc.rotate(-30, { origin: [centerX, centerY] });
+  const horizontalGap =
+    (pageWidth - left - right - (watermarkColumns * wmWidth)) /
+    (watermarkColumns - 1);
+
+  const verticalGap =
+    (pageHeight - top - bottom - (watermarkRows * wmHeight)) /
+    (watermarkRows - 1);
+
+  doc.opacity(0.055);
+
   try {
-    doc.image(WATERMARK_PATH, centerX - wmWidth / 2, centerY - wmHeight / 2, { width: wmWidth });
+    for (let row = 0; row < watermarkRows; row += 1) {
+      for (let column = 0; column < watermarkColumns; column += 1) {
+        const x =
+          left +
+          column * (wmWidth + horizontalGap);
+
+        const y =
+          top +
+          row * (wmHeight + verticalGap);
+
+        const centerX = x + (wmWidth / 2);
+        const centerY = y + (wmHeight / 2);
+
+        doc.save();
+        doc.rotate(
+          -24,
+          {
+            origin: [
+              centerX,
+              centerY,
+            ],
+          }
+        );
+
+        doc.image(
+          WATERMARK_PATH,
+          x,
+          y,
+          {
+            width: wmWidth,
+          }
+        );
+
+        doc.restore();
+      }
+    }
   } catch (e) {
-    logger.warn('Watermark image not found, skipping:', e.message);
+    logger.warn(
+      'Watermark image not found, skipping:',
+      e.message
+    );
   }
-  doc.restore();
+
   doc.opacity(1);
+}
+
+// Draws the approved AgentPro logo + wordmark lockup as one asset.
+// Reports must not add a second standalone "AgentPro" title beside or
+// below the lockup, because the wordmark is already part of the asset.
+function drawReportBrandLockup(
+  doc,
+  {
+    top = 8,
+    maxWidth = 190,
+    maxHeight = 36,
+  } = {}
+) {
+  try {
+    const logo =
+      doc.openImage(LOGO_PATH);
+
+    const naturalWidth =
+      Number(logo.width) || 1;
+
+    const naturalHeight =
+      Number(logo.height) || 1;
+
+    const scale = Math.min(
+      maxWidth / naturalWidth,
+      maxHeight / naturalHeight
+    );
+
+    const width =
+      naturalWidth * scale;
+
+    const height =
+      naturalHeight * scale;
+
+    doc.image(
+      logo,
+      (doc.page.width - width) / 2,
+      top,
+      {
+        width,
+        height,
+      }
+    );
+  } catch (e) {
+    logger.warn(
+      'Logo image not found, skipping:',
+      e.message
+    );
+  }
 }
 
 // Draws the watermark plus a page-number footer on whichever page is
@@ -317,53 +412,14 @@ async function generateTransactionReportPDF({
       104
     ).fill(COLORS.primary);
 
-    try {
-      const logo =
-        doc.openImage(LOGO_PATH);
-
-      const logoHeight = 28;
-
-      const logoWidth =
-        logo.width &&
-        logo.height
-          ? (
-              logo.width /
-              logo.height
-            ) *
-            logoHeight
-          : logoHeight;
-
-      doc.image(
-        logo,
-        (
-          doc.page.width -
-          logoWidth
-        ) / 2,
-        8,
-        {
-          height: logoHeight,
-        }
-      );
-    } catch (e) {
-      logger.warn(
-        'Logo image not found, skipping:',
-        e.message
-      );
-    }
-
-    doc.fillColor(COLORS.secondary)
-      .fontSize(17)
-      .font('Helvetica-Bold')
-      .text(
-        'AgentPro',
-        40,
-        39,
-        {
-          width:
-            doc.page.width - 80,
-          align: 'center',
-        }
-      );
+    drawReportBrandLockup(
+      doc,
+      {
+        top: 8,
+        maxWidth: 190,
+        maxHeight: 36,
+      }
+    );
 
     doc.fillColor('white')
       .fontSize(11)
@@ -372,7 +428,7 @@ async function generateTransactionReportPDF({
         title ||
           'Business Transaction Report',
         40,
-        59,
+        50,
         {
           width:
             doc.page.width - 80,
@@ -385,7 +441,7 @@ async function generateTransactionReportPDF({
       .text(
         `Reporting Period: ${reportPeriodLabel(filters)}`,
         40,
-        79
+        73
       )
       .text(
         `Scope: ${filters.scope_label || 'All Branches'}`,
@@ -812,15 +868,52 @@ async function generateCommissionReportPDF({ commissions, summary, title, groupB
     let pageNum = 1;
     decoratePage(doc, pageNum);
 
-    doc.rect(0, 0, doc.page.width, 70).fill(COLORS.primary);
-    try { doc.image(LOGO_PATH, 15, 15, { height: 40 }); } catch (e) { logger.warn('Logo image not found, skipping:', e.message); }
-    doc.fillColor(COLORS.secondary).fontSize(18).font('Helvetica-Bold')
-      .text('AgentPro', 40, 15);
-    doc.fillColor('white').fontSize(11).font('Helvetica')
-      .text(title || 'Provider Commission Report', 40, 35);
-    doc.fontSize(9).text(`Generated: ${dateTimeStr(new Date())}`, 40, 52);
+    doc.rect(
+      0,
+      0,
+      doc.page.width,
+      82
+    ).fill(COLORS.primary);
+
+    drawReportBrandLockup(
+      doc,
+      {
+        top: 8,
+        maxWidth: 176,
+        maxHeight: 30,
+      }
+    );
+
+    doc.fillColor('white')
+      .fontSize(11)
+      .font('Helvetica-Bold')
+      .text(
+        title ||
+          'Provider Commission Report',
+        40,
+        43,
+        {
+          width:
+            doc.page.width - 80,
+          align: 'center',
+        }
+      );
+
+    doc.fontSize(8)
+      .font('Helvetica')
+      .text(
+        `Generated: ${dateTimeStr(new Date())}`,
+        40,
+        62,
+        {
+          width:
+            doc.page.width - 80,
+          align: 'center',
+        }
+      );
+
     doc.fillColor(COLORS.text);
-    doc.moveDown(3);
+    doc.y = 96;
 
     // Summary
     doc.fontSize(9).font('Helvetica-Bold').text('Summary');
@@ -1012,15 +1105,52 @@ async function generatePersonalTransactionReportPDF({ transactions, summary, tit
     decoratePage(doc, pageNum);
 
     // Header
-    doc.rect(0, 0, doc.page.width, 70).fill(COLORS.primary);
-    try { doc.image(LOGO_PATH, 15, 15, { height: 40 }); } catch (e) { logger.warn('Logo image not found, skipping:', e.message); }
-    doc.fillColor(COLORS.secondary).fontSize(18).font('Helvetica-Bold')
-      .text('AgentPro', 40, 15);
-    doc.fillColor('white').fontSize(11).font('Helvetica')
-      .text(title || 'My Transaction Report', 40, 35);
-    doc.fontSize(9).text(`Generated: ${dateTimeStr(new Date())}`, 40, 52);
+    doc.rect(
+      0,
+      0,
+      doc.page.width,
+      82
+    ).fill(COLORS.primary);
+
+    drawReportBrandLockup(
+      doc,
+      {
+        top: 8,
+        maxWidth: 176,
+        maxHeight: 30,
+      }
+    );
+
+    doc.fillColor('white')
+      .fontSize(11)
+      .font('Helvetica-Bold')
+      .text(
+        title ||
+          'My Transaction Report',
+        40,
+        43,
+        {
+          width:
+            doc.page.width - 80,
+          align: 'center',
+        }
+      );
+
+    doc.fontSize(8)
+      .font('Helvetica')
+      .text(
+        `Generated: ${dateTimeStr(new Date())}`,
+        40,
+        62,
+        {
+          width:
+            doc.page.width - 80,
+          align: 'center',
+        }
+      );
+
     doc.fillColor(COLORS.text);
-    doc.moveDown(2.5);
+    doc.y = 96;
 
     // Summary Cards
     const summaries = [
