@@ -17,6 +17,7 @@ import '../../core/services/storage_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
+import '../../shared/utils/high_amount_warning.dart';
 
 const Map<String, String> kPersonalTransactionLabels = {
   'send_money': 'Transfer Money',
@@ -1200,6 +1201,20 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
 
     if (!_formKey.currentState!.validate()) return;
 
+    if (_needsAmount) {
+      final amount =
+          double.tryParse(_amountCtrl.text.replaceAll(',', '').trim()) ?? 0;
+
+      final continueAfterAmountWarning = await confirmHighAmountIfNeeded(
+        context,
+        amount: amount,
+      );
+
+      if (!continueAfterAmountWarning || !mounted) {
+        return;
+      }
+    }
+
     if (!_simDetectionComplete) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('SIM detection is still in progress.')),
@@ -1299,9 +1314,6 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       return;
     }
 
-    setState(() => _loading = true);
-    String? progressAction;
-
     final recipientPhone =
         _recipientMode == 'other' ? _phoneCtrl.text.trim() : null;
 
@@ -1309,6 +1321,23 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         _bundleCategory == 'flexi' && !_isTelecelManualDataCategory
             ? _flexiAmountCtrl.text.trim()
             : null;
+
+    if (flexiAmount != null) {
+      final amount =
+          double.tryParse(flexiAmount.replaceAll(',', '').trim()) ?? 0;
+
+      final continueAfterAmountWarning = await confirmHighAmountIfNeeded(
+        context,
+        amount: amount,
+      );
+
+      if (!continueAfterAmountWarning || !mounted) {
+        return;
+      }
+    }
+
+    setState(() => _loading = true);
+    String? progressAction;
 
     final resolvedBundleCategory = _isMtnDataBundle &&
             _bundleCategory != null &&
@@ -2103,6 +2132,15 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           ),
         ),
       );
+      return;
+    }
+
+    final continueAfterAmountWarning = await confirmHighAmountIfNeeded(
+      context,
+      amount: tier.amount,
+    );
+
+    if (!continueAfterAmountWarning || !mounted) {
       return;
     }
 

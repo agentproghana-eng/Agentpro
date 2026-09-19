@@ -12,6 +12,7 @@ import '../../shared/theme/app_theme.dart';
 import '../../shared/utils/transaction_labels.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_widgets.dart';
+import '../../shared/utils/high_amount_warning.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../core/services/offline_queue_service.dart';
 import '../../core/services/offline_authorization_service.dart';
@@ -577,6 +578,18 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
   Future<void> _proceed() async {
     if (!_formKey.currentState!.validate()) return;
+
+    final amountForWarning =
+        double.tryParse(_amountCtrl.text.replaceAll(',', '').trim()) ?? 0;
+
+    final continueAfterAmountWarning = await confirmHighAmountIfNeeded(
+      context,
+      amount: amountForWarning,
+    );
+
+    if (!continueAfterAmountWarning || !mounted) {
+      return;
+    }
 
     if (!_simDetectionComplete) {
       ScaffoldMessenger.of(context).showSnackBar(

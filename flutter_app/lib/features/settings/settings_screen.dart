@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import '../../core/auth/auth_bloc.dart';
 import '../../core/api/api_client.dart';
 import '../../core/services/biometric_service.dart';
+import '../../core/services/high_amount_warning_service.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/services/offline_queue_service.dart';
@@ -25,6 +26,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _deviceAuthEnabled = false;
   bool _canDeviceAuth = false;
   String _appVersion = '';
+  double? _highAmountWarningLimit;
 
   @override
   void initState() {
@@ -36,12 +38,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final availability = await BiometricService.checkDeviceAuthAvailability();
     final enabled = await BiometricService.isDeviceAuthEnabled();
     final packageInfo = await PackageInfo.fromPlatform();
+    final highAmountWarningLimit =
+        await HighAmountWarningService.getLimit();
 
     if (mounted) {
       setState(() {
         _canDeviceAuth = availability == BiometricAvailability.available;
         _deviceAuthEnabled = enabled;
         _appVersion = 'v${packageInfo.version}+${packageInfo.buildNumber}';
+        _highAmountWarningLimit = highAmountWarningLimit;
       });
     }
   }
@@ -87,6 +92,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (mounted) {
       setState(() => _deviceAuthEnabled = value);
+    }
+  }
+
+  String get _highAmountWarningSubtitle {
+    final limit = _highAmountWarningLimit;
+
+    if (limit == null) {
+      return 'Off · Set a warning limit';
+    }
+
+    final decimals = limit == limit.roundToDouble() ? 0 : 2;
+
+    return 'Warn above GHS ${limit.toStringAsFixed(decimals)}';
+  }
+
+  Future<void> _openHighAmountWarning() async {
+    final changed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _HighAmountWarningSheet(
+        initialLimit: _highAmountWarningLimit,
+      ),
+    );
+
+    if (changed != true) {
+      return;
+    }
+
+    final latest = await HighAmountWarningService.getLimit();
+
+    if (mounted) {
+      setState(() => _highAmountWarningLimit = latest);
     }
   }
 
@@ -292,6 +333,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
           const SizedBox(height: 20),
+          const _SettingsSectionHeader(title: 'Transaction Safety'),
+          _SettingsGroupCard(
+            children: [
+              _SettingsTile(
+                icon: Icons.warning_amber_rounded,
+                title: 'High amount warning',
+                subtitle: _highAmountWarningSubtitle,
+                onTap: _openHighAmountWarning,
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
           const _SettingsSectionHeader(title: 'Quick Actions'),
           _SettingsGroupCard(
             children: [
@@ -387,6 +440,177 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: 'Version',
                 subtitle:
                     _appVersion.isEmpty ? '—' : _appVersion,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HighAmountWarningSheet extends StatefulWidget {
+  final double? initialLimit;
+
+  const _HighAmountWarningSheet({
+    required this.initialLimit,
+  });
+
+  @override
+  State<_HighAmountWarningSheet> createState() =>
+      _HighAmountWarningSheetState();
+}
+
+class _HighAmountWarningSheetState extends State<_HighAmountWarningSheet> {
+  late final TextEditingController _controller;
+  String? _errorText;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    final initial = widget.initialLimit;
+
+    _controller = TextEditingController(
+      text: initial == null
+          ? ''
+          : initial == initial.roundToDouble()
+              ? initial.toStringAsFixed(0)
+              : initial.toStringAsFixed(2),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final raw = _controller.text.replaceAll(',', '').trim();
+    final amount = double.tryParse(raw);
+
+    if (amount == null || !amount.isFinite || amount <= 0) {
+      setState(() {
+        _errorText = 'Enter an amount above GHS 0.';
+      });
+      return;
+    }
+
+    setState(() {
+      _saving = true;
+      _errorText = null;
+    });
+
+    try {
+      await HighAmountWarningService.setLimit(amount);
+
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _errorText = 'Could not save this setting.';
+        });
+      }
+    }
+  }
+
+  Future<void> _disable() async {
+    setState(() {
+      _saving = true;
+      _errorText = null;
+    });
+
+    try {
+      await HighAmountWarningService.clearLimit();
+
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _errorText = 'Could not turn this off.';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomInset),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'High amount warning',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Warn when a transaction exceeds this amount.',
+            style: TextStyle(color: context.appSecondaryText),
+          ),
+          const SizedBox(height: 18),
+          TextField(
+            controller: _controller,
+            enabled: !_saving,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              labelText: 'Warning amount',
+              prefixText: 'GHS ',
+              helperText: 'Example: 1000',
+              errorText: _errorText,
+            ),
+            onSubmitted: (_) {
+              if (!_saving) {
+                _save();
+              }
+            },
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              if (widget.initialLimit != null)
+                TextButton(
+                  onPressed: _saving ? null : _disable,
+                  child: const Text('Turn off'),
+                ),
+              const Spacer(),
+              TextButton(
+                onPressed: _saving ? null : () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: _saving ? null : _save,
+                child: _saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Save'),
               ),
             ],
           ),
