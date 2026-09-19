@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../../core/api/api_client.dart';
+import '../../core/config/distribution_channel.dart';
 import '../../core/auth/auth_bloc.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
@@ -33,7 +34,9 @@ class _PersonalSubscriptionScreenState extends State<PersonalSubscriptionScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _restorePaystackReference();
+    if (!kPlayStoreBuild) {
+      _restorePaystackReference();
+    }
     _load();
   }
 
@@ -447,6 +450,139 @@ class _PersonalSubscriptionScreenState extends State<PersonalSubscriptionScreen>
     final plan = sub?['plan'] ?? 'free';
     final expiresAt = sub?['expires_at'];
     final isPaid = plan == 'paid';
+
+    if (kPlayStoreBuild) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('My Subscription')),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _loadError != null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.cloud_off_outlined, size: 48),
+                          const SizedBox(height: 12),
+                          Text(
+                            _loadError!,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: context.appSecondaryText,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton.icon(
+                            onPressed: _load,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Try Again'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : RefreshIndicator(
+                    onRefresh: _load,
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        Card(
+                          color: isPaid
+                              ? AppTheme.successColor.withValues(
+                                  alpha: 0.1,
+                                )
+                              : Colors.grey.withValues(alpha: 0.1),
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              children: [
+                                Icon(
+                                  isPaid
+                                      ? Icons.check_circle
+                                      : Icons.info_outline,
+                                  color: isPaid
+                                      ? AppTheme.successColor
+                                      : context.appPrimaryText,
+                                  size: 48,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  isPaid
+                                      ? 'Personal Plan — Paid'
+                                      : 'Personal Plan — Free',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                if (isPaid && expiresAt != null) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Renews/Expires: ${DateFormat('dd MMM yyyy').format(DateTime.parse(expiresAt))}',
+                                    style: TextStyle(
+                                      color: context.appPrimaryText,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+                              children: [
+                                const Row(
+                                  children: [
+                                    Icon(Icons.language_outlined),
+                                    SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Subscription management',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                Text(
+                                  'Purchases and renewals are not available '
+                                  'inside this Play Store version of AgentPro. '
+                                  'Existing subscriptions continue to work '
+                                  'normally. To purchase or renew, use '
+                                  'AgentPro on the web, then return here and '
+                                  'refresh your subscription status.',
+                                  style: TextStyle(
+                                    color: context.appSecondaryText,
+                                    height: 1.45,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                OutlinedButton.icon(
+                                  onPressed: _load,
+                                  icon: const Icon(Icons.refresh),
+                                  label: const Text(
+                                    'Refresh subscription status',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(title: const Text('My Subscription')),

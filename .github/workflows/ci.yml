@@ -603,6 +603,7 @@ jobs:
         run: |
           flutter build appbundle --release \
             --build-number "$GITHUB_RUN_NUMBER" \
+            --dart-define=AGENTPRO_PLAY_STORE_BUILD=true \
             --dart-define=AGENTPRO_SOURCE_COMMIT="$GITHUB_SHA"
 
       - name: Verify signed Play Store AAB

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/api/api_client.dart';
+import '../../core/config/distribution_channel.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_network_image.dart';
 import '../../shared/widgets/app_widgets.dart';
@@ -656,7 +657,8 @@ class _AdDetailScreenState extends State<AdDetailScreen> {
                 onPressed: _removeAd,
               ),
             ],
-            if (status == 'pending_payment' &&
+            if (!kPlayStoreBuild &&
+                status == 'pending_payment' &&
                 (!paymentReferenceSubmitted || paystackPending)) ...[
               const SizedBox(height: 20),
               AppButton(
@@ -1349,6 +1351,15 @@ class _StatusExplainer extends StatelessWidget {
   Widget build(BuildContext context) {
     final expiresAtDate = parseMarketplaceDateTime(expiresAt);
 
+    final pendingPaymentBody = kPlayStoreBuild
+        ? 'Your ad was approved. Listing payments are not available in '
+            'this Play Store version of AgentPro. Complete the listing '
+            'payment using AgentPro on the web, then return here and '
+            'refresh the listing status.'
+        : 'Your ad was approved! Pay the GH₵ ${fee.toStringAsFixed(2)} '
+            'publishing fee securely with Paystack below. Manual MoMo '
+            'remains available as a fallback.';
+
     final (icon, color, title, body) = switch (status) {
       'pending_review' => (
           Icons.hourglass_top,
@@ -1361,8 +1372,7 @@ class _StatusExplainer extends StatelessWidget {
           Icons.payment,
           AppTheme.secondaryColor,
           'Approved — Payment Required',
-          'Your ad was approved! Pay the GH₵ ${fee.toStringAsFixed(2)} publishing '
-              'fee securely with Paystack below. Manual MoMo remains available as a fallback.',
+          pendingPaymentBody,
         ),
       'active' => (
           Icons.check_circle,
