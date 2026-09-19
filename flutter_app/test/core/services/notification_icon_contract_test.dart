@@ -60,14 +60,14 @@ void main() {
       colors,
       contains(
         '<color name="notification_color">'
-        '#00695C</color>',
+        '#006B5E</color>',
       ),
     );
 
-    expect(theme, contains('primaryColor = Color(0xFF00695C)'));
+    expect(theme, contains('primaryColor = Color(0xFF006B5E)'));
 
-    expect(service, contains('color: const Color(0xFF00695C),'));
+    expect(service, contains('color: const Color(0xFF006B5E),'));
 
-    expect(service, isNot(contains('color: const Color(0xFF006B5E),')));
+    expect(service, isNot(contains('color: const Color(0xFF00695C),')));
   });
 }

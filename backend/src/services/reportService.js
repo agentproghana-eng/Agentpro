@@ -139,7 +139,7 @@ function simLabel(tx, { full = false } = {}) {
 // ── Brand Colors ──────────────────────────────────────────────
 const COLORS = {
   primary: '#006B5E',
-  secondary: '#FFB300',
+  secondary: '#D6AD38',
   text: '#1A1A1A',
   muted: '#666666',
   light: '#F5F5F5',

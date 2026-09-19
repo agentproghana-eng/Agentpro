@@ -4,7 +4,7 @@ import { PublicInfoPage } from "@/components/marketing/public-info-page";
 import { createPageMetadata } from "@/lib/metadata";
 
 export const metadata: Metadata = createPageMetadata({
-  title: "AgentPro — One App. Every Business.",
+  title: "AgentPro — One App Every Business",
   description:
     "AgentPro is Coreintel Systems' integrated operating platform for business operations, transactions, reporting, people, discovery and opportunity.",
   path: "/agentpro",
@@ -149,7 +149,7 @@ export default function AgentProPage() {
   return (
     <PublicInfoPage
       eyebrow="AgentPro"
-      title="One App. Every Business."
+      title="One App Every Business"
       description="AgentPro is an integrated business operating platform designed to help businesses run their work, understand performance, connect with people and discover opportunity."
       primaryAction={{
         label: "Get AgentPro",

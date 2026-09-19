@@ -386,7 +386,7 @@ select:focus-visible {
   height: 55px;
   max-width: none;
   object-fit: contain;
-  transform: scale(2.65);
+  transform: none;
 }
 
 .ic-product-brand > div:last-child {

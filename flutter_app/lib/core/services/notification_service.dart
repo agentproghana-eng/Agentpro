@@ -259,7 +259,7 @@ class NotificationService {
       onlyAlertOnce: hasDeliveryKey,
       tag: hasDeliveryKey ? deliveryKey : null,
       icon: '@drawable/ic_notification',
-      color: const Color(0xFF00695C),
+      color: const Color(0xFF006B5E),
     );
 
     await _localNotifications.show(

@@ -118,7 +118,7 @@ describe(
         expect(
           payload.html,
         ).toContain(
-          'One App. Every Business.',
+          'One App Every Business',
         );
 
         expect(
@@ -154,7 +154,7 @@ describe(
         expect(
           payload.text,
         ).toContain(
-          'One App. Every Business.',
+          'One App Every Business',
         );
       },
     );

@@ -3,10 +3,10 @@ import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   // AgentPro — premium teal + gold identity.
-  static const Color primaryColor = Color(0xFF00695C); // AgentPro Deep Teal
+  static const Color primaryColor = Color(0xFF006B5E); // AgentPro Deep Teal
   static const Color primaryDeep = Color(0xFF004D40);
   static const Color primaryLight = Color(0xFF4FD1C5);
-  static const Color secondaryColor = Color(0xFFC9A227); // AgentPro Gold
+  static const Color secondaryColor = Color(0xFFD6AD38); // AgentPro Gold
 
   static const Color errorColor = Color(0xFFBA1A1A);
   static const Color successColor = Color(0xFF2E7D32);

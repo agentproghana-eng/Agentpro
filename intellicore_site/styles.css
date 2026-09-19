@@ -1130,7 +1130,7 @@ h3 {
   max-width: none;
   display: block;
   object-fit: contain;
-  transform: scale(2.65);
+  transform: none;
   transform-origin: center;
 }
 
@@ -1144,6 +1144,6 @@ h3 {
   .agentpro-web-shield {
     width: 82px;
     height: 82px;
-    transform: scale(2.65);
+    transform: none;
   }
 }
