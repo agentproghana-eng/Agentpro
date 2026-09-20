@@ -17,6 +17,12 @@ import {
 } from './components/PageState.jsx';
 import { ConfirmDialog } from './components/ConfirmDialog.jsx';
 import SupportCasesPanel from './features/support/SupportCasesPanel.jsx';
+import AdminTeamPage from './features/admin/AdminTeamPage.jsx';
+import {
+  adminRoleLabel,
+  canAccessAdminPath,
+  isAdminPortalRole,
+} from './lib/adminAccess.js';
 import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom';
 import API from './lib/api.js';
 import {
@@ -48,7 +54,13 @@ function AuthProvider({ children }) {
       Boolean(getAccessToken()) ||
       Boolean(getRefreshToken());
 
-    if (storedUser && hasCredential) {
+    if (
+      storedUser &&
+      hasCredential &&
+      isAdminPortalRole(
+        storedUser.role,
+      )
+    ) {
       setUser(storedUser);
     } else {
       clearAuthSession();
@@ -103,8 +115,9 @@ function AuthProvider({ children }) {
     }
 
     if (
-      data.data.user.role !==
-      'superuser'
+      !isAdminPortalRole(
+        data.data.user.role,
+      )
     ) {
       // A non-superuser can still authenticate through the shared API,
       // but that session has no authority in the Admin Portal.
@@ -126,7 +139,7 @@ function AuthProvider({ children }) {
       clearAuthSession();
 
       throw new Error(
-        'Access denied. Superuser only.',
+        'Access denied. Administrator role required.',
       );
     }
 
@@ -174,13 +187,14 @@ function AuthProvider({ children }) {
 
     if (
       !data?.data?.user ||
-      data.data.user.role !==
-        'superuser'
+      !isAdminPortalRole(
+        data.data.user.role,
+      )
     ) {
       clearAuthSession();
 
       throw new Error(
-        'Access denied. Superuser only.',
+        'Access denied. Administrator role required.',
       );
     }
 
@@ -253,7 +267,25 @@ function AuthProvider({ children }) {
 
 function Protected({ children }) {
   const { user } = useAuth();
-  return user ? children : <Navigate to="/login" replace />;
+
+  return user &&
+    isAdminPortalRole(user.role)
+    ? children
+    : <Navigate to="/login" replace />;
+}
+
+function AdminPageGuard({
+  path,
+  children,
+}) {
+  const { user } = useAuth();
+
+  return canAccessAdminPath(
+    user?.role,
+    path,
+  )
+    ? children
+    : <Navigate to="/" replace />;
 }
 
 // ── Login Page ────────────────────────────────────────────────
@@ -493,7 +525,7 @@ function LoginPage() {
           mt-1
         "
       >
-        Superuser Admin Portal
+        Administrator Portal
       </p>
     </div>
   );
@@ -1094,6 +1126,7 @@ const NAV = [
   { path: '/config', icon: '⚙️', label: 'System Config' },
   { path: '/support', icon: '🛟', label: 'Support' },
   { path: '/audit', icon: '📋', label: 'Audit Logs' },
+  { path: '/admin-team', icon: '🛡️', label: 'Admin Team' },
 ];
 
 function Layout({ children }) {
@@ -1102,7 +1135,12 @@ function Layout({ children }) {
 
   return (
     <div className="flex h-screen bg-gray-100">
-      <UssdFlowHealthToastWatcher />
+      {canAccessAdminPath(
+        user?.role,
+        '/flows',
+      ) && (
+        <UssdFlowHealthToastWatcher />
+      )}
 
       {/* Sidebar */}
       <aside className={`${sidebarOpen ? 'w-56' : 'w-16'} bg-white shadow-md flex flex-col transition-all duration-200`}>
@@ -1113,7 +1151,14 @@ function Layout({ children }) {
           {sidebarOpen && <span className="font-bold text-gray-900 text-sm">Admin Portal</span>}
         </div>
         <nav className="flex-1 p-2 space-y-1">
-          {NAV.map(({ path, icon, label }) => (
+          {NAV
+            .filter(({ path }) =>
+              canAccessAdminPath(
+                user?.role,
+                path,
+              ),
+            )
+            .map(({ path, icon, label }) => (
             <Link key={path} to={path}
               className="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-50 hover:text-primary transition text-sm">
               <span className="text-lg">{icon}</span>
@@ -1122,7 +1167,16 @@ function Layout({ children }) {
           ))}
         </nav>
         <div className="p-4 border-t">
-          {sidebarOpen && <p className="text-xs text-gray-500 mb-2 truncate">{user?.email}</p>}
+          {sidebarOpen && (
+            <>
+              <p className="text-xs text-gray-500 truncate">
+                {user?.email}
+              </p>
+              <p className="text-[11px] text-gray-400 mb-2">
+                {adminRoleLabel(user?.role)}
+              </p>
+            </>
+          )}
           <button onClick={logout}
             className="flex items-center gap-2 text-red-500 hover:text-red-700 text-sm w-full">
             <span>🚪</span>{sidebarOpen && 'Sign Out'}
@@ -1151,6 +1205,13 @@ function Layout({ children }) {
 
 function DashboardPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const canViewOperations =
+    canAccessAdminPath(
+      user?.role,
+      '/flows',
+    );
 
   const {
     data: overview,
@@ -1264,7 +1325,16 @@ function DashboardPage() {
             </>
           );
 
-          if (!card.path) {
+          const accessiblePath =
+            card.path &&
+            canAccessAdminPath(
+              user?.role,
+              card.path,
+            )
+              ? card.path
+              : null;
+
+          if (!accessiblePath) {
             return (
               <div
                 key={card.label}
@@ -1279,7 +1349,7 @@ function DashboardPage() {
             <button
               key={card.label}
               type="button"
-              onClick={() => navigate(card.path)}
+              onClick={() => navigate(accessiblePath)}
               className="rounded-xl bg-white p-4 text-left shadow-sm
                          transition hover:shadow-md hover:ring-2
                          hover:ring-primary/30 focus:outline-none
@@ -1291,9 +1361,13 @@ function DashboardPage() {
         })}
       </div>
 
-      <UssdFlowHealthAlerts />
-      <OperationalHealthWidget />
-      <PendingRegistrationsWidget />
+      {canViewOperations && (
+        <>
+          <UssdFlowHealthAlerts />
+          <OperationalHealthWidget />
+          <PendingRegistrationsWidget />
+        </>
+      )}
     </div>
   );
 }
@@ -6417,6 +6491,18 @@ import {
   CommissionsPage,
 } from './pages.jsx';
 
+function MarketplaceBusinessesRoutePage() {
+  const { user } = useAuth();
+
+  return (
+    <MarketplaceBusinessesPage
+      allowAccountActions={
+        user?.role === 'superuser'
+      }
+    />
+  );
+}
+
 // ── Root App ──────────────────────────────────────────────────
 
 export default function App() {
@@ -6431,30 +6517,134 @@ export default function App() {
               <Layout>
                 <Routes>
                   <Route path="/" element={<DashboardPage />} />
-                  <Route path="/registrations" element={<RegistrationsPage />} />
-                  <Route path="/subscriptions" element={<SubscriptionsPage />} />
-                  <Route path="/marketplace" element={<MarketplacePage />} />
-                  <Route path="/config" element={<ConfigPage />} />
-                  <Route path="/companies" element={<CompaniesPage />} />
+                  <Route
+                    path="/registrations"
+                    element={
+                      <AdminPageGuard path="/registrations">
+                        <RegistrationsPage />
+                      </AdminPageGuard>
+                    }
+                  />
+                  <Route
+                    path="/subscriptions"
+                    element={
+                      <AdminPageGuard path="/subscriptions">
+                        <SubscriptionsPage />
+                      </AdminPageGuard>
+                    }
+                  />
+                  <Route
+                    path="/marketplace"
+                    element={
+                      <AdminPageGuard path="/marketplace">
+                        <MarketplacePage />
+                      </AdminPageGuard>
+                    }
+                  />
+                  <Route
+                    path="/config"
+                    element={
+                      <AdminPageGuard path="/config">
+                        <ConfigPage />
+                      </AdminPageGuard>
+                    }
+                  />
+                  <Route
+                    path="/companies"
+                    element={
+                      <AdminPageGuard path="/companies">
+                        <CompaniesPage />
+                      </AdminPageGuard>
+                    }
+                  />
                   <Route
                     path="/personal-users"
-                    element={<PersonalUsersPage />}
+                    element={
+                      <AdminPageGuard path="/personal-users">
+                        <PersonalUsersPage />
+                      </AdminPageGuard>
+                    }
                   />
                   <Route
                     path="/marketplace-businesses"
-                    element={<MarketplaceBusinessesPage />}
+                    element={
+                      <AdminPageGuard path="/marketplace-businesses">
+                        <MarketplaceBusinessesRoutePage />
+                      </AdminPageGuard>
+                    }
                   />
                   <Route
                     path="/community"
-                    element={<CommunityModerationPage />}
+                    element={
+                      <AdminPageGuard path="/community">
+                        <CommunityModerationPage />
+                      </AdminPageGuard>
+                    }
                   />
-                  <Route path="/companies/:companyId" element={<CompanyDetailPage />} />
-                  <Route path="/shifts" element={<ShiftsPage />} />
-                  <Route path="/commissions" element={<CommissionsPage />} />
-                  <Route path="/ussd" element={<USSDTemplatesPage />} />
-                  <Route path="/flows" element={<FlowsPage />} />
-                  <Route path="/support" element={<SupportConsolePage />} />
-                  <Route path="/audit" element={<AuditLogsPage />} />
+                  <Route
+                    path="/companies/:companyId"
+                    element={
+                      <AdminPageGuard path="/companies">
+                        <CompanyDetailPage />
+                      </AdminPageGuard>
+                    }
+                  />
+                  <Route
+                    path="/shifts"
+                    element={
+                      <AdminPageGuard path="/shifts">
+                        <ShiftsPage />
+                      </AdminPageGuard>
+                    }
+                  />
+                  <Route
+                    path="/commissions"
+                    element={
+                      <AdminPageGuard path="/commissions">
+                        <CommissionsPage />
+                      </AdminPageGuard>
+                    }
+                  />
+                  <Route
+                    path="/ussd"
+                    element={
+                      <AdminPageGuard path="/ussd">
+                        <USSDTemplatesPage />
+                      </AdminPageGuard>
+                    }
+                  />
+                  <Route
+                    path="/flows"
+                    element={
+                      <AdminPageGuard path="/flows">
+                        <FlowsPage />
+                      </AdminPageGuard>
+                    }
+                  />
+                  <Route
+                    path="/support"
+                    element={
+                      <AdminPageGuard path="/support">
+                        <SupportConsolePage />
+                      </AdminPageGuard>
+                    }
+                  />
+                  <Route
+                    path="/audit"
+                    element={
+                      <AdminPageGuard path="/audit">
+                        <AuditLogsPage />
+                      </AdminPageGuard>
+                    }
+                  />
+                  <Route
+                    path="/admin-team"
+                    element={
+                      <AdminPageGuard path="/admin-team">
+                        <AdminTeamPage />
+                      </AdminPageGuard>
+                    }
+                  />
                 </Routes>
               </Layout>
             </Protected>

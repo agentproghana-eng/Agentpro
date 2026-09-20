@@ -765,7 +765,7 @@ exports.listShiftsCursor = async (req, res) => {
     const params = [];
     let idx = 1;
 
-    if (req.user.role !== 'superuser') {
+    if (!['superuser', 'admin_operations'].includes(req.user.role)) {
       conditions.push(
         `s.company_id = $${idx++}`
       );
@@ -944,8 +944,10 @@ exports.listShifts = async (req, res) => {
     let idx = 1;
 
     if (
-      req.user.role !==
-      'superuser'
+      ![
+        'superuser',
+        'admin_operations',
+      ].includes(req.user.role)
     ) {
       conditions.push(
         `s.company_id = $${idx++}`

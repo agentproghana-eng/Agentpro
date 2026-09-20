@@ -442,7 +442,9 @@ export function PersonalUsersPage() {
 // ── Marketplace Businesses Page ───────────────────────────────
 
 
-export function MarketplaceBusinessesPage() {
+export function MarketplaceBusinessesPage({
+  allowAccountActions = true,
+}) {
   const navigate = useNavigate();
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -706,28 +708,38 @@ export function MarketplaceBusinessesPage() {
             {
               key: 'account_action',
               label: '',
-              render: (row) => (
-                <button
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    toggleStatus(row.owner_user_id, row.status);
-                  }}
-                  className={[
-                    'rounded-lg border px-3 py-1.5 text-xs font-medium transition',
-                    row.status === 'active'
-                      ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100'
-                      : 'border-green-200 bg-green-50 text-green-600 hover:bg-green-100',
-                  ].join(' ')}
-                >
-                  {row.status === 'active'
-                    ? 'Suspend'
-                    : 'Activate'}
-                </button>
-              ),
+              render: (row) =>
+                allowAccountActions ? (
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleStatus(row.owner_user_id, row.status);
+                    }}
+                    className={[
+                      'rounded-lg border px-3 py-1.5 text-xs font-medium transition',
+                      row.status === 'active'
+                        ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100'
+                        : 'border-green-200 bg-green-50 text-green-600 hover:bg-green-100',
+                    ].join(' ')}
+                  >
+                    {row.status === 'active'
+                      ? 'Suspend'
+                      : 'Activate'}
+                  </button>
+                ) : (
+                  <span className="text-xs text-gray-400">
+                    Superuser only
+                  </span>
+                ),
             },
           ]}
-          onRowClick={(row) =>
-            navigate(`/companies/${row.company_id}`)
+          onRowClick={
+            allowAccountActions
+              ? (row) =>
+                  navigate(
+                    `/companies/${row.company_id}`,
+                  )
+              : undefined
           }
         />
       </div>

@@ -43,7 +43,7 @@ describe(
 
         const mfaGate =
           login.indexOf(
-            "user.role === 'superuser'",
+            'isAdminPortalRole(user.role)',
           );
 
         const sessionInsert =

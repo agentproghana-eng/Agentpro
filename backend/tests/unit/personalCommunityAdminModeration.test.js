@@ -210,7 +210,7 @@ describe("Personal Community admin moderation", () => {
     );
   });
 
-  test("superuser routes precede Personal-account gate", () => {
+  test("admin content moderation routes precede Personal-account gate", () => {
     const source = fs.readFileSync(
       path.join(
         __dirname,
@@ -240,7 +240,7 @@ describe("Personal Community admin moderation", () => {
     expect(personalGateAt).toBeGreaterThan(moderateAt);
 
     expect(source).toContain(
-      "authorize('superuser')"
+      "authorize('superuser', 'admin_content')"
     );
   });
 

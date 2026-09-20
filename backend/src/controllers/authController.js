@@ -45,6 +45,9 @@ const {
 const {
   deleteFile: deleteCloudinaryFile,
 } = require('../config/cloudinary');
+const {
+  isAdminPortalRole,
+} = require('../security/adminRbac');
 
 // ─── Token Helpers ───────────────────────────────────────────
 
@@ -1172,7 +1175,7 @@ exports.login = async (req, res) => {
       });
     }
 
-    if (user.role === 'superuser') {
+    if (isAdminPortalRole(user.role)) {
       try {
         assertMfaEncryptionConfigured();
       } catch (configurationError) {
@@ -1466,8 +1469,9 @@ exports.completeMfa = async (req, res) => {
             userResult.rows[0];
 
           if (
-            user.role !==
-              'superuser' ||
+            !isAdminPortalRole(
+              user.role,
+            ) ||
             user.status !==
               'active'
           ) {
@@ -2204,7 +2208,7 @@ exports.refreshToken = async (req, res) => {
     // merely by presenting its old refresh credential. Superusers must
     // return through password + MFA authentication.
     if (
-      user.role === 'superuser' &&
+      isAdminPortalRole(user.role) &&
       (
         !user.mfa_enabled ||
         !matchedSession.mfa_verified_at
@@ -2710,7 +2714,9 @@ exports.deleteAccount = async (
           }
 
           if (
-            user.role === 'superuser'
+            isAdminPortalRole(
+              user.role,
+            )
           ) {
             return {
               statusCode: 403,

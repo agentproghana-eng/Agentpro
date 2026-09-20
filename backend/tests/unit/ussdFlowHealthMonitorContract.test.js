@@ -152,7 +152,7 @@ describe(
     );
 
     test(
-      'admin flow-health routes remain superuser-only',
+      'admin flow-health routes remain permission protected',
       () => {
         const admin = read(
           'src/routes/admin.routes.js'
@@ -161,7 +161,7 @@ describe(
         expect(
           admin
         ).toContain(
-          "router.use(authenticate, authorize('superuser'))"
+          'requireAdminPortalAccess'
         );
 
         expect(

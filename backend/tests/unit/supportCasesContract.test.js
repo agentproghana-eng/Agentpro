@@ -37,10 +37,10 @@ describe('Support Cases contracts', () => {
     expect(server).toContain("app.use(`${API}/support`, supportRoutes)");
   });
 
-  test('admin support inbox remains behind global superuser authorization', () => {
+  test('admin support inbox remains behind fail-closed admin authorization', () => {
     const admin = read('backend/src/routes/admin.routes.js');
 
-    expect(admin).toContain("router.use(authenticate, authorize('superuser'))");
+    expect(admin).toContain('requireAdminPortalAccess');
     expect(admin).toContain("router.get('/support/cases'");
     expect(admin).toContain("router.patch('/support/cases/:id'");
     expect(admin).toContain("router.post('/support/cases/:id/reply'");

@@ -22,11 +22,11 @@ describe(
       );
 
     test(
-      'remains behind global superuser authorization',
+      'remains behind fail-closed admin authorization',
       () => {
         expect(source)
           .toContain(
-            "router.use(authenticate, authorize('superuser'))"
+            'requireAdminPortalAccess'
           );
       }
     );

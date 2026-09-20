@@ -4,6 +4,9 @@ const { body, param, validationResult } = require('express-validator');
 const userRouter = express.Router();
 const userController = require('../controllers/userController');
 const {
+  ADMIN_STAFF_ROLES,
+} = require('../security/adminRbac');
+const {
   authenticate,
   authorize,
   requireActiveSubscription,
@@ -47,7 +50,14 @@ const createUserValidation = [
     .notEmpty()
     .withMessage('Phone number is required'),
   body('role')
-    .isIn(['business_owner', 'manager', 'agent', 'auditor', 'customer'])
+    .isIn([
+      'business_owner',
+      'manager',
+      'agent',
+      'auditor',
+      'customer',
+      ...ADMIN_STAFF_ROLES,
+    ])
     .withMessage('Invalid user role'),
   body('branch_id')
     .optional({ nullable: true, checkFalsy: true })
@@ -109,13 +119,23 @@ userRouter.use(authenticate);
 // endpoint available until all clients have migrated.
 userRouter.get(
   '/cursor',
-  authorize('superuser', 'business_owner', 'manager'),
+  authorize(
+    'superuser',
+    'admin_operations',
+    'business_owner',
+    'manager',
+  ),
   (req, res) => userController.listUsersCursor(req, res)
 );
 
 userRouter.get(
   '/',
-  authorize('superuser', 'business_owner', 'manager'),
+  authorize(
+    'superuser',
+    'admin_operations',
+    'business_owner',
+    'manager',
+  ),
   userController.listUsers
 );
 
@@ -177,7 +197,12 @@ userRouter.get(
 
 userRouter.get(
   '/:user_id',
-  authorize('superuser', 'business_owner', 'manager'),
+  authorize(
+    'superuser',
+    'admin_operations',
+    'business_owner',
+    'manager',
+  ),
   userIdValidation,
   handleValidation,
   userController.getUser
@@ -185,7 +210,11 @@ userRouter.get(
 
 userRouter.patch(
   '/:user_id',
-  authorize('superuser', 'business_owner'),
+  authorize(
+    'superuser',
+    'admin_operations',
+    'business_owner',
+  ),
   updateUserValidation,
   handleValidation,
   userController.updateUser

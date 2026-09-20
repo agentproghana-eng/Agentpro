@@ -29,6 +29,9 @@ const api = read('admin_portal/src/lib/api.js');
 const authStorage = read(
   'admin_portal/src/lib/authStorage.js',
 );
+const adminAccess = read(
+  'admin_portal/src/lib/adminAccess.js',
+);
 const headers = read(
   'admin_portal/public/_headers',
 );
@@ -464,6 +467,43 @@ assert(
 
 console.log(
   'ADMIN_PORTAL_BROWSER_SECURITY_CONTRACT=PASS',
+);
+
+assert(
+  adminAccess.includes(
+    "'admin_support'",
+  ) &&
+    adminAccess.includes(
+      "'admin_operations'",
+    ) &&
+    adminAccess.includes(
+      "'admin_finance'",
+    ) &&
+    adminAccess.includes(
+      "'admin_content'",
+    ),
+  'Admin portal must define delegated administrator roles',
+);
+
+assert(
+  app.includes(
+    'canAccessAdminPath',
+  ),
+  'Admin portal navigation and routes must be role-aware',
+);
+
+assert(
+  app.includes(
+    '<AdminTeamPage />',
+  ),
+  'Superuser portal must expose Admin Team management',
+);
+
+assert(
+  app.includes(
+    'MarketplaceBusinessesRoutePage',
+  ),
+  'Content moderation must not inherit generic account controls',
 );
 
 assert(

@@ -13,7 +13,7 @@ function repoSource(relativePath) {
 }
 
 describe("subscription admin payment operations contracts", () => {
-  test("Business reconciliation queue is superuser-only and Paystack-only", () => {
+  test("Business reconciliation queue is finance-admin protected and Paystack-only", () => {
     const route = backendSource("src/routes/subscription.routes.js");
 
     const controller = backendSource(
@@ -22,7 +22,7 @@ describe("subscription admin payment operations contracts", () => {
 
     expect(route).toContain("'/reconciliation-payments'");
 
-    expect(route).toContain("authorize('superuser')");
+    expect(route).toContain("authorize('superuser', 'admin_finance')");
 
     expect(controller).toContain("exports.listReconciliationPayments");
 
@@ -31,7 +31,7 @@ describe("subscription admin payment operations contracts", () => {
     expect(controller).toContain("sp.reconciliation_required = TRUE");
   });
 
-  test("Personal reconciliation queue is superuser-only and Paystack-only", () => {
+  test("Personal reconciliation queue is finance-admin protected and Paystack-only", () => {
     const route = backendSource("src/routes/personalSubscription.routes.js");
 
     const controller = backendSource(
@@ -40,7 +40,7 @@ describe("subscription admin payment operations contracts", () => {
 
     expect(route).toContain("'/reconciliation-payments'");
 
-    expect(route).toContain("authorize('superuser')");
+    expect(route).toContain("authorize('superuser', 'admin_finance')");
 
     expect(controller).toContain("exports.listReconciliationPayments");
 

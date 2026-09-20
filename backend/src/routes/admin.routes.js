@@ -5,7 +5,16 @@ const {
   getGlobalFlowBuilderEligibility,
 } = require('../utils/ussdFlowCapabilities');
 const router = express.Router();
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate } = require('../middleware/auth');
+const {
+  requireAdminPortalAccess,
+} = require('../middleware/adminAuthorization');
+const {
+  ADMIN_STAFF_ROLES,
+} = require('../security/adminRbac');
+const {
+  validate: uuidValidate,
+} = require('uuid');
 const { query } = require('../config/database');
 const { withTransaction } = require('../config/database');
 const { sendWelcomeEmail } = require('../services/emailService');
@@ -44,7 +53,266 @@ const {
   serializeDisabledTransactionTypes,
 } = require('../utils/featureFlagConfig');
 
-router.use(authenticate, authorize('superuser'));
+router.use(authenticate, requireAdminPortalAccess);
+
+// ── Admin Team ────────────────────────────────────────────────
+// Account creation itself reuses POST /users so the existing secure,
+// one-time password setup link remains the only initial credential path.
+// These routes list and change only non-superuser Admin Portal identities.
+
+router.get('/admin-team', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT
+         id,
+         role,
+         first_name,
+         last_name,
+         email,
+         phone,
+         status,
+         last_login_at,
+         mfa_enabled,
+         created_at,
+         updated_at
+       FROM users
+       WHERE role = ANY($1::user_role[])
+       ORDER BY created_at DESC`,
+      [ADMIN_STAFF_ROLES],
+    );
+
+    return res.json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (error) {
+    logger.error(
+      'Admin team list error:',
+      error,
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        'Failed to fetch administrator accounts',
+    });
+  }
+});
+
+router.patch(
+  '/admin-team/:user_id',
+  async (req, res) => {
+    const userId =
+      String(
+        req.params.user_id || '',
+      ).trim();
+
+    const role =
+      req.body?.role == null
+        ? null
+        : String(req.body.role).trim();
+
+    const status =
+      req.body?.status == null
+        ? null
+        : String(req.body.status).trim();
+
+    if (!uuidValidate(userId)) {
+      return res.status(422).json({
+        success: false,
+        message:
+          'Invalid administrator user ID',
+      });
+    }
+
+    if (
+      role !== null &&
+      !ADMIN_STAFF_ROLES.includes(role)
+    ) {
+      return res.status(422).json({
+        success: false,
+        message:
+          'Invalid administrator role',
+      });
+    }
+
+    if (
+      status !== null &&
+      ![
+        'active',
+        'suspended',
+        'deactivated',
+      ].includes(status)
+    ) {
+      return res.status(422).json({
+        success: false,
+        message:
+          'Invalid administrator status',
+      });
+    }
+
+    if (
+      role === null &&
+      status === null
+    ) {
+      return res.status(422).json({
+        success: false,
+        message:
+          'Role or status is required',
+      });
+    }
+
+    try {
+      const updated =
+        await withTransaction(
+          async (client) => {
+            const targetResult =
+              await client.query(
+                `SELECT
+                   id,
+                   role,
+                   status,
+                   email
+                 FROM users
+                 WHERE id = $1
+                   AND role = ANY(
+                     $2::user_role[]
+                   )
+                 FOR UPDATE`,
+                [
+                  userId,
+                  ADMIN_STAFF_ROLES,
+                ],
+              );
+
+            if (
+              targetResult.rows.length !==
+              1
+            ) {
+              return null;
+            }
+
+            const target =
+              targetResult.rows[0];
+
+            const result =
+              await client.query(
+                `UPDATE users
+                 SET
+                   role = COALESCE(
+                     $1::user_role,
+                     role
+                   ),
+                   status = COALESCE(
+                     $2::account_status,
+                     status
+                   ),
+                   updated_at = NOW()
+                 WHERE id = $3
+                 RETURNING
+                   id,
+                   role,
+                   first_name,
+                   last_name,
+                   email,
+                   phone,
+                   status,
+                   last_login_at,
+                   mfa_enabled,
+                   created_at,
+                   updated_at`,
+                [
+                  role,
+                  status,
+                  userId,
+                ],
+              );
+
+            const next =
+              result.rows[0];
+
+            if (
+              next.role !== target.role ||
+              next.status !== target.status
+            ) {
+              await client.query(
+                `UPDATE refresh_tokens
+                 SET revoked_at =
+                   COALESCE(
+                     revoked_at,
+                     NOW()
+                   )
+                 WHERE user_id = $1
+                   AND revoked_at IS NULL`,
+                [userId],
+              );
+            }
+
+            await auditLog({
+              userId:
+                req.user.id,
+              companyId: null,
+              action:
+                'ADMIN_STAFF_UPDATED',
+              entityType:
+                'user',
+              entityId:
+                userId,
+              oldValues: {
+                role:
+                  target.role,
+                status:
+                  target.status,
+              },
+              newValues: {
+                role:
+                  next.role,
+                status:
+                  next.status,
+              },
+              ipAddress:
+                req.ip,
+              userAgent:
+                req.headers[
+                  'user-agent'
+                ],
+              requestId:
+                req.requestId,
+              dbClient:
+                client,
+              strict: true,
+            });
+
+            return next;
+          },
+        );
+
+      if (!updated) {
+        return res.status(404).json({
+          success: false,
+          message:
+            'Administrator account not found',
+        });
+      }
+
+      return res.json({
+        success: true,
+        data: updated,
+      });
+    } catch (error) {
+      logger.error(
+        'Admin team update error:',
+        error,
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          'Failed to update administrator account',
+      });
+    }
+  },
+);
 
 // ── Platform Overview ─────────────────────────────────────────
 router.get('/overview', async (req, res) => {
