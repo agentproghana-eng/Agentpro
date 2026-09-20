@@ -95,4 +95,48 @@ describe("SIM purpose roles", () => {
       }),
     ).toMatch(/installation_id/);
   });
+  test("customer can assign Subscriber to own discovered SIM", () => {
+    expect(
+      _test.validateAssignmentForRole(
+        {
+          sim_slot: 0,
+          sim_iccid: "SIM-CUSTOMER-0",
+          provider: "mtn",
+          purpose: "subscriber",
+        },
+        "customer",
+      ),
+    ).toBeNull();
+  });
+
+  test("customer cannot self-assign business SIM roles", () => {
+    for (const purpose of ["agent", "evd", "merchant"]) {
+      expect(
+        _test.validateAssignmentForRole(
+          {
+            sim_slot: 0,
+            sim_iccid: "SIM-CUSTOMER-0",
+            provider: "mtn",
+            purpose,
+          },
+          "customer",
+        ),
+      ).toMatch(/only assign Subscriber/);
+    }
+  });
+
+  test("business roles retain their supported SIM assignments", () => {
+    expect(
+      _test.validateAssignmentForRole(
+        {
+          sim_slot: 0,
+          sim_iccid: "SIM-AGENT-0",
+          provider: "mtn",
+          purpose: "agent",
+        },
+        "agent",
+      ),
+    ).toBeNull();
+  });
+
 });
