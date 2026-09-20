@@ -81,7 +81,7 @@ describe('shift history cursor contract', () => {
       controller.slice(start, end);
 
     expect(handler).toContain(
-      "!['superuser', 'admin_operations'].includes(req.user.role)"
+      "hasAdminRole("
     );
     expect(handler).toContain(
       "req.user.role === 'manager'"
@@ -108,7 +108,7 @@ describe('shift history cursor contract', () => {
       "'admin_operations'"
     );
     expect(handler).toContain(
-      '.includes(req.user.role)'
+      'hasAdminRole('
     );
     expect(handler).toContain(
       's.company_id'

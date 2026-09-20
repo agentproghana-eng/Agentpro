@@ -4,6 +4,7 @@ const { query } = require('../config/database');
 const { logger } = require('../utils/logger');
 const {
   isAdminPortalRole,
+  hasAdminRole,
 } = require('../security/adminRbac');
 
 // ─── JWT Authentication Middleware ────────────────────────────
@@ -249,6 +250,17 @@ const authenticate = async (req, res, next) => {
          u.email,
          u.status,
          u.mfa_enabled,
+         COALESCE(
+           (
+             SELECT array_agg(
+               uar.role::text
+               ORDER BY uar.role::text
+             )
+             FROM user_admin_roles uar
+             WHERE uar.user_id = u.id
+           ),
+           ARRAY[]::text[]
+         ) AS admin_roles,
          rt.id AS session_id,
          rt.expires_at AS session_expires_at,
          rt.mfa_verified_at
@@ -299,6 +311,10 @@ const authenticate = async (req, res, next) => {
       role: activeSession.role,
       company_id: activeSession.company_id,
       email: activeSession.email,
+      admin_roles:
+        activeSession.admin_roles || [],
+      mfa_verified_at:
+        activeSession.mfa_verified_at,
       session_id: activeSession.session_id,
       session_expires_at:
         activeSession.session_expires_at,
@@ -340,13 +356,54 @@ const authenticate = async (req, res, next) => {
 const authorize = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {
-      return res.status(401).json({ success: false, message: 'Authentication required' });
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+      });
     }
 
-    if (!roles.includes(req.user.role)) {
+    const primaryRoleAllowed =
+      roles.includes(req.user.role);
+
+    const delegatedAdminRoleAllowed =
+      roles.some(
+        (role) =>
+          hasAdminRole(
+            req.user,
+            role,
+          ),
+      );
+
+    if (
+      !primaryRoleAllowed &&
+      !delegatedAdminRoleAllowed
+    ) {
       return res.status(403).json({
         success: false,
-        message: 'You do not have permission to access this resource'
+        message:
+          'You do not have permission to access this resource',
+      });
+    }
+
+    // authenticate() already enforces MFA for primary administrator roles.
+    // Only a normal primary account exercising additive admin authority
+    // requires an MFA check here.
+    const usingAdditiveAdminAuthority =
+      !isAdminPortalRole(
+        req.user.role,
+      ) &&
+      !primaryRoleAllowed &&
+      delegatedAdminRoleAllowed;
+
+    if (
+      usingAdditiveAdminAuthority &&
+      !req.user.mfa_verified_at
+    ) {
+      return res.status(401).json({
+        success: false,
+        code: 'MFA_REAUTH_REQUIRED',
+        message:
+          'Administrator MFA authentication is required. Please sign in to the Admin Portal again.',
       });
     }
 

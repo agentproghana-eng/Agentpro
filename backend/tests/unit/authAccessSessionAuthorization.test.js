@@ -93,6 +93,8 @@ describe('Access token durable session authorization', () => {
         role: 'agent',
         company_id: 'company-1',
         email: 'current@example.com',
+        admin_roles: [],
+        mfa_verified_at: undefined,
         session_id: 'session-1',
         session_expires_at:
           '2099-12-31T23:59:59.000Z',

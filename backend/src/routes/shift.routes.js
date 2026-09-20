@@ -7,6 +7,10 @@ const {
   authorize,
   requireActiveSubscription,
 } = require('../middleware/auth');
+const {
+  hasAdminRole,
+  isAdminPortalRole,
+} = require('../security/adminRbac');
 
 router.use(authenticate);
 
@@ -15,24 +19,50 @@ const requireShiftListAccess = (
   res,
   next,
 ) => {
+  if (req.user.role === 'superuser') {
+    return next();
+  }
+
+  if (
+    hasAdminRole(
+      req.user,
+      'admin_operations',
+    )
+  ) {
+    if (
+      !isAdminPortalRole(
+        req.user.role,
+      ) &&
+      !req.user.mfa_verified_at
+    ) {
+      return res.status(401).json({
+        success: false,
+        code: 'MFA_REAUTH_REQUIRED',
+        message:
+          'Administrator MFA authentication is required. Please sign in again.',
+      });
+    }
+
+    return next();
+  }
+
   if (
     [
-      'superuser',
-      'admin_operations',
-    ].includes(req.user.role)
+      'business_owner',
+      'manager',
+      'auditor',
+    ].includes(
+      req.user.role,
+    )
   ) {
     return next();
   }
 
-  return requireActiveSubscription(
-    req,
-    res,
-    () =>
-      authorize(
-        'business_owner',
-        'manager',
-      )(req, res, next),
-  );
+  return res.status(403).json({
+    success: false,
+    message:
+      'You do not have permission to access this resource',
+  });
 };
 
 router.get(

@@ -19,6 +19,8 @@ jest.mock('../../src/middleware/auth', () => ({
     req.user = {
       id: 'superuser-1',
       role: 'superuser',
+      mfa_verified_at:
+        '2026-09-20T00:00:00.000Z',
     };
     next();
   },

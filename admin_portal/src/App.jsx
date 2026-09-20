@@ -21,7 +21,7 @@ import AdminTeamPage from './features/admin/AdminTeamPage.jsx';
 import {
   adminRoleLabel,
   canAccessAdminPath,
-  isAdminPortalRole,
+  isAdminPortalUser,
 } from './lib/adminAccess.js';
 import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom';
 import API from './lib/api.js';
@@ -57,8 +57,8 @@ function AuthProvider({ children }) {
     if (
       storedUser &&
       hasCredential &&
-      isAdminPortalRole(
-        storedUser.role,
+      isAdminPortalUser(
+        storedUser,
       )
     ) {
       setUser(storedUser);
@@ -75,6 +75,13 @@ function AuthProvider({ children }) {
       {
         email,
         password,
+        admin_portal: true,
+      },
+      {
+        headers: {
+          'X-AgentPro-Admin-Portal':
+            '1',
+        },
       },
     );
 
@@ -115,8 +122,8 @@ function AuthProvider({ children }) {
     }
 
     if (
-      !isAdminPortalRole(
-        data.data.user.role,
+      !isAdminPortalUser(
+        data.data.user,
       )
     ) {
       // A non-superuser can still authenticate through the shared API,
@@ -187,8 +194,8 @@ function AuthProvider({ children }) {
 
     if (
       !data?.data?.user ||
-      !isAdminPortalRole(
-        data.data.user.role,
+      !isAdminPortalUser(
+        data.data.user,
       )
     ) {
       clearAuthSession();
@@ -269,7 +276,7 @@ function Protected({ children }) {
   const { user } = useAuth();
 
   return user &&
-    isAdminPortalRole(user.role)
+    isAdminPortalUser(user)
     ? children
     : <Navigate to="/login" replace />;
 }
@@ -281,7 +288,7 @@ function AdminPageGuard({
   const { user } = useAuth();
 
   return canAccessAdminPath(
-    user?.role,
+    user,
     path,
   )
     ? children
@@ -1136,7 +1143,7 @@ function Layout({ children }) {
   return (
     <div className="flex h-screen bg-gray-100">
       {canAccessAdminPath(
-        user?.role,
+        user,
         '/flows',
       ) && (
         <UssdFlowHealthToastWatcher />
@@ -1154,7 +1161,7 @@ function Layout({ children }) {
           {NAV
             .filter(({ path }) =>
               canAccessAdminPath(
-                user?.role,
+                user,
                 path,
               ),
             )
@@ -1173,7 +1180,7 @@ function Layout({ children }) {
                 {user?.email}
               </p>
               <p className="text-[11px] text-gray-400 mb-2">
-                {adminRoleLabel(user?.role)}
+                {adminRoleLabel(user)}
               </p>
             </>
           )}
@@ -1209,7 +1216,7 @@ function DashboardPage() {
 
   const canViewOperations =
     canAccessAdminPath(
-      user?.role,
+      user,
       '/flows',
     );
 
@@ -1328,7 +1335,7 @@ function DashboardPage() {
           const accessiblePath =
             card.path &&
             canAccessAdminPath(
-              user?.role,
+              user,
               card.path,
             )
               ? card.path

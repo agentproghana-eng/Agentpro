@@ -4,6 +4,9 @@ const { authenticate, authorize } = require('../middleware/auth');
 const { query } = require('../config/database');
 const { getCommissionSummary } = require('../services/commissionService');
 const {
+  hasAdminRole,
+} = require('../security/adminRbac');
+const {
   normalizeCommissionScopeValue,
   isSupportedProviderCommissionCombination,
 } = require('../config/commissionRulePolicy');
@@ -15,7 +18,13 @@ router.get('/rules', authorize('superuser', 'admin_finance', 'business_owner'), 
   try {
     let result;
 
-    if (['superuser', 'admin_finance'].includes(req.user.role)) {
+    if (
+      req.user.role === 'superuser' ||
+      hasAdminRole(
+        req.user,
+        'admin_finance',
+      )
+    ) {
       result = await query(
         `SELECT *
          FROM commission_rules

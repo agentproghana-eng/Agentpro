@@ -124,7 +124,12 @@ describe(
 
         expect(controller)
           .toContain(
-            'if (isAdminPortalRole(user.role))',
+            'adminPortalRequested',
+          );
+
+        expect(controller)
+          .toContain(
+            'isAdminPortalUser(user)',
           );
 
         expect(controller)
@@ -227,7 +232,12 @@ describe(
 
         expect(controller)
           .toContain(
-            "'admin_support'",
+            'isAdminPortalUser(targetUser)',
+          );
+
+        expect(controller)
+          .toContain(
+            'ADMIN_STAFF_ROLES',
           );
       },
     );
@@ -241,8 +251,8 @@ describe(
           );
 
         expect(admin)
-          .toMatch(
-            /role\s*=\s*ANY\(\s*\$2::user_role\[\]\s*\)/,
+          .toContain(
+            "target.role === 'superuser'",
           );
 
         expect(admin)

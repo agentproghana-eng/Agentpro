@@ -11,6 +11,7 @@ import toast from 'react-hot-toast';
 
 import API from '../../lib/api.js';
 import {
+  ADMIN_STAFF_ROLES,
   adminRoleLabel,
 } from '../../lib/adminAccess.js';
 import {
@@ -18,13 +19,6 @@ import {
   ErrorState,
   LoadingState,
 } from '../../components/PageState.jsx';
-
-const ADMIN_STAFF_ROLES = [
-  'admin_support',
-  'admin_operations',
-  'admin_finance',
-  'admin_content',
-];
 
 const ROLE_DESCRIPTIONS = {
   admin_support:
@@ -37,11 +31,33 @@ const ROLE_DESCRIPTIONS = {
     'Community and Marketplace moderation.',
 };
 
+function normalizeMember(member) {
+  return {
+    ...member,
+    admin_roles:
+      Array.isArray(member?.admin_roles)
+        ? member.admin_roles
+        : [],
+  };
+}
+
+function roleSummary(member) {
+  const roles =
+    normalizeMember(member)
+      .admin_roles;
+
+  return roles.length > 0
+    ? roles
+        .map(adminRoleLabel)
+        .join(', ')
+    : 'No admin access';
+}
+
 export default function AdminTeamPage() {
   const queryClient =
     useQueryClient();
 
-  const [form, setForm] =
+  const [invite, setInvite] =
     useState({
       first_name: '',
       last_name: '',
@@ -50,6 +66,12 @@ export default function AdminTeamPage() {
       role:
         'admin_support',
     });
+
+  const [search, setSearch] =
+    useState('');
+
+  const [editing, setEditing] =
+    useState(null);
 
   const teamQuery =
     useQuery({
@@ -68,6 +90,32 @@ export default function AdminTeamPage() {
       },
     });
 
+  const candidateQuery =
+    useQuery({
+      queryKey: [
+        'admin',
+        'team',
+        'candidates',
+        search.trim(),
+      ],
+      enabled:
+        search.trim().length >= 2,
+      retry: false,
+      queryFn: async () => {
+        const response =
+          await API.get(
+            '/admin/admin-team/candidates',
+            {
+              params: {
+                q: search.trim(),
+              },
+            },
+          );
+
+        return response.data.data;
+      },
+    });
+
   const sortedTeam =
     useMemo(
       () =>
@@ -75,9 +123,38 @@ export default function AdminTeamPage() {
           teamQuery.data,
         )
           ? teamQuery.data
+              .map(normalizeMember)
           : [],
       [teamQuery.data],
     );
+
+  const openEditor =
+    (member) => {
+      const normalized =
+        normalizeMember(member);
+
+      setEditing({
+        id: normalized.id,
+        primary_role:
+          normalized.primary_role ||
+          normalized.role ||
+          'customer',
+        first_name:
+          normalized.first_name || '',
+        last_name:
+          normalized.last_name || '',
+        email:
+          normalized.email || '',
+        phone:
+          normalized.phone || '',
+        status:
+          normalized.status || 'active',
+        admin_roles:
+          [...normalized.admin_roles],
+        mfa_enabled:
+          normalized.mfa_enabled === true,
+      });
+    };
 
   const createMutation =
     useMutation({
@@ -85,7 +162,7 @@ export default function AdminTeamPage() {
         const response =
           await API.post(
             '/users',
-            form,
+            invite,
           );
 
         return response.data;
@@ -97,7 +174,7 @@ export default function AdminTeamPage() {
               'Administrator account created.',
           );
 
-          setForm({
+          setInvite({
             first_name: '',
             last_name: '',
             email: '',
@@ -127,39 +204,55 @@ export default function AdminTeamPage() {
   const updateMutation =
     useMutation({
       mutationFn:
-        async ({
-          userId,
-          role,
-          status,
-        }) => {
+        async (form) => {
           const response =
             await API.patch(
-              `/admin/admin-team/${userId}`,
+              `/admin/admin-team/${form.id}`,
               {
-                ...(role
-                  ? { role }
-                  : {}),
-                ...(status
-                  ? { status }
-                  : {}),
+                first_name:
+                  form.first_name,
+                last_name:
+                  form.last_name,
+                email:
+                  form.email,
+                phone:
+                  form.phone,
+                status:
+                  form.status,
+                admin_roles:
+                  form.admin_roles,
               },
             );
 
           return response.data.data;
         },
       onSuccess:
-        async () => {
+        async (payload) => {
           toast.success(
-            'Administrator updated.',
+            payload?.sessions_revoked
+              ? 'Account updated. Existing sessions were revoked for security.'
+              : 'Account updated.',
           );
 
-          await queryClient
-            .invalidateQueries({
-              queryKey: [
-                'admin',
-                'team',
-              ],
-            });
+          setEditing(null);
+
+          await Promise.all([
+            queryClient
+              .invalidateQueries({
+                queryKey: [
+                  'admin',
+                  'team',
+                ],
+              }),
+            queryClient
+              .invalidateQueries({
+                queryKey: [
+                  'admin',
+                  'team',
+                  'candidates',
+                ],
+              }),
+          ]);
         },
       onError:
         (error) => {
@@ -171,10 +264,34 @@ export default function AdminTeamPage() {
         },
     });
 
-  const submit =
-    (event) => {
-      event.preventDefault();
-      createMutation.mutate();
+  const toggleRole =
+    (role) => {
+      setEditing(
+        (current) => {
+          if (!current) {
+            return current;
+          }
+
+          const hasRole =
+            current.admin_roles
+              .includes(role);
+
+          return {
+            ...current,
+            admin_roles:
+              hasRole
+                ? current.admin_roles
+                    .filter(
+                      (value) =>
+                        value !== role,
+                    )
+                : [
+                    ...current.admin_roles,
+                    role,
+                  ],
+          };
+        },
+      );
     };
 
   return (
@@ -185,36 +302,325 @@ export default function AdminTeamPage() {
         </h2>
 
         <p className="mt-1 text-sm text-gray-500">
-          Create least-privilege administrator accounts.
-          Every administrator must enroll authenticator MFA.
-          Initial passwords are never shown here.
+          Grant several administrator roles to one registered AgentPro
+          account without replacing its normal Customer or Business role.
+          Admin privileges require an MFA-verified Admin Portal session.
         </p>
       </section>
 
       <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <h3 className="font-semibold text-gray-900">
-          Invite administrator
+          Grant access to a registered user
         </h3>
 
         <p className="mt-1 text-xs text-gray-500">
-          AgentPro sends the existing secure one-time password
-          setup link. The invited administrator then enrolls MFA
-          on first Admin Portal sign-in.
+          Search by name, email or phone, then edit profile information and
+          select any combination of administrator roles.
+        </p>
+
+        <input
+          value={search}
+          onChange={(event) =>
+            setSearch(
+              event.target.value,
+            )
+          }
+          className="mt-4 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          placeholder="Search registered users..."
+        />
+
+        {search.trim().length >= 2 && (
+          <div className="mt-3 rounded-lg border border-gray-200">
+            {candidateQuery.isLoading ? (
+              <LoadingState label="Searching users..." />
+            ) : candidateQuery.isError ? (
+              <ErrorState
+                title="User search failed"
+                message={
+                  candidateQuery.error
+                    ?.response?.data
+                    ?.message ||
+                  'Try again.'
+                }
+                onRetry={
+                  candidateQuery.refetch
+                }
+              />
+            ) : (
+              <div className="divide-y">
+                {(
+                  candidateQuery.data ||
+                  []
+                ).map(
+                  (member) => (
+                    <button
+                      type="button"
+                      key={member.id}
+                      onClick={() =>
+                        openEditor(member)
+                      }
+                      className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-gray-50"
+                    >
+                      <span>
+                        <span className="block text-sm font-medium text-gray-900">
+                          {member.first_name}{' '}
+                          {member.last_name}
+                        </span>
+                        <span className="block text-xs text-gray-500">
+                          {member.email}
+                          {member.phone
+                            ? ` · ${member.phone}`
+                            : ''}
+                        </span>
+                      </span>
+
+                      <span className="text-right text-xs text-gray-500">
+                        <span className="block">
+                          Primary: {member.primary_role}
+                        </span>
+                        <span className="block">
+                          {roleSummary(member)}
+                        </span>
+                      </span>
+                    </button>
+                  ),
+                )}
+
+                {(
+                  candidateQuery.data ||
+                  []
+                ).length === 0 && (
+                  <div className="p-4 text-sm text-gray-500">
+                    No matching registered user.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      {editing && (
+        <section className="rounded-xl border border-primary/30 bg-white p-5 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="font-semibold text-gray-900">
+                Edit account & admin access
+              </h3>
+              <p className="mt-1 text-xs text-gray-500">
+                Primary account role: {editing.primary_role}. This remains
+                separate from delegated administrator roles.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                setEditing(null)
+              }
+              className="text-sm text-gray-500 hover:text-gray-800"
+            >
+              Close
+            </button>
+          </div>
+
+          <form
+            className="mt-4 grid gap-4 md:grid-cols-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              updateMutation.mutate(
+                editing,
+              );
+            }}
+          >
+            <input
+              required
+              value={editing.first_name}
+              onChange={(event) =>
+                setEditing(
+                  (current) => ({
+                    ...current,
+                    first_name:
+                      event.target.value,
+                  }),
+                )
+              }
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              placeholder="First name"
+            />
+
+            <input
+              required
+              value={editing.last_name}
+              onChange={(event) =>
+                setEditing(
+                  (current) => ({
+                    ...current,
+                    last_name:
+                      event.target.value,
+                  }),
+                )
+              }
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              placeholder="Last name"
+            />
+
+            <input
+              required
+              type="email"
+              value={editing.email}
+              onChange={(event) =>
+                setEditing(
+                  (current) => ({
+                    ...current,
+                    email:
+                      event.target.value,
+                  }),
+                )
+              }
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              placeholder="Email"
+            />
+
+            <input
+              value={editing.phone}
+              onChange={(event) =>
+                setEditing(
+                  (current) => ({
+                    ...current,
+                    phone:
+                      event.target.value,
+                  }),
+                )
+              }
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              placeholder="Phone"
+            />
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-gray-600">
+                Status
+              </label>
+              <select
+                value={editing.status}
+                onChange={(event) =>
+                  setEditing(
+                    (current) => ({
+                      ...current,
+                      status:
+                        event.target.value,
+                    }),
+                  )
+                }
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              >
+                <option value="active">
+                  Active
+                </option>
+                <option value="suspended">
+                  Suspended
+                </option>
+                <option value="deactivated">
+                  Deactivated
+                </option>
+              </select>
+            </div>
+
+            <div className="rounded-lg bg-gray-50 p-3 text-xs text-gray-600">
+              MFA: {editing.mfa_enabled
+                ? 'Already enrolled'
+                : 'Required when Admin Portal access is used'}
+            </div>
+
+            <div className="md:col-span-2">
+              <p className="mb-2 text-xs font-semibold text-gray-600">
+                Administrator roles
+              </p>
+
+              <div className="grid gap-2 md:grid-cols-2">
+                {ADMIN_STAFF_ROLES.map(
+                  (role) => (
+                    <label
+                      key={role}
+                      className="flex cursor-pointer gap-3 rounded-lg border border-gray-200 p-3"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={
+                          editing.admin_roles
+                            .includes(role)
+                        }
+                        onChange={() =>
+                          toggleRole(role)
+                        }
+                      />
+
+                      <span>
+                        <span className="block text-sm font-medium text-gray-900">
+                          {adminRoleLabel(role)}
+                        </span>
+                        <span className="block text-xs text-gray-500">
+                          {ROLE_DESCRIPTIONS[role]}
+                        </span>
+                      </span>
+                    </label>
+                  ),
+                )}
+              </div>
+
+              <p className="mt-2 text-xs text-gray-500">
+                Clearing all boxes revokes Admin Portal access. Changing
+                admin roles, email, phone or status revokes existing sessions.
+                A phone change also clears the old phone-verification state.
+              </p>
+            </div>
+
+            <div className="md:col-span-2">
+              <button
+                type="submit"
+                disabled={
+                  updateMutation.isPending
+                }
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {updateMutation.isPending
+                  ? 'Saving...'
+                  : 'Save account & roles'}
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <h3 className="font-semibold text-gray-900">
+          Invite a new administrator
+        </h3>
+
+        <p className="mt-1 text-xs text-gray-500">
+          Use this only when the person does not already have AgentPro.
+          The secure one-time password setup link remains the initial
+          credential path. Additional roles can be added afterward.
         </p>
 
         <form
-          onSubmit={submit}
+          onSubmit={(event) => {
+            event.preventDefault();
+            createMutation.mutate();
+          }}
           className="mt-4 grid gap-4 md:grid-cols-2"
         >
           <input
             required
-            value={form.first_name}
+            value={invite.first_name}
             onChange={(event) =>
-              setForm((current) => ({
-                ...current,
-                first_name:
-                  event.target.value,
-              }))
+              setInvite(
+                (current) => ({
+                  ...current,
+                  first_name:
+                    event.target.value,
+                }),
+              )
             }
             className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
             placeholder="First name"
@@ -222,13 +628,15 @@ export default function AdminTeamPage() {
 
           <input
             required
-            value={form.last_name}
+            value={invite.last_name}
             onChange={(event) =>
-              setForm((current) => ({
-                ...current,
-                last_name:
-                  event.target.value,
-              }))
+              setInvite(
+                (current) => ({
+                  ...current,
+                  last_name:
+                    event.target.value,
+                }),
+              )
             }
             className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
             placeholder="Last name"
@@ -237,13 +645,15 @@ export default function AdminTeamPage() {
           <input
             required
             type="email"
-            value={form.email}
+            value={invite.email}
             onChange={(event) =>
-              setForm((current) => ({
-                ...current,
-                email:
-                  event.target.value,
-              }))
+              setInvite(
+                (current) => ({
+                  ...current,
+                  email:
+                    event.target.value,
+                }),
+              )
             }
             className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
             placeholder="Email"
@@ -251,54 +661,44 @@ export default function AdminTeamPage() {
 
           <input
             required
-            value={form.phone}
+            value={invite.phone}
             onChange={(event) =>
-              setForm((current) => ({
-                ...current,
-                phone:
-                  event.target.value,
-              }))
+              setInvite(
+                (current) => ({
+                  ...current,
+                  phone:
+                    event.target.value,
+                }),
+              )
             }
             className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
             placeholder="Phone"
           />
 
-          <div className="md:col-span-2">
-            <label className="mb-1 block text-xs font-semibold text-gray-600">
-              Role
-            </label>
-
-            <select
-              value={form.role}
-              onChange={(event) =>
-                setForm((current) => ({
+          <select
+            value={invite.role}
+            onChange={(event) =>
+              setInvite(
+                (current) => ({
                   ...current,
                   role:
                     event.target.value,
-                }))
-              }
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-            >
-              {ADMIN_STAFF_ROLES.map(
-                (role) => (
-                  <option
-                    key={role}
-                    value={role}
-                  >
-                    {adminRoleLabel(role)}
-                  </option>
-                ),
-              )}
-            </select>
-
-            <p className="mt-1 text-xs text-gray-500">
-              {
-                ROLE_DESCRIPTIONS[
-                  form.role
-                ]
-              }
-            </p>
-          </div>
+                }),
+              )
+            }
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm md:col-span-2"
+          >
+            {ADMIN_STAFF_ROLES.map(
+              (role) => (
+                <option
+                  key={role}
+                  value={role}
+                >
+                  {adminRoleLabel(role)}
+                </option>
+              ),
+            )}
+          </select>
 
           <div className="md:col-span-2">
             <button
@@ -350,16 +750,22 @@ export default function AdminTeamPage() {
               <thead>
                 <tr className="border-b text-xs uppercase tracking-wide text-gray-500">
                   <th className="px-3 py-2">
-                    Administrator
+                    User
                   </th>
                   <th className="px-3 py-2">
-                    Role
+                    Primary role
+                  </th>
+                  <th className="px-3 py-2">
+                    Admin roles
                   </th>
                   <th className="px-3 py-2">
                     MFA
                   </th>
                   <th className="px-3 py-2">
                     Status
+                  </th>
+                  <th className="px-3 py-2">
+                    Action
                   </th>
                 </tr>
               </thead>
@@ -376,51 +782,22 @@ export default function AdminTeamPage() {
                           {member.first_name}{' '}
                           {member.last_name}
                         </div>
-
                         <div className="text-xs text-gray-500">
                           {member.email}
                         </div>
+                        {member.phone && (
+                          <div className="text-xs text-gray-400">
+                            {member.phone}
+                          </div>
+                        )}
                       </td>
 
-                      <td className="px-3 py-3">
-                        <select
-                          value={
-                            member.role
-                          }
-                          disabled={
-                            updateMutation
-                              .isPending
-                          }
-                          onChange={(
-                            event,
-                          ) =>
-                            updateMutation
-                              .mutate({
-                                userId:
-                                  member.id,
-                                role:
-                                  event
-                                    .target
-                                    .value,
-                              })
-                          }
-                          className="rounded-md border border-gray-300 px-2 py-1 text-xs"
-                        >
-                          {ADMIN_STAFF_ROLES.map(
-                            (role) => (
-                              <option
-                                key={role}
-                                value={
-                                  role
-                                }
-                              >
-                                {adminRoleLabel(
-                                  role,
-                                )}
-                              </option>
-                            ),
-                          )}
-                        </select>
+                      <td className="px-3 py-3 text-xs">
+                        {member.primary_role}
+                      </td>
+
+                      <td className="px-3 py-3 text-xs">
+                        {roleSummary(member)}
                       </td>
 
                       <td className="px-3 py-3 text-xs">
@@ -429,40 +806,20 @@ export default function AdminTeamPage() {
                           : 'Not enrolled'}
                       </td>
 
+                      <td className="px-3 py-3 text-xs">
+                        {member.status}
+                      </td>
+
                       <td className="px-3 py-3">
-                        <select
-                          value={
-                            member.status
+                        <button
+                          type="button"
+                          onClick={() =>
+                            openEditor(member)
                           }
-                          disabled={
-                            updateMutation
-                              .isPending
-                          }
-                          onChange={(
-                            event,
-                          ) =>
-                            updateMutation
-                              .mutate({
-                                userId:
-                                  member.id,
-                                status:
-                                  event
-                                    .target
-                                    .value,
-                              })
-                          }
-                          className="rounded-md border border-gray-300 px-2 py-1 text-xs"
+                          className="text-sm font-medium text-primary hover:underline"
                         >
-                          <option value="active">
-                            Active
-                          </option>
-                          <option value="suspended">
-                            Suspended
-                          </option>
-                          <option value="deactivated">
-                            Deactivated
-                          </option>
-                        </select>
+                          Edit
+                        </button>
                       </td>
                     </tr>
                   ),

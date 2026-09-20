@@ -1,7 +1,7 @@
 'use strict';
 
 const {
-  isAdminPortalRole,
+  isAdminPortalUser,
   hasAdminPermission,
 } = require('../security/adminRbac');
 
@@ -99,11 +99,20 @@ function requireAdminPortalAccess(req, res, next) {
     });
   }
 
-  if (!isAdminPortalRole(req.user.role)) {
+  if (!isAdminPortalUser(req.user)) {
     return res.status(403).json({
       success: false,
       code: 'ADMIN_PORTAL_ROLE_REQUIRED',
       message: 'Administrator access is required.',
+    });
+  }
+
+  if (!req.user.mfa_verified_at) {
+    return res.status(401).json({
+      success: false,
+      code: 'MFA_REAUTH_REQUIRED',
+      message:
+        'Administrator MFA authentication is required. Please sign in again.',
     });
   }
 
@@ -116,7 +125,7 @@ function requireAdminPortalAccess(req, res, next) {
   if (
     !permission ||
     !hasAdminPermission(
-      req.user.role,
+      req.user,
       permission,
     )
   ) {
