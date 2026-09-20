@@ -191,8 +191,8 @@ class _SupportCasesScreenState extends State<SupportCasesScreen> {
     Widget content;
 
     if (_loading) {
-      content = const ListView(
-        children: [
+      content = ListView(
+        children: const [
           SizedBox(height: 160),
           Center(child: CircularProgressIndicator()),
         ],
