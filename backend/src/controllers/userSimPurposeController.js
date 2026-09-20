@@ -102,6 +102,23 @@ const validateAssignment = (assignment) => {
   return null;
 };
 
+const validateAssignmentForRole = (assignment, role) => {
+  const validationError = validateAssignment(assignment);
+
+  if (validationError) {
+    return validationError;
+  }
+
+  if (
+    role === "customer" &&
+    normalizePurpose(assignment.purpose) !== "subscriber"
+  ) {
+    return "Personal customer accounts can only assign Subscriber SIMs.";
+  }
+
+  return null;
+};
+
 // ─── List My SIM Purpose Assignments ───────────────────────────
 //
 // SIM Purpose now identifies the operational role of each physical SIM:
@@ -164,7 +181,10 @@ exports.setPurposes = async (req, res) => {
   }
 
   for (const assignment of assignments) {
-    const validationError = validateAssignment(assignment);
+    const validationError = validateAssignmentForRole(
+      assignment,
+      req.user?.role,
+    );
 
     if (validationError) {
       return res.status(422).json({
@@ -248,4 +268,5 @@ exports.setPurposes = async (req, res) => {
 exports._test = {
   normalizePurpose,
   validateAssignment,
+  validateAssignmentForRole,
 };

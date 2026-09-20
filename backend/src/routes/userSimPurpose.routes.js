@@ -12,7 +12,8 @@ router.use(
   authorize(
     'business_owner',
     'manager',
-    'agent'
+    'agent',
+    'customer'
   )
 );
 
