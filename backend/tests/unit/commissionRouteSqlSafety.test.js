@@ -20,7 +20,19 @@ describe('commission route SQL safety', () => {
     expect(
       source
     ).toContain(
-      "authorize('superuser', 'business_owner')"
+      "authorize('superuser', 'admin_finance', 'business_owner')"
+    );
+
+    expect(
+      source
+    ).toContain(
+      "authorize('superuser', 'admin_finance')"
+    );
+
+    expect(
+      source
+    ).toContain(
+      "['superuser', 'admin_finance'].includes(req.user.role)"
     );
   });
 

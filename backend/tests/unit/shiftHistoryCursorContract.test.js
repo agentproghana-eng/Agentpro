@@ -26,9 +26,15 @@ const migration = fs.readFileSync(
 );
 
 describe('shift history cursor contract', () => {
-  test('registers protected cursor route', () => {
+  test('registers protected cursor route for operations and business scopes', () => {
     expect(routes).toContain(
-      "router.get('/cursor', authorize('superuser', 'business_owner', 'manager'), shiftController.listShiftsCursor)"
+      'requireShiftListAccess'
+    );
+    expect(routes).toContain(
+      "'admin_operations'"
+    );
+    expect(routes).toContain(
+      'shiftController.listShiftsCursor'
     );
   });
 
@@ -75,7 +81,7 @@ describe('shift history cursor contract', () => {
       controller.slice(start, end);
 
     expect(handler).toContain(
-      "req.user.role !== 'superuser'"
+      "!['superuser', 'admin_operations'].includes(req.user.role)"
     );
     expect(handler).toContain(
       "req.user.role === 'manager'"
@@ -88,6 +94,24 @@ describe('shift history cursor contract', () => {
     );
     expect(handler).toContain(
       "flagged_only === 'true'"
+    );
+  });
+
+  test('legacy list endpoint gives Operations Admin the same platform read scope', () => {
+    const start = controller.indexOf(
+      'exports.listShifts ='
+    );
+    const handler =
+      controller.slice(start);
+
+    expect(handler).toContain(
+      "'admin_operations'"
+    );
+    expect(handler).toContain(
+      '.includes(req.user.role)'
+    );
+    expect(handler).toContain(
+      's.company_id'
     );
   });
 
