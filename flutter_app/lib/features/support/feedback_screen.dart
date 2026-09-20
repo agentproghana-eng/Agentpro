@@ -1,7 +1,7 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
-import '../../core/constants/app_constants.dart';
+import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 
 class FeedbackScreen extends StatefulWidget {
@@ -12,19 +12,19 @@ class FeedbackScreen extends StatefulWidget {
       _FeedbackScreenState();
 }
 
-class _FeedbackScreenState
-    extends State<FeedbackScreen> {
-  final _formKey =
-      GlobalKey<FormState>();
+class _FeedbackScreenState extends State<FeedbackScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _subjectController = TextEditingController();
+  final _messageController = TextEditingController();
 
-  final _subjectController =
-      TextEditingController();
-
-  final _messageController =
-      TextEditingController();
-
-  String _type = 'Feedback';
+  String _type = 'feedback';
   bool _sending = false;
+
+  String _typeLabel(String value) => switch (value) {
+        'complaint' => 'Complaint',
+        'suggestion' => 'Suggestion',
+        _ => 'Feedback',
+      };
 
   Future<void> _send() async {
     if (!_formKey.currentState!.validate()) {
@@ -33,50 +33,83 @@ class _FeedbackScreenState
 
     setState(() => _sending = true);
 
-    final subject =
-        _subjectController.text.trim();
-
-    final message =
-        _messageController.text.trim();
-
-    final uri = Uri(
-      scheme: 'mailto',
-      path:
-          AppConstants.supportEmail,
-      queryParameters: {
-        'subject':
-            'AgentPro $_type: $subject',
-        'body': message,
-      },
-    );
-
-    var launched = false;
-
     try {
-      launched = await launchUrl(
-        uri,
-        mode:
-            LaunchMode.externalApplication,
+      final response = await ApiClient.instance.post(
+        '/support/cases',
+        data: {
+          'type': _type,
+          'subject': _subjectController.text.trim(),
+          'message': _messageController.text.trim(),
+        },
       );
-    } catch (_) {
-      launched = false;
-    }
 
-    if (!mounted) return;
+      final payload = response.data;
+      String reference = 'your support case';
 
-    setState(() => _sending = false);
+      if (payload is Map) {
+        final data = payload['data'];
 
-    if (!launched) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Your email app could not be opened. '
-            'Please email '
-            '${AppConstants.supportEmail}.',
+        if (data is Map) {
+          final raw = data['reference']?.toString().trim();
+
+          if (raw != null && raw.isNotEmpty) {
+            reference = raw;
+          }
+        }
+      }
+
+      _subjectController.clear();
+      _messageController.clear();
+
+      if (!mounted) return;
+
+      setState(() => _type = 'feedback');
+
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          icon: const Icon(
+            Icons.check_circle_outline,
+            color: AppTheme.primaryColor,
           ),
+          title: const Text('Message received'),
+          content: Text(
+            'AgentPro Support has received your message. '
+            'Reference: $reference',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Done'),
+            ),
+          ],
         ),
       );
+    } catch (error) {
+      if (!mounted) return;
+
+      var message =
+          'Your message could not be sent. Please try again.';
+
+      if (error is DioException) {
+        final body = error.response?.data;
+
+        if (body is Map) {
+          final serverMessage = body['message']?.toString().trim();
+
+          if (serverMessage != null && serverMessage.isNotEmpty) {
+            message = serverMessage;
+          }
+        }
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _sending = false);
+      }
     }
   }
 
@@ -84,84 +117,69 @@ class _FeedbackScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title:
-            const Text(
-          'Complaints & Feedback',
-        ),
+        title: const Text('Complaints & Feedback'),
       ),
       body: SafeArea(
         child: Form(
           key: _formKey,
           child: ListView(
-            padding:
-                const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
             children: [
               const Text(
                 'Tell us what happened or how AgentPro can improve.',
                 style: TextStyle(
                   fontSize: 16,
-                  fontWeight:
-                      FontWeight.w700,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 6),
               const Text(
+                'Your message is sent securely to AgentPro Support. '
+                'Do not include your PIN, password or one-time codes. '
                 'AgentPro does not automatically attach transaction '
                 'details, phone numbers, PINs or USSD screen content.',
               ),
               const SizedBox(height: 20),
               DropdownButtonFormField<String>(
                 initialValue: _type,
-                decoration:
-                    const InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'Type',
-                  border:
-                      OutlineInputBorder(),
+                  border: OutlineInputBorder(),
                 ),
                 items: const [
                   DropdownMenuItem(
-                    value: 'Complaint',
-                    child:
-                        Text('Complaint'),
+                    value: 'complaint',
+                    child: Text('Complaint'),
                   ),
                   DropdownMenuItem(
-                    value: 'Feedback',
-                    child:
-                        Text('Feedback'),
+                    value: 'feedback',
+                    child: Text('Feedback'),
                   ),
                   DropdownMenuItem(
-                    value: 'Suggestion',
-                    child:
-                        Text('Suggestion'),
+                    value: 'suggestion',
+                    child: Text('Suggestion'),
                   ),
                 ],
                 onChanged: _sending
                     ? null
                     : (value) {
-                        if (value !=
-                            null) {
-                          setState(
-                            () => _type =
-                                value,
-                          );
+                        if (value != null) {
+                          setState(() => _type = value);
                         }
                       },
               ),
               const SizedBox(height: 14),
               TextFormField(
-                controller:
-                    _subjectController,
+                controller: _subjectController,
                 maxLength: 120,
-                decoration:
-                    const InputDecoration(
-                  labelText: 'Subject',
-                  border:
-                      OutlineInputBorder(),
+                textInputAction: TextInputAction.next,
+                decoration: InputDecoration(
+                  labelText: '${_typeLabel(_type)} subject',
+                  border: const OutlineInputBorder(),
                 ),
                 validator: (value) {
-                  if (value == null ||
-                      value.trim().isEmpty) {
-                    return 'Enter a subject';
+                  if ((value?.trim().length ?? 0) < 3) {
+                    return 'Enter a short subject';
                   }
 
                   return null;
@@ -169,24 +187,17 @@ class _FeedbackScreenState
               ),
               const SizedBox(height: 10),
               TextFormField(
-                controller:
-                    _messageController,
+                controller: _messageController,
                 minLines: 6,
                 maxLines: 10,
-                maxLength: 2000,
-                decoration:
-                    const InputDecoration(
-                  labelText:
-                      'Complaint or feedback',
-                  alignLabelWithHint:
-                      true,
-                  border:
-                      OutlineInputBorder(),
+                maxLength: 4000,
+                decoration: InputDecoration(
+                  labelText: _typeLabel(_type),
+                  alignLabelWithHint: true,
+                  border: const OutlineInputBorder(),
                 ),
                 validator: (value) {
-                  if (value == null ||
-                      value.trim().length <
-                          10) {
+                  if (value == null || value.trim().length < 10) {
                     return 'Please provide a little more detail';
                   }
 
@@ -195,30 +206,22 @@ class _FeedbackScreenState
               ),
               const SizedBox(height: 16),
               FilledButton.icon(
-                onPressed:
-                    _sending ? null : _send,
+                onPressed: _sending ? null : _send,
                 icon: _sending
                     ? const SizedBox(
                         width: 18,
                         height: 18,
-                        child:
-                            CircularProgressIndicator(
+                        child: CircularProgressIndicator(
                           strokeWidth: 2,
                           color: Colors.white,
                         ),
                       )
-                    : const Icon(
-                        Icons.send_outlined,
-                      ),
+                    : const Icon(Icons.send_outlined),
                 label: Text(
-                  _sending
-                      ? 'Opening email...'
-                      : 'Send',
+                  _sending ? 'Sending...' : 'Send securely',
                 ),
-                style:
-                    FilledButton.styleFrom(
-                  backgroundColor:
-                      AppTheme.primaryColor,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppTheme.primaryColor,
                 ),
               ),
             ],

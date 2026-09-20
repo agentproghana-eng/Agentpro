@@ -16,6 +16,7 @@ import {
   EmptyState,
 } from './components/PageState.jsx';
 import { ConfirmDialog } from './components/ConfirmDialog.jsx';
+import SupportCasesPanel from './features/support/SupportCasesPanel.jsx';
 import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom';
 import API from './lib/api.js';
 import {
@@ -3339,6 +3340,10 @@ function SupportConsolePage() {
 
   return (
     <div>
+      <SupportCasesPanel />
+
+      <div className="my-6 border-t border-gray-200" />
+
       <div
         className="
           mb-6

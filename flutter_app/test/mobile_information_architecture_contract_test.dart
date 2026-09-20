@@ -161,7 +161,7 @@ void main() {
       );
 
       test(
-        'Settings owns feedback deletion and simplified About',
+        'Settings owns deletion and simplified About',
         () {
           final text = source(
             'lib/features/settings/settings_screen.dart',
@@ -178,20 +178,6 @@ void main() {
             text,
             contains(
               "'Delete Account'",
-            ),
-          );
-
-          expect(
-            text,
-            contains(
-              "'Complaints & Feedback'",
-            ),
-          );
-
-          expect(
-            text,
-            contains(
-              "context.push('/support/feedback')",
             ),
           );
 
@@ -245,6 +231,56 @@ void main() {
             isNot(
               contains(
                 "_SettingsSectionHeader(title: 'Session')",
+              ),
+            ),
+          );
+        },
+      );
+
+      test(
+        'Help and Support owns Complaints and Feedback',
+        () {
+          final support = source(
+            'lib/features/support/support_screen.dart',
+          );
+
+          expect(
+            support,
+            contains(
+              "'Complaints & Feedback'",
+            ),
+          );
+
+          expect(
+            support,
+            contains(
+              "context.push('/support/feedback')",
+            ),
+          );
+
+          expect(
+            support,
+            contains(
+              "'My Support Cases'",
+            ),
+          );
+
+          expect(
+            support,
+            contains(
+              "context.push('/support/cases')",
+            ),
+          );
+
+          final settings = source(
+            'lib/features/settings/settings_screen.dart',
+          );
+
+          expect(
+            settings,
+            isNot(
+              contains(
+                "'Complaints & Feedback'",
               ),
             ),
           );

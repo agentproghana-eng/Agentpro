@@ -50,6 +50,7 @@ const userSimPurposeRoutes = require('./src/routes/userSimPurpose.routes');
 const reportRoutes = require('./src/routes/report.routes');
 const aiRoutes = require('./src/routes/ai.routes');
 const notificationRoutes = require('./src/routes/notification.routes');
+const supportRoutes = require('./src/routes/support.routes');
 const adminRoutes = require('./src/routes/admin.routes');
 const branchRoutes = require('./src/routes/branch.routes');
 const ussdFlowRoutes = require('./src/routes/ussdFlow.routes');
@@ -275,6 +276,7 @@ app.use(`${API}/user-sim-purposes`, userSimPurposeRoutes);
 app.use(`${API}/reports`, reportRoutes);
 app.use(`${API}/ai`, aiRoutes);
 app.use(`${API}/notifications`, notificationRoutes);
+app.use(`${API}/support`, supportRoutes);
 app.use(`${API}/admin`, adminRoutes);
 app.use(`${API}/ussd-flows`, ussdFlowRoutes);
 
