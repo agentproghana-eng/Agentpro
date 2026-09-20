@@ -23,6 +23,15 @@ const {
   searchSupportTimeline,
 } = require('../services/supportTimelineService');
 const {
+  listAdminSupportCases,
+  getAdminSupportCase,
+  updateAdminSupportCase,
+  addAdminSupportReply,
+} = require('../services/supportCaseService');
+const {
+  sendToUser,
+} = require('../services/notificationService');
+const {
   listOpenUssdFlowHealthIncidents,
   dismissUssdFlowHealthIncident,
 } = require('../services/ussdFlowHealthService');
@@ -288,6 +297,220 @@ router.get('/support/timeline', async (req, res) => {
       success: false,
       message:
         'Support timeline search failed',
+    });
+  }
+});
+
+// ── Support Case Inbox ────────────────────────────────────────
+//
+// This router is globally protected by authenticate + superuser authorization.
+// Message text stays in support-case tables. Audit records contain metadata only.
+router.get('/support/cases', async (req, res) => {
+  try {
+    const result = await listAdminSupportCases({
+      status: req.query.status,
+      type: req.query.type,
+      priority: req.query.priority,
+      cursor: req.query.cursor,
+      limit: req.query.limit,
+    });
+
+    return res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    const status = Number.isInteger(error?.statusCode)
+      ? error.statusCode
+      : 500;
+
+    if (status === 500) {
+      logger.error('Support case inbox error:', {
+        errorCode: error?.code,
+        requestId: req.requestId,
+      });
+    }
+
+    return res.status(status).json({
+      success: false,
+      code: error?.code,
+      message:
+        status === 500
+          ? 'Support case inbox is temporarily unavailable'
+          : error.message,
+    });
+  }
+});
+
+router.get('/support/cases/:id', async (req, res) => {
+  try {
+    const result = await getAdminSupportCase({
+      caseId: req.params.id,
+    });
+
+    return res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    const status = Number.isInteger(error?.statusCode)
+      ? error.statusCode
+      : 500;
+
+    if (status === 500) {
+      logger.error('Support case detail error:', {
+        errorCode: error?.code,
+        requestId: req.requestId,
+      });
+    }
+
+    return res.status(status).json({
+      success: false,
+      code: error?.code,
+      message:
+        status === 500
+          ? 'Support case is temporarily unavailable'
+          : error.message,
+    });
+  }
+});
+
+router.patch('/support/cases/:id', async (req, res) => {
+  try {
+    const result = await withTransaction(async (client) => {
+      const updated = await updateAdminSupportCase({
+        caseId: req.params.id,
+        status: req.body?.status,
+        priority: req.body?.priority,
+        dbClient: client,
+      });
+
+      await auditLog({
+        userId: req.user.id,
+        companyId: updated.case.company_id || null,
+        action: 'SUPPORT_CASE_UPDATED',
+        entityType: 'support_case',
+        entityId: updated.case.id,
+        oldValues: {
+          status: updated.previous.status,
+          priority: updated.previous.priority,
+        },
+        newValues: {
+          reference: updated.case.reference,
+          status: updated.case.status,
+          priority: updated.case.priority,
+        },
+        ipAddress: req.ip,
+        requestId: req.requestId,
+        dbClient: client,
+        strict: true,
+      });
+
+      return updated;
+    });
+
+    return res.json({
+      success: true,
+      data: result,
+      message: 'Support case updated.',
+    });
+  } catch (error) {
+    const status = Number.isInteger(error?.statusCode)
+      ? error.statusCode
+      : 500;
+
+    if (status === 500) {
+      logger.error('Support case update error:', {
+        errorCode: error?.code,
+        requestId: req.requestId,
+      });
+    }
+
+    return res.status(status).json({
+      success: false,
+      code: error?.code,
+      message:
+        status === 500
+          ? 'Support case could not be updated'
+          : error.message,
+    });
+  }
+});
+
+router.post('/support/cases/:id/reply', async (req, res) => {
+  try {
+    const result = await withTransaction(async (client) => {
+      const replied = await addAdminSupportReply({
+        caseId: req.params.id,
+        adminUserId: req.user.id,
+        body: req.body?.message,
+        dbClient: client,
+      });
+
+      await auditLog({
+        userId: req.user.id,
+        companyId: replied.case.company_id || null,
+        action: 'SUPPORT_CASE_REPLIED',
+        entityType: 'support_case',
+        entityId: replied.case.id,
+        newValues: {
+          reference: replied.case.reference,
+          status: replied.case.status,
+          message_id: replied.message.id,
+        },
+        ipAddress: req.ip,
+        requestId: req.requestId,
+        dbClient: client,
+        strict: true,
+      });
+
+      return replied;
+    });
+
+    if (result.case.requester_user_id) {
+      await sendToUser(
+        result.case.requester_user_id,
+        {
+          type: 'system_update',
+          title: `AgentPro Support ${result.case.reference}`,
+          body:
+            'AgentPro Support replied to your case. ' +
+            'Open My Support Cases to read the response.',
+          data: {
+            support_case_id: String(result.case.id),
+            support_case_reference: String(result.case.reference),
+          },
+        },
+        {
+          deliveryKey: `support-case-reply:${result.message.id}`,
+        }
+      );
+    }
+
+    return res.json({
+      success: true,
+      data: result,
+      message: 'Reply sent.',
+    });
+  } catch (error) {
+    const status = Number.isInteger(error?.statusCode)
+      ? error.statusCode
+      : 500;
+
+    if (status === 500) {
+      logger.error('Support case reply error:', {
+        errorCode: error?.code,
+        requestId: req.requestId,
+      });
+    }
+
+    return res.status(status).json({
+      success: false,
+      code: error?.code,
+      message:
+        status === 500
+          ? 'Support reply could not be sent'
+          : error.message,
     });
   }
 });

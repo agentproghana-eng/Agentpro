@@ -402,22 +402,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ],
           const SizedBox(height: 20),
-          const _SettingsSectionHeader(
-            title: 'Feedback',
-          ),
-          _SettingsGroupCard(
-            children: [
-              _SettingsTile(
-                icon: Icons.feedback_outlined,
-                title: 'Complaints & Feedback',
-                subtitle:
-                    'Send a complaint, suggestion or product feedback',
-                onTap: () =>
-                    context.push('/support/feedback'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
           const _SettingsSectionHeader(title: 'About'),
           _SettingsGroupCard(
             children: [

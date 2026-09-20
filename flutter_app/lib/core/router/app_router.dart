@@ -29,6 +29,7 @@ import '../../features/balances/cash_adjustment_screen.dart';
 import '../../features/balances/pending_approvals_screen.dart';
 import '../../features/support/support_screen.dart';
 import '../../features/support/feedback_screen.dart';
+import '../../features/support/support_cases_screen.dart';
 import '../../features/support/help_guide_screen.dart';
 import '../../features/dashboard/personal_dashboard.dart';
 import '../../features/dashboard/marketplace_seller_dashboard.dart';
@@ -413,6 +414,10 @@ class AppRouter {
         GoRoute(
           path: '/support/feedback',
           builder: (_, __) => const FeedbackScreen(),
+        ),
+        GoRoute(
+          path: '/support/cases',
+          builder: (_, __) => const SupportCasesScreen(),
         ),
         GoRoute(
             path: '/help-guide', builder: (_, __) => const HelpGuideScreen()),
