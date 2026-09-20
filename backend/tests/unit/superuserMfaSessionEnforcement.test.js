@@ -202,6 +202,65 @@ describe(
     );
 
     test(
+      'rejects delegated administrator sessions with no MFA assurance',
+      async () => {
+        query.mockResolvedValue({
+          rows: [
+            {
+              id: 'user-admin-support',
+              role: 'admin_support',
+              company_id: null,
+              email:
+                'support-admin@example.com',
+              status: 'active',
+              mfa_enabled: true,
+              session_id:
+                'session-1',
+              session_expires_at:
+                new Date(
+                  Date.now() +
+                  60000,
+                ),
+              mfa_verified_at:
+                null,
+            },
+          ],
+        });
+
+        const res =
+          response();
+
+        const next =
+          jest.fn();
+
+        await authenticate(
+          request(),
+          res,
+          next,
+        );
+
+        expect(
+          res.status,
+        ).toHaveBeenCalledWith(
+          401,
+        );
+
+        expect(
+          res.json,
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            code:
+              'MFA_REAUTH_REQUIRED',
+          }),
+        );
+
+        expect(next)
+          .not
+          .toHaveBeenCalled();
+      },
+    );
+
+    test(
       'ordinary application roles retain their existing durable-session contract',
       async () => {
         query.mockResolvedValue({

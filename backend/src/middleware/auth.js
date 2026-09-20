@@ -2,6 +2,9 @@ const jwt = require('jsonwebtoken');
 const { isTokenBlacklisted } = require('../config/redis');
 const { query } = require('../config/database');
 const { logger } = require('../utils/logger');
+const {
+  isAdminPortalRole,
+} = require('../security/adminRbac');
 
 // ─── JWT Authentication Middleware ────────────────────────────
 
@@ -277,7 +280,7 @@ const authenticate = async (req, res, next) => {
     // Existing pre-rollout sessions have mfa_verified_at = NULL and fail
     // closed immediately after the migration is deployed.
     if (
-      activeSession.role === 'superuser' &&
+      isAdminPortalRole(activeSession.role) &&
       (
         activeSession.mfa_enabled !== true ||
         !activeSession.mfa_verified_at

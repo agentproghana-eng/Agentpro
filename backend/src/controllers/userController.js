@@ -281,9 +281,26 @@ exports.listUsers = async (req, res) => {
     const params = [];
     let idx = 1;
 
-    if (req.user.role !== "superuser") {
+    if (
+      ![
+        "superuser",
+        "admin_operations",
+      ].includes(req.user.role)
+    ) {
       conditions.push(`u.company_id = $${idx++}`);
       params.push(req.user.company_id);
+    }
+
+    if (req.user.role === "admin_operations") {
+      conditions.push(
+        `u.role NOT IN (
+          'superuser',
+          'admin_support',
+          'admin_operations',
+          'admin_finance',
+          'admin_content'
+        )`
+      );
     }
 
     // Managers only see agents assigned to branches they manage - mirrors
@@ -433,9 +450,26 @@ exports.listUsersCursor = async (req, res) => {
     const params = [];
     let idx = 1;
 
-    if (req.user.role !== "superuser") {
+    if (
+      ![
+        "superuser",
+        "admin_operations",
+      ].includes(req.user.role)
+    ) {
       conditions.push(`u.company_id = $${idx++}`);
       params.push(req.user.company_id);
+    }
+
+    if (req.user.role === "admin_operations") {
+      conditions.push(
+        `u.role NOT IN (
+          'superuser',
+          'admin_support',
+          'admin_operations',
+          'admin_finance',
+          'admin_content'
+        )`
+      );
     }
 
     if (req.user.role === "manager") {
@@ -630,7 +664,17 @@ exports.createUser = async (req, res) => {
   // - manager: agents only
   const allowedRoles =
     req.user.role === "superuser"
-      ? ["business_owner", "manager", "agent", "auditor", "customer"]
+      ? [
+          "business_owner",
+          "manager",
+          "agent",
+          "auditor",
+          "customer",
+          "admin_support",
+          "admin_operations",
+          "admin_finance",
+          "admin_content",
+        ]
       : req.user.role === "business_owner"
         ? ["manager", "agent", "auditor"]
         : req.user.role === "manager"
@@ -897,10 +941,31 @@ exports.updateUser = async (req, res) => {
 
     // Non-superusers can only modify users in their own company
     if (
-      req.user.role !== "superuser" &&
+      ![
+        "superuser",
+        "admin_operations",
+      ].includes(req.user.role) &&
       targetUser.company_id !== req.user.company_id
     ) {
       return res.status(403).json({ success: false, message: "Access denied" });
+    }
+
+    if (
+      req.user.role ===
+        "admin_operations" &&
+      [
+        "superuser",
+        "admin_support",
+        "admin_operations",
+        "admin_finance",
+        "admin_content",
+      ].includes(targetUser.role)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Administrator accounts are restricted to superuser management",
+      });
     }
 
     // Business owners cannot modify other business owners or superusers
@@ -1004,10 +1069,31 @@ exports.getUser = async (req, res) => {
 
     // Non-superusers can only view users in their own company
     if (
-      req.user.role !== "superuser" &&
+      ![
+        "superuser",
+        "admin_operations",
+      ].includes(req.user.role) &&
       targetUser.company_id !== req.user.company_id
     ) {
       return res.status(403).json({ success: false, message: "Access denied" });
+    }
+
+    if (
+      req.user.role ===
+        "admin_operations" &&
+      [
+        "superuser",
+        "admin_support",
+        "admin_operations",
+        "admin_finance",
+        "admin_content",
+      ].includes(targetUser.role)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Administrator accounts are restricted to superuser management",
+      });
     }
 
     // Managers can only view agents assigned to branches they manage -

@@ -13,7 +13,7 @@ const { activateBusinessSubscription } = require('../services/subscriptionActiva
 // ── Get Subscription Status ───────────────────────────────────
 
 exports.getSubscription = async (req, res) => {
-  const companyId = req.user.role === 'superuser'
+  const companyId = ['superuser', 'admin_finance'].includes(req.user.role)
     ? req.params.company_id
     : req.user.company_id;
 

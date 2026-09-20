@@ -51,16 +51,16 @@ router.get(
   paystackSubscriptionController.verifyPersonal
 );
 
-router.get('/pending-payments', authorize('superuser'), personalSubController.listPendingPayments);
+router.get('/pending-payments', authorize('superuser', 'admin_finance'), personalSubController.listPendingPayments);
 router.get(
   '/reconciliation-payments',
-  authorize('superuser'),
+  authorize('superuser', 'admin_finance'),
   personalSubController.listReconciliationPayments
 );
 
 router.patch(
   '/payment/:payment_id/verify',
-  authorize('superuser'),
+  authorize('superuser', 'admin_finance'),
   [
     param('payment_id')
       .isUUID()

@@ -25,7 +25,7 @@ const handleValidation = (req, res, next) => {
 router.use(authenticate);
 
 router.get('/status', subController.getSubscription);
-router.get('/status/:company_id', authorize('superuser'), subController.getSubscription);
+router.get('/status/:company_id', authorize('superuser', 'admin_finance'), subController.getSubscription);
 
 router.post('/payment', [
   body('momo_reference').trim().notEmpty().withMessage('MoMo reference is required'),
@@ -52,16 +52,16 @@ router.get(
   paystackSubscriptionController.verifyBusiness
 );
 
-router.get('/pending-payments', authorize('superuser'), subController.listPendingPayments);
+router.get('/pending-payments', authorize('superuser', 'admin_finance'), subController.listPendingPayments);
 router.get(
   '/reconciliation-payments',
-  authorize('superuser'),
+  authorize('superuser', 'admin_finance'),
   subController.listReconciliationPayments
 );
 
 router.patch(
   '/payment/:payment_id/verify',
-  authorize('superuser'),
+  authorize('superuser', 'admin_finance'),
   [
     param('payment_id')
       .isUUID()

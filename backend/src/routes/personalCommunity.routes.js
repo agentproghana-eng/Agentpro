@@ -28,13 +28,13 @@ router.use(authenticate);
 
 router.get(
   '/moderation/pending',
-  authorize('superuser'),
+  authorize('superuser', 'admin_content'),
   personalCommunityController.listPending
 );
 
 router.patch(
   '/posts/:post_id/moderate',
-  authorize('superuser'),
+  authorize('superuser', 'admin_content'),
   personalCommunityController.moderatePost
 );
 

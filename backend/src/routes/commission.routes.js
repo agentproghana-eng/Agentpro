@@ -11,11 +11,11 @@ const {
 router.use(authenticate);
 
 // Get commission rules
-router.get('/rules', authorize('superuser', 'business_owner'), async (req, res) => {
+router.get('/rules', authorize('superuser', 'admin_finance', 'business_owner'), async (req, res) => {
   try {
     let result;
 
-    if (req.user.role === 'superuser') {
+    if (['superuser', 'admin_finance'].includes(req.user.role)) {
       result = await query(
         `SELECT *
          FROM commission_rules
@@ -44,7 +44,7 @@ router.get('/rules', authorize('superuser', 'business_owner'), async (req, res) 
 });
 
 // Create commission rule (superuser only)
-router.post('/rules', authorize('superuser'), async (req, res) => {
+router.post('/rules', authorize('superuser', 'admin_finance'), async (req, res) => {
   const {
     company_id,
     provider,

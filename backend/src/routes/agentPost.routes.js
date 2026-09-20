@@ -32,47 +32,47 @@ router.use(authenticate);
 // business-role restriction below.
 router.get(
   "/moderation/posts/cursor",
-  authorize("superuser"),
+  authorize("superuser", "admin_content"),
   enhancementController.listModerationPostsCursor
 );
 router.get(
   "/moderation/posts",
-  authorize("superuser"),
+  authorize("superuser", "admin_content"),
   enhancementController.listModerationPosts
 );
 router.get(
   "/moderation/history/cursor",
-  authorize("superuser"),
+  authorize("superuser", "admin_content"),
   enhancementController.listModerationHistoryCursor
 );
 router.get(
   "/moderation/history",
-  authorize("superuser"),
+  authorize("superuser", "admin_content"),
   enhancementController.listModerationHistory
 );
 router.get(
   "/moderation/reports",
-  authorize("superuser"),
+  authorize("superuser", "admin_content"),
   enhancementController.listReports
 );
 router.patch(
   "/moderation/reports/:report_id",
-  authorize("superuser"),
+  authorize("superuser", "admin_content"),
   enhancementController.resolveReport
 );
 router.get(
   "/moderation/pending",
-  authorize("superuser"),
+  authorize("superuser", "admin_content"),
   agentPostController.listPending
 );
 router.patch(
   "/:post_id/community-moderation",
-  authorize("superuser"),
+  authorize("superuser", "admin_content"),
   enhancementController.updatePostModeration
 );
 router.patch(
   "/:post_id/moderate",
-  authorize("superuser"),
+  authorize("superuser", "admin_content"),
   agentPostController.moderatePost
 );
 
