@@ -4,6 +4,9 @@ const { auditLog } = require('../services/auditService');
 const {
   getOrCreateAgentSimWallet,
 } = require('../services/agentWalletService');
+const {
+  hasAdminRole,
+} = require('../security/adminRbac');
 
 // A shift reconciles against the agent's single physical cash drawer.
 // Electronic provider wallets are separate and must never be summed to
@@ -765,7 +768,13 @@ exports.listShiftsCursor = async (req, res) => {
     const params = [];
     let idx = 1;
 
-    if (!['superuser', 'admin_operations'].includes(req.user.role)) {
+    if (
+      req.user.role !== 'superuser' &&
+      !hasAdminRole(
+        req.user,
+        'admin_operations',
+      )
+    ) {
       conditions.push(
         `s.company_id = $${idx++}`
       );
@@ -944,10 +953,13 @@ exports.listShifts = async (req, res) => {
     let idx = 1;
 
     if (
-      ![
-        'superuser',
-        'admin_operations',
-      ].includes(req.user.role)
+      !(
+        req.user.role === 'superuser' ||
+        hasAdminRole(
+          req.user,
+          'admin_operations',
+        )
+      )
     ) {
       conditions.push(
         `s.company_id = $${idx++}`

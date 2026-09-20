@@ -1,4 +1,7 @@
 const { query, withTransaction } = require('../config/database');
+const {
+  hasAdminRole,
+} = require('../security/adminRbac');
 const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
 const {
@@ -13,9 +16,16 @@ const { activateBusinessSubscription } = require('../services/subscriptionActiva
 // ── Get Subscription Status ───────────────────────────────────
 
 exports.getSubscription = async (req, res) => {
-  const companyId = ['superuser', 'admin_finance'].includes(req.user.role)
-    ? req.params.company_id
-    : req.user.company_id;
+  const companyId =
+    (
+      req.user.role === 'superuser' ||
+      hasAdminRole(
+        req.user,
+        'admin_finance',
+      )
+    )
+      ? req.params.company_id
+      : req.user.company_id;
 
   try {
     const result = await query(

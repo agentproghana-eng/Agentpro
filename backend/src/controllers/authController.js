@@ -47,6 +47,7 @@ const {
 } = require('../config/cloudinary');
 const {
   isAdminPortalRole,
+  isAdminPortalUser,
 } = require('../security/adminRbac');
 
 // ─── Token Helpers ───────────────────────────────────────────
@@ -786,6 +787,8 @@ exports.registerPersonal = async (req, res) => {
         user: {
           id: user.id,
           role: user.role,
+          admin_roles:
+            user.admin_roles || [],
           first_name: user.first_name,
           last_name: user.last_name,
           email: user.email,
@@ -1035,6 +1038,8 @@ exports.addPersonalCapability = async (req, res) => {
 
 exports.login = async (req, res) => {
   const { email, password, fcm_token, device_info } = req.body;
+  const adminPortalRequested =
+    req.body?.admin_portal === true;
 
   try {
     // Fetch user with company subscription status
@@ -1175,7 +1180,44 @@ exports.login = async (req, res) => {
       });
     }
 
-    if (isAdminPortalRole(user.role)) {
+    user.admin_roles =
+      (
+        isAdminPortalRole(
+          user.role,
+        ) &&
+        user.role !== 'superuser'
+      )
+        ? [user.role]
+        : [];
+
+    if (
+      adminPortalRequested &&
+      !isAdminPortalRole(
+        user.role,
+      )
+    ) {
+      const adminRoleResult =
+        await query(
+          `SELECT role::text AS role
+           FROM user_admin_roles
+           WHERE user_id = $1
+           ORDER BY role::text`,
+          [user.id],
+        );
+
+      user.admin_roles =
+        adminRoleResult.rows.map(
+          (row) => row.role,
+        );
+    }
+
+    if (
+      isAdminPortalRole(user.role) ||
+      (
+        adminPortalRequested &&
+        isAdminPortalUser(user)
+      )
+    ) {
       try {
         assertMfaEncryptionConfigured();
       } catch (configurationError) {
@@ -1468,9 +1510,45 @@ exports.completeMfa = async (req, res) => {
           const user =
             userResult.rows[0];
 
+
+          user.admin_roles =
+            (
+              isAdminPortalRole(
+                user.role,
+              ) &&
+              user.role !==
+                'superuser'
+            )
+              ? [user.role]
+              : [];
+
           if (
             !isAdminPortalRole(
               user.role,
+            )
+          ) {
+            const adminRoleResult =
+              await client.query(
+                `SELECT
+                   role::text AS role
+                 FROM user_admin_roles
+                 WHERE user_id = $1
+                 ORDER BY role::text`,
+                [user.id],
+              );
+
+            user.admin_roles =
+              adminRoleResult.rows.map(
+                (row) => row.role,
+              );
+          }
+
+          if (
+            (
+              !isAdminPortalRole(
+                user.role,
+              ) &&
+              !isAdminPortalUser(user)
             ) ||
             user.status !==
               'active'
@@ -1917,6 +1995,8 @@ exports.completeMfa = async (req, res) => {
             result.user.id,
           role:
             result.user.role,
+          admin_roles:
+            result.user.admin_roles || [],
           first_name:
             result.user
               .first_name,
@@ -2700,6 +2780,20 @@ exports.deleteAccount = async (
           const user =
             userResult.rows[0];
 
+          const deletionAdminRoles =
+            await client.query(
+              `SELECT role::text AS role
+               FROM user_admin_roles
+               WHERE user_id = $1
+               ORDER BY role::text`,
+              [user.id],
+            );
+
+          user.admin_roles =
+            deletionAdminRoles.rows.map(
+              (row) => row.role,
+            );
+
           if (
             user.account_deleted_at
           ) {
@@ -2714,9 +2808,7 @@ exports.deleteAccount = async (
           }
 
           if (
-            isAdminPortalRole(
-              user.role,
-            )
+            isAdminPortalUser(user)
           ) {
             return {
               statusCode: 403,

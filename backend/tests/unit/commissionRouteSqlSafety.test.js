@@ -32,7 +32,7 @@ describe('commission route SQL safety', () => {
     expect(
       source
     ).toContain(
-      "['superuser', 'admin_finance'].includes(req.user.role)"
+      "hasAdminRole("
     );
   });
 

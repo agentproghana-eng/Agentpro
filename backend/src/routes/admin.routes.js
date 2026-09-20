@@ -56,29 +56,48 @@ const {
 router.use(authenticate, requireAdminPortalAccess);
 
 // ── Admin Team ────────────────────────────────────────────────
-// Account creation itself reuses POST /users so the existing secure,
-// one-time password setup link remains the only initial credential path.
-// These routes list and change only non-superuser Admin Portal identities.
+// users.role remains the primary application/business role.
+// Admin Portal roles are additive through user_admin_roles.
+
+function adminRolesSelectSql(userAlias = 'u') {
+  return `COALESCE(
+    (
+      SELECT array_agg(
+        uar.role::text
+        ORDER BY uar.role::text
+      )
+      FROM user_admin_roles uar
+      WHERE uar.user_id = ${userAlias}.id
+    ),
+    ARRAY[]::text[]
+  )`;
+}
 
 router.get('/admin-team', async (req, res) => {
   try {
     const result = await query(
       `SELECT
-         id,
-         role,
-         first_name,
-         last_name,
-         email,
-         phone,
-         status,
-         last_login_at,
-         mfa_enabled,
-         created_at,
-         updated_at
-       FROM users
-       WHERE role = ANY($1::user_role[])
-       ORDER BY created_at DESC`,
-      [ADMIN_STAFF_ROLES],
+         u.id,
+         u.role AS primary_role,
+         u.first_name,
+         u.last_name,
+         u.email,
+         u.phone,
+         u.status,
+         u.last_login_at,
+         u.mfa_enabled,
+         u.created_at,
+         u.updated_at,
+         ${adminRolesSelectSql('u')} AS admin_roles
+       FROM users u
+       WHERE u.role <> 'superuser'
+         AND u.account_deleted_at IS NULL
+         AND EXISTS (
+           SELECT 1
+           FROM user_admin_roles uar_exists
+           WHERE uar_exists.user_id = u.id
+         )
+       ORDER BY u.created_at DESC`,
     );
 
     return res.json({
@@ -99,6 +118,77 @@ router.get('/admin-team', async (req, res) => {
   }
 });
 
+router.get(
+  '/admin-team/candidates',
+  async (req, res) => {
+    const search =
+      String(req.query.q || '').trim();
+
+    if (search.length < 2) {
+      return res.status(422).json({
+        success: false,
+        message:
+          'Enter at least two characters to search users.',
+      });
+    }
+
+    try {
+      const result = await query(
+        `SELECT
+           u.id,
+           u.role AS primary_role,
+           u.first_name,
+           u.last_name,
+           u.email,
+           u.phone,
+           u.status,
+           u.mfa_enabled,
+           ${adminRolesSelectSql('u')} AS admin_roles
+         FROM users u
+         WHERE u.role <> 'superuser'
+           AND u.account_deleted_at IS NULL
+           AND (
+             u.email ILIKE $1
+             OR COALESCE(u.phone, '') ILIKE $1
+             OR (
+               COALESCE(u.first_name, '') ||
+               ' ' ||
+               COALESCE(u.last_name, '')
+             ) ILIKE $1
+           )
+         ORDER BY
+           CASE
+             WHEN LOWER(u.email) = LOWER($2)
+             THEN 0
+             ELSE 1
+           END,
+           u.created_at DESC
+         LIMIT 20`,
+        [
+          `%${search}%`,
+          search,
+        ],
+      );
+
+      return res.json({
+        success: true,
+        data: result.rows,
+      });
+    } catch (error) {
+      logger.error(
+        'Admin team candidate search error:',
+        error,
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          'Failed to search registered users',
+      });
+    }
+  },
+);
+
 router.patch(
   '/admin-team/:user_id',
   async (req, res) => {
@@ -107,15 +197,12 @@ router.patch(
         req.params.user_id || '',
       ).trim();
 
-    const role =
-      req.body?.role == null
-        ? null
-        : String(req.body.role).trim();
-
-    const status =
-      req.body?.status == null
-        ? null
-        : String(req.body.status).trim();
+    const hasField =
+      (name) =>
+        Object.prototype.hasOwnProperty.call(
+          req.body || {},
+          name,
+        );
 
     if (!uuidValidate(userId)) {
       return res.status(422).json({
@@ -125,14 +212,116 @@ router.patch(
       });
     }
 
+    let requestedAdminRoles = null;
+
+    if (hasField('admin_roles')) {
+      if (!Array.isArray(req.body.admin_roles)) {
+        return res.status(422).json({
+          success: false,
+          message:
+            'admin_roles must be an array',
+        });
+      }
+
+      requestedAdminRoles = [
+        ...new Set(
+          req.body.admin_roles.map(
+            (value) =>
+              String(value || '').trim(),
+          ),
+        ),
+      ];
+
+      if (
+        requestedAdminRoles.length >
+          ADMIN_STAFF_ROLES.length ||
+        requestedAdminRoles.some(
+          (role) =>
+            !ADMIN_STAFF_ROLES.includes(role),
+        )
+      ) {
+        return res.status(422).json({
+          success: false,
+          message:
+            'One or more administrator roles are invalid',
+        });
+      }
+    }
+
+    const firstName =
+      hasField('first_name')
+        ? String(req.body.first_name || '').trim()
+        : null;
+
+    const lastName =
+      hasField('last_name')
+        ? String(req.body.last_name || '').trim()
+        : null;
+
+    const email =
+      hasField('email')
+        ? String(req.body.email || '')
+            .trim()
+            .toLowerCase()
+        : null;
+
+    const phone =
+      hasField('phone')
+        ? (
+            String(req.body.phone || '').trim() ||
+            null
+          )
+        : undefined;
+
+    const status =
+      hasField('status')
+        ? String(req.body.status || '').trim()
+        : null;
+
     if (
-      role !== null &&
-      !ADMIN_STAFF_ROLES.includes(role)
+      hasField('first_name') &&
+      !firstName
     ) {
       return res.status(422).json({
         success: false,
         message:
-          'Invalid administrator role',
+          'First name cannot be empty',
+      });
+    }
+
+    if (
+      hasField('last_name') &&
+      !lastName
+    ) {
+      return res.status(422).json({
+        success: false,
+        message:
+          'Last name cannot be empty',
+      });
+    }
+
+    if (
+      hasField('email') &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+        email,
+      )
+    ) {
+      return res.status(422).json({
+        success: false,
+        message:
+          'A valid email address is required',
+      });
+    }
+
+    if (
+      phone !== undefined &&
+      phone !== null &&
+      phone.length > 20
+    ) {
+      return res.status(422).json({
+        success: false,
+        message:
+          'Phone number is too long',
       });
     }
 
@@ -152,13 +341,17 @@ router.patch(
     }
 
     if (
-      role === null &&
-      status === null
+      requestedAdminRoles === null &&
+      !hasField('first_name') &&
+      !hasField('last_name') &&
+      !hasField('email') &&
+      !hasField('phone') &&
+      !hasField('status')
     ) {
       return res.status(422).json({
         success: false,
         message:
-          'Role or status is required',
+          'No account changes were supplied',
       });
     }
 
@@ -171,18 +364,16 @@ router.patch(
                 `SELECT
                    id,
                    role,
+                   first_name,
+                   last_name,
+                   email,
+                   phone,
                    status,
-                   email
+                   account_deleted_at
                  FROM users
                  WHERE id = $1
-                   AND role = ANY(
-                     $2::user_role[]
-                   )
                  FOR UPDATE`,
-                [
-                  userId,
-                  ADMIN_STAFF_ROLES,
-                ],
+                [userId],
               );
 
             if (
@@ -195,23 +386,127 @@ router.patch(
             const target =
               targetResult.rows[0];
 
+            if (
+              target.role === 'superuser'
+            ) {
+              return {
+                protectedSuperuser: true,
+              };
+            }
+
+            if (target.account_deleted_at) {
+              return {
+                deletedAccount: true,
+              };
+            }
+
+            const roleResult =
+              await client.query(
+                `SELECT role::text AS role
+                 FROM user_admin_roles
+                 WHERE user_id = $1
+                 ORDER BY role::text`,
+                [userId],
+              );
+
+            const currentAdminRoles =
+              roleResult.rows.map(
+                (row) => row.role,
+              );
+
+            const nextAdminRoles =
+              requestedAdminRoles === null
+                ? currentAdminRoles
+                : requestedAdminRoles;
+
+            const nextFirstName =
+              hasField('first_name')
+                ? firstName
+                : target.first_name;
+
+            const nextLastName =
+              hasField('last_name')
+                ? lastName
+                : target.last_name;
+
+            const nextEmail =
+              hasField('email')
+                ? email
+                : target.email;
+
+            const nextPhone =
+              hasField('phone')
+                ? phone
+                : target.phone;
+
+            const nextStatus =
+              hasField('status')
+                ? status
+                : target.status;
+
+            let nextPrimaryRole =
+              target.role;
+
+            if (
+              ADMIN_STAFF_ROLES.includes(
+                target.role,
+              ) &&
+              requestedAdminRoles !== null &&
+              !nextAdminRoles.includes(
+                target.role,
+              )
+            ) {
+              nextPrimaryRole =
+                nextAdminRoles[0] ||
+                'customer';
+            }
+
+            const emailChanged =
+              String(target.email || '')
+                .toLowerCase() !==
+              String(nextEmail || '')
+                .toLowerCase();
+
+            const phoneChanged =
+              String(target.phone || '') !==
+              String(nextPhone || '');
+
+            const statusChanged =
+              target.status !== nextStatus;
+
+            const primaryRoleChanged =
+              target.role !==
+              nextPrimaryRole;
+
+            const rolesChanged =
+              JSON.stringify(
+                [...currentAdminRoles].sort(),
+              ) !==
+              JSON.stringify(
+                [...nextAdminRoles].sort(),
+              );
+
             const result =
               await client.query(
                 `UPDATE users
                  SET
-                   role = COALESCE(
-                     $1::user_role,
-                     role
-                   ),
-                   status = COALESCE(
-                     $2::account_status,
-                     status
-                   ),
+                   role = $1::user_role,
+                   first_name = $2,
+                   last_name = $3,
+                   email = $4,
+                   phone = $5,
+                   status = $6::account_status,
+                   phone_verified_at =
+                     CASE
+                       WHEN $7::boolean
+                       THEN NULL
+                       ELSE phone_verified_at
+                     END,
                    updated_at = NOW()
-                 WHERE id = $3
+                 WHERE id = $8
                  RETURNING
                    id,
-                   role,
+                   role AS primary_role,
                    first_name,
                    last_name,
                    email,
@@ -222,19 +517,58 @@ router.patch(
                    created_at,
                    updated_at`,
                 [
-                  role,
-                  status,
+                  nextPrimaryRole,
+                  nextFirstName,
+                  nextLastName,
+                  nextEmail,
+                  nextPhone,
+                  nextStatus,
+                  phoneChanged,
                   userId,
                 ],
               );
 
-            const next =
-              result.rows[0];
-
             if (
-              next.role !== target.role ||
-              next.status !== target.status
+              requestedAdminRoles !== null
             ) {
+              await client.query(
+                `DELETE FROM user_admin_roles
+                 WHERE user_id = $1`,
+                [userId],
+              );
+
+              for (
+                const adminRole
+                of nextAdminRoles
+              ) {
+                await client.query(
+                  `INSERT INTO user_admin_roles (
+                     user_id,
+                     role,
+                     granted_by
+                   )
+                   VALUES (
+                     $1,
+                     $2::user_role,
+                     $3
+                   )`,
+                  [
+                    userId,
+                    adminRole,
+                    req.user.id,
+                  ],
+                );
+              }
+            }
+
+            const securityStateChanged =
+              emailChanged ||
+              phoneChanged ||
+              statusChanged ||
+              primaryRoleChanged ||
+              rolesChanged;
+
+            if (securityStateChanged) {
               await client.query(
                 `UPDATE refresh_tokens
                  SET revoked_at =
@@ -253,22 +587,38 @@ router.patch(
                 req.user.id,
               companyId: null,
               action:
-                'ADMIN_STAFF_UPDATED',
+                'ADMIN_ACCOUNT_UPDATED',
               entityType:
                 'user',
               entityId:
                 userId,
               oldValues: {
-                role:
+                primary_role:
                   target.role,
+                admin_roles:
+                  currentAdminRoles,
                 status:
                   target.status,
               },
               newValues: {
-                role:
-                  next.role,
+                primary_role:
+                  nextPrimaryRole,
+                admin_roles:
+                  nextAdminRoles,
                 status:
-                  next.status,
+                  nextStatus,
+                first_name_changed:
+                  target.first_name !==
+                  nextFirstName,
+                last_name_changed:
+                  target.last_name !==
+                  nextLastName,
+                email_changed:
+                  emailChanged,
+                phone_changed:
+                  phoneChanged,
+                phone_verification_cleared:
+                  phoneChanged,
               },
               ipAddress:
                 req.ip,
@@ -283,7 +633,13 @@ router.patch(
               strict: true,
             });
 
-            return next;
+            return {
+              ...result.rows[0],
+              admin_roles:
+                nextAdminRoles,
+              sessions_revoked:
+                securityStateChanged,
+            };
           },
         );
 
@@ -291,7 +647,23 @@ router.patch(
         return res.status(404).json({
           success: false,
           message:
-            'Administrator account not found',
+            'Registered user not found',
+        });
+      }
+
+      if (updated.protectedSuperuser) {
+        return res.status(403).json({
+          success: false,
+          message:
+            'The superuser account cannot be managed through Admin Team',
+        });
+      }
+
+      if (updated.deletedAccount) {
+        return res.status(409).json({
+          success: false,
+          message:
+            'A permanently deleted account cannot be modified',
         });
       }
 
@@ -300,6 +672,16 @@ router.patch(
         data: updated,
       });
     } catch (error) {
+      if (error?.code === '23505') {
+        return res.status(409).json({
+          success: false,
+          code:
+            'EMAIL_ALREADY_IN_USE',
+          message:
+            'That email address is already used by another AgentPro account.',
+        });
+      }
+
       logger.error(
         'Admin team update error:',
         error,

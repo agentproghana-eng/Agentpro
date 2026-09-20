@@ -228,6 +228,10 @@ router.post(
 router.post('/login', loginTelemetry, authLimiter, [
   body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
   body('password').notEmpty().withMessage('Password is required'),
+  body('admin_portal')
+    .optional()
+    .isBoolean()
+    .withMessage('admin_portal must be a boolean'),
 ], handleValidation, authController.login);
 
 // POST /api/v1/auth/mfa/complete

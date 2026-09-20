@@ -16,6 +16,10 @@ const {
   getOfflineAuthorizationSnapshot,
 } = require("../utils/offlineAuthorizationSnapshot");
 const {
+  hasAdminRole,
+  isAdminPortalUser,
+} = require("../security/adminRbac");
+const {
   issueOfflineAuthorizationReceipt,
 } = require("../utils/offlineAuthorizationReceipt");
 
@@ -282,23 +286,32 @@ exports.listUsers = async (req, res) => {
     let idx = 1;
 
     if (
-      ![
-        "superuser",
-        "admin_operations",
-      ].includes(req.user.role)
+      !(
+        req.user.role === "superuser" ||
+        hasAdminRole(
+          req.user,
+          "admin_operations",
+        )
+      )
     ) {
       conditions.push(`u.company_id = $${idx++}`);
       params.push(req.user.company_id);
     }
 
-    if (req.user.role === "admin_operations") {
+    if (
+      hasAdminRole(
+        req.user,
+        "admin_operations",
+      )
+    ) {
       conditions.push(
-        `u.role NOT IN (
-          'superuser',
-          'admin_support',
-          'admin_operations',
-          'admin_finance',
-          'admin_content'
+        `u.role <> 'superuser'`
+      );
+      conditions.push(
+        `NOT EXISTS (
+          SELECT 1
+          FROM user_admin_roles uar_admin
+          WHERE uar_admin.user_id = u.id
         )`
       );
     }
@@ -451,23 +464,32 @@ exports.listUsersCursor = async (req, res) => {
     let idx = 1;
 
     if (
-      ![
-        "superuser",
-        "admin_operations",
-      ].includes(req.user.role)
+      !(
+        req.user.role === "superuser" ||
+        hasAdminRole(
+          req.user,
+          "admin_operations",
+        )
+      )
     ) {
       conditions.push(`u.company_id = $${idx++}`);
       params.push(req.user.company_id);
     }
 
-    if (req.user.role === "admin_operations") {
+    if (
+      hasAdminRole(
+        req.user,
+        "admin_operations",
+      )
+    ) {
       conditions.push(
-        `u.role NOT IN (
-          'superuser',
-          'admin_support',
-          'admin_operations',
-          'admin_finance',
-          'admin_content'
+        `u.role <> 'superuser'`
+      );
+      conditions.push(
+        `NOT EXISTS (
+          SELECT 1
+          FROM user_admin_roles uar_admin
+          WHERE uar_admin.user_id = u.id
         )`
       );
     }
@@ -789,6 +811,27 @@ exports.createUser = async (req, res) => {
       );
       const createdUser = result.rows[0];
 
+      if (
+        req.user.role === "superuser" &&
+        ADMIN_STAFF_ROLES.includes(role)
+      ) {
+        await client.query(
+          `INSERT INTO user_admin_roles (
+             user_id,
+             role,
+             granted_by
+           )
+           VALUES ($1, $2::user_role, $3)
+           ON CONFLICT (user_id, role)
+           DO NOTHING`,
+          [
+            createdUser.id,
+            role,
+            req.user.id,
+          ],
+        );
+      }
+
       if (assignToBranch) {
         // Agents and managers both get an agent_branches entry -
         // this is where they personally process transactions.
@@ -928,7 +971,24 @@ exports.updateUser = async (req, res) => {
   try {
     // Fetch target user first to verify company ownership
     const target = await query(
-      "SELECT id, company_id, role, account_deleted_at FROM users WHERE id = $1",
+      `SELECT
+         u.id,
+         u.company_id,
+         u.role,
+         u.account_deleted_at,
+         COALESCE(
+           (
+             SELECT array_agg(
+               uar.role::text
+               ORDER BY uar.role::text
+             )
+             FROM user_admin_roles uar
+             WHERE uar.user_id = u.id
+           ),
+           ARRAY[]::text[]
+         ) AS admin_roles
+       FROM users u
+       WHERE u.id = $1`,
       [user_id],
     );
     if (target.rows.length === 0) {
@@ -941,25 +1001,24 @@ exports.updateUser = async (req, res) => {
 
     // Non-superusers can only modify users in their own company
     if (
-      ![
-        "superuser",
-        "admin_operations",
-      ].includes(req.user.role) &&
+      !(
+        req.user.role === "superuser" ||
+        hasAdminRole(
+          req.user,
+          "admin_operations",
+        )
+      ) &&
       targetUser.company_id !== req.user.company_id
     ) {
       return res.status(403).json({ success: false, message: "Access denied" });
     }
 
     if (
-      req.user.role ===
-        "admin_operations" &&
-      [
-        "superuser",
-        "admin_support",
+      hasAdminRole(
+        req.user,
         "admin_operations",
-        "admin_finance",
-        "admin_content",
-      ].includes(targetUser.role)
+      ) &&
+      isAdminPortalUser(targetUser)
     ) {
       return res.status(403).json({
         success: false,
@@ -1053,7 +1112,18 @@ exports.getUser = async (req, res) => {
     const result = await query(
       `SELECT u.id, u.role, u.first_name, u.last_name, u.email, u.phone,
               u.ghana_card_number, u.profile_image_url, u.status,
-              u.created_at, u.last_login_at, u.company_id, c.name as company_name
+              u.created_at, u.last_login_at, u.company_id, c.name as company_name,
+              COALESCE(
+                (
+                  SELECT array_agg(
+                    uar.role::text
+                    ORDER BY uar.role::text
+                  )
+                  FROM user_admin_roles uar
+                  WHERE uar.user_id = u.id
+                ),
+                ARRAY[]::text[]
+              ) AS admin_roles
        FROM users u LEFT JOIN companies c ON u.company_id = c.id
        WHERE u.id = $1`,
       [user_id],
@@ -1069,25 +1139,24 @@ exports.getUser = async (req, res) => {
 
     // Non-superusers can only view users in their own company
     if (
-      ![
-        "superuser",
-        "admin_operations",
-      ].includes(req.user.role) &&
+      !(
+        req.user.role === "superuser" ||
+        hasAdminRole(
+          req.user,
+          "admin_operations",
+        )
+      ) &&
       targetUser.company_id !== req.user.company_id
     ) {
       return res.status(403).json({ success: false, message: "Access denied" });
     }
 
     if (
-      req.user.role ===
-        "admin_operations" &&
-      [
-        "superuser",
-        "admin_support",
+      hasAdminRole(
+        req.user,
         "admin_operations",
-        "admin_finance",
-        "admin_content",
-      ].includes(targetUser.role)
+      ) &&
+      isAdminPortalUser(targetUser)
     ) {
       return res.status(403).json({
         success: false,
@@ -1222,7 +1291,14 @@ exports.reactivateStaffMember = async (req, res, existingUserId, fields) => {
 
   const allowedRoles =
     req.user.role === "superuser"
-      ? ["business_owner", "manager", "agent", "auditor", "customer"]
+      ? [
+          "business_owner",
+          "manager",
+          "agent",
+          "auditor",
+          "customer",
+          ...ADMIN_STAFF_ROLES,
+        ]
       : req.user.role === "business_owner"
         ? ["manager", "agent", "auditor"]
         : req.user.role === "manager"
@@ -1286,6 +1362,31 @@ exports.reactivateStaffMember = async (req, res, existingUserId, fields) => {
         [first_name, last_name, phone, role, passwordHash, existingUserId],
       );
       const reactivatedUser = result.rows[0];
+
+      await client.query(
+        `DELETE FROM user_admin_roles
+         WHERE user_id = $1`,
+        [existingUserId],
+      );
+
+      if (
+        req.user.role === "superuser" &&
+        ADMIN_STAFF_ROLES.includes(role)
+      ) {
+        await client.query(
+          `INSERT INTO user_admin_roles (
+             user_id,
+             role,
+             granted_by
+           )
+           VALUES ($1, $2::user_role, $3)`,
+          [
+            existingUserId,
+            role,
+            req.user.id,
+          ],
+        );
+      }
 
       await client.query("DELETE FROM agent_branches WHERE agent_id = $1", [
         existingUserId,

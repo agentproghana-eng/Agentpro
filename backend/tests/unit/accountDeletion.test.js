@@ -791,7 +791,15 @@ describe(
         );
 
         expect(source).toContain(
-          'role, account_deleted_at FROM users WHERE id = $1'
+          'u.account_deleted_at'
+        );
+
+        expect(source).toContain(
+          'WHERE u.id = $1'
+        );
+
+        expect(source).toContain(
+          'AS admin_roles'
         );
       },
     );
