@@ -1145,7 +1145,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       if (!mounted) return null;
 
       return await context.push<String>(
-        '/transactions/progress',
+        '/personal-transactions/progress',
         extra: {
           'is_personal': true,
           'transaction': transaction,
