@@ -364,6 +364,7 @@ class ApiClient {
 
     String? minimumSupportedVersion;
     String? recommendedVersion;
+    String? updateUrl;
 
     if (compatibility is Map) {
       minimumSupportedVersion =
