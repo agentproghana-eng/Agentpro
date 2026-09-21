@@ -213,14 +213,14 @@ router.post('/', async (req, res) => {
         payload:
           req.rawBody.toString('utf8'),
         headers: {
-          'svix-id':
+          id:
             req.get('svix-id'),
-          'svix-timestamp':
+          timestamp:
             req.get('svix-timestamp'),
-          'svix-signature':
+          signature:
             req.get('svix-signature'),
         },
-        secret:
+        webhookSecret:
           webhookSecret,
       });
   } catch (error) {
