@@ -172,15 +172,19 @@ async function resolveAttachments(
 }
 
 router.post('/', async (req, res) => {
-  const resendApiKey =
+  const sendApiKey =
     process.env.RESEND_API_KEY;
+
+  const receiveApiKey =
+    process.env.RESEND_RECEIVING_API_KEY;
 
   const webhookSecret =
     process.env
       .RESEND_INBOUND_WEBHOOK_SECRET;
 
   if (
-    !resendApiKey ||
+    !sendApiKey ||
+    !receiveApiKey ||
     !webhookSecret
   ) {
     logger.error(
@@ -202,14 +206,17 @@ router.post('/', async (req, res) => {
     });
   }
 
-  const resend =
-    new Resend(resendApiKey);
+  const receivingResend =
+    new Resend(receiveApiKey);
+
+  const sendingResend =
+    new Resend(sendApiKey);
 
   let event;
 
   try {
     event =
-      resend.webhooks.verify({
+      receivingResend.webhooks.verify({
         payload:
           req.rawBody.toString('utf8'),
         headers: {
@@ -277,7 +284,7 @@ router.post('/', async (req, res) => {
       data: email,
       error: receiveError,
     } =
-      await resend.emails.receiving.get(
+      await receivingResend.emails.receiving.get(
         emailId
       );
 
@@ -313,7 +320,7 @@ router.post('/', async (req, res) => {
 
     const attachments =
       await resolveAttachments(
-        resend,
+        receivingResend,
         emailId,
         event?.data?.attachments
       );
@@ -370,7 +377,7 @@ router.post('/', async (req, res) => {
       data: forwarded,
       error: sendError,
     } =
-      await resend.emails.send(
+      await sendingResend.emails.send(
         sendRequest,
         {
           idempotencyKey:
