@@ -125,6 +125,25 @@ describe(
         ).toHaveBeenCalledTimes(1);
 
         expect(
+          mockVerify
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            payload:
+              expect.any(String),
+            headers: {
+              id:
+                'msg_test',
+              timestamp:
+                '1234567890',
+              signature:
+                'v1,test',
+            },
+            webhookSecret:
+              'whsec_test',
+          })
+        );
+
+        expect(
           mockReceiveGet
         ).toHaveBeenCalledWith(
           'received-email-1'
