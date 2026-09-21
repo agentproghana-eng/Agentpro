@@ -110,6 +110,12 @@ function enforceClientCompatibility(
 
       forced_upgrade_below_build_number:
         MOBILE_COMPATIBILITY_POLICY.forcedUpgradeBelowBuildNumber,
+
+      update_url:
+        MOBILE_COMPATIBILITY_POLICY.androidUpdateUrl,
+
+      update_message:
+        MOBILE_COMPATIBILITY_POLICY.requiredUpdateMessage,
     },
   });
 }

@@ -341,6 +341,9 @@ class StorageService {
   static const _keySessionLocked = 'session_locked';
   static const _keyInstallationId = 'installation_id';
   static const _keyOfflineQueueEncryptionKey = 'offline_queue_hive_key_v1';
+  static const _keyUpdateReminderBuild = 'app_update_reminder_build_v1';
+  static const _keyUpdateReminderDismissedAt =
+      'app_update_reminder_dismissed_at_v1';
 
   static const _keyLegacyServerTrust = 'offline_server_trust_v1';
   static const _keyBusinessServerTrust = 'offline_server_trust_business_v2';
@@ -962,6 +965,55 @@ class StorageService {
         _offlineDashboardWrites.remove(key);
       }
     }
+  }
+
+  static Future<bool> shouldShowAppUpdateReminder(
+    int recommendedBuild, {
+    DateTime? now,
+  }) async {
+    if (recommendedBuild < 1) {
+      return false;
+    }
+
+    final dismissedBuild = int.tryParse(
+      await _storage.read(key: _keyUpdateReminderBuild) ?? '',
+    );
+
+    if (dismissedBuild != recommendedBuild) {
+      return true;
+    }
+
+    final dismissedAt = DateTime.tryParse(
+      await _storage.read(key: _keyUpdateReminderDismissedAt) ?? '',
+    )?.toUtc();
+
+    if (dismissedAt == null) {
+      return true;
+    }
+
+    final current = (now ?? DateTime.now()).toUtc();
+
+    return current.difference(dismissedAt) >=
+        const Duration(hours: 24);
+  }
+
+  static Future<void> dismissAppUpdateReminder(
+    int recommendedBuild, {
+    DateTime? now,
+  }) async {
+    if (recommendedBuild < 1) {
+      return;
+    }
+
+    await _storage.write(
+      key: _keyUpdateReminderBuild,
+      value: recommendedBuild.toString(),
+    );
+
+    await _storage.write(
+      key: _keyUpdateReminderDismissedAt,
+      value: (now ?? DateTime.now()).toUtc().toIso8601String(),
+    );
   }
 
   // ── "New" feature badges ───────────────────────────────────

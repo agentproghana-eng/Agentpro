@@ -16,6 +16,9 @@ describe('AgentPro HTTP client compatibility contract', () => {
       minimum_supported_build_number: 1,
       recommended_build_number: 1,
       forced_upgrade_below_build_number: 1,
+      update_url:
+        'https://agentproghana.com/download/agentpro-latest.apk',
+      update_message: null,
       status: 'LEGACY_SUPPORTED',
     });
   });
@@ -80,6 +83,10 @@ describe('AgentPro HTTP client compatibility contract', () => {
         minimum_supported_build_number: 1,
         recommended_build_number: 1,
         forced_upgrade_below_build_number: 1,
+        update_url:
+          'https://agentproghana.com/download/agentpro-latest.apk',
+        update_message:
+          'Update AgentPro to continue using the latest supported transaction and security fixes.',
       },
     });
   });
@@ -98,6 +105,44 @@ describe('AgentPro HTTP client compatibility contract', () => {
       success: false,
       code: 'CLIENT_METADATA_INVALID',
     });
+  });
+
+  test('discovery exposes a non-blocking recommended update', async () => {
+    const originalRecommendedBuild =
+      process.env.AGENTPRO_RECOMMENDED_BUILD;
+
+    process.env.AGENTPRO_RECOMMENDED_BUILD = '5';
+
+    jest.resetModules();
+
+    const freshApp = require('../../server');
+
+    const response = await request(freshApp)
+      .get('/api/v1/compatibility')
+      .set('X-AgentPro-App-Version', '2.0.0')
+      .set('X-AgentPro-App-Build', '3')
+      .set('X-AgentPro-Platform', 'android')
+      .set('X-AgentPro-API-Version', '1');
+
+    expect(response.status).toBe(200);
+
+    expect(response.body.data).toMatchObject({
+      status: 'UPDATE_RECOMMENDED',
+      recommended_build_number: 5,
+      update_url:
+        'https://agentproghana.com/download/agentpro-latest.apk',
+      update_message:
+        'A newer AgentPro version is available with the latest fixes and improvements.',
+    });
+
+    if (originalRecommendedBuild === undefined) {
+      delete process.env.AGENTPRO_RECOMMENDED_BUILD;
+    } else {
+      process.env.AGENTPRO_RECOMMENDED_BUILD =
+        originalRecommendedBuild;
+    }
+
+    jest.resetModules();
   });
 
   test('discovery exposes exact APK provenance', async () => {

@@ -16,12 +16,28 @@ class ClientCompatibilityBlock {
   final String message;
   final String? minimumSupportedVersion;
   final String? recommendedVersion;
+  final String? updateUrl;
 
   const ClientCompatibilityBlock({
     required this.code,
     required this.message,
     this.minimumSupportedVersion,
     this.recommendedVersion,
+    this.updateUrl,
+  });
+}
+
+class ClientUpdateNotice {
+  final String message;
+  final String recommendedVersion;
+  final int recommendedBuildNumber;
+  final String updateUrl;
+
+  const ClientUpdateNotice({
+    required this.message,
+    required this.recommendedVersion,
+    required this.recommendedBuildNumber,
+    required this.updateUrl,
   });
 }
 
@@ -47,6 +63,18 @@ class ApiClient {
   static final ValueNotifier<ClientCompatibilityBlock?>
       compatibilityBlock =
       ValueNotifier<ClientCompatibilityBlock?>(null);
+
+  static final ValueNotifier<ClientUpdateNotice?>
+      recommendedUpdateNotice =
+      ValueNotifier<ClientUpdateNotice?>(null);
+
+  static DateTime? _lastCompatibilityCheckAt;
+
+  static const Duration _compatibilityCheckInterval =
+      Duration(minutes: 15);
+
+  static const String _defaultAndroidUpdateUrl =
+      'https://agentproghana.com/download/agentpro-latest.apk';
 
   static Future<TokenRefreshOutcome>? _refreshFuture;
   static Future<void>? _sessionInvalidationFuture;
@@ -336,6 +364,7 @@ class ApiClient {
 
     String? minimumSupportedVersion;
     String? recommendedVersion;
+    String? updateUrl;
 
     if (compatibility is Map) {
       minimumSupportedVersion =
@@ -345,6 +374,11 @@ class ApiClient {
 
       recommendedVersion =
           compatibility['recommended_app_version']
+              ?.toString()
+              .trim();
+
+      updateUrl =
+          compatibility['update_url']
               ?.toString()
               .trim();
     }
@@ -367,7 +401,167 @@ class ApiClient {
                   recommendedVersion.isEmpty
               ? null
               : recommendedVersion,
+      updateUrl:
+          updateUrl == null || updateUrl.isEmpty
+              ? _defaultAndroidUpdateUrl
+              : updateUrl,
     );
+
+    recommendedUpdateNotice.value = null;
+  }
+
+  static Future<void> checkForAppUpdate({
+    bool force = false,
+  }) async {
+    final now = DateTime.now().toUtc();
+    final lastChecked = _lastCompatibilityCheckAt;
+
+    if (!force &&
+        lastChecked != null &&
+        now.difference(lastChecked) <
+            _compatibilityCheckInterval) {
+      return;
+    }
+
+    _lastCompatibilityCheckAt = now;
+
+    try {
+      final response = await Dio(
+        BaseOptions(
+          baseUrl: _baseUrl,
+          connectTimeout: const Duration(seconds: 10),
+          receiveTimeout: const Duration(seconds: 10),
+          headers: <String, dynamic>{
+            'Content-Type': 'application/json',
+            ...await _clientHeaders(),
+          },
+          validateStatus: (_) => true,
+        ),
+      ).get('/compatibility');
+
+      if (response.statusCode != 200 ||
+          response.data is! Map) {
+        return;
+      }
+
+      final payload =
+          Map<String, dynamic>.from(response.data as Map);
+
+      final rawData = payload['data'];
+
+      if (rawData is! Map) {
+        return;
+      }
+
+      final data =
+          Map<String, dynamic>.from(rawData);
+
+      final status =
+          data['status']?.toString().trim() ?? '';
+
+      final updateUrl =
+          data['update_url']?.toString().trim();
+
+      final resolvedUpdateUrl =
+          updateUrl == null || updateUrl.isEmpty
+              ? _defaultAndroidUpdateUrl
+              : updateUrl;
+
+      final updateMessage =
+          data['update_message']?.toString().trim();
+
+      final recommendedVersion =
+          data['recommended_app_version']
+                  ?.toString()
+                  .trim() ??
+              '';
+
+      final recommendedBuildNumber =
+          int.tryParse(
+            data['recommended_build_number']
+                    ?.toString() ??
+                '',
+          );
+
+      if (status == 'UPDATE_REQUIRED' ||
+          status == 'API_INCOMPATIBLE') {
+        compatibilityBlock.value =
+            ClientCompatibilityBlock(
+          code: status,
+          message:
+              updateMessage == null ||
+                      updateMessage.isEmpty
+                  ? 'This version of AgentPro must be updated before continuing.'
+                  : updateMessage,
+          minimumSupportedVersion:
+              data['minimum_supported_app_version']
+                  ?.toString()
+                  .trim(),
+          recommendedVersion:
+              recommendedVersion.isEmpty
+                  ? null
+                  : recommendedVersion,
+          updateUrl: resolvedUpdateUrl,
+        );
+
+        recommendedUpdateNotice.value = null;
+        return;
+      }
+
+      compatibilityBlock.value = null;
+
+      if (status != 'UPDATE_RECOMMENDED' ||
+          recommendedBuildNumber == null ||
+          recommendedBuildNumber < 1) {
+        recommendedUpdateNotice.value = null;
+        return;
+      }
+
+      final shouldShow =
+          await StorageService.shouldShowAppUpdateReminder(
+        recommendedBuildNumber,
+        now: now,
+      );
+
+      if (!shouldShow) {
+        recommendedUpdateNotice.value = null;
+        return;
+      }
+
+      recommendedUpdateNotice.value =
+          ClientUpdateNotice(
+        message:
+            updateMessage == null ||
+                    updateMessage.isEmpty
+                ? 'A newer AgentPro version is available.'
+                : updateMessage,
+        recommendedVersion:
+            recommendedVersion.isEmpty
+                ? 'Latest'
+                : recommendedVersion,
+        recommendedBuildNumber:
+            recommendedBuildNumber,
+        updateUrl:
+            resolvedUpdateUrl,
+      );
+    } catch (_) {
+      // Update discovery is advisory. Network failure must never stop
+      // AgentPro startup or normal offline-capable use.
+    }
+  }
+
+  static Future<void> dismissRecommendedUpdate() async {
+    final notice = recommendedUpdateNotice.value;
+
+    if (notice == null) {
+      return;
+    }
+
+    await StorageService.dismissAppUpdateReminder(
+      notice.recommendedBuildNumber,
+    );
+
+    recommendedUpdateNotice.value = null;
   }
 
   static Future<void> _invalidateSession() {
