@@ -55,6 +55,7 @@ const adminRoutes = require('./src/routes/admin.routes');
 const branchRoutes = require('./src/routes/branch.routes');
 const ussdFlowRoutes = require('./src/routes/ussdFlow.routes');
 const paystackWebhookRoutes = require('./src/routes/paystackWebhook.routes');
+const resendInboundWebhookRoutes = require('./src/routes/resendInboundWebhook.routes');
 const compatibilityRoutes = require('./src/routes/compatibility.routes');
 const {
   enforceClientCompatibility,
@@ -143,7 +144,9 @@ app.use(express.json({
 
     if (
       requestPath ===
-      '/api/v1/webhooks/paystack'
+        '/api/v1/webhooks/paystack' ||
+      requestPath ===
+        '/api/v1/webhooks/resend-inbound'
     ) {
       req.rawBody =
         Buffer.from(buffer);
@@ -251,6 +254,10 @@ const API = '/api/v1';
 // Keep compatibility discovery reachable even when the requesting client
 // itself requires an upgrade. Existing clients without version metadata
 // remain legacy-supported during the migration period.
+app.use(
+  `${API}/webhooks/resend-inbound`,
+  resendInboundWebhookRoutes
+);
 app.use(`${API}/compatibility`, compatibilityRoutes);
 app.use(API, enforceClientCompatibility);
 
