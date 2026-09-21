@@ -38,7 +38,14 @@ void main() {
 
     expect(
       accessibility,
-      contains('it.id == targetSubId'),
+      contains(
+        'telephonyManager.getSubscriptionId(handle) == targetSubId',
+      ),
+    );
+
+    expect(
+      accessibility,
+      contains('Build.VERSION.SDK_INT >= Build.VERSION_CODES.R'),
     );
   });
 
@@ -72,10 +79,15 @@ void main() {
     );
   });
 
-  test('Accessibility call intent always carries exact PhoneAccountHandle', () {
+  test('Accessibility call always carries exact PhoneAccountHandle', () {
     expect(
       accessibility,
       contains('TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE'),
+    );
+
+    expect(
+      accessibility,
+      contains('telecomManager.placeCall('),
     );
 
     expect(

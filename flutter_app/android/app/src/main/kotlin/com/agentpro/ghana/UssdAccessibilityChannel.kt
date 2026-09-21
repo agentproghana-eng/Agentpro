@@ -4,12 +4,15 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.os.Bundle
 import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
 import android.annotation.SuppressLint
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
 import android.telephony.SubscriptionManager
+import android.telephony.TelephonyManager
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -133,17 +136,58 @@ class UssdAccessibilityChannel(
             context.getSystemService(Context.TELECOM_SERVICE)
                 as? TelecomManager
                 ?: return null
+        val telephonyManager =
+            context.getSystemService(Context.TELEPHONY_SERVICE)
+                as? TelephonyManager
+                ?: return null
 
         val subInfo =
             subscriptionManager.getActiveSubscriptionInfoForSimSlotIndex(
                 simSlot
             ) ?: return null
 
-        val targetSubId = subInfo.subscriptionId.toString()
+        val targetSubId = subInfo.subscriptionId
 
-        return telecomManager.callCapablePhoneAccounts.firstOrNull {
-            it.id == targetSubId
+        return telecomManager.callCapablePhoneAccounts.firstOrNull { handle ->
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                // Android 11+ exposes the supported PhoneAccount -> subscription
+                // mapping. PhoneAccountHandle.id is allowed to be an opaque OEM
+                // token, so comparing handle.id directly with subscriptionId is
+                // not reliable on dual-SIM devices.
+                try {
+                    telephonyManager.getSubscriptionId(handle) == targetSubId
+                } catch (_: UnsupportedOperationException) {
+                    false
+                }
+            } else {
+                // Pre-Android-11 has no public equivalent mapping API.
+                // Preserve the old exact-id compatibility path only; never
+                // infer SIM identity from PhoneAccount list position.
+                handle.id == targetSubId.toString()
+            }
         }
+    }
+
+    private fun placeCallOnPhoneAccount(
+        dialCode: String,
+        phoneAccountHandle: PhoneAccountHandle
+    ) {
+        val telecomManager =
+            context.getSystemService(Context.TELECOM_SERVICE)
+                as? TelecomManager
+                ?: throw IllegalStateException("Telecom service unavailable")
+
+        val extras = Bundle().apply {
+            putParcelable(
+                TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE,
+                phoneAccountHandle
+            )
+        }
+
+        telecomManager.placeCall(
+            Uri.parse("tel:" + Uri.encode(dialCode)),
+            extras
+        )
     }
 
     // Opens the real provider USSD menu without starting an Accessibility
@@ -182,18 +226,10 @@ class UssdAccessibilityChannel(
                 return
             }
 
-            val dialIntent = Intent(
-                Intent.ACTION_CALL,
-                Uri.parse("tel:" + Uri.encode(dialCode))
-            )
-            dialIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-
-            dialIntent.putExtra(
-                TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE,
+            placeCallOnPhoneAccount(
+                dialCode,
                 phoneAccountHandle
             )
-
-            context.startActivity(dialIntent)
             result.success(true)
         } catch (e: SecurityException) {
             result.error(
@@ -438,13 +474,10 @@ class UssdAccessibilityChannel(
         val dialCode = explicitDialCode ?: if (provider == "telecel") "*110#" else "*171#"
 
         try {
-            val dialIntent = Intent(Intent.ACTION_CALL, Uri.parse("tel:" + Uri.encode(dialCode)))
-            dialIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            dialIntent.putExtra(
-                TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE,
+            placeCallOnPhoneAccount(
+                dialCode,
                 phoneAccountHandle
             )
-            context.startActivity(dialIntent)
             result.success(true)
         } catch (e: SecurityException) {
             UssdAccessibilityService.endSession()
