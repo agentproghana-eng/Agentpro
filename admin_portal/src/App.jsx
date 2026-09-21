@@ -295,6 +295,122 @@ function AdminPageGuard({
     : <Navigate to="/" replace />;
 }
 
+// ── Password Recovery ─────────────────────────────────────────
+
+function ForgotPasswordPage() {
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  const handleSubmit = async e => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      await API.post(
+        '/auth/forgot-password',
+        { email },
+      );
+
+      setSubmitted(true);
+    } catch (err) {
+      toast.error(
+        err.response?.data?.message ||
+        err.message ||
+        'Password recovery could not be started.',
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-md">
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <span className="text-white text-2xl font-bold">
+              AP
+            </span>
+          </div>
+
+          <h1 className="text-2xl font-bold text-gray-900">
+            Reset administrator password
+          </h1>
+
+          <p className="text-gray-500 text-sm mt-2">
+            Enter the email address on your AgentPro administrator account.
+          </p>
+        </div>
+
+        {submitted ? (
+          <div>
+            <div
+              className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-900"
+              role="status"
+            >
+              If that email is registered, AgentPro has sent a secure
+              password-reset link. Check your inbox and spam folder.
+            </div>
+
+            <p className="mt-4 text-xs text-gray-500">
+              The reset link expires after one hour. After choosing a new
+              password, return to the Administrator Portal to sign in.
+            </p>
+
+            <Link
+              to="/login"
+              className="mt-6 block w-full rounded-lg bg-primary py-2.5 text-center font-semibold text-white transition hover:bg-primary-dark"
+            >
+              Return to sign in
+            </Link>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label
+                htmlFor="admin-recovery-email"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Email
+              </label>
+
+              <input
+                id="admin-recovery-email"
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                autoComplete="email"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary"
+                placeholder="admin@example.com"
+                autoFocus
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-primary text-white py-2.5 rounded-lg font-semibold hover:bg-primary-dark disabled:opacity-60 transition"
+            >
+              {loading
+                ? 'Sending reset link...'
+                : 'Send reset link'}
+            </button>
+
+            <Link
+              to="/login"
+              className="block text-center text-sm font-medium text-primary hover:underline"
+            >
+              Back to sign in
+            </Link>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Login Page ────────────────────────────────────────────────
 
 function LoginPage() {
@@ -1084,6 +1200,15 @@ function LoginPage() {
               "
               placeholder="••••••••"
             />
+
+            <div className="mt-2 text-right">
+              <Link
+                to="/forgot-password"
+                className="text-sm font-medium text-primary hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
           </div>
 
           <button
@@ -6518,6 +6643,10 @@ export default function App() {
       <BrowserRouter>
         <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
         <Routes>
+          <Route
+            path="/forgot-password"
+            element={<ForgotPasswordPage />}
+          />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/*" element={
             <Protected>

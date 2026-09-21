@@ -529,6 +529,34 @@ assert(
 
 assert(
   app.includes(
+    'path="/forgot-password"',
+  ),
+  'Admin portal must expose a public forgot-password route',
+);
+
+assert(
+  app.includes(
+    "'/auth/forgot-password'",
+  ),
+  'Admin password recovery must use the shared secure backend endpoint',
+);
+
+assert(
+  app.includes(
+    'Forgot password?',
+  ),
+  'Admin login must expose an obvious password-recovery action',
+);
+
+assert(
+  app.includes(
+    'If that email is registered',
+  ),
+  'Admin password recovery must preserve account-enumeration resistance',
+);
+
+assert(
+  app.includes(
     'recovery_codes',
   ),
   'Admin portal must surface one-time recovery codes after enrollment',

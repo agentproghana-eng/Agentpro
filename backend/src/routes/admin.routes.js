@@ -52,6 +52,9 @@ const {
 const {
   serializeDisabledTransactionTypes,
 } = require('../utils/featureFlagConfig');
+const {
+  normalizeAccountEmail,
+} = require('../utils/emailIdentity');
 
 router.use(authenticate, requireAdminPortalAccess);
 
@@ -132,6 +135,11 @@ router.get(
       });
     }
 
+    const searchIdentity =
+      search.includes('@')
+        ? normalizeAccountEmail(search)
+        : search;
+
     try {
       const result = await query(
         `SELECT
@@ -165,8 +173,8 @@ router.get(
            u.created_at DESC
          LIMIT 20`,
         [
-          `%${search}%`,
-          search,
+          `%${searchIdentity}%`,
+          searchIdentity,
         ],
       );
 
@@ -260,9 +268,9 @@ router.patch(
 
     const email =
       hasField('email')
-        ? String(req.body.email || '')
-            .trim()
-            .toLowerCase()
+        ? normalizeAccountEmail(
+            req.body.email,
+          )
         : null;
 
     const phone =
