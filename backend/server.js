@@ -125,6 +125,7 @@ app.use(cors({
     'X-AgentPro-Platform',
     'X-AgentPro-API-Version',
     'X-AgentPro-Source-Commit',
+    'X-AgentPro-Admin-Portal',
   ],
 
   // Browser/mobile API authentication uses explicit Bearer tokens,
