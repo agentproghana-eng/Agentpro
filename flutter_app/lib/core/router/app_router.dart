@@ -295,6 +295,24 @@ class AppRouter {
           },
         ),
         GoRoute(
+          path: '/personal-transactions/progress',
+          builder: (_, state) {
+            final extra = state.extra;
+
+            if (extra is! Map<String, dynamic>) {
+              return const AppRouteErrorScreen(
+                message: 'Personal transaction details are missing.',
+                location: '/personal-transactions/progress',
+              );
+            }
+
+            return TransactionProgressScreen(
+              data: extra,
+              isPersonal: true,
+            );
+          },
+        ),
+        GoRoute(
           path: '/transactions/progress',
           builder: (_, state) {
             final extra = state.extra;
