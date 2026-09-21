@@ -4,29 +4,36 @@ const mockAttachmentList =
   jest.fn();
 const mockSend = jest.fn();
 
+const mockResendConstructor =
+  jest.fn((apiKey) => ({
+    webhooks: {
+      verify: mockVerify,
+    },
+    emails: {
+      send: mockSend,
+      receiving: {
+        get: mockReceiveGet,
+        attachments: {
+          list:
+            mockAttachmentList,
+        },
+      },
+    },
+    __apiKey: apiKey,
+  }));
+
 jest.mock(
   'resend',
   () => ({
-    Resend: jest.fn(() => ({
-      webhooks: {
-        verify: mockVerify,
-      },
-      emails: {
-        send: mockSend,
-        receiving: {
-          get: mockReceiveGet,
-          attachments: {
-            list:
-              mockAttachmentList,
-          },
-        },
-      },
-    })),
+    Resend:
+      mockResendConstructor,
   })
 );
 
 process.env.RESEND_API_KEY =
-  're_test';
+  're_send_test';
+process.env.RESEND_RECEIVING_API_KEY =
+  're_receive_test';
 process.env
   .RESEND_INBOUND_WEBHOOK_SECRET =
   'whsec_test';
@@ -119,6 +126,18 @@ describe(
         expect(
           response.status
         ).toBe(200);
+
+        expect(
+          mockResendConstructor
+        ).toHaveBeenCalledWith(
+          're_receive_test'
+        );
+
+        expect(
+          mockResendConstructor
+        ).toHaveBeenCalledWith(
+          're_send_test'
+        );
 
         expect(
           mockVerify
