@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 
 import 'core/api/api_client.dart';
 import 'shared/widgets/app_update_required_screen.dart';
+import 'shared/widgets/app_update_recommended_banner.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
 import 'package:go_router/go_router.dart';
@@ -149,6 +150,12 @@ class _AgentProAppState extends State<AgentProApp>
     MtnCashOutReconciliationService.initialize();
 
     if (!widget.isJailbroken) {
+      unawaited(
+        ApiClient.checkForAppUpdate(
+          force: true,
+        ),
+      );
+
       final authBloc = AuthBloc()..add(AuthCheckEvent());
       final refreshNotifier = AuthRouterRefreshNotifier(
         authBloc.stream,
@@ -260,12 +267,16 @@ class _AgentProAppState extends State<AgentProApp>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (
-        state == AppLifecycleState.resumed &&
-        _authBloc?.state is AuthAuthenticated) {
+    if (state == AppLifecycleState.resumed) {
       unawaited(
-        MtnCashOutReconciliationService.reconcile(),
+        ApiClient.checkForAppUpdate(),
       );
+
+      if (_authBloc?.state is AuthAuthenticated) {
+        unawaited(
+          MtnCashOutReconciliationService.reconcile(),
+        );
+      }
     }
   }
 
@@ -327,9 +338,24 @@ class _AgentProAppState extends State<AgentProApp>
                   );
                 }
 
-                return InactivityDetector(
+                final appChild = InactivityDetector(
                   timeout: const Duration(minutes: 5),
                   child: child ?? const SizedBox.shrink(),
+                );
+
+                return ValueListenableBuilder<ClientUpdateNotice?>(
+                  valueListenable:
+                      ApiClient.recommendedUpdateNotice,
+                  builder: (context, notice, _) {
+                    if (notice == null) {
+                      return appChild;
+                    }
+
+                    return AppUpdateRecommendedBanner(
+                      notice: notice,
+                      child: appChild,
+                    );
+                  },
                 );
               },
             ),

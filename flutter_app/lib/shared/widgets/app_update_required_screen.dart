@@ -18,9 +18,6 @@ class AppUpdateRequiredScreen extends StatefulWidget {
 
 class _AppUpdateRequiredScreenState
     extends State<AppUpdateRequiredScreen> {
-  static final Uri _updateUri =
-      Uri.parse('https://agentproghana.com');
-
   bool _openingUpdatePage = false;
   String? _launchError;
 
@@ -35,8 +32,19 @@ class _AppUpdateRequiredScreenState
     });
 
     try {
+      final updateUri = Uri.tryParse(
+        widget.compatibility.updateUrl ??
+            'https://agentproghana.com/download/agentpro-latest.apk',
+      );
+
+      if (updateUri == null) {
+        throw const FormatException(
+          'Invalid AgentPro update URL',
+        );
+      }
+
       final launched = await launchUrl(
-        _updateUri,
+        updateUri,
         mode: LaunchMode.externalApplication,
       );
 

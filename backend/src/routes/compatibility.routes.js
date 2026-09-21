@@ -53,6 +53,19 @@ router.get('/', (req, res) => {
       forced_upgrade_below_build_number:
         MOBILE_COMPATIBILITY_POLICY.forcedUpgradeBelowBuildNumber,
 
+      update_url:
+        MOBILE_COMPATIBILITY_POLICY.androidUpdateUrl,
+
+      update_message:
+        result.status === 'UPDATE_RECOMMENDED'
+          ? MOBILE_COMPATIBILITY_POLICY.recommendedUpdateMessage
+          : (
+              result.status === 'UPDATE_REQUIRED' ||
+              result.status === 'API_INCOMPATIBLE'
+            )
+            ? MOBILE_COMPATIBILITY_POLICY.requiredUpdateMessage
+            : null,
+
       status: result.status,
       reason: result.reason,
 
