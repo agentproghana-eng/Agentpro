@@ -39,8 +39,11 @@ const postingSource = fs.readFileSync(
   "utf8",
 );
 
-const adminPagesSource = fs.readFileSync(
-  path.join(__dirname, "../../../admin_portal/src/pages.jsx"),
+const commissionsPageSource = fs.readFileSync(
+  path.join(
+    __dirname,
+    "../../../admin_portal/src/features/commissions/CommissionsPage.jsx",
+  ),
   "utf8",
 );
 
@@ -71,11 +74,11 @@ describe("Pay to Agent canonical transaction type", () => {
   });
 
   test("Admin commission rules do not misclassify Pay to Agent or Bill Payment", () => {
-    const policyStart = adminPagesSource.indexOf(
+    const policyStart = commissionsPageSource.indexOf(
       "const commissionTypesByProvider =",
     );
 
-    const policyEnd = adminPagesSource.indexOf(
+    const policyEnd = commissionsPageSource.indexOf(
       "export function CommissionsPage()",
       policyStart,
     );
@@ -84,7 +87,7 @@ describe("Pay to Agent canonical transaction type", () => {
     expect(policyEnd).toBeGreaterThan(policyStart);
 
     const commissionPolicySource =
-      adminPagesSource.slice(
+      commissionsPageSource.slice(
         policyStart,
         policyEnd,
       );
