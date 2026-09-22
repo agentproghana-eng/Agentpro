@@ -1949,38 +1949,195 @@ export function CommunityModerationPage() {
 export function CompanyDetailPage() {
   const { companyId } = useParams();
   const navigate = useNavigate();
+  const [owner, setOwner] = useState(null);
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [updatingId, setUpdatingId] = useState(null);
 
-  const load = async () => {
+  const loadInitial = async () => {
     setLoading(true);
+
     try {
-      const res = await API.get(`/users?company_id=${companyId}&limit=100`);
-      setStaff(res.data.data || []);
-    } catch (_) {
-      toast.error('Failed to load company details');
-    } finally { setLoading(false); }
+      const [ownerResponse, staffResponse] =
+        await Promise.all([
+          API.get('/users/cursor', {
+            params: {
+              company_id: companyId,
+              role: 'business_owner',
+              limit: 1,
+            },
+          }),
+          API.get('/users/cursor', {
+            params: {
+              company_id: companyId,
+              limit: 50,
+            },
+          }),
+        ]);
+
+      setOwner(
+        ownerResponse.data.data?.[0] ||
+          null,
+      );
+
+      const rows =
+        staffResponse.data.data || [];
+
+      setStaff(
+        rows.filter(
+          user =>
+            user.role !==
+            'business_owner',
+        ),
+      );
+
+      setNextCursor(
+        staffResponse.data.meta
+          ?.next_cursor || null,
+      );
+
+      setHasMore(
+        Boolean(
+          staffResponse.data.meta
+            ?.has_more,
+        ),
+      );
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message ||
+          'Failed to load company details',
+      );
+    } finally {
+      setLoading(false);
+    }
   };
-  useEffect(() => { load(); }, [companyId]);
 
-  const owner = staff.find(u => u.role === 'business_owner');
-  const otherStaff = staff.filter(u => u.role !== 'business_owner');
+  const loadMore = async () => {
+    if (!nextCursor || loadingMore) {
+      return;
+    }
 
-  const toggleStatus = async (userId, currentStatus) => {
-    const newStatus = currentStatus === 'active' ? 'suspended' : 'active';
+    setLoadingMore(true);
+
     try {
-      await API.patch(`/users/${userId}`, { status: newStatus });
-      toast.success(`User ${newStatus}`);
-      load();
-    } catch (_) { toast.error('Action failed'); }
+      const response =
+        await API.get('/users/cursor', {
+          params: {
+            company_id: companyId,
+            limit: 50,
+            cursor: nextCursor,
+          },
+        });
+
+      const rows =
+        response.data.data || [];
+
+      setStaff(current => {
+        const seen = new Set(
+          current.map(user => user.id),
+        );
+
+        return [
+          ...current,
+          ...rows.filter(
+            user =>
+              user.role !==
+                'business_owner' &&
+              !seen.has(user.id),
+          ),
+        ];
+      });
+
+      setNextCursor(
+        response.data.meta
+          ?.next_cursor || null,
+      );
+
+      setHasMore(
+        Boolean(
+          response.data.meta
+            ?.has_more,
+        ),
+      );
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message ||
+          'Failed to load more staff',
+      );
+    } finally {
+      setLoadingMore(false);
+    }
   };
 
-  if (loading) return <div className="text-center py-16 text-gray-400">Loading...</div>;
+  useEffect(() => {
+    setOwner(null);
+    setStaff([]);
+    setNextCursor(null);
+    setHasMore(false);
+    loadInitial();
+  }, [companyId]);
+
+  const toggleStatus = async (
+    userId,
+    currentStatus,
+  ) => {
+    const newStatus =
+      currentStatus === 'active'
+        ? 'suspended'
+        : 'active';
+
+    setUpdatingId(userId);
+
+    try {
+      await API.patch(
+        `/users/${userId}`,
+        { status: newStatus },
+      );
+
+      setStaff(current =>
+        current.map(user =>
+          user.id === userId
+            ? {
+                ...user,
+                status: newStatus,
+              }
+            : user,
+        ),
+      );
+
+      toast.success(
+        `User ${newStatus}`,
+      );
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message ||
+          'Action failed',
+      );
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="text-center py-16 text-gray-400">
+        Loading...
+      </div>
+    );
+  }
 
   return (
     <div>
-      <button onClick={() => navigate('/companies')}
-        className="text-sm text-primary hover:underline mb-4 flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() =>
+          navigate('/companies')
+        }
+        className="text-sm text-primary hover:underline mb-4 flex items-center gap-1"
+      >
         ← Back to Companies
       </button>
 
@@ -1988,11 +2145,17 @@ export function CompanyDetailPage() {
         <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-bold text-gray-900">{owner.company_name || '—'}</h2>
+              <h2 className="text-xl font-bold text-gray-900">
+                {owner.company_name || '—'}
+              </h2>
+
               <p className="text-sm text-gray-500 mt-1">
-                Owner: {owner.first_name} {owner.last_name} · {owner.email} · {owner.phone || '—'}
+                Owner: {owner.first_name}{' '}
+                {owner.last_name} · {owner.email} ·{' '}
+                {owner.phone || '—'}
               </p>
             </div>
+
             <Badge status={owner.status} />
           </div>
         </div>
@@ -2002,91 +2165,368 @@ export function CompanyDetailPage() {
         </div>
       )}
 
-      <PageHeader title="Staff" subtitle={`${otherStaff.length} staff member${otherStaff.length === 1 ? '' : 's'}`} />
+      <PageHeader
+        title="Staff"
+        subtitle={`Loaded ${staff.length} staff member${staff.length === 1 ? '' : 's'}`}
+      />
+
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <Table
           loading={false}
-          data={otherStaff}
+          data={staff}
           emptyMsg="No other staff yet"
           columns={[
-            { key: 'name', label: 'Name', render: r => `${r.first_name} ${r.last_name}` },
-            { key: 'role', label: 'Role', render: r => <Badge status={r.role} /> },
-            { key: 'email', label: 'Email' },
-            { key: 'phone', label: 'Phone' },
-            { key: 'status', label: 'Status', render: r => <Badge status={r.status} /> },
-            { key: 'created_at', label: 'Joined',
-              render: r => r.created_at ? new Date(r.created_at).toLocaleDateString() : '—' },
-            { key: 'actions', label: '',
-              render: r => (
-                <button onClick={(e) => { e.stopPropagation(); toggleStatus(r.id, r.status); }}
-                  className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
-                    r.status === 'active'
+            {
+              key: 'name',
+              label: 'Name',
+              render: row =>
+                `${row.first_name} ${row.last_name}`,
+            },
+            {
+              key: 'role',
+              label: 'Role',
+              render: row => (
+                <Badge status={row.role} />
+              ),
+            },
+            {
+              key: 'email',
+              label: 'Email',
+            },
+            {
+              key: 'phone',
+              label: 'Phone',
+            },
+            {
+              key: 'status',
+              label: 'Status',
+              render: row => (
+                <Badge status={row.status} />
+              ),
+            },
+            {
+              key: 'created_at',
+              label: 'Joined',
+              render: row =>
+                row.created_at
+                  ? new Date(
+                      row.created_at,
+                    ).toLocaleDateString()
+                  : '—',
+            },
+            {
+              key: 'actions',
+              label: '',
+              render: row => (
+                <button
+                  type="button"
+                  disabled={
+                    updatingId === row.id
+                  }
+                  onClick={event => {
+                    event.stopPropagation();
+
+                    toggleStatus(
+                      row.id,
+                      row.status,
+                    );
+                  }}
+                  className={[
+                    'text-xs px-3 py-1.5 rounded-lg font-medium transition disabled:opacity-50',
+                    row.status === 'active'
                       ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200'
-                      : 'bg-green-50 text-green-600 hover:bg-green-100 border border-green-200'
-                  }`}>
-                  {r.status === 'active' ? 'Suspend' : 'Activate'}
+                      : 'bg-green-50 text-green-600 hover:bg-green-100 border border-green-200',
+                  ].join(' ')}
+                >
+                  {updatingId === row.id
+                    ? 'Updating...'
+                    : row.status === 'active'
+                      ? 'Suspend'
+                      : 'Activate'}
                 </button>
-              )},
+              ),
+            },
           ]}
         />
+
+        {hasMore && (
+          <div className="border-t border-gray-100 p-4 text-center">
+            <button
+              type="button"
+              onClick={loadMore}
+              disabled={
+                loadingMore ||
+                !nextCursor
+              }
+              className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loadingMore
+                ? 'Loading...'
+                : 'Load more staff'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 // ── Shifts Page ────────────────────────────────────────────────
-// Shift open/close history with cash variance, sourced from the same
-// /shifts endpoint agents use to open/close their own shifts -
-// superuser/business_owner/manager get the broader listShifts view.
+// Shift open/close history with cash variance, sourced from the
+// existing cursor endpoint and its role/company/branch scoping.
+
 export function ShiftsPage() {
   const [shifts, setShifts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [flaggedOnly, setFlaggedOnly] = useState(false);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
+  const latestFlaggedRef = useRef(false);
 
-  const load = async () => {
-    setLoading(true);
+  const load = async ({
+    cursor = null,
+    append = false,
+    flagged =
+      latestFlaggedRef.current,
+  } = {}) => {
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
+
     try {
-      const res = await API.get('/shifts', { params: { flagged_only: flaggedOnly, limit: 50 } });
-      setShifts(res.data.data || []);
-    } catch (_) {
-      toast.error('Failed to load shifts');
-    } finally { setLoading(false); }
+      const response =
+        await API.get(
+          '/shifts/cursor',
+          {
+            params: {
+              flagged_only: flagged,
+              limit: 50,
+              ...(cursor
+                ? { cursor }
+                : {}),
+            },
+          },
+        );
+
+      if (
+        flagged !==
+        latestFlaggedRef.current
+      ) {
+        return;
+      }
+
+      const rows =
+        response.data.data || [];
+
+      setShifts(current => {
+        if (!append) {
+          return rows;
+        }
+
+        const seen = new Set(
+          current.map(shift => shift.id),
+        );
+
+        return [
+          ...current,
+          ...rows.filter(
+            shift =>
+              !seen.has(shift.id),
+          ),
+        ];
+      });
+
+      setNextCursor(
+        response.data.pagination
+          ?.next_cursor || null,
+      );
+
+      setHasMore(
+        Boolean(
+          response.data.pagination
+            ?.has_more,
+        ),
+      );
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message ||
+          'Failed to load shifts',
+      );
+    } finally {
+      if (
+        flagged ===
+        latestFlaggedRef.current
+      ) {
+        if (append) {
+          setLoadingMore(false);
+        } else {
+          setLoading(false);
+        }
+      }
+    }
   };
-  useEffect(() => { load(); }, [flaggedOnly]);
+
+  useEffect(() => {
+    latestFlaggedRef.current =
+      flaggedOnly;
+
+    setShifts([]);
+    setNextCursor(null);
+    setHasMore(false);
+
+    load({
+      flagged: flaggedOnly,
+    });
+  }, [flaggedOnly]);
+
+  const loadMore = () => {
+    if (!nextCursor || loadingMore) {
+      return;
+    }
+
+    load({
+      cursor: nextCursor,
+      append: true,
+      flagged:
+        latestFlaggedRef.current,
+    });
+  };
 
   return (
     <div>
-      <PageHeader title="Shifts" subtitle="Shift open/close history and cash variance"
+      <PageHeader
+        title="Shifts"
+        subtitle="Shift open/close history and cash variance"
         action={
           <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-            <input type="checkbox" checked={flaggedOnly} onChange={e => setFlaggedOnly(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={flaggedOnly}
+              onChange={event =>
+                setFlaggedOnly(
+                  event.target.checked,
+                )
+              }
+            />
             Flagged only
           </label>
-        } />
+        }
+      />
+
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <Table
           loading={loading}
           data={shifts}
           emptyMsg="No closed shifts yet"
           columns={[
-            { key: 'agent', label: 'Agent', render: r => `${r.first_name} ${r.last_name}` },
-            { key: 'branch_name', label: 'Branch', render: r => r.branch_name || '—' },
-            { key: 'opened_at', label: 'Opened', render: r => r.opened_at ? new Date(r.opened_at).toLocaleString() : '—' },
-            { key: 'closed_at', label: 'Closed', render: r => r.closed_at ? new Date(r.closed_at).toLocaleString() : '—' },
-            { key: 'transaction_count', label: 'Transactions', render: r => r.transaction_count ?? '—' },
-            { key: 'closing_cash_expected', label: 'Expected', render: r => `GH₵ ${parseFloat(r.closing_cash_expected || 0).toFixed(2)}` },
-            { key: 'closing_cash_actual', label: 'Actual', render: r => `GH₵ ${parseFloat(r.closing_cash_actual || 0).toFixed(2)}` },
-            { key: 'variance', label: 'Variance',
-              render: r => {
-                const v = parseFloat(r.variance || 0);
+            {
+              key: 'agent',
+              label: 'Agent',
+              render: row =>
+                `${row.first_name} ${row.last_name}`,
+            },
+            {
+              key: 'branch_name',
+              label: 'Branch',
+              render: row =>
+                row.branch_name || '—',
+            },
+            {
+              key: 'opened_at',
+              label: 'Opened',
+              render: row =>
+                row.opened_at
+                  ? new Date(
+                      row.opened_at,
+                    ).toLocaleString()
+                  : '—',
+            },
+            {
+              key: 'closed_at',
+              label: 'Closed',
+              render: row =>
+                row.closed_at
+                  ? new Date(
+                      row.closed_at,
+                    ).toLocaleString()
+                  : '—',
+            },
+            {
+              key: 'transaction_count',
+              label: 'Transactions',
+              render: row =>
+                row.transaction_count ??
+                '—',
+            },
+            {
+              key: 'closing_cash_expected',
+              label: 'Expected',
+              render: row =>
+                `GH₵ ${parseFloat(
+                  row.closing_cash_expected ||
+                    0,
+                ).toFixed(2)}`,
+            },
+            {
+              key: 'closing_cash_actual',
+              label: 'Actual',
+              render: row =>
+                `GH₵ ${parseFloat(
+                  row.closing_cash_actual ||
+                    0,
+                ).toFixed(2)}`,
+            },
+            {
+              key: 'variance',
+              label: 'Variance',
+              render: row => {
+                const value =
+                  parseFloat(
+                    row.variance || 0,
+                  );
+
                 return (
-                  <span className={r.flagged ? 'text-red-600 font-bold' : 'text-gray-700'}>
-                    {v > 0 ? '+' : ''}{v.toFixed(2)}{r.flagged ? ' ⚠️' : ''}
+                  <span
+                    className={
+                      row.flagged
+                        ? 'text-red-600 font-bold'
+                        : 'text-gray-700'
+                    }
+                  >
+                    {value > 0
+                      ? '+'
+                      : ''}
+                    {value.toFixed(2)}
+                    {row.flagged
+                      ? ' ⚠️'
+                      : ''}
                   </span>
                 );
-              }},
+              },
+            },
           ]}
         />
+
+        {hasMore && !loading && (
+          <div className="border-t border-gray-100 p-4 text-center">
+            <button
+              type="button"
+              onClick={loadMore}
+              disabled={
+                loadingMore ||
+                !nextCursor
+              }
+              className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loadingMore
+                ? 'Loading...'
+                : 'Load more shifts'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
