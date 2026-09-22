@@ -35,6 +35,11 @@ describe(
         'admin_portal/src/features/users/UserManagementPages.jsx',
       );
 
+    const communityModeration =
+      read(
+        'admin_portal/src/features/community/CommunityModerationPage.jsx',
+      );
+
     test(
       'shared Admin UI primitives live in one reusable module',
       () => {
@@ -133,6 +138,56 @@ describe(
         expect(pages)
           .toContain(
             "from './features/users/UserManagementPages.jsx'",
+          );
+      },
+    );
+
+    test(
+      'Community Moderation is extracted and re-exported',
+      () => {
+        expect(communityModeration)
+          .toContain(
+            'export function CommunityModerationPage()',
+          );
+
+        expect(communityModeration)
+          .toContain(
+            "'/agent-posts/moderation/posts/cursor'",
+          );
+
+        expect(communityModeration)
+          .toContain(
+            "'/personal-community/moderation/pending'",
+          );
+
+        expect(pages)
+          .not.toContain(
+            'export function CommunityModerationPage()',
+          );
+
+        expect(pages)
+          .toContain(
+            "from './features/community/CommunityModerationPage.jsx'",
+          );
+      },
+    );
+
+    test(
+      'Community Moderation avoids circular pages imports',
+      () => {
+        expect(communityModeration)
+          .toContain(
+            "from '../../components/AdminUi.jsx'",
+          );
+
+        expect(communityModeration)
+          .toContain(
+            "from '../../lib/api.js'",
+          );
+
+        expect(communityModeration)
+          .not.toContain(
+            "from '../../pages.jsx'",
           );
       },
     );
