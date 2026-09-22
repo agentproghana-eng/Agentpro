@@ -45,7 +45,7 @@ describe('Admin directory cursor client contract', () => {
   test('Personal Users uses server cursor search instead of first-100 local filtering', () => {
     const personal = sliceBetween(
       'export function PersonalUsersPage()',
-      'export function MarketplaceBusinessesPage',
+      'export { MarketplaceBusinessesPage }',
     );
 
     expect(personal).toContain("'/users/cursor'");

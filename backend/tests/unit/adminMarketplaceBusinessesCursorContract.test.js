@@ -27,12 +27,12 @@ const migration =
     'migrations/144_admin_marketplace_business_cursor_indexes.sql',
   );
 
-const pages =
+const marketplacePage =
   fs.readFileSync(
     path.join(
       __dirname,
       '../../..',
-      'admin_portal/src/pages.jsx',
+      'admin_portal/src/features/marketplace/MarketplaceBusinessesPage.jsx',
     ),
     'utf8',
   );
@@ -180,19 +180,8 @@ describe(
     test(
       'Admin Marketplace UI uses server search and incremental cursor loading',
       () => {
-        const start =
-          pages.indexOf(
-            'export function MarketplaceBusinessesPage({',
-          );
-
-        const end =
-          pages.indexOf(
-            'export function CommunityModerationPage()',
-            start,
-          );
-
         const marketplace =
-          pages.slice(start, end);
+          marketplacePage;
 
         expect(marketplace)
           .toContain(
