@@ -274,11 +274,11 @@ describe(
           'utf8',
         );
 
-        const pages = fs.readFileSync(
+        const marketplacePage = fs.readFileSync(
           path.join(
             __dirname,
             '../../..',
-            'admin_portal/src/pages.jsx',
+            'admin_portal/src/features/marketplace/MarketplaceBusinessesPage.jsx',
           ),
           'utf8',
         );
@@ -288,12 +288,12 @@ describe(
             'allowAccountActions={',
           );
 
-        expect(pages)
+        expect(marketplacePage)
           .toContain(
             'allowAccountActions = true',
           );
 
-        expect(pages)
+        expect(marketplacePage)
           .toContain(
             'Superuser only',
           );
