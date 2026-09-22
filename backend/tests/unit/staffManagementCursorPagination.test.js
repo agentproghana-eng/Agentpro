@@ -314,6 +314,63 @@ describe(
     );
 
     test(
+      'applies bounded server-side prefix search without OFFSET or COUNT',
+      async () => {
+        query.mockResolvedValueOnce({ rows: [] });
+
+        const req = makeReq({
+          user: {
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            role: 'superuser',
+            company_id: null,
+          },
+          query: {
+            search: 'Eric',
+            limit: '50',
+          },
+        });
+        const res = makeResponse();
+
+        await userController.listUsersCursor(req, res);
+
+        const [sql, params] = query.mock.calls[0];
+
+        expect(sql).toContain('u.first_name ILIKE');
+        expect(sql).toContain('u.last_name ILIKE');
+        expect(sql).toContain('CONCAT_WS(');
+        expect(sql).toContain('u.email ILIKE');
+        expect(sql).toContain('u.phone ILIKE');
+        expect(sql).toContain('c.name ILIKE');
+        expect(sql).not.toMatch(/\bOFFSET\b/i);
+        expect(sql).not.toMatch(/\bCOUNT\s*\(/i);
+        expect(params).toContain('Eric%');
+        expect(params.at(-1)).toBe(51);
+      },
+    );
+
+    test.each([
+      ['one character', 'E'],
+      ['over maximum length', 'x'.repeat(121)],
+    ])(
+      'rejects %s search before DB access',
+      async (_label, search) => {
+        const req = makeReq({ query: { search } });
+        const res = makeResponse();
+
+        await userController.listUsersCursor(req, res);
+
+        expect(query).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(422);
+        expect(res.json.mock.calls[0][0]).toEqual(
+          expect.objectContaining({
+            success: false,
+            code: 'INVALID_SEARCH',
+          }),
+        );
+      },
+    );
+
+    test(
       'preserves manager managed-branch scoping',
       async () => {
         query.mockResolvedValueOnce({

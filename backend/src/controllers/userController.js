@@ -445,6 +445,7 @@ exports.listUsersCursor = async (req, res) => {
     branch_id,
     company_id,
     personal_only,
+    search,
     cursor,
     limit,
   } = req.query;
@@ -456,6 +457,32 @@ exports.listUsersCursor = async (req, res) => {
 
   if (cursor && decodedCursor === false) {
     return invalidStaffCursor(res);
+  }
+
+  const searchTerm =
+    typeof search === "string"
+      ? search.trim()
+      : "";
+
+  if (searchTerm.length > 120) {
+    return res.status(422).json({
+      success: false,
+      code: "INVALID_SEARCH",
+      message:
+        "Search must be 120 characters or fewer.",
+    });
+  }
+
+  if (
+    searchTerm.length > 0 &&
+    searchTerm.length < 2
+  ) {
+    return res.status(422).json({
+      success: false,
+      code: "INVALID_SEARCH",
+      message:
+        "Enter at least two characters to search.",
+    });
   }
 
   try {
@@ -539,6 +566,23 @@ exports.listUsersCursor = async (req, res) => {
           AND ab_filter.branch_id = $${idx++}
       )`);
       params.push(branch_id);
+    }
+
+    if (searchTerm) {
+      conditions.push(`(
+        u.first_name ILIKE $${idx}
+        OR u.last_name ILIKE $${idx}
+        OR CONCAT_WS(
+          ' ',
+          u.first_name,
+          u.last_name
+        ) ILIKE $${idx}
+        OR u.email ILIKE $${idx}
+        OR u.phone ILIKE $${idx}
+        OR c.name ILIKE $${idx}
+      )`);
+      params.push(`${searchTerm}%`);
+      idx += 1;
     }
 
     if (decodedCursor) {
