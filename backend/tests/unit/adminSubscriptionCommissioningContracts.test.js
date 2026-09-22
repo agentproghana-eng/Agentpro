@@ -84,6 +84,18 @@ describe("Admin subscription commissioning contracts", () => {
     );
 
     expect(pages).toContain(
+      "'/users/cursor'",
+    );
+
+    expect(pages).toContain(
+      "personal_only: true",
+    );
+
+    expect(pages).toContain(
+      "limit: 50",
+    );
+
+    expect(pages).not.toContain(
       "/users?personal_only=true&limit=100",
     );
 

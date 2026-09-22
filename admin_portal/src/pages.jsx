@@ -97,40 +97,80 @@ export function CompaniesPage() {
   const navigate = useNavigate();
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [search, setSearch] = useState('');
+  const [nextCursor, setNextCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
+  const latestSearchRef = useRef('');
 
-  const load = async () => {
-    setLoading(true);
+  const load = async ({
+    cursor = null,
+    append = false,
+    term = latestSearchRef.current,
+  } = {}) => {
+    const normalizedTerm = term.trim();
+
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
 
     try {
       const response = await API.get(
-        '/users?role=business_owner&limit=100',
+        '/users/cursor',
+        {
+          params: {
+            role: 'business_owner',
+            limit: 50,
+            ...(normalizedTerm.length >= 2
+              ? { search: normalizedTerm }
+              : {}),
+            ...(cursor ? { cursor } : {}),
+          },
+        },
       );
 
-      setCompanies(response.data.data || []);
-    } catch (_) {
-      toast.error('Failed to load companies');
+      if (normalizedTerm !== latestSearchRef.current) {
+        return;
+      }
+
+      const rows = response.data.data || [];
+
+      setCompanies((current) =>
+        append ? [...current, ...rows] : rows,
+      );
+
+      setNextCursor(
+        response.data.meta?.next_cursor || null,
+      );
+      setHasMore(Boolean(response.data.meta?.has_more));
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message ||
+          'Failed to load companies',
+      );
     } finally {
-      setLoading(false);
+      if (normalizedTerm === latestSearchRef.current) {
+        if (append) setLoadingMore(false);
+        else setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    load();
-  }, []);
+    const normalizedTerm = search.trim();
+    latestSearchRef.current = normalizedTerm;
 
-  const filtered = companies.filter((company) => {
-    const term = search.trim().toLowerCase();
+    const timeout = setTimeout(() => {
+      setNextCursor(null);
+      setHasMore(false);
+      load({ term: normalizedTerm });
+    }, 300);
 
-    if (!term) return true;
-
-    return (
-      company.company_name?.toLowerCase().includes(term) ||
-      company.email?.toLowerCase().includes(term) ||
-      company.phone?.toLowerCase().includes(term)
-    );
-  });
+    return () => clearTimeout(timeout);
+  }, [search]);
 
   const toggleStatus = async (company) => {
     const newStatus =
@@ -149,7 +189,7 @@ export function CompaniesPage() {
           : 'Business owner suspended.',
       );
 
-      await load();
+      await load({ term: latestSearchRef.current });
     } catch (error) {
       toast.error(
         error.response?.data?.message ||
@@ -166,19 +206,27 @@ export function CompaniesPage() {
         title="Companies"
         subtitle="Manage company accounts, subscriptions, owners, and staff"
         action={
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search marketplace businesses..."
-            className="w-64 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-          />
+          <div>
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search companies..."
+              aria-label="Search companies"
+              className="w-64 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            {search.trim().length === 1 && (
+              <p className="mt-1 text-xs text-gray-400">
+                Enter at least 2 characters to search.
+              </p>
+            )}
+          </div>
         }
       />
 
       <div className="overflow-hidden rounded-xl bg-white shadow-sm">
         <Table
           loading={loading}
-          data={filtered}
+          data={companies}
           emptyMsg="No companies found"
           columns={[
             {
@@ -212,18 +260,14 @@ export function CompaniesPage() {
               key: 'subscription_plan',
               label: 'Plan',
               render: (row) => (
-                <Badge
-                  status={row.subscription_plan || 'none'}
-                />
+                <Badge status={row.subscription_plan || 'none'} />
               ),
             },
             {
               key: 'subscription_status',
               label: 'Subscription',
               render: (row) => (
-                <Badge
-                  status={row.subscription_status || 'none'}
-                />
+                <Badge status={row.subscription_status || 'none'} />
               ),
             },
             {
@@ -231,9 +275,7 @@ export function CompaniesPage() {
               label: 'Expires',
               render: (row) =>
                 row.subscription_expires_at
-                  ? new Date(
-                      row.subscription_expires_at,
-                    ).toLocaleDateString()
+                  ? new Date(row.subscription_expires_at).toLocaleDateString()
                   : '—',
             },
             {
@@ -280,6 +322,25 @@ export function CompaniesPage() {
             navigate(`/companies/${row.company_id}`)
           }
         />
+
+        {hasMore && !loading && (
+          <div className="border-t border-gray-100 p-4 text-center">
+            <button
+              type="button"
+              disabled={loadingMore || !nextCursor}
+              onClick={() =>
+                load({
+                  cursor: nextCursor,
+                  append: true,
+                  term: latestSearchRef.current,
+                })
+              }
+              className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {loadingMore ? 'Loading...' : 'Load more'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -291,47 +352,74 @@ export function CompaniesPage() {
 export function PersonalUsersPage() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [search, setSearch] = useState('');
+  const [nextCursor, setNextCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
+  const latestSearchRef = useRef('');
 
-  const load = async () => {
-    setLoading(true);
+  const load = async ({
+    cursor = null,
+    append = false,
+    term = latestSearchRef.current,
+  } = {}) => {
+    const normalizedTerm = term.trim();
+
+    if (append) setLoadingMore(true);
+    else setLoading(true);
 
     try {
       const response = await API.get(
-        '/users?personal_only=true&limit=100',
+        '/users/cursor',
+        {
+          params: {
+            personal_only: true,
+            limit: 50,
+            ...(normalizedTerm.length >= 2
+              ? { search: normalizedTerm }
+              : {}),
+            ...(cursor ? { cursor } : {}),
+          },
+        },
       );
 
-      setUsers(response.data.data || []);
-    } catch (_) {
-      toast.error('Failed to load Personal users');
+      if (normalizedTerm !== latestSearchRef.current) {
+        return;
+      }
+
+      const rows = response.data.data || [];
+
+      setUsers((current) =>
+        append ? [...current, ...rows] : rows,
+      );
+
+      setNextCursor(response.data.meta?.next_cursor || null);
+      setHasMore(Boolean(response.data.meta?.has_more));
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message ||
+          'Failed to load Personal users',
+      );
     } finally {
-      setLoading(false);
+      if (normalizedTerm === latestSearchRef.current) {
+        if (append) setLoadingMore(false);
+        else setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    load();
-  }, []);
+    const normalizedTerm = search.trim();
+    latestSearchRef.current = normalizedTerm;
 
-  const filtered = users.filter((user) => {
-    const term = search.trim().toLowerCase();
+    const timeout = setTimeout(() => {
+      setNextCursor(null);
+      setHasMore(false);
+      load({ term: normalizedTerm });
+    }, 300);
 
-    if (!term) return true;
-
-    return [
-      user.first_name,
-      user.last_name,
-      user.email,
-      user.phone,
-      user.company_name,
-    ]
-      .filter(Boolean)
-      .some((value) =>
-        String(value)
-          .toLowerCase()
-          .includes(term),
-      );
-  });
+    return () => clearTimeout(timeout);
+  }, [search]);
 
   return (
     <div>
@@ -339,21 +427,27 @@ export function PersonalUsersPage() {
         title="Personal Users"
         subtitle="Personal-capability accounts and subscription state"
         action={
-          <input
-            value={search}
-            onChange={(event) =>
-              setSearch(event.target.value)
-            }
-            placeholder="Search Personal users..."
-            className="w-64 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-          />
+          <div>
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search Personal users..."
+              aria-label="Search Personal users"
+              className="w-64 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            {search.trim().length === 1 && (
+              <p className="mt-1 text-xs text-gray-400">
+                Enter at least 2 characters to search.
+              </p>
+            )}
+          </div>
         }
       />
 
       <div className="overflow-hidden rounded-xl bg-white shadow-sm">
         <Table
           loading={loading}
-          data={filtered}
+          data={users}
           emptyMsg="No Personal users found"
           columns={[
             {
@@ -366,8 +460,7 @@ export function PersonalUsersPage() {
                     {row.last_name || ''}
                   </p>
                   <p className="text-xs text-gray-500">
-                    {row.company_name ||
-                      'Personal only'}
+                    {row.company_name || 'Personal only'}
                   </p>
                 </div>
               ),
@@ -387,32 +480,20 @@ export function PersonalUsersPage() {
             {
               key: 'role',
               label: 'Account Role',
-              render: (row) => (
-                <Badge status={row.role} />
-              ),
+              render: (row) => <Badge status={row.role} />,
             },
             {
               key: 'personal_subscription_plan',
               label: 'Personal Plan',
               render: (row) => (
-                <Badge
-                  status={
-                    row.personal_subscription_plan ||
-                    'none'
-                  }
-                />
+                <Badge status={row.personal_subscription_plan || 'none'} />
               ),
             },
             {
               key: 'personal_subscription_status',
               label: 'Subscription',
               render: (row) => (
-                <Badge
-                  status={
-                    row.personal_subscription_status ||
-                    'none'
-                  }
-                />
+                <Badge status={row.personal_subscription_status || 'none'} />
               ),
             },
             {
@@ -420,20 +501,35 @@ export function PersonalUsersPage() {
               label: 'Expires',
               render: (row) =>
                 row.personal_subscription_expires_at
-                  ? new Date(
-                      row.personal_subscription_expires_at,
-                    ).toLocaleDateString()
+                  ? new Date(row.personal_subscription_expires_at).toLocaleDateString()
                   : '—',
             },
             {
               key: 'status',
               label: 'Account',
-              render: (row) => (
-                <Badge status={row.status} />
-              ),
+              render: (row) => <Badge status={row.status} />,
             },
           ]}
         />
+
+        {hasMore && !loading && (
+          <div className="border-t border-gray-100 p-4 text-center">
+            <button
+              type="button"
+              disabled={loadingMore || !nextCursor}
+              onClick={() =>
+                load({
+                  cursor: nextCursor,
+                  append: true,
+                  term: latestSearchRef.current,
+                })
+              }
+              className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {loadingMore ? 'Loading...' : 'Load more'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
