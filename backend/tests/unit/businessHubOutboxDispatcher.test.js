@@ -219,7 +219,11 @@ describe(
           "ama@example.com",
           "Ama",
           "Test listing",
-          "25.00"
+          "25.00",
+          {
+            idempotencyKey:
+              `business-hub:payment-confirmed:email:${AD_ID}:payment-1`,
+          }
         );
       }
     );

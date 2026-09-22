@@ -43,6 +43,7 @@ const {
   sendWelcomeEmail,
   sendSubscriptionRenewalEmail,
   sendSubscriptionReminderEmail,
+  sendAdPaymentConfirmedEmail,
 } = require(
   '../../src/services/emailService',
 );
@@ -259,6 +260,38 @@ describe(
           payload.html,
         ).not.toContain(
           'Welcome to AgentPro',
+        );
+      },
+    );
+
+    test(
+      'Business Hub payment confirmation forwards outbox idempotency to Resend',
+      async () => {
+        const key =
+          'business-hub:payment-confirmed:email:ad-1:payment-1';
+
+        await sendAdPaymentConfirmedEmail(
+          'owner@example.com',
+          'Eric',
+          'Test listing',
+          '25.00',
+          {
+            idempotencyKey:
+              key,
+          },
+        );
+
+        expect(
+          mockResendSend,
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            subject:
+              'AgentPro — Business Hub Payment Confirmed',
+          }),
+          {
+            idempotencyKey:
+              key,
+          },
         );
       },
     );

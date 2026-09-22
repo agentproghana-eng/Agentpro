@@ -1,5 +1,8 @@
 const { Resend } = require("resend");
 const { logger } = require("../utils/logger");
+const {
+  resolveEmailFrom,
+} = require("../utils/emailSender");
 
 const BRAND = Object.freeze({
   name: "AgentPro",
@@ -21,12 +24,8 @@ const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
   : null;
 
-// A verified custom sending domain can override this with EMAIL_FROM.
-// Until then, keep Resend's test sender while presenting the AgentPro
-// brand consistently in the display name.
 const FROM =
-  process.env.EMAIL_FROM ||
-  "AgentPro <onboarding@resend.dev>";
+  resolveEmailFrom();
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -1211,6 +1210,9 @@ async function sendAdPaymentConfirmedEmail(
   firstName,
   adTitle,
   amount,
+  {
+    idempotencyKey = null,
+  } = {},
 ) {
   const safeName =
     escapeHtml(firstName);
@@ -1290,6 +1292,7 @@ async function sendAdPaymentConfirmedEmail(
       "AgentPro — Business Hub Payment Confirmed",
     html,
     text,
+    idempotencyKey,
   });
 }
 
