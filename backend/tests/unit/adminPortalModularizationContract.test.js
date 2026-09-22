@@ -40,6 +40,11 @@ describe(
         'admin_portal/src/features/community/CommunityModerationPage.jsx',
       );
 
+    const ussdAdmin =
+      read(
+        'admin_portal/src/features/ussd/UssdAdminPages.jsx',
+      );
+
     test(
       'shared Admin UI primitives live in one reusable module',
       () => {
@@ -189,6 +194,29 @@ describe(
           .not.toContain(
             "from '../../pages.jsx'",
           );
+      },
+    );
+
+    test(
+      'USSD Admin pages are extracted and re-exported',
+      () => {
+        for (const page of ['USSDTemplatesPage', 'FlowsPage']) {
+          expect(ussdAdmin).toContain(`export function ${page}()`);
+          expect(pages).not.toContain(`export function ${page}()`);
+        }
+        expect(pages).toContain("from './features/ussd/UssdAdminPages.jsx'");
+      },
+    );
+
+    test(
+      'USSD Admin preserves live flow verification and avoids circular imports',
+      () => {
+        expect(ussdAdmin).toContain('verifyPersistedFlow');
+        expect(ussdAdmin).toContain('FLOW_READ_AFTER_WRITE_MISMATCH');
+        expect(ussdAdmin).toContain('Flow updated and verified live');
+        expect(ussdAdmin).toContain("from '../../components/AdminUi.jsx'");
+        expect(ussdAdmin).toContain("from '../../lib/api.js'");
+        expect(ussdAdmin).not.toContain("from '../../pages.jsx'");
       },
     );
 

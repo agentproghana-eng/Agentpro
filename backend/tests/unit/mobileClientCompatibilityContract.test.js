@@ -97,7 +97,7 @@ describe('AgentPro mobile release contract', () => {
 
   test('admin verifies persisted flow before reporting live', () => {
     const source = read(
-      'admin_portal/src/pages.jsx'
+      'admin_portal/src/features/ussd/UssdAdminPages.jsx'
     );
 
     expect(source).toContain(
