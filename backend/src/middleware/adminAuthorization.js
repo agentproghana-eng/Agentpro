@@ -42,8 +42,13 @@ const ADMIN_ROUTE_POLICIES = Object.freeze([
     permission: 'operations.manage',
   },
   {
-    methods: ['GET', 'PATCH'],
-    pattern: /^\/marketplace-businesses(?:\/[^/]+\/(?:verification|featured))?$/,
+    methods: ['GET'],
+    pattern: /^\/marketplace-businesses(?:\/cursor)?$/,
+    permission: 'content.manage',
+  },
+  {
+    methods: ['PATCH'],
+    pattern: /^\/marketplace-businesses\/[^/]+\/(?:verification|featured)$/,
     permission: 'content.manage',
   },
   {
