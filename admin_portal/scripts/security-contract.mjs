@@ -37,6 +37,9 @@ const adminPageFeatures = [
     'admin_portal/src/features/community/CommunityModerationPage.jsx',
   ),
   read(
+    'admin_portal/src/features/dashboard/DashboardOperationalWidgets.jsx',
+  ),
+  read(
     'admin_portal/src/features/ussd/UssdAdminPages.jsx',
   ),
   read(
