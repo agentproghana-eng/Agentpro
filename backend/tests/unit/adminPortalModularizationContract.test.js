@@ -45,6 +45,21 @@ describe(
         'admin_portal/src/features/ussd/UssdAdminPages.jsx',
       );
 
+    const shiftsPage =
+      read(
+        'admin_portal/src/features/operations/ShiftsPage.jsx',
+      );
+
+    const auditLogsPage =
+      read(
+        'admin_portal/src/features/audit/AuditLogsPage.jsx',
+      );
+
+    const commissionsPage =
+      read(
+        'admin_portal/src/features/commissions/CommissionsPage.jsx',
+      );
+
     test(
       'shared Admin UI primitives live in one reusable module',
       () => {
@@ -94,7 +109,12 @@ describe(
 
         expect(pages)
           .toContain(
-            "export { MarketplaceBusinessesPage } from './features/marketplace/MarketplaceBusinessesPage.jsx';",
+            'MarketplaceBusinessesPage',
+          );
+
+        expect(pages)
+          .toContain(
+            "from './features/marketplace/MarketplaceBusinessesPage.jsx'",
           );
       },
     );
@@ -217,6 +237,93 @@ describe(
         expect(ussdAdmin).toContain("from '../../components/AdminUi.jsx'");
         expect(ussdAdmin).toContain("from '../../lib/api.js'");
         expect(ussdAdmin).not.toContain("from '../../pages.jsx'");
+      },
+    );
+
+    test(
+      'remaining Admin pages are extracted into dedicated feature modules',
+      () => {
+        expect(shiftsPage)
+          .toContain(
+            'export function ShiftsPage()',
+          );
+
+        expect(auditLogsPage)
+          .toContain(
+            'export function AuditLogsPage()',
+          );
+
+        expect(commissionsPage)
+          .toContain(
+            'export function CommissionsPage()',
+          );
+
+        for (
+          const page of [
+            'ShiftsPage',
+            'AuditLogsPage',
+            'CommissionsPage',
+          ]
+        ) {
+          expect(pages)
+            .not.toContain(
+              `export function ${page}()`,
+            );
+        }
+
+        expect(pages)
+          .toContain(
+            "from './features/operations/ShiftsPage.jsx'",
+          );
+
+        expect(pages)
+          .toContain(
+            "from './features/audit/AuditLogsPage.jsx'",
+          );
+
+        expect(pages)
+          .toContain(
+            "from './features/commissions/CommissionsPage.jsx'",
+          );
+      },
+    );
+
+    test(
+      'pages.jsx is a compatibility barrel with no page implementations',
+      () => {
+        expect(pages).not.toContain('useState(');
+        expect(pages).not.toContain('useEffect(');
+        expect(pages).not.toContain('API.');
+        expect(pages).not.toContain('toast.');
+        expect(pages).not.toMatch(/export function /);
+      },
+    );
+
+    test(
+      'final extracted pages avoid circular imports',
+      () => {
+        for (
+          const feature of [
+            shiftsPage,
+            auditLogsPage,
+            commissionsPage,
+          ]
+        ) {
+          expect(feature)
+            .toContain(
+              "from '../../lib/api.js'",
+            );
+
+          expect(feature)
+            .toContain(
+              "from '../../components/AdminUi.jsx'",
+            );
+
+          expect(feature)
+            .not.toContain(
+              "from '../../pages.jsx'",
+            );
+        }
       },
     );
 

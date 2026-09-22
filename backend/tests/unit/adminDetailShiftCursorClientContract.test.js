@@ -14,8 +14,10 @@ function read(relativePath) {
   );
 }
 
-const pages =
-  read('admin_portal/src/pages.jsx');
+const shiftsPage =
+  read(
+    'admin_portal/src/features/operations/ShiftsPage.jsx',
+  );
 
 const userPages =
   read(
@@ -99,9 +101,8 @@ describe(
       () => {
         const shifts =
           section(
-            pages,
+            shiftsPage,
             'export function ShiftsPage()',
-            "export { USSDTemplatesPage, FlowsPage }",
           );
 
         expect(shifts)

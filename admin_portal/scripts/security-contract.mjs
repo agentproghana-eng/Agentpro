@@ -25,6 +25,33 @@ function assert(condition, message) {
 
 const app = read('admin_portal/src/App.jsx');
 const pages = read('admin_portal/src/pages.jsx');
+
+const adminPageFeatures = [
+  read(
+    'admin_portal/src/features/users/UserManagementPages.jsx',
+  ),
+  read(
+    'admin_portal/src/features/marketplace/MarketplaceBusinessesPage.jsx',
+  ),
+  read(
+    'admin_portal/src/features/community/CommunityModerationPage.jsx',
+  ),
+  read(
+    'admin_portal/src/features/ussd/UssdAdminPages.jsx',
+  ),
+  read(
+    'admin_portal/src/features/operations/ShiftsPage.jsx',
+  ),
+  read(
+    'admin_portal/src/features/audit/AuditLogsPage.jsx',
+  ),
+  read(
+    'admin_portal/src/features/commissions/CommissionsPage.jsx',
+  ),
+];
+
+const adminPageFeatureSource =
+  adminPageFeatures.join('\n');
 const api = read('admin_portal/src/lib/api.js');
 const authStorage = read(
   'admin_portal/src/lib/authStorage.js',
@@ -60,8 +87,9 @@ assert(
 );
 
 assert(
-  !pages.includes("from 'axios'"),
-  'pages.jsx must not own an Axios client',
+  !pages.includes("from 'axios'") &&
+    !adminPageFeatureSource.includes("from 'axios'"),
+  'Admin page modules must not own an Axios client',
 );
 
 assert(
@@ -70,8 +98,16 @@ assert(
 );
 
 assert(
-  pages.includes("from './lib/api.js'"),
-  'pages.jsx must use the shared API client',
+  adminPageFeatures.every(
+    source =>
+      source.includes("from '../../lib/api.js'"),
+  ),
+  'Admin page feature modules must use the shared API client',
+);
+
+assert(
+  !pages.includes("from './lib/api.js'"),
+  'pages.jsx compatibility barrel must not import runtime API code',
 );
 
 assert(
@@ -94,8 +130,9 @@ assert(
 );
 
 assert(
-  !pages.includes('localStorage'),
-  'pages.jsx must not read auth storage directly',
+  !pages.includes('localStorage') &&
+    !adminPageFeatureSource.includes('localStorage'),
+  'Admin page modules must not read auth storage directly',
 );
 
 assert(
