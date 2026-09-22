@@ -22,8 +22,8 @@ describe("Admin subscription commissioning contracts", () => {
     "backend/src/controllers/userController.js",
   );
 
-  const pages = read(
-    "admin_portal/src/pages.jsx",
+  const userPages = read(
+    "admin_portal/src/features/users/UserManagementPages.jsx",
   );
 
   const app = read(
@@ -61,7 +61,7 @@ describe("Admin subscription commissioning contracts", () => {
       "business_subscription.expires_at as subscription_expires_at",
     );
 
-    expect(pages).not.toContain(
+    expect(userPages).not.toContain(
       "status={row.subscription_status || 'pending'}",
     );
   });
@@ -79,23 +79,23 @@ describe("Admin subscription commissioning contracts", () => {
       "personal_subscription_status",
     );
 
-    expect(pages).toContain(
+    expect(userPages).toContain(
       "export function PersonalUsersPage()",
     );
 
-    expect(pages).toContain(
+    expect(userPages).toContain(
       "'/users/cursor'",
     );
 
-    expect(pages).toContain(
+    expect(userPages).toContain(
       "personal_only: true",
     );
 
-    expect(pages).toContain(
+    expect(userPages).toContain(
       "limit: 50",
     );
 
-    expect(pages).not.toContain(
+    expect(userPages).not.toContain(
       "/users?personal_only=true&limit=100",
     );
 

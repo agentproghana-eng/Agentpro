@@ -30,6 +30,11 @@ describe(
         'admin_portal/src/features/marketplace/MarketplaceBusinessesPage.jsx',
       );
 
+    const userManagement =
+      read(
+        'admin_portal/src/features/users/UserManagementPages.jsx',
+      );
+
     test(
       'shared Admin UI primitives live in one reusable module',
       () => {
@@ -85,7 +90,7 @@ describe(
     );
 
     test(
-      'extracted Marketplace page avoids circular pages import',
+      'Marketplace feature avoids circular pages import',
       () => {
         expect(marketplace)
           .toContain(
@@ -98,6 +103,69 @@ describe(
           );
 
         expect(marketplace)
+          .not.toContain(
+            "from '../../pages.jsx'",
+          );
+      },
+    );
+
+    test(
+      'user-management pages are extracted and re-exported',
+      () => {
+        for (
+          const page of [
+            'CompaniesPage',
+            'PersonalUsersPage',
+            'CompanyDetailPage',
+          ]
+        ) {
+          expect(userManagement)
+            .toContain(
+              `export function ${page}()`,
+            );
+
+          expect(pages)
+            .not.toContain(
+              `export function ${page}()`,
+            );
+        }
+
+        expect(pages)
+          .toContain(
+            "from './features/users/UserManagementPages.jsx'",
+          );
+      },
+    );
+
+    test(
+      'user-management module preserves cursor clients and avoids circular imports',
+      () => {
+        expect(userManagement)
+          .toContain(
+            "'/users/cursor'",
+          );
+
+        expect(userManagement)
+          .toContain(
+            'personal_only: true',
+          );
+
+        expect(userManagement)
+          .toContain(
+            'company_id: companyId',
+          );
+
+        expect(userManagement)
+          .toContain(
+            "from '../../components/AdminUi.jsx'",
+          );
+
+        expect(userManagement)
+          .toContain(
+            "from '../../lib/api.js'",
+          );
+
+        expect(userManagement)
           .not.toContain(
             "from '../../pages.jsx'",
           );
