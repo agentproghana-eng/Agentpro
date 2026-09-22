@@ -383,7 +383,11 @@ async function dispatchBusinessHubConfirmedEmail(
     email,
     recipient.first_name || 'there',
     payload.adTitle,
-    payload.amount
+    payload.amount,
+    {
+      idempotencyKey:
+        payload.deliveryKey,
+    }
   );
 }
 

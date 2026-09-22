@@ -7,6 +7,10 @@ const {
   logger,
 } = require('../utils/logger');
 
+const {
+  resolveEmailFrom,
+} = require('../utils/emailSender');
+
 const router = express.Router();
 
 const SUPPORT_ADDRESS =
@@ -24,8 +28,7 @@ const SUPPORT_FORWARD_TO =
   ).trim();
 
 const FROM =
-  process.env.EMAIL_FROM ||
-  'AgentPro <onboarding@resend.dev>';
+  resolveEmailFrom();
 
 const MAX_FORWARDED_TEXT_LENGTH = 100_000;
 
