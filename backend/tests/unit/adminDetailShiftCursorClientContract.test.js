@@ -101,7 +101,7 @@ describe(
           section(
             pages,
             'export function ShiftsPage()',
-            'export function USSDTemplatesPage()',
+            "export { USSDTemplatesPage, FlowsPage }",
           );
 
         expect(shifts)
