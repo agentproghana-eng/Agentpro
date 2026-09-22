@@ -248,7 +248,7 @@ describe("Personal Community admin moderation", () => {
     const source = fs.readFileSync(
       path.join(
         __dirname,
-        "../../../admin_portal/src/pages.jsx"
+        "../../../admin_portal/src/features/community/CommunityModerationPage.jsx"
       ),
       "utf8"
     );

@@ -49,7 +49,7 @@ describe('Secondary feed client cursor contract', () => {
 
   test('Admin moderation uses cursor routes and incremental loading', () => {
     const text = source(
-      'admin_portal/src/pages.jsx'
+      'admin_portal/src/features/community/CommunityModerationPage.jsx'
     );
 
     expect(text).toContain(
@@ -70,7 +70,7 @@ describe('Secondary feed client cursor contract', () => {
   });
   test('Admin moderation cursor loaders live inside CommunityModerationPage', () => {
     const text = source(
-      'admin_portal/src/pages.jsx'
+      'admin_portal/src/features/community/CommunityModerationPage.jsx'
     );
 
     const moderationStart = text.indexOf(
