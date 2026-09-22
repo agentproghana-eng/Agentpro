@@ -90,10 +90,15 @@ describe(
     );
 
     test(
-      'App.jsx continues shrinking without moving subscription behavior',
+      'App.jsx remains modular after subscription extraction',
       () => {
-        expect(app.split('\n').length).toBeLessThan(5700);
-        expect(app).toContain('function SubscriptionsPage()');
+        expect(app.split('\n').length).toBeLessThan(5100);
+        expect(app).not.toContain(
+          'function SubscriptionsPage()',
+        );
+        expect(app).toContain(
+          "from './features/subscriptions/SubscriptionsPage.jsx'",
+        );
       },
     );
   },

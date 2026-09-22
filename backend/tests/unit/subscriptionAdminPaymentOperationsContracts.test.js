@@ -64,30 +64,34 @@ describe("subscription admin payment operations contracts", () => {
   });
 
   test("Admin surfaces Business and Personal manual queues plus reconciliation", () => {
-    const app = repoSource("admin_portal/src/App.jsx");
+    const subscriptions = repoSource(
+      "admin_portal/src/features/subscriptions/SubscriptionsPage.jsx",
+    );
 
-    expect(app).toContain("'/subscriptions/pending-payments'");
+    expect(subscriptions).toContain("'/subscriptions/pending-payments'");
 
-    expect(app).toContain("'/personal-subscription/pending-payments'");
+    expect(subscriptions).toContain("'/personal-subscription/pending-payments'");
 
-    expect(app).toContain("'/subscriptions/reconciliation-payments'");
+    expect(subscriptions).toContain("'/subscriptions/reconciliation-payments'");
 
-    expect(app).toContain("'/personal-subscription/reconciliation-payments'");
+    expect(subscriptions).toContain("'/personal-subscription/reconciliation-payments'");
 
-    expect(app).toContain("Business — Manual MoMo");
+    expect(subscriptions).toContain("Business — Manual MoMo");
 
-    expect(app).toContain("Personal — Manual MoMo");
+    expect(subscriptions).toContain("Personal — Manual MoMo");
 
-    expect(app).toContain("Paystack Reconciliation Required");
+    expect(subscriptions).toContain("Paystack Reconciliation Required");
   });
 
   test("Admin never exposes manual approve or reject as a Paystack reconciliation action", () => {
-    const app = repoSource("admin_portal/src/App.jsx");
+    const subscriptions = repoSource(
+      "admin_portal/src/features/subscriptions/SubscriptionsPage.jsx",
+    );
 
-    expect(app).toContain("payment.payment_provider === 'manual_momo'");
+    expect(subscriptions).toContain("payment.payment_provider === 'manual_momo'");
 
-    expect(app).toContain("No approve/reject action is available for");
+    expect(subscriptions).toContain("No approve/reject action is available for");
 
-    expect(app).toContain("Paystack charges.");
+    expect(subscriptions).toContain("Paystack charges.");
   });
 });
