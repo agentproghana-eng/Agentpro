@@ -1,15 +1,12 @@
 'use strict';
 
-const fs =
-  require('fs');
+const fs = require('fs');
+const path = require('path');
 
-const path =
-  require('path');
-
-const APP =
+const FRAUD_QUEUE =
   path.join(
     __dirname,
-    '../../../admin_portal/src/App.jsx'
+    '../../../admin_portal/src/features/support/FraudSignalQueue.jsx'
   );
 
 describe(
@@ -17,7 +14,7 @@ describe(
   () => {
     const source =
       fs.readFileSync(
-        APP,
+        FRAUD_QUEUE,
         'utf8'
       );
 
@@ -105,30 +102,13 @@ describe(
     test(
       'does not expose raw metrics or evidence in queue cards',
       () => {
-        const start =
-          source.indexOf(
-            'Fraud Signal Queue'
-          );
-
-        const end =
-          source.indexOf(
-            'Support Console',
-            start
-          );
-
-        const panel =
-          source.slice(
-            start,
-            end
-          );
-
-        expect(panel)
+        expect(source)
           .not
           .toContain(
             'JSON.stringify(signal.metrics'
           );
 
-        expect(panel)
+        expect(source)
           .not
           .toContain(
             'JSON.stringify(signal.evidence'

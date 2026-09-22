@@ -46,6 +46,12 @@ const adminPageFeatures = [
     'admin_portal/src/features/subscriptions/SubscriptionsPage.jsx',
   ),
   read(
+    'admin_portal/src/features/support/FraudSignalQueue.jsx',
+  ),
+  read(
+    'admin_portal/src/features/support/SupportTimelineInvestigation.jsx',
+  ),
+  read(
     'admin_portal/src/features/ussd/UssdAdminPages.jsx',
   ),
   read(
