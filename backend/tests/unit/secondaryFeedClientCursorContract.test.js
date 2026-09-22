@@ -73,19 +73,14 @@ describe('Secondary feed client cursor contract', () => {
       'admin_portal/src/pages.jsx'
     );
 
-    const companiesStart = text.indexOf(
-      'export function CompaniesPage()'
-    );
-
     const moderationStart = text.indexOf(
       'export function CommunityModerationPage()'
     );
 
-    expect(companiesStart).toBeGreaterThanOrEqual(0);
-    expect(moderationStart).toBeGreaterThan(companiesStart);
+    expect(moderationStart).toBeGreaterThanOrEqual(0);
 
-    const companiesSection = text.slice(
-      companiesStart,
+    const beforeModeration = text.slice(
+      0,
       moderationStart
     );
 
@@ -93,11 +88,11 @@ describe('Secondary feed client cursor contract', () => {
       moderationStart
     );
 
-    expect(companiesSection).not.toContain(
+    expect(beforeModeration).not.toContain(
       'const loadMorePosts = async () =>'
     );
 
-    expect(companiesSection).not.toContain(
+    expect(beforeModeration).not.toContain(
       'const loadMoreHistory = async () =>'
     );
 

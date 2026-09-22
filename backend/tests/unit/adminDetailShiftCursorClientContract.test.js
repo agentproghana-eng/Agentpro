@@ -3,33 +3,48 @@
 const fs = require('fs');
 const path = require('path');
 
-const pages = fs.readFileSync(
-  path.join(
-    __dirname,
-    '../../..',
-    'admin_portal/src/pages.jsx',
-  ),
-  'utf8',
-);
+function read(relativePath) {
+  return fs.readFileSync(
+    path.join(
+      __dirname,
+      '../../..',
+      relativePath,
+    ),
+    'utf8',
+  );
+}
+
+const pages =
+  read('admin_portal/src/pages.jsx');
+
+const userPages =
+  read(
+    'admin_portal/src/features/users/UserManagementPages.jsx',
+  );
 
 function section(
+  text,
   startMarker,
-  endMarker,
+  endMarker = null,
 ) {
   const start =
-    pages.indexOf(startMarker);
-  const end =
-    pages.indexOf(
-      endMarker,
-      start + startMarker.length,
-    );
+    text.indexOf(startMarker);
 
   expect(start)
     .toBeGreaterThanOrEqual(0);
+
+  const end =
+    endMarker === null
+      ? text.length
+      : text.indexOf(
+          endMarker,
+          start + startMarker.length,
+        );
+
   expect(end)
     .toBeGreaterThan(start);
 
-  return pages.slice(
+  return text.slice(
     start,
     end,
   );
@@ -43,8 +58,8 @@ describe(
       () => {
         const company =
           section(
+            userPages,
             'export function CompanyDetailPage()',
-            'export function ShiftsPage()',
           );
 
         expect(company)
@@ -84,6 +99,7 @@ describe(
       () => {
         const shifts =
           section(
+            pages,
             'export function ShiftsPage()',
             'export function USSDTemplatesPage()',
           );

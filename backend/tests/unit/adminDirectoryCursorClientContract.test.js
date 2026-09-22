@@ -3,18 +3,18 @@
 const fs = require('fs');
 const path = require('path');
 
-const pages = fs.readFileSync(
+const userPages = fs.readFileSync(
   path.join(
     __dirname,
     '../../..',
-    'admin_portal/src/pages.jsx',
+    'admin_portal/src/features/users/UserManagementPages.jsx',
   ),
   'utf8',
 );
 
 function sliceBetween(startMarker, endMarker) {
-  const start = pages.indexOf(startMarker);
-  const end = pages.indexOf(
+  const start = userPages.indexOf(startMarker);
+  const end = userPages.indexOf(
     endMarker,
     start + startMarker.length,
   );
@@ -22,7 +22,7 @@ function sliceBetween(startMarker, endMarker) {
   expect(start).toBeGreaterThanOrEqual(0);
   expect(end).toBeGreaterThan(start);
 
-  return pages.slice(start, end);
+  return userPages.slice(start, end);
 }
 
 describe('Admin directory cursor client contract', () => {
@@ -45,7 +45,7 @@ describe('Admin directory cursor client contract', () => {
   test('Personal Users uses server cursor search instead of first-100 local filtering', () => {
     const personal = sliceBetween(
       'export function PersonalUsersPage()',
-      'export { MarketplaceBusinessesPage }',
+      'export function CompanyDetailPage()',
     );
 
     expect(personal).toContain("'/users/cursor'");
