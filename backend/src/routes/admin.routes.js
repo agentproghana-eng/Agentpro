@@ -55,6 +55,10 @@ const {
 const {
   normalizeAccountEmail,
 } = require('../utils/emailIdentity');
+const {
+  encodeMarketplaceBusinessCursor,
+  decodeMarketplaceBusinessCursor,
+} = require('../utils/marketplaceBusinessCursor');
 
 router.use(authenticate, requireAdminPortalAccess);
 
@@ -1483,6 +1487,355 @@ router.patch("/pending-registrations/:company_id/approve", async (req, res) => {
 // ── Marketplace Businesses ────────────────────────────────────
 
 // List companies with owner and marketplace trust/placement state.
+router.get(
+  '/marketplace-businesses/cursor',
+  async (req, res) => {
+    const parsedLimit = Math.min(
+      Math.max(
+        parseInt(
+          req.query.limit || '50',
+          10,
+        ) || 50,
+        1,
+      ),
+      100,
+    );
+
+    const searchTerm =
+      typeof req.query.search ===
+      'string'
+        ? req.query.search.trim()
+        : '';
+
+    if (
+      searchTerm.length > 0 &&
+      searchTerm.length < 2
+    ) {
+      return res.status(422).json({
+        success: false,
+        code: 'INVALID_SEARCH',
+        message:
+          'Enter at least two characters to search.',
+      });
+    }
+
+    if (searchTerm.length > 120) {
+      return res.status(422).json({
+        success: false,
+        code: 'INVALID_SEARCH',
+        message:
+          'Search must be 120 characters or fewer.',
+      });
+    }
+
+    const cursor =
+      req.query.cursor;
+
+    const decodedCursor =
+      cursor === undefined
+        ? null
+        : decodeMarketplaceBusinessCursor(
+            cursor,
+          );
+
+    if (
+      cursor !== undefined &&
+      !decodedCursor
+    ) {
+      return res.status(422).json({
+        success: false,
+        code: 'INVALID_CURSOR',
+        message:
+          'The pagination cursor is invalid or expired.',
+      });
+    }
+
+    try {
+      const conditions = [];
+      const params = [];
+      let idx = 1;
+
+      if (searchTerm) {
+        const searchParam = idx++;
+
+        conditions.push(
+          `(
+            LOWER(c.name)
+              LIKE $${searchParam}
+            OR LOWER(c.email)
+              LIKE $${searchParam}
+            OR EXISTS (
+              SELECT 1
+              FROM users owner_search
+              WHERE
+                owner_search.company_id =
+                  c.id
+                AND owner_search.role IN (
+                  'business_owner',
+                  'marketplace_seller'
+                )
+                AND LOWER(
+                  owner_search.email
+                ) LIKE $${searchParam}
+            )
+          )`,
+        );
+
+        params.push(
+          `${searchTerm.toLowerCase()}%`,
+        );
+      }
+
+      if (decodedCursor) {
+        const featuredParam = idx++;
+        const priorityParam = idx++;
+        const verifiedParam = idx++;
+        const nameParam = idx++;
+        const idParam = idx++;
+
+        conditions.push(
+          `(
+            c.marketplace_featured <
+              $${featuredParam}::boolean
+            OR (
+              c.marketplace_featured =
+                $${featuredParam}::boolean
+              AND
+              c.marketplace_featured_priority <
+                $${priorityParam}::integer
+            )
+            OR (
+              c.marketplace_featured =
+                $${featuredParam}::boolean
+              AND
+              c.marketplace_featured_priority =
+                $${priorityParam}::integer
+              AND
+              c.marketplace_verified <
+                $${verifiedParam}::boolean
+            )
+            OR (
+              c.marketplace_featured =
+                $${featuredParam}::boolean
+              AND
+              c.marketplace_featured_priority =
+                $${priorityParam}::integer
+              AND
+              c.marketplace_verified =
+                $${verifiedParam}::boolean
+              AND
+              c.name >
+                $${nameParam}
+            )
+            OR (
+              c.marketplace_featured =
+                $${featuredParam}::boolean
+              AND
+              c.marketplace_featured_priority =
+                $${priorityParam}::integer
+              AND
+              c.marketplace_verified =
+                $${verifiedParam}::boolean
+              AND
+              c.name =
+                $${nameParam}
+              AND
+              c.id >
+                $${idParam}::uuid
+            )
+          )`,
+        );
+
+        params.push(
+          decodedCursor.featured,
+          decodedCursor.priority,
+          decodedCursor.verified,
+          decodedCursor.name,
+          decodedCursor.id,
+        );
+      }
+
+      const where =
+        conditions.length
+          ? `WHERE ${conditions.join(
+              ' AND ',
+            )}`
+          : '';
+
+      const limitParam = idx++;
+
+      params.push(
+        parsedLimit + 1,
+      );
+
+      const result = await query(
+        `WITH page_companies
+           AS MATERIALIZED (
+          SELECT c.*
+          FROM companies c
+          ${where}
+          ORDER BY
+            c.marketplace_featured DESC,
+            c.marketplace_featured_priority DESC,
+            c.marketplace_verified DESC,
+            c.name ASC,
+            c.id ASC
+          LIMIT $${limitParam}
+        )
+        SELECT
+          c.id AS company_id,
+          c.name AS company_name,
+          c.phone AS company_phone,
+          c.email AS company_email,
+          c.address,
+          c.logo_url,
+          c.status AS company_status,
+          c.created_at,
+          c.marketplace_verified,
+          c.marketplace_verified_at,
+          c.marketplace_featured,
+          c.marketplace_featured_priority,
+          c.marketplace_featured_at,
+          owner.id AS owner_user_id,
+          owner.first_name,
+          owner.last_name,
+          owner.email,
+          owner.phone,
+          owner.status,
+          subscription.plan
+            AS subscription_plan,
+          subscription.status
+            AS subscription_status,
+          COALESCE(
+            metrics.active_ad_count,
+            0
+          )::int AS active_ad_count,
+          COALESCE(
+            metrics.average_rating,
+            0
+          )::float AS average_rating,
+          COALESCE(
+            metrics.review_count,
+            0
+          )::int AS review_count
+        FROM page_companies c
+        LEFT JOIN LATERAL (
+          SELECT
+            owner_candidate.id,
+            owner_candidate.first_name,
+            owner_candidate.last_name,
+            owner_candidate.email,
+            owner_candidate.phone,
+            owner_candidate.status
+          FROM users owner_candidate
+          WHERE
+            owner_candidate.company_id =
+              c.id
+            AND owner_candidate.role IN (
+              'business_owner',
+              'marketplace_seller'
+            )
+          ORDER BY
+            CASE
+              WHEN owner_candidate.role =
+                'business_owner'
+              THEN 0
+              ELSE 1
+            END ASC,
+            owner_candidate.created_at ASC,
+            owner_candidate.id ASC
+          LIMIT 1
+        ) owner ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT
+            s.plan,
+            s.status
+          FROM subscriptions s
+          WHERE s.company_id = c.id
+          ORDER BY
+            s.created_at DESC,
+            s.id DESC
+          LIMIT 1
+        ) subscription ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT
+            COUNT(
+              DISTINCT a.id
+            ) FILTER (
+              WHERE a.status = 'active'
+            )::int AS active_ad_count,
+            COALESCE(
+              AVG(ar.rating),
+              0
+            )::float AS average_rating,
+            COUNT(ar.id)::int
+              AS review_count
+          FROM advertisements a
+          LEFT JOIN ad_ratings ar
+            ON ar.advertisement_id =
+              a.id
+          WHERE a.company_id = c.id
+        ) metrics ON TRUE
+        ORDER BY
+          c.marketplace_featured DESC,
+          c.marketplace_featured_priority DESC,
+          c.marketplace_verified DESC,
+          c.name ASC,
+          c.id ASC`,
+        params,
+      );
+
+      const hasMore =
+        result.rows.length >
+        parsedLimit;
+
+      const rows =
+        hasMore
+          ? result.rows.slice(
+              0,
+              parsedLimit,
+            )
+          : result.rows;
+
+      const nextCursor =
+        hasMore && rows.length
+          ? encodeMarketplaceBusinessCursor(
+              rows[
+                rows.length - 1
+              ],
+            )
+          : null;
+
+      return res.json({
+        success: true,
+        data: rows,
+        meta: {
+          limit: parsedLimit,
+          has_more: hasMore,
+          next_cursor: nextCursor,
+        },
+      });
+    } catch (error) {
+      logger.error(
+        'List marketplace businesses cursor error:',
+        {
+          errorCode:
+            error?.code,
+          requestId:
+            req.requestId,
+        },
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          'Failed to fetch marketplace businesses',
+      });
+    }
+  },
+);
+
+// Legacy unbounded route retained for compatibility.
 router.get('/marketplace-businesses', async (req, res) => {
   try {
     const result = await query(
