@@ -73,9 +73,18 @@ describe('Support Cases contracts', () => {
 
   test('admin portal mounts a separate support inbox feature', () => {
     const app = read('admin_portal/src/App.jsx');
-    const panel = read('admin_portal/src/features/support/SupportCasesPanel.jsx');
+    const supportPage = read(
+      'admin_portal/src/features/support/SupportConsolePage.jsx'
+    );
+    const panel = read(
+      'admin_portal/src/features/support/SupportCasesPanel.jsx'
+    );
 
-    expect(app).toContain('<SupportCasesPanel />');
+    expect(app).toContain(
+      "from './features/support/SupportConsolePage.jsx'"
+    );
+    expect(app).not.toContain('<SupportCasesPanel />');
+    expect(supportPage).toContain('<SupportCasesPanel />');
     expect(panel).toContain("'/admin/support/cases'");
     expect(panel).toContain('`/admin/support/cases/${selectedId}`');
     expect(panel).toContain('`/admin/support/cases/${selectedId}/reply`');
