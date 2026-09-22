@@ -43,6 +43,9 @@ const adminPageFeatures = [
     'admin_portal/src/features/registrations/RegistrationsPage.jsx',
   ),
   read(
+    'admin_portal/src/features/subscriptions/SubscriptionsPage.jsx',
+  ),
+  read(
     'admin_portal/src/features/ussd/UssdAdminPages.jsx',
   ),
   read(
