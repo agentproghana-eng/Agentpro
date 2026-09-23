@@ -54,7 +54,7 @@ void main() {
 
       expect(
         source,
-        contains('_feeManuallyOverridden) &&
+        contains('_feeManuallyOverridden') &&
             contains('_recalculateAgentServiceFee()'),
       );
     });
