@@ -1393,7 +1393,6 @@ exports.login = async (req, res) => {
           personal_subscription_plan: user.personal_subscription_plan,
           personal_subscription_expires_at: user.personal_subscription_expires_at,
           profile_image_url: user.profile_image_url,
-          telecel_operator_id: user.telecel_operator_id,
           must_change_password: user.must_change_password
         }
       }
@@ -2013,9 +2012,6 @@ exports.completeMfa = async (req, res) => {
           profile_image_url:
             result.user
               .profile_image_url,
-          telecel_operator_id:
-            result.user
-              .telecel_operator_id,
           must_change_password:
             result.user
               .must_change_password,
@@ -3269,6 +3265,10 @@ exports.deleteAccount = async (
                  fcm_token = NULL,
                  must_change_password = FALSE,
                  telecel_operator_id = NULL,
+                 telecel_agent_operator_id_enc = NULL,
+                 telecel_agent_organisation_shortcode_enc = NULL,
+                 telecel_merchant_operator_id_enc = NULL,
+                 telecel_merchant_organisation_shortcode_enc = NULL,
                  agent_quick_actions =
                    '{}'::jsonb,
                  personal_quick_actions =

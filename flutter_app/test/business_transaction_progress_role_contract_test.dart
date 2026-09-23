@@ -80,15 +80,17 @@ void main() {
   );
 
   test(
-    'hardcoded accessibility menus remain Agent only',
+    'hardcoded MTN accessibility menu remains Agent only',
     () {
-      final count = RegExp(
-        r"expectedBusinessRole == 'agent'",
-      ).allMatches(source).length;
-
       expect(
-        count,
-        greaterThanOrEqualTo(2),
+        source,
+        contains(
+          "final isMtnAccessibilityFlow = expectedBusinessRole == 'agent' &&",
+        ),
+      );
+      expect(
+        source,
+        contains("provider == 'mtn'"),
       );
     },
   );

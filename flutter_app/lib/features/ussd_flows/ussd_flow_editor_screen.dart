@@ -82,6 +82,7 @@ class _UssdFlowEditorScreenState extends State<UssdFlowEditorScreen> {
     {'value': 'send_account_number', 'label': 'Send Account Number'},
     {'value': 'send_amount', 'label': 'Send Amount'},
     {'value': 'send_operator_id', 'label': 'Send Operator ID'},
+    {'value': 'send_organisation_shortcode', 'label': 'Send Organisation Shortcode'},
     {'value': 'send_reference', 'label': 'Send Reference'},
     {'value': 'send_merchant_id', 'label': 'Send Merchant / Till ID'},
     {'value': 'send_selection', 'label': 'Send Dynamic Selection'},

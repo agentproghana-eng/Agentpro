@@ -615,39 +615,18 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             transactionType == 'cash_out' ||
             transactionType == 'send_money');
 
-    final isTelecelDepositFlow = expectedBusinessRole == 'agent' &&
-        provider == 'telecel' &&
-        transactionType == 'cash_in';
-
-    // Telecel Operator ID is only actually needed by flows whose steps
-    // include a send_operator_id action (Telecel Airtime, and the
-    // hardcoded Deposit flow) - fetched here unconditionally so it's
-    // available to pass along either way, but NOT blanket-required for
-    // every Telecel transaction the way this used to work. That
-    // blanket requirement blocked any other Telecel flow (e.g. Send
-    // Money Same Network) for any account that never set this
-    // Agent-only value, which a Personal account has no reason to have
-    // done. The actual requirement is enforced natively in
-    // UssdAccessibilityChannel.kt's needsOperatorId check, which knows
-    // the resolved flow's real steps at the point it matters - this
-    // layer doesn't need to duplicate that logic or guess in advance.
-    String? telecelOperatorId;
-    if (provider == 'telecel') {
-      if (!mounted) return;
-
-      final authState = context.read<AuthBloc>().state;
-      telecelOperatorId = authState is AuthAuthenticated
-          ? authState.user['telecel_operator_id'] as String?
-          : null;
-    }
-
-    if (isMtnAccessibilityFlow || isTelecelDepositFlow) {
+    // MTN Agent Cash In/Out/Send Money still use their dedicated native
+    // execution path. Telecel Agent Cash In deliberately does not bypass
+    // Flow Builder: its resolved flow contains send_operator_id, so the
+    // protected execution boundary can derive and supply only the required
+    // Agent credential immediately before execution.
+    if (isMtnAccessibilityFlow) {
       await _startAccessibilityAutomation(
         transactionId,
         automationParams,
         transactionType,
         provider,
-        telecelOperatorId,
+        null,
         simSlot: simSlot,
         businessSimRole: expectedBusinessRole,
       );
@@ -669,11 +648,11 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         automationParams: Map<String, String>.from(automationParams),
         transactionType: transactionType,
         provider: provider,
-        telecelOperatorId: telecelOperatorId,
         simSlot: simSlot,
         businessSimRole: expectedBusinessRole,
         flowData: Map<String, dynamic>.from(suppliedCachedFlow),
         selectionsInOrder: selectionsInOrder,
+        isOnlineResolvedFlow: false,
       );
       return;
     }
@@ -739,11 +718,11 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         automationParams: Map<String, String>.from(automationParams),
         transactionType: transactionType,
         provider: provider,
-        telecelOperatorId: telecelOperatorId,
         simSlot: simSlot,
         businessSimRole: expectedBusinessRole,
         flowData: flowData,
         selectionsInOrder: selectionsInOrder,
+        isOnlineResolvedFlow: true,
       );
       return;
     } on DioException catch (error) {
@@ -806,11 +785,11 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
           automationParams: Map<String, String>.from(automationParams),
           transactionType: transactionType,
           provider: provider,
-          telecelOperatorId: telecelOperatorId,
-          simSlot: simSlot,
+            simSlot: simSlot,
           businessSimRole: expectedBusinessRole,
           flowData: fallbackCachedFlow,
           selectionsInOrder: selectionsInOrder,
+          isOnlineResolvedFlow: false,
         );
         return;
       }
@@ -952,11 +931,11 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     required Map<String, String> automationParams,
     required String transactionType,
     required String provider,
-    required String? telecelOperatorId,
     required int simSlot,
     String? businessSimRole,
     required Map<String, dynamic> flowData,
     required List<String> selectionsInOrder,
+    required bool isOnlineResolvedFlow,
   }) async {
     final rawSteps = flowData['steps'];
     final dialCode = flowData['dial_code'];
@@ -972,6 +951,19 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     final steps =
         rawSteps.map((step) => Map<String, dynamic>.from(step as Map)).toList();
 
+    final needsTelecelOperatorId = steps.any(
+      (step) => step['action'] == 'send_operator_id',
+    );
+
+    final needsTelecelOrganisationShortcode = steps.any(
+      (step) => step['action'] == 'send_organisation_shortcode',
+    );
+
+    final needsProtectedTelecelCredential =
+        provider == 'telecel' &&
+        (needsTelecelOperatorId ||
+            needsTelecelOrganisationShortcode);
+
     final resolvedFlowId =
         flowData['id']
             ?.toString()
@@ -982,6 +974,188 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         resolvedFlowId.isEmpty
             ? null
             : resolvedFlowId;
+
+    String? protectedOperatorId;
+    String? protectedOrganisationShortcode;
+
+    if (needsProtectedTelecelCredential) {
+      // Personal flows must never enter the Business protected-credential
+      // boundary.
+      if (widget.isPersonal) {
+        const reason =
+            'Protected Business Telecel credentials cannot be used '
+            'for a Personal transaction.';
+
+        if (mounted) {
+          setState(() => _simWarning = reason);
+        }
+
+        await _reportResult(
+          transactionId,
+          const USSDResult(
+            outcome: USSDStatus.failed,
+            failureReason: reason,
+            sessionLog: [],
+          ),
+        );
+        return;
+      }
+
+      final role =
+          businessSimRole?.trim().toLowerCase() ?? '';
+
+      if (!const {'agent', 'merchant'}.contains(role)) {
+        const reason =
+            'A valid Telecel Agent or Merchant SIM role is required '
+            'before protected USSD automation can start.';
+
+        if (mounted) {
+          setState(() => _simWarning = reason);
+        }
+
+        await _reportResult(
+          transactionId,
+          const USSDResult(
+            outcome: USSDStatus.failed,
+            failureReason: reason,
+            sessionLog: [],
+          ),
+        );
+        return;
+      }
+
+      // Protected Telecel credentials may only be requested for a flow
+      // freshly resolved from the authenticated online resolver. Cached flows
+      // can retain a valid server flow ID, so ID presence alone is not proof
+      // of online provenance.
+      if (!isOnlineResolvedFlow || resolvedFlowId.isEmpty) {
+        const reason =
+            'This Telecel transaction needs a protected credential and '
+            'requires an online connection before USSD can start.';
+
+        if (mounted) {
+          setState(() => _simWarning = reason);
+        }
+
+        await _reportResult(
+          transactionId,
+          const USSDResult(
+            outcome: USSDStatus.failed,
+            failureReason: reason,
+            sessionLog: [],
+          ),
+        );
+        return;
+      }
+
+      try {
+        final credentialResponse =
+            await ApiClient.instance.post(
+          '/ussd-flows/execution-credentials',
+          data: {
+            'flow_id': resolvedFlowId,
+            'sim_role': role,
+          },
+        );
+
+        final rawCredentialData =
+            credentialResponse.data['data'];
+
+        if (rawCredentialData is! Map) {
+          throw const FormatException(
+            'Invalid protected credential response',
+          );
+        }
+
+        final credentialData =
+            Map<String, dynamic>.from(
+          rawCredentialData,
+        );
+
+        if (
+          credentialData['flow_id']?.toString() !=
+              resolvedFlowId ||
+          credentialData['sim_role']?.toString() != role
+        ) {
+          throw const FormatException(
+            'Protected credential scope mismatch',
+          );
+        }
+
+        if (needsTelecelOperatorId) {
+          final value =
+              credentialData['operator_id']?.toString();
+
+          if (value == null || value.trim().isEmpty) {
+            throw const FormatException(
+              'Required Telecel Operator ID unavailable',
+            );
+          }
+
+          protectedOperatorId = value;
+        }
+
+        if (needsTelecelOrganisationShortcode) {
+          final value =
+              credentialData['organisation_shortcode']
+                  ?.toString();
+
+          if (value == null || value.trim().isEmpty) {
+            throw const FormatException(
+              'Required Telecel Organisation Shortcode unavailable',
+            );
+          }
+
+          protectedOrganisationShortcode = value;
+        }
+      } on DioException catch (error) {
+        final responseData = error.response?.data;
+
+        final serverMessage =
+            responseData is Map
+                ? responseData['message']?.toString()
+                : null;
+
+        final reason =
+            serverMessage == null ||
+                    serverMessage.trim().isEmpty
+                ? 'Protected Telecel credentials could not be prepared. '
+                    'No USSD request was sent.'
+                : serverMessage;
+
+        if (mounted) {
+          setState(() => _simWarning = reason);
+        }
+
+        await _reportResult(
+          transactionId,
+          USSDResult(
+            outcome: USSDStatus.failed,
+            failureReason: reason,
+            sessionLog: const [],
+          ),
+        );
+        return;
+      } catch (_) {
+        const reason =
+            'Protected Telecel credentials could not be prepared. '
+            'No USSD request was sent.';
+
+        if (mounted) {
+          setState(() => _simWarning = reason);
+        }
+
+        await _reportResult(
+          transactionId,
+          const USSDResult(
+            outcome: USSDStatus.failed,
+            failureReason: reason,
+            sessionLog: [],
+          ),
+        );
+        return;
+      }
+    }
 
     _activeFlowStepCount =
         steps.length;
@@ -1094,9 +1268,11 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       automationParams,
       transactionType,
       provider,
-      telecelOperatorId,
+      protectedOperatorId,
       simSlot: simSlot,
       businessSimRole: businessSimRole,
+      organisationShortcode:
+          protectedOrganisationShortcode,
       dialCode: dialCode,
       steps: steps,
       successMarkers: successMarkers,
@@ -1269,6 +1445,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     String? operatorId, {
     required int simSlot,
     String? businessSimRole,
+    String? organisationShortcode,
     String? dialCode,
     List<Map<String, dynamic>>? steps,
     List<String>? successMarkers,
@@ -1393,6 +1570,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       provider: provider,
       businessSimRole: businessSimRole,
       operatorId: operatorId,
+      organisationShortcode:
+          organisationShortcode,
       reference: automationParams['payment_reference'],
       merchantId: automationParams['merchant_id'],
       accountNumber: automationParams['account_number'],

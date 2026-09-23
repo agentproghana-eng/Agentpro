@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/services/biometric_service.dart';
 import '../../core/auth/auth_bloc.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_theme.dart';
@@ -23,77 +24,337 @@ class UssdSettingsScreen extends StatefulWidget {
 }
 
 class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
-  final _operatorIdCtrl = TextEditingController();
+  bool _loadingTelecelCredentialStatus = false;
+  bool _savingTelecelCredential = false;
 
-  bool _savingOperatorId = false;
+  bool _agentOperatorConfigured = false;
+  bool _agentShortcodeConfigured = false;
+  bool _merchantOperatorConfigured = false;
+  bool _merchantShortcodeConfigured = false;
 
   @override
   void initState() {
     super.initState();
-    _loadOperatorId();
+    _loadTelecelCredentialStatus();
   }
 
-  @override
-  void dispose() {
-    _operatorIdCtrl.dispose();
-    super.dispose();
-  }
 
-  void _loadOperatorId() {
-    final state = context.read<AuthBloc>().state;
 
-    if (state is! AuthAuthenticated) {
-      return;
+  Future<void> _loadTelecelCredentialStatus() async {
+    if (widget.isPersonal) return;
+
+    if (mounted) {
+      setState(() {
+        _loadingTelecelCredentialStatus = true;
+      });
     }
-
-    _operatorIdCtrl.text = state.user['telecel_operator_id']?.toString() ?? '';
-  }
-
-  Future<void> _saveOperatorId() async {
-    final value = _operatorIdCtrl.text.trim();
-
-    if (value.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a Telecel Operator ID')),
-      );
-      return;
-    }
-
-    setState(() => _savingOperatorId = true);
 
     try {
-      await ApiClient.instance.patch(
-        '/users/me/settings',
-        data: {'telecel_operator_id': value},
+      final response = await ApiClient.instance.get(
+        '/users/me/telecel-credentials/status',
       );
 
-      if (!mounted) {
+      final raw = response.data;
+      final data = raw is Map<String, dynamic>
+          ? raw['data']
+          : null;
+
+      if (!mounted || data is! Map<String, dynamic>) {
         return;
       }
 
-      context.read<AuthBloc>().add(
-            AuthUpdateUserEvent({'telecel_operator_id': value}),
-          );
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Telecel Operator ID saved')),
-      );
+      setState(() {
+        _agentOperatorConfigured =
+            data['telecel_agent_operator_id_configured'] == true;
+        _agentShortcodeConfigured =
+            data['telecel_agent_organisation_shortcode_configured'] == true;
+        _merchantOperatorConfigured =
+            data['telecel_merchant_operator_id_configured'] == true;
+        _merchantShortcodeConfigured =
+            data['telecel_merchant_organisation_shortcode_configured'] == true;
+      });
     } catch (_) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Failed to save Telecel Operator ID'),
+          content: Text(
+            'Could not load protected Telecel credential status.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingTelecelCredentialStatus = false;
+        });
+      }
+    }
+  }
+
+  Future<bool> _authenticateCredentialChange() async {
+    final result =
+        await BiometricService.authenticateSensitiveAction();
+
+    if (!mounted) return false;
+
+    switch (result) {
+      case BiometricResult.success:
+        return true;
+
+      case BiometricResult.cancelled:
+        return false;
+
+      case BiometricResult.notAvailable:
+      case BiometricResult.notEnrolled:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Set up a phone screen lock, fingerprint, '
+              'or face unlock before changing protected credentials.',
+            ),
+          ),
+        );
+        return false;
+
+      case BiometricResult.lockedOut:
+      case BiometricResult.permanentlyLockedOut:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Phone authentication is locked. '
+              'Unlock your phone and try again.',
+            ),
+          ),
+        );
+        return false;
+
+      case BiometricResult.error:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Phone authentication could not be completed.',
+            ),
+          ),
+        );
+        return false;
+    }
+  }
+
+  Future<void> _editProtectedTelecelCredential({
+    required String simRole,
+    required String credentialType,
+    required String title,
+  }) async {
+    if (_savingTelecelCredential) return;
+
+    final authenticated =
+        await _authenticateCredentialChange();
+
+    if (!authenticated || !mounted) return;
+
+    // Create plaintext state only after successful phone authentication.
+    final controller = TextEditingController();
+
+    final value = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(title),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            obscureText: true,
+            enableSuggestions: false,
+            autocorrect: false,
+            maxLength: 32,
+            decoration: InputDecoration(
+              labelText: title,
+              hintText: 'Enter protected value',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final normalized =
+                    controller.text.trim();
+
+                if (normalized.isEmpty) return;
+
+                Navigator.of(dialogContext).pop(
+                  normalized,
+                );
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+
+    // Do not retain plaintext in screen state.
+    controller.clear();
+    controller.dispose();
+
+    if (value == null || value.isEmpty || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _savingTelecelCredential = true;
+    });
+
+    try {
+      final field =
+          credentialType == 'operator_id'
+              ? 'telecel_operator_id'
+              : 'telecel_organisation_shortcode';
+
+      await ApiClient.instance.patch(
+        '/users/me/settings',
+        data: {
+          'telecel_sim_role': simRole,
+          field: value,
+        },
+      );
+
+      if (!mounted) return;
+
+      await _loadTelecelCredentialStatus();
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$title saved securely.'),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not save protected Telecel credential.',
+          ),
           backgroundColor: AppTheme.errorColor,
         ),
       );
     } finally {
       if (mounted) {
-        setState(() => _savingOperatorId = false);
+        setState(() {
+          _savingTelecelCredential = false;
+        });
       }
     }
+  }
+
+  Widget _protectedCredentialRow({
+    required String simRole,
+    required String credentialType,
+    required String label,
+    required bool configured,
+  }) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(
+        label,
+        style: const TextStyle(
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      subtitle: Text(
+        configured
+            ? '••••••••  Configured'
+            : 'Not configured',
+      ),
+      trailing: TextButton(
+        onPressed: _savingTelecelCredential
+            ? null
+            : () => _editProtectedTelecelCredential(
+                  simRole: simRole,
+                  credentialType: credentialType,
+                  title:
+                      '${simRole == 'agent' ? 'Agent' : 'Merchant'} $label',
+                ),
+        child: Text(
+          configured ? 'Change' : 'Set',
+        ),
+      ),
+    );
+  }
+
+  Widget _telecelProtectedCredentialsCard(
+    BuildContext context,
+  ) {
+    return _sectionCard(
+      context: context,
+      icon: Icons.shield_outlined,
+      title: 'Telecel protected credentials',
+      description:
+          'Operator IDs and Organisation Shortcodes stay masked '
+          'after saving. Phone authentication is required before '
+          'setting or replacing them.',
+      child: _loadingTelecelCredentialStatus
+          ? const Padding(
+              padding: EdgeInsets.all(18),
+              child: Center(
+                child: CircularProgressIndicator(),
+              ),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'AGENT',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                _protectedCredentialRow(
+                  simRole: 'agent',
+                  credentialType: 'operator_id',
+                  label: 'Operator ID',
+                  configured: _agentOperatorConfigured,
+                ),
+                _protectedCredentialRow(
+                  simRole: 'agent',
+                  credentialType: 'organisation_shortcode',
+                  label: 'Organisation Shortcode',
+                  configured: _agentShortcodeConfigured,
+                ),
+                const Divider(),
+                const SizedBox(height: 6),
+                const Text(
+                  'MERCHANT',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                _protectedCredentialRow(
+                  simRole: 'merchant',
+                  credentialType: 'operator_id',
+                  label: 'Operator ID',
+                  configured: _merchantOperatorConfigured,
+                ),
+                _protectedCredentialRow(
+                  simRole: 'merchant',
+                  credentialType: 'organisation_shortcode',
+                  label: 'Organisation Shortcode',
+                  configured: _merchantShortcodeConfigured,
+                ),
+              ],
+            ),
+    );
   }
 
   Future<void> _createAutomation() async {
@@ -247,43 +508,6 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
     );
   }
 
-  Widget _telecelOperatorCard(BuildContext context) {
-    return _sectionCard(
-      context: context,
-      icon: Icons.sim_card_outlined,
-      title: 'Telecel Operator ID',
-      description:
-          'Used when a Telecel Agent transaction requires your assigned '
-          'operator identifier. This is separate from USSD flow design.',
-      child: Column(
-        children: [
-          TextField(
-            controller: _operatorIdCtrl,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Operator ID',
-              hintText: 'e.g. 8284',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _savingOperatorId ? null : _saveOperatorId,
-              child: _savingOperatorId
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Save Operator ID'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -342,7 +566,7 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
             _managedByOwnerCard(context),
           if (!widget.isPersonal) ...[
             const SizedBox(height: 12),
-            _telecelOperatorCard(context),
+            _telecelProtectedCredentialsCard(context),
           ],
           const SizedBox(height: 20),
         ],

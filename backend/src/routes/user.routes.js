@@ -149,6 +149,10 @@ userRouter.post(
 
 userRouter.patch('/me/password', userController.changePassword);
 userRouter.patch('/me/settings', userController.updateMySettings);
+userRouter.get(
+  '/me/telecel-credentials/status',
+  userController.getMyTelecelCredentialStatus,
+);
 userRouter.get('/me/quick-actions/catalog', userController.getMyQuickActionCatalog);
 userRouter.get('/me/quick-actions', userController.getMyQuickActions);
 userRouter.patch('/me/quick-actions', userController.updateMyQuickActions);

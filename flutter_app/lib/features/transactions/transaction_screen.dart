@@ -1921,6 +1921,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
                           child: Text(
                             'TRANSFER TO WORKING ACCOUNT',
                             textAlign: TextAlign.center,
+                            maxLines: 2,
+                            softWrap: true,
+                            overflow: TextOverflow.visible,
                             style: TextStyle(
                               fontWeight: FontWeight.w800,
                             ),
@@ -1947,6 +1950,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
                           child: Text(
                             'TRANSFER TO MERCHANT ACCOUNT',
                             textAlign: TextAlign.center,
+                            maxLines: 2,
+                            softWrap: true,
+                            overflow: TextOverflow.visible,
                             style: TextStyle(
                               fontWeight: FontWeight.w800,
                             ),
