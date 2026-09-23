@@ -1811,7 +1811,6 @@ class _TransactionScreenState extends State<TransactionScreen> {
               ],
 
               if (_isMtnCashInOutWorkspace) ...[
-                ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
@@ -2175,6 +2174,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
             ],
           ),
         ),
+      ),
       ),
       bottomNavigationBar: SafeArea(
         top: false,
