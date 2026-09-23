@@ -1273,6 +1273,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: Text(_title),
         actions: [
@@ -1810,14 +1811,6 @@ class _TransactionScreenState extends State<TransactionScreen> {
               ],
 
               if (_isMtnCashInOutWorkspace) ...[
-                Text(
-                  'Choose transaction',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: context.appSecondaryText,
-                  ),
-                ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
@@ -2173,57 +2166,33 @@ class _TransactionScreenState extends State<TransactionScreen> {
                       ),
                     ],
                   ),
-                )
-              else
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: context.isDarkMode
-                        ? Colors.blue[900]!.withValues(alpha: 0.25)
-                        : Colors.blue[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: context.isDarkMode
-                          ? Colors.blue[700]!
-                          : Colors.blue[200]!,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.security,
-                        color:
-                            context.isDarkMode ? Colors.blue[200] : Colors.blue,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'You will enter your MoMo PIN only on the official network USSD screen. '
-                          'AgentPro never asks for your PIN.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: context.isDarkMode
-                                ? Colors.blue[200]
-                                : Colors.blue[900],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
 
-              const SizedBox(height: 24),
-
-              AppButton(
-                label: _isManualCashOut
-                    ? 'Record Cash Out'
-                    : 'Proceed to ${_needsAmount ? 'Confirm' : 'Execute'}',
-                onPressed: _proceed,
-                isLoading: _loading,
-                icon: Icons.arrow_forward,
-              ),
+              // Reserve enough space so the final form controls remain
+              // scrollable above the persistent primary action.
+              const SizedBox(height: 12),
             ],
+          ),
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: AnimatedPadding(
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOut,
+          padding: EdgeInsets.fromLTRB(
+            16,
+            8,
+            16,
+            MediaQuery.viewInsetsOf(context).bottom > 0 ? 8 : 16,
+          ),
+          child: AppButton(
+            label: _isManualCashOut
+                ? 'Record Cash Out'
+                : 'Proceed to ${_needsAmount ? 'Confirm' : 'Execute'}',
+            onPressed: _proceed,
+            isLoading: _loading,
+            icon: Icons.arrow_forward,
           ),
         ),
       ),
