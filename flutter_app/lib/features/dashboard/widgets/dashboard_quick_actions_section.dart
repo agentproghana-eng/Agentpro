@@ -186,9 +186,32 @@ class DashboardQuickActionsSection extends StatelessWidget {
         return fallback.where((item) => item.isVisible).take(9).toList();
       }
 
-      // EVD and Merchant deliberately have no Agent fallback
-      // catalog. They appear only when role-specific preferences
-      // have actually been configured.
+      // Merchant must never inherit Agent actions. Telecel Merchant,
+      // however, has a small role-specific default set so a valid
+      // Merchant SIM does not render an empty dashboard merely because
+      // the user has not saved custom Merchant preferences yet.
+      if (role == 'merchant' && provider == 'telecel') {
+        const telecelMerchantDefaults = <String>[
+          'airtime',
+          'balance_enquiry',
+          'float_to_working',
+          'working_to_float',
+        ];
+
+        return telecelMerchantDefaults
+            .asMap()
+            .entries
+            .map(
+              (entry) => QuickActionPreference(
+                actionKey: entry.value,
+                position: entry.key,
+              ),
+            )
+            .toList();
+      }
+
+      // EVD and other Merchant/provider combinations deliberately have
+      // no Agent fallback catalog.
       return const <QuickActionPreference>[];
     }
 
@@ -306,8 +329,12 @@ class DashboardQuickActionsSection extends StatelessWidget {
       );
     }
 
+    final hasRoleSpecificDefaults =
+        role == 'merchant' && provider == 'telecel';
+
     if ((role == 'evd' || role == 'merchant') &&
-        hasVisibleSavedActions == false) {
+        hasVisibleSavedActions == false &&
+        hasRoleSpecificDefaults == false) {
       return _withSimSelector(
         sims: sims,
         selected: sim,
