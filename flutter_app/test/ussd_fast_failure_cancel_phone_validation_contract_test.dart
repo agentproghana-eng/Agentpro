@@ -201,7 +201,11 @@ void main() {
     );
     expect(
       transaction,
-      contains('_feeAutoCalculated = true'),
+      contains('_agentServiceFeeEnabled = false'),
+    );
+    expect(
+      transaction,
+      contains('_feeManuallyOverridden = false'),
     );
     expect(
       transaction,

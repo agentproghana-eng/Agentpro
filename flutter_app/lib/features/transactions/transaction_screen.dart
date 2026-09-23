@@ -2042,7 +2042,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
               if (_needsReference) ...[
                 AppTextField(
                   transactionEmphasis: true,
-                  transactionValueFontSize: 28,
+                  transactionValueFontSize: 20,
                   controller: _referenceCtrl,
                   label: 'Reference',
                   prefixIcon: Icons.notes_outlined,

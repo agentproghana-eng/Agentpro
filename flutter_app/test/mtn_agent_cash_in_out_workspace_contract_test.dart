@@ -149,10 +149,10 @@ void main() {
       );
     });
 
-    test('reference is visually secondary', () {
+    test('reference remains visually secondary', () {
       expect(
         transaction,
-        contains('transactionLabelFontSize: 13'),
+        contains('transactionValueFontSize: 20'),
       );
     });
 

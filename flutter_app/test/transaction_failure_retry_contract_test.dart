@@ -98,8 +98,16 @@ void main() {
       2,
     );
     expect(
-      RegExp(r"progressAction == 'retry_now'").allMatches(business).length,
-      2,
+      business,
+      contains('_handleProgressAction(progressAction)'),
+    );
+    expect(
+      business,
+      contains("if (action == 'retry_now')"),
+    );
+    expect(
+      business,
+      contains('await _proceed();'),
     );
     expect(
       business,

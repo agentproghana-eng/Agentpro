@@ -23,7 +23,7 @@ void main() {
       );
     });
 
-    test('reference can use a smaller entered-value size', () {
+    test('reference can use a smaller 20px entered-value size', () {
       expect(
         widgets,
         contains('final double? transactionValueFontSize;'),
@@ -71,7 +71,7 @@ void main() {
       expect(block, isNot(contains('fontSize: 20')));
     });
 
-    test('business reference entered value is 28px', () {
+    test('business reference entered value is 20px', () {
       final refStart =
           business.indexOf('controller: _referenceCtrl');
 
@@ -85,11 +85,11 @@ void main() {
       expect(before, contains('transactionEmphasis: true'));
       expect(
         before,
-        contains('transactionValueFontSize: 28'),
+        contains('transactionValueFontSize: 20'),
       );
     });
 
-    test('personal reference entered value is 28px', () {
+    test('personal reference entered value is 20px', () {
       final refStart =
           personal.indexOf('controller: _referenceCtrl');
 
@@ -103,7 +103,7 @@ void main() {
       expect(before, contains('transactionEmphasis: true'));
       expect(
         before,
-        contains('transactionValueFontSize: 28'),
+        contains('transactionValueFontSize: 20'),
       );
     });
   });
