@@ -121,19 +121,16 @@ class BiometricService {
       return authenticated
           ? BiometricResult.success
           : BiometricResult.cancelled;
-    } on LocalAuthException catch (error) {
-      switch (error.code) {
-        case LocalAuthExceptionCode.noBiometricHardware:
-        case LocalAuthExceptionCode.noBiometricsEnrolled:
-        case LocalAuthExceptionCode.noCredentialsSet:
+    } on PlatformException catch (e) {
+      switch (e.code) {
+        case auth_error.notAvailable:
           return BiometricResult.notAvailable;
-
-        case LocalAuthExceptionCode.temporaryLockout:
+        case auth_error.notEnrolled:
+          return BiometricResult.notEnrolled;
+        case auth_error.lockedOut:
           return BiometricResult.lockedOut;
-
-        case LocalAuthExceptionCode.biometricLockout:
+        case auth_error.permanentlyLockedOut:
           return BiometricResult.permanentlyLockedOut;
-
         default:
           return BiometricResult.error;
       }
