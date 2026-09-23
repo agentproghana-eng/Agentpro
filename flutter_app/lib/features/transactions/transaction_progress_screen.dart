@@ -1944,6 +1944,19 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
           orElse: () => '',
         );
 
+    final processingAmountRaw =
+        widget.data['amount']?.toString().trim().isNotEmpty == true
+            ? widget.data['amount'].toString().trim()
+            : requestFields['amount']?.toString().trim() ?? '';
+
+    final processingAmount =
+        double.tryParse(processingAmountRaw.replaceAll(',', ''));
+
+    final processingAmountLabel =
+        processingAmount != null && processingAmount > 0
+            ? 'GH₵ ${processingAmount.toStringAsFixed(2)}'
+            : '';
+
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
@@ -2024,6 +2037,16 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
                           color: context.appSecondaryText,
                         ),
                       ),
+                      if (processingAmountLabel.isNotEmpty) ...[
+                        const SizedBox(height: 5),
+                        Text(
+                          processingAmountLabel,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
                       if (processingPhone.isNotEmpty) ...[
                         const SizedBox(height: 3),
                         Text(
@@ -2543,8 +2566,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
                     'GH₵ ${parsedAmount.toStringAsFixed(2)}',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                      fontSize: 30,
-                      fontWeight: FontWeight.w900,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ],
