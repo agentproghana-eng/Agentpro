@@ -2205,6 +2205,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     required String label,
     required String value,
     Color? valueColor,
+    double valueFontSize = 13,
+    FontWeight valueFontWeight = FontWeight.w700,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 9),
@@ -2238,8 +2240,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
                   value,
                   style: TextStyle(
                     color: valueColor,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
+                    fontSize: valueFontSize,
+                    fontWeight: valueFontWeight,
                   ),
                 ),
               ],
@@ -2297,16 +2299,45 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     );
   }
 
+  bool get _isMtnCashInOutWorkspace =>
+      !widget.isPersonal &&
+      widget.data['mtn_cash_in_out_workspace'] == true &&
+      widget.data['provider']?.toString() == 'mtn';
+
+  void _notifyTransactionCompleted() {
+    DashboardRefreshService.notifyTransactionCompleted(
+      isPersonal: widget.isPersonal,
+      provider: widget.data['provider']?.toString() ?? 'mtn',
+      simSlot: _parseSimSlot(widget.data['sim_slot']),
+    );
+  }
+
   void _returnHome({required bool refreshDashboard}) {
     if (refreshDashboard) {
-      DashboardRefreshService.notifyTransactionCompleted(
-        isPersonal: widget.isPersonal,
-        provider: widget.data['provider']?.toString() ?? 'mtn',
-        simSlot: _parseSimSlot(widget.data['sim_slot']),
-      );
+      _notifyTransactionCompleted();
     }
 
     context.go(widget.isPersonal ? '/personal-home' : '/agent');
+  }
+
+  void _finishResult({
+    required String workspaceAction,
+    required bool refreshDashboard,
+  }) {
+    if (!mounted) return;
+
+    if (_isMtnCashInOutWorkspace) {
+      if (refreshDashboard) {
+        _notifyTransactionCompleted();
+      }
+
+      if (context.canPop()) {
+        context.pop(workspaceAction);
+      }
+      return;
+    }
+
+    _returnHome(refreshDashboard: refreshDashboard);
   }
 
   bool _isRetryableInitiationError(DioException error) {
@@ -2517,6 +2548,17 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
                     ),
                   ),
                 ],
+                if (customerPhone.isNotEmpty) ...[
+                  SizedBox(height: showAmount ? 6 : 18),
+                  SelectableText(
+                    customerPhone,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 30,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -2563,23 +2605,14 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
                       ? 'Mobile Money Transaction'
                       : transactionType,
                 ),
-                if (customerPhone.isNotEmpty) ...[
-                  const Divider(height: 1),
-                  _resultDetailRow(
-                    icon: Icons.phone_outlined,
-                    label: rawType == 'business_deposit' ||
-                            rawType == 'business_withdrawal'
-                        ? 'Agent Short Code'
-                        : 'Customer Number',
-                    value: customerPhone,
-                  ),
-                ],
                 if (reference.isNotEmpty) ...[
                   const Divider(height: 1),
                   _resultDetailRow(
                     icon: Icons.tag,
                     label: 'AgentPro Reference',
                     value: compactTransactionReference(reference),
+                    valueFontSize: 11,
+                    valueFontWeight: FontWeight.w600,
                   ),
                 ],
                 if (networkReference.isNotEmpty) ...[
@@ -2588,6 +2621,8 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
                     icon: Icons.confirmation_number_outlined,
                     label: 'Network Reference',
                     value: networkReference,
+                    valueFontSize: 11,
+                    valueFontWeight: FontWeight.w600,
                   ),
                 ],
                 const Divider(height: 1),
@@ -2664,9 +2699,16 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             ),
             const SizedBox(height: 12),
             AppButton(
-              label: 'Done',
-              icon: Icons.home_outlined,
-              onPressed: () => _returnHome(refreshDashboard: true),
+              label: _isMtnCashInOutWorkspace
+                  ? 'Back to Cash In/Out'
+                  : 'Done',
+              icon: _isMtnCashInOutWorkspace
+                  ? Icons.swap_horiz_rounded
+                  : Icons.home_outlined,
+              onPressed: () => _finishResult(
+                workspaceAction: 'success',
+                refreshDashboard: true,
+              ),
               outlined: true,
             ),
           ] else if (isPending) ...[
@@ -2679,9 +2721,16 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             ),
             const SizedBox(height: 12),
             AppButton(
-              label: 'Go Home',
-              icon: Icons.home_outlined,
-              onPressed: () => _returnHome(refreshDashboard: true),
+              label: _isMtnCashInOutWorkspace
+                  ? 'Back to Cash In/Out'
+                  : 'Go Home',
+              icon: _isMtnCashInOutWorkspace
+                  ? Icons.swap_horiz_rounded
+                  : Icons.home_outlined,
+              onPressed: () => _finishResult(
+                workspaceAction: 'pending_confirmation',
+                refreshDashboard: true,
+              ),
               outlined: true,
             ),
           ] else if (canRetryDefiniteFailure) ...[
@@ -2699,9 +2748,16 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             ),
             const SizedBox(height: 12),
             AppButton(
-              label: 'Go Home',
-              icon: Icons.home_outlined,
-              onPressed: () => _returnHome(refreshDashboard: false),
+              label: _isMtnCashInOutWorkspace
+                  ? 'Back to Cash In/Out'
+                  : 'Go Home',
+              icon: _isMtnCashInOutWorkspace
+                  ? Icons.swap_horiz_rounded
+                  : Icons.home_outlined,
+              onPressed: () => _finishResult(
+                workspaceAction: 'failed',
+                refreshDashboard: false,
+              ),
               outlined: true,
             ),
           ] else if (!widget.isPersonal &&
@@ -2715,16 +2771,30 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             ),
             const SizedBox(height: 12),
             AppButton(
-              label: 'Go Home',
-              icon: Icons.home_outlined,
-              onPressed: () => _returnHome(refreshDashboard: false),
+              label: _isMtnCashInOutWorkspace
+                  ? 'Back to Cash In/Out'
+                  : 'Go Home',
+              icon: _isMtnCashInOutWorkspace
+                  ? Icons.swap_horiz_rounded
+                  : Icons.home_outlined,
+              onPressed: () => _finishResult(
+                workspaceAction: 'failed',
+                refreshDashboard: false,
+              ),
               outlined: true,
             ),
           ] else ...[
             AppButton(
-              label: 'Go Home',
-              icon: Icons.home_outlined,
-              onPressed: () => _returnHome(refreshDashboard: false),
+              label: _isMtnCashInOutWorkspace
+                  ? 'Back to Cash In/Out'
+                  : 'Go Home',
+              icon: _isMtnCashInOutWorkspace
+                  ? Icons.swap_horiz_rounded
+                  : Icons.home_outlined,
+              onPressed: () => _finishResult(
+                workspaceAction: 'failed',
+                refreshDashboard: false,
+              ),
               outlined: true,
             ),
           ],

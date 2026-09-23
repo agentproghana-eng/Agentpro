@@ -81,11 +81,18 @@ class PersonalTransactionItem extends StatelessWidget {
                   quickActionTransactionLabel(type),
               style:
                   const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
-          Text('${tx['recipient_phone'] ?? ''} \u00b7 $timeStr',
-              style: TextStyle(
-                  fontSize: 10.5,
-                  color: context.appSecondaryText,
-                  fontWeight: FontWeight.w700)),
+          Text(
+              '${tx['recipient_phone'] ?? ''}',
+              style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.bold)),
+          if (timeStr.isNotEmpty)
+            Text(
+                timeStr,
+                style: TextStyle(
+                    fontSize: 10.5,
+                    color: context.appSecondaryText,
+                    fontWeight: FontWeight.w600)),
         ])),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
           if (amount != null)

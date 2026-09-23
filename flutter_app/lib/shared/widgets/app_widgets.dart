@@ -94,6 +94,7 @@ class AppTextField extends StatelessWidget {
   final ValueChanged<String>? onChanged;
   final TextInputAction? textInputAction;
   final double? transactionLabelFontSize;
+  final double? transactionValueFontSize;
 
   /// Larger, stronger transaction-entry treatment.
   ///
@@ -117,14 +118,15 @@ class AppTextField extends StatelessWidget {
     this.onChanged,
     this.textInputAction,
     this.transactionLabelFontSize,
+    this.transactionValueFontSize,
     this.transactionEmphasis = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final fieldStyle = transactionEmphasis
-        ? const TextStyle(
-            fontSize: 30,
+        ? TextStyle(
+            fontSize: transactionValueFontSize ?? 30,
             fontWeight: FontWeight.bold,
           )
         : null;

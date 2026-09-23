@@ -232,6 +232,30 @@ class AppRouter {
         ),
 
         // Transactions
+        //
+        // MTN Agent Cash In/Out is a UI workspace. It deliberately reuses
+        // the canonical send_money and cash_out transaction identities.
+        GoRoute(
+          path: '/transactions/mtn-cash-in-out',
+          builder: (_, state) {
+            final simSlotStr = state.uri.queryParameters['sim_slot'];
+            final simIccid = state.uri.queryParameters['sim_iccid'];
+            final simSubscriptionIdStr =
+                state.uri.queryParameters['sim_subscription_id'];
+
+            return TransactionScreen(
+              transactionType: 'send_money',
+              initialProvider: 'mtn',
+              initialSimSlot:
+                  simSlotStr != null ? int.tryParse(simSlotStr) : null,
+              initialSimIccid: simIccid,
+              initialSimSubscriptionId: simSubscriptionIdStr != null
+                  ? int.tryParse(simSubscriptionIdStr)
+                  : null,
+              mtnCashInOutWorkspace: true,
+            );
+          },
+        ),
         GoRoute(
           path: '/transactions',
           builder: (_, state) {
