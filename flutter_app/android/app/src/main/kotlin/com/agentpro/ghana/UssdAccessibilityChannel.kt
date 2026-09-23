@@ -249,6 +249,8 @@ class UssdAccessibilityChannel(
         val provider = call.argument<String>("provider")
         val businessSimRole = call.argument<String>("sim_role")
         val operatorId = call.argument<String>("operator_id")
+        val organisationShortcode =
+            call.argument<String>("organisation_shortcode")
         val reference = call.argument<String>("reference")
         val merchantId = call.argument<String>("merchant_id")
         val accountNumber = call.argument<String>("account_number")
@@ -413,6 +415,23 @@ class UssdAccessibilityChannel(
             return
         }
 
+        val needsOrganisationShortcode =
+            steps?.any {
+                it.action == "send_organisation_shortcode"
+            } == true
+
+        if (
+            needsOrganisationShortcode &&
+            organisationShortcode.isNullOrBlank()
+        ) {
+            result.error(
+                "MISSING_ORGANISATION_SHORTCODE",
+                "Telecel Organisation Shortcode is required - set it in USSD Automation settings",
+                null
+            )
+            return
+        }
+
         // Generic flows (provider not mtn/telecel) must supply their own
         // dial code, since there's no hardcoded lookup for them.
         if (provider != "mtn" && provider != "telecel" && explicitDialCode.isNullOrBlank()) {
@@ -461,6 +480,7 @@ class UssdAccessibilityChannel(
             provider,
             normalizedBusinessSimRole,
             operatorId,
+            organisationShortcode,
             reference,
             merchantId,
             accountNumber,

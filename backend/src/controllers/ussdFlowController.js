@@ -1,4 +1,8 @@
 const { query, withTransaction } = require("../config/database");
+const {
+  assertTelecelCredentialEncryptionConfigured,
+  decryptTelecelCredential,
+} = require("../utils/telecelCredentialCrypto");
 const { logger } = require("../utils/logger");
 const { auditLog } = require("../services/auditService");
 const { validateFlowSteps } = require("../utils/ussdFlowValidation");
@@ -874,6 +878,283 @@ exports.resolveFlow = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to resolve USSD flow",
+    });
+  }
+};
+
+// ── Protected Telecel execution credentials ─────────────────────
+//
+// This is NOT a general credential-reveal endpoint.
+// The server independently reloads the exact active Telecel flow,
+// derives which protected credential types its stored steps require,
+// and decrypts only those values for immediate USSD execution.
+//
+// Never log, audit, persist, or attach the returned plaintext values
+// to a transaction/result record.
+exports.getExecutionCredentials = async (req, res) => {
+  const flowId = String(
+    req.body?.flow_id || "",
+  ).trim();
+
+  const simRole = String(
+    req.body?.sim_role || "",
+  )
+    .trim()
+    .toLowerCase();
+
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      flowId,
+    )
+  ) {
+    return res.status(422).json({
+      success: false,
+      code: "INVALID_FLOW_ID",
+      message: "A valid flow_id is required",
+    });
+  }
+
+  if (!["agent", "merchant"].includes(simRole)) {
+    return res.status(422).json({
+      success: false,
+      code:
+        "INVALID_TELECEL_CREDENTIAL_SIM_ROLE",
+      message:
+        "Protected Telecel credentials require an agent or merchant SIM role",
+    });
+  }
+
+  try {
+    assertTelecelCredentialEncryptionConfigured();
+
+    // Revalidate the flow server-side. Do not trust Flutter to tell us
+    // which protected credentials are required.
+    //
+    // Global flow:
+    //   company_id IS NULL
+    //
+    // Company override:
+    //   company_id must exactly match the authenticated caller.
+    //
+    // Personal-owned rows are excluded explicitly.
+    const flowResult = await query(
+      `SELECT
+         id,
+         provider,
+         business_sim_role,
+         company_id,
+         owner_user_id,
+         is_active
+       FROM ussd_flows
+       WHERE id = $1
+         AND provider = 'telecel'
+         AND business_sim_role = $2
+         AND owner_user_id IS NULL
+         AND is_active = TRUE
+         AND (
+           company_id IS NULL
+           OR company_id = $3
+         )
+       LIMIT 1`,
+      [
+        flowId,
+        simRole,
+        req.user.company_id || null,
+      ],
+    );
+
+    if (flowResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        code:
+          "TELECEL_EXECUTION_FLOW_NOT_FOUND",
+        message:
+          "The active Telecel USSD flow is not available for this account",
+      });
+    }
+
+    const flow = flowResult.rows[0];
+
+    // Defensive ownership check in addition to SQL scoping.
+    if (
+      flow.company_id !== null &&
+      String(flow.company_id) !==
+        String(req.user.company_id || "")
+    ) {
+      return res.status(404).json({
+        success: false,
+        code:
+          "TELECEL_EXECUTION_FLOW_NOT_FOUND",
+        message:
+          "The active Telecel USSD flow is not available for this account",
+      });
+    }
+
+    const stepsResult = await query(
+      `SELECT action
+       FROM ussd_flow_steps
+       WHERE flow_id = $1
+       ORDER BY step_order`,
+      [flow.id],
+    );
+
+    const actions = new Set(
+      stepsResult.rows.map((row) =>
+        String(row.action || "").trim(),
+      ),
+    );
+
+    const needsOperatorId =
+      actions.has("send_operator_id");
+
+    const needsOrganisationShortcode =
+      actions.has(
+        "send_organisation_shortcode",
+      );
+
+    // A credential-free Telecel flow never needs to read the user's
+    // protected credential columns at all.
+    if (
+      !needsOperatorId &&
+      !needsOrganisationShortcode
+    ) {
+      return res.json({
+        success: true,
+        data: {
+          flow_id: flow.id,
+          sim_role: simRole,
+          operator_id: null,
+          organisation_shortcode: null,
+        },
+      });
+    }
+
+    const operatorColumn =
+      simRole === "agent"
+        ? "telecel_agent_operator_id_enc"
+        : "telecel_merchant_operator_id_enc";
+
+    const shortcodeColumn =
+      simRole === "agent"
+        ? "telecel_agent_organisation_shortcode_enc"
+        : "telecel_merchant_organisation_shortcode_enc";
+
+    const credentialsResult = await query(
+      `SELECT
+         ${operatorColumn}
+           AS operator_id_enc,
+         ${shortcodeColumn}
+           AS organisation_shortcode_enc
+       FROM users
+       WHERE id = $1`,
+      [req.user.id],
+    );
+
+    if (credentialsResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        code: "USER_NOT_FOUND",
+        message: "User not found",
+      });
+    }
+
+    const encrypted =
+      credentialsResult.rows[0];
+
+    if (
+      needsOperatorId &&
+      !encrypted.operator_id_enc
+    ) {
+      return res.status(409).json({
+        success: false,
+        code:
+          "TELECEL_OPERATOR_ID_NOT_CONFIGURED",
+        message:
+          "Set the Telecel Operator ID for this SIM role before starting this transaction",
+      });
+    }
+
+    if (
+      needsOrganisationShortcode &&
+      !encrypted.organisation_shortcode_enc
+    ) {
+      return res.status(409).json({
+        success: false,
+        code:
+          "TELECEL_ORGANISATION_SHORTCODE_NOT_CONFIGURED",
+        message:
+          "Set the Telecel Organisation Shortcode for this SIM role before starting this transaction",
+      });
+    }
+
+    const operatorId =
+      needsOperatorId
+        ? decryptTelecelCredential(
+            encrypted.operator_id_enc,
+            {
+              userId: req.user.id,
+              simRole,
+              credentialType:
+                "operator_id",
+            },
+          )
+        : null;
+
+    const organisationShortcode =
+      needsOrganisationShortcode
+        ? decryptTelecelCredential(
+            encrypted.organisation_shortcode_enc,
+            {
+              userId: req.user.id,
+              simRole,
+              credentialType:
+                "organisation_shortcode",
+            },
+          )
+        : null;
+
+    return res.json({
+      success: true,
+      data: {
+        flow_id: flow.id,
+        sim_role: simRole,
+        operator_id: operatorId,
+        organisation_shortcode:
+          organisationShortcode,
+      },
+    });
+  } catch (error) {
+    if (
+      error.code ===
+      "TELECEL_CREDENTIAL_ENCRYPTION_KEY_REQUIRED"
+    ) {
+      return res.status(503).json({
+        success: false,
+        code:
+          "TELECEL_CREDENTIAL_ENCRYPTION_UNAVAILABLE",
+        message:
+          "Protected Telecel credential execution is temporarily unavailable",
+      });
+    }
+
+    // Deliberately do not log plaintext credential values or expose
+    // crypto/parser details to the client.
+    logger.error(
+      "Prepare Telecel execution credentials failed",
+      {
+        userId: req.user.id,
+        flowId,
+        simRole,
+        code: error.code || "UNKNOWN",
+      },
+    );
+
+    return res.status(500).json({
+      success: false,
+      code:
+        "TELECEL_EXECUTION_CREDENTIAL_ERROR",
+      message:
+        "Protected Telecel credentials could not be prepared for execution",
     });
   }
 };

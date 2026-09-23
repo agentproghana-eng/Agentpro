@@ -89,6 +89,59 @@ class BiometricService {
   ///
   /// Success creates one in-memory approval object. AuthBloc must consume that
   /// exact object before it is allowed to clear the persisted session lock.
+  /// Authenticate a sensitive in-session action.
+  ///
+  /// Uses the same Android/iOS device credential mechanism as app
+  /// unlock, including biometric or phone PIN/pattern/password fallback,
+  /// but deliberately does NOT create a pending AuthBloc unlock approval.
+  static Future<BiometricResult> authenticateSensitiveAction() async {
+    final availability =
+        await checkDeviceAuthAvailability();
+
+    if (availability == BiometricAvailability.notEnrolled) {
+      return BiometricResult.notEnrolled;
+    }
+
+    if (availability != BiometricAvailability.available) {
+      return BiometricResult.notAvailable;
+    }
+
+    try {
+      final authenticated =
+          await _auth.authenticate(
+        localizedReason:
+            'Confirm your identity to change protected Telecel credentials',
+        options: const AuthenticationOptions(
+          biometricOnly: false,
+          stickyAuth: true,
+          sensitiveTransaction: true,
+        ),
+      );
+
+      return authenticated
+          ? BiometricResult.success
+          : BiometricResult.cancelled;
+    } on LocalAuthException catch (error) {
+      switch (error.code) {
+        case LocalAuthExceptionCode.noBiometricHardware:
+        case LocalAuthExceptionCode.noBiometricsEnrolled:
+        case LocalAuthExceptionCode.noCredentialsSet:
+          return BiometricResult.notAvailable;
+
+        case LocalAuthExceptionCode.temporaryLockout:
+          return BiometricResult.lockedOut;
+
+        case LocalAuthExceptionCode.biometricLockout:
+          return BiometricResult.permanentlyLockedOut;
+
+        default:
+          return BiometricResult.error;
+      }
+    } catch (_) {
+      return BiometricResult.error;
+    }
+  }
+
   static Future<BiometricResult> authenticateToUnlock() async {
     _pendingUnlockApproval = null;
 

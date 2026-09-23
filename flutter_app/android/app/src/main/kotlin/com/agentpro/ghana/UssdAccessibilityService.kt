@@ -162,6 +162,7 @@ class UssdAccessibilityService : AccessibilityService() {
         @Volatile var pendingProvider: String? = null
         @Volatile var pendingBusinessSimRole: String? = null
         @Volatile var pendingOperatorId: String? = null
+        @Volatile var pendingOrganisationShortcode: String? = null
         @Volatile var pendingReference: String? = null
         @Volatile var pendingMerchantId: String? = null
         @Volatile var pendingAccountNumber: String? = null
@@ -237,6 +238,7 @@ class UssdAccessibilityService : AccessibilityService() {
             provider: String,
             businessSimRole: String? = null,
             operatorId: String? = null,
+            organisationShortcode: String? = null,
             reference: String? = null,
             merchantId: String? = null,
             accountNumber: String? = null,
@@ -251,6 +253,7 @@ class UssdAccessibilityService : AccessibilityService() {
             pendingProvider = provider
             pendingBusinessSimRole = businessSimRole
             pendingOperatorId = operatorId
+            pendingOrganisationShortcode = organisationShortcode
             pendingReference = reference
             pendingMerchantId = merchantId
             pendingAccountNumber = accountNumber
@@ -320,6 +323,7 @@ class UssdAccessibilityService : AccessibilityService() {
             pendingProvider = null
             pendingBusinessSimRole = null
             pendingOperatorId = null
+            pendingOrganisationShortcode = null
             pendingReference = null
             pendingMerchantId = null
             pendingAccountNumber = null
@@ -1136,6 +1140,11 @@ class UssdAccessibilityService : AccessibilityService() {
 
                     "send_operator_id" ->
                         pendingOperatorId?.let { respond(root, it) } ?: false
+
+                    "send_organisation_shortcode" ->
+                        pendingOrganisationShortcode?.let {
+                            respond(root, it)
+                        } ?: false
 
                     "send_reference" ->
                         pendingReference?.let { respond(root, it) } ?: false

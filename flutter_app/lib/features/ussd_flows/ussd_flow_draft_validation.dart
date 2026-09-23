@@ -93,6 +93,7 @@ const List<String> kValidUssdFlowActions = [
   'send_account_number',
   'send_amount',
   'send_operator_id',
+  'send_organisation_shortcode',
   'send_reference',
   'send_merchant_id',
   'send_selection',

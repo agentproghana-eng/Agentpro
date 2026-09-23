@@ -22,6 +22,10 @@ const {
 const {
   issueOfflineAuthorizationReceipt,
 } = require("../utils/offlineAuthorizationReceipt");
+const {
+  assertTelecelCredentialEncryptionConfigured,
+  encryptTelecelCredential,
+} = require("../utils/telecelCredentialCrypto");
 
 const STAFF_SETUP_TOKEN_TTL_MS = 60 * 60 * 1000;
 
@@ -1574,50 +1578,261 @@ exports.getFeatureFlags = async (req, res) => {
 };
 
 exports.updateMySettings = async (req, res) => {
-  const { telecel_operator_id } = req.body;
+  const {
+    telecel_sim_role,
+    telecel_operator_id,
+    telecel_organisation_shortcode,
+  } = req.body;
 
-  if (
-    telecel_operator_id !== undefined &&
-    typeof telecel_operator_id !== "string"
-  ) {
+  const simRole = String(
+    telecel_sim_role || "",
+  ).trim().toLowerCase();
+
+  if (!["agent", "merchant"].includes(simRole)) {
     return res.status(422).json({
       success: false,
-      message: "telecel_operator_id must be a string",
+      message:
+        "telecel_sim_role must be agent or merchant",
     });
   }
 
+  const suppliedOperatorId =
+    telecel_operator_id !== undefined;
+
+  const suppliedOrganisationShortcode =
+    telecel_organisation_shortcode !== undefined;
+
+  if (
+    !suppliedOperatorId &&
+    !suppliedOrganisationShortcode
+  ) {
+    return res.status(422).json({
+      success: false,
+      message:
+        "At least one Telecel credential is required",
+    });
+  }
+
+  const normalizeCredential = (
+    value,
+    fieldName,
+  ) => {
+    if (typeof value !== "string") {
+      const error = new Error(
+        `${fieldName} must be a string`,
+      );
+      error.code = "INVALID_TELECEL_CREDENTIAL";
+      throw error;
+    }
+
+    const normalized = value.trim();
+
+    if (
+      normalized.length < 1 ||
+      normalized.length > 32 ||
+      !/^[A-Za-z0-9]+$/.test(normalized)
+    ) {
+      const error = new Error(
+        `${fieldName} must contain 1-32 letters or numbers`,
+      );
+      error.code = "INVALID_TELECEL_CREDENTIAL";
+      throw error;
+    }
+
+    return normalized;
+  };
+
   try {
+    assertTelecelCredentialEncryptionConfigured();
+
+    const operatorId = suppliedOperatorId
+      ? normalizeCredential(
+          telecel_operator_id,
+          "telecel_operator_id",
+        )
+      : null;
+
+    const organisationShortcode =
+      suppliedOrganisationShortcode
+        ? normalizeCredential(
+            telecel_organisation_shortcode,
+            "telecel_organisation_shortcode",
+          )
+        : null;
+
+    const operatorColumn =
+      simRole === "agent"
+        ? "telecel_agent_operator_id_enc"
+        : "telecel_merchant_operator_id_enc";
+
+    const shortcodeColumn =
+      simRole === "agent"
+        ? "telecel_agent_organisation_shortcode_enc"
+        : "telecel_merchant_organisation_shortcode_enc";
+
+    const encryptedOperatorId =
+      operatorId === null
+        ? null
+        : encryptTelecelCredential(
+            operatorId,
+            {
+              userId: req.user.id,
+              simRole,
+              credentialType: "operator_id",
+            },
+          );
+
+    const encryptedOrganisationShortcode =
+      organisationShortcode === null
+        ? null
+        : encryptTelecelCredential(
+            organisationShortcode,
+            {
+              userId: req.user.id,
+              simRole,
+              credentialType:
+                "organisation_shortcode",
+            },
+          );
+
     const result = await query(
-      `UPDATE users SET telecel_operator_id = COALESCE($1, telecel_operator_id), updated_at = NOW()
-       WHERE id = $2 RETURNING id, telecel_operator_id`,
-      [telecel_operator_id, req.user.id],
+      `UPDATE users
+       SET ${operatorColumn} =
+             COALESCE($1, ${operatorColumn}),
+           ${shortcodeColumn} =
+             COALESCE($2, ${shortcodeColumn}),
+           updated_at = NOW()
+       WHERE id = $3
+       RETURNING
+         id,
+         telecel_agent_operator_id_enc IS NOT NULL
+           AS telecel_agent_operator_id_configured,
+         telecel_agent_organisation_shortcode_enc IS NOT NULL
+           AS telecel_agent_organisation_shortcode_configured,
+         telecel_merchant_operator_id_enc IS NOT NULL
+           AS telecel_merchant_operator_id_configured,
+         telecel_merchant_organisation_shortcode_enc IS NOT NULL
+           AS telecel_merchant_organisation_shortcode_configured`,
+      [
+        encryptedOperatorId,
+        encryptedOrganisationShortcode,
+        req.user.id,
+      ],
     );
 
     if (result.rows.length === 0) {
-      return res
-        .status(404)
-        .json({ success: false, message: "User not found" });
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
     }
 
+    // Audit only WHICH protected credential changed.
+    // Never write the credential or ciphertext into the audit trail.
     await auditLog({
       userId: req.user.id,
       companyId: req.user.company_id,
-      action: "SETTINGS_UPDATED",
+      action: "TELECEL_CREDENTIALS_UPDATED",
       entityType: "user",
       entityId: req.user.id,
-      newValues: { telecel_operator_id },
+      newValues: {
+        sim_role: simRole,
+        operator_id_updated:
+          suppliedOperatorId,
+        organisation_shortcode_updated:
+          suppliedOrganisationShortcode,
+      },
       ipAddress: req.ip,
       requestId: req.requestId,
     });
 
-    res.json({ success: true, data: result.rows[0] });
+    res.json({
+      success: true,
+      data: result.rows[0],
+    });
   } catch (error) {
-    logger.error("Update my settings error:", error);
-    res
-      .status(500)
-      .json({ success: false, message: "Failed to update settings" });
+    if (
+      error.code ===
+      "INVALID_TELECEL_CREDENTIAL"
+    ) {
+      return res.status(422).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    if (
+      error.code ===
+      "TELECEL_CREDENTIAL_ENCRYPTION_KEY_REQUIRED"
+    ) {
+      logger.error(
+        "Telecel credential encryption is not configured",
+      );
+
+      return res.status(503).json({
+        success: false,
+        code:
+          "TELECEL_CREDENTIAL_ENCRYPTION_UNAVAILABLE",
+        message:
+          "Protected Telecel credential storage is temporarily unavailable",
+      });
+    }
+
+    logger.error(
+      "Update protected Telecel settings error:",
+      error,
+    );
+
+    res.status(500).json({
+      success: false,
+      message:
+        "Failed to update protected Telecel settings",
+    });
   }
 };
+
+exports.getMyTelecelCredentialStatus =
+  async (req, res) => {
+    try {
+      const result = await query(
+        `SELECT
+           telecel_agent_operator_id_enc IS NOT NULL
+             AS telecel_agent_operator_id_configured,
+           telecel_agent_organisation_shortcode_enc IS NOT NULL
+             AS telecel_agent_organisation_shortcode_configured,
+           telecel_merchant_operator_id_enc IS NOT NULL
+             AS telecel_merchant_operator_id_configured,
+           telecel_merchant_organisation_shortcode_enc IS NOT NULL
+             AS telecel_merchant_organisation_shortcode_configured
+         FROM users
+         WHERE id = $1`,
+        [req.user.id],
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+
+      res.json({
+        success: true,
+        data: result.rows[0],
+      });
+    } catch (error) {
+      logger.error(
+        "Get Telecel credential status error:",
+        error,
+      );
+
+      res.status(500).json({
+        success: false,
+        message:
+          "Failed to fetch Telecel credential status",
+      });
+    }
+  };
 
 const QUICK_ACTION_ICON_COLORS = new Set([
   "#00897B",

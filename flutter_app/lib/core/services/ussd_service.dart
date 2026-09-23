@@ -839,6 +839,7 @@ class UssdAccessibilityEngine {
     required String provider,
     String? businessSimRole,
     String? operatorId,
+    String? organisationShortcode,
     String? reference,
     String? merchantId,
     String? accountNumber,
@@ -938,6 +939,8 @@ class UssdAccessibilityEngine {
         'provider': provider,
         if (businessSimRole?.isNotEmpty == true) 'sim_role': businessSimRole,
         if (operatorId != null) 'operator_id': operatorId,
+        if (organisationShortcode != null)
+          'organisation_shortcode': organisationShortcode,
         if (reference != null) 'reference': reference,
         if (merchantId != null) 'merchant_id': merchantId,
         if (accountNumber != null) 'account_number': accountNumber,
@@ -1003,6 +1006,7 @@ class UssdAccessibilityEngine {
         'INVALID_ACCOUNT_NUMBER',
         'MISSING_SELECTION',
         'MISSING_OPERATOR_ID',
+        'MISSING_ORGANISATION_SHORTCODE',
         'MISSING_DIAL_CODE',
         'DIAL_ERROR',
       };

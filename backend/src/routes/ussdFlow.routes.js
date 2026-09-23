@@ -21,6 +21,12 @@ router.get(
   ussdFlowController.resolveFlow
 );
 
+router.post(
+  '/execution-credentials',
+  requireActiveSubscription,
+  ussdFlowController.getExecutionCredentials
+);
+
 // Builder metadata is protected by the same role boundary as Business
 // Flow Builder CRUD and must be registered before /:id.
 router.get(

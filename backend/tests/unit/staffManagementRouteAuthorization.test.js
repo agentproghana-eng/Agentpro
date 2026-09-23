@@ -25,6 +25,7 @@ jest.mock('../../src/controllers/userController', () => {
     createUser: noContent,
     changePassword: noContent,
     updateMySettings: noContent,
+    getMyTelecelCredentialStatus: noContent,
     getMyQuickActionCatalog: noContent,
     getMyQuickActions: noContent,
     updateMyQuickActions: noContent,
