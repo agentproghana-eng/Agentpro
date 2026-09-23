@@ -139,7 +139,7 @@ void main() {
       expect(
         quickActionSource,
         contains(
-          'EVD and Merchant deliberately have no Agent fallback',
+          'EVD and other Merchant/provider combinations deliberately have',
         ),
       );
 
