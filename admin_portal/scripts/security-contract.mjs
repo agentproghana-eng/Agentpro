@@ -49,6 +49,9 @@ const adminPageFeatures = [
     'admin_portal/src/features/config/ConfigPage.jsx',
   ),
   read(
+    'admin_portal/src/features/marketplace/MarketplaceModerationPage.jsx',
+  ),
+  read(
     'admin_portal/src/features/support/FraudSignalQueue.jsx',
   ),
   read(

@@ -15,9 +15,17 @@ function source(relativePath) {
 describe(
   "Business Hub reviewed pricing UI contracts",
   () => {
-    const admin = source(
-      "admin_portal/src/App.jsx"
-    );
+    const admin = [
+      source(
+        "admin_portal/src/features/marketplace/MarketplaceModerationPage.jsx"
+      ),
+      source(
+        "admin_portal/src/features/marketplace/MarketplaceModerationCard.jsx"
+      ),
+      source(
+        "admin_portal/src/features/marketplace/MarketplacePhotoViewer.jsx"
+      ),
+    ].join("\n");
 
     const marketplace = source(
       "backend/src/routes/marketplace.routes.js"
