@@ -120,9 +120,9 @@ void main() {
       expect(
         transaction,
         contains(
-          "widget.mtnCashInOutWorkspace\n"
-          "      ? _mtnCashInOutOperation\n"
-          "      : widget.transactionType",
+          "if (widget.mtnCashInOutWorkspace) {\n"
+          "      return _mtnCashInOutOperation;\n"
+          "    }",
         ),
       );
     });

@@ -58,7 +58,7 @@ void main() {
 
     test('workspace success clears completed transaction', () {
       final workspaceStart = handler.indexOf(
-        'if (_isMtnCashInOutWorkspace)',
+        'if (_isMtnCashInOutWorkspace ||',
       );
 
       final ordinaryStart = handler.indexOf(

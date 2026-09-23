@@ -80,7 +80,7 @@ void main() {
 
       expect(
         block,
-        contains('if (_isMtnCashInOutWorkspace)'),
+        contains('if (_isPersistentBusinessWorkspace)'),
       );
 
       expect(
