@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { body, query, validationResult } = require("express-validator");
 const transactionController = require("../controllers/transactionController");
+const telecelMerchantBalanceObservationController = require("../controllers/telecelMerchantBalanceObservationController");
 const cursorHistoryController = require("../controllers/cursorHistoryController");
 const {
   authenticate,
@@ -233,6 +234,96 @@ router.post(
   businessInitiationCapabilityGuard,
   authorize("agent", "business_owner", "manager"),
   transactionController.initiateTransaction,
+);
+
+// POST /api/v1/transactions/telecel-merchant/balance-observations
+//
+// Accepts only a newly parsed Telecel Merchant T-CASH balance observation.
+// The server derives the financial wallet from the authenticated user's
+// exact SIM identity. The client cannot choose a sim_wallet_id.
+router.post(
+  "/telecel-merchant/balance-observations",
+  [
+    body("source_reference")
+      .isString()
+      .trim()
+      .matches(/^[a-f0-9]{64}$/)
+      .withMessage(
+        "source_reference must be a SHA-256 reference",
+      ),
+
+    body("observed_at")
+      .isISO8601()
+      .withMessage(
+        "observed_at must be a valid ISO-8601 timestamp",
+      ),
+
+    body("merchant_account_balance")
+      .isFloat({ min: 0 })
+      .withMessage(
+        "merchant_account_balance must be non-negative",
+      ),
+
+    body("working_account_balance")
+      .isFloat({ min: 0 })
+      .withMessage(
+        "working_account_balance must be non-negative",
+      ),
+
+    body("sim_iccid")
+      .optional({ nullable: true })
+      .isString()
+      .trim(),
+
+    body("installation_id")
+      .optional({ nullable: true })
+      .isUUID()
+      .withMessage(
+        "installation_id must be a valid UUID",
+      ),
+
+    body("sim_subscription_id")
+      .optional({ nullable: true })
+      .isInt({ min: 0 })
+      .withMessage(
+        "sim_subscription_id must be a non-negative integer",
+      ),
+
+    body("sim_slot")
+      .isInt({ min: 0 })
+      .withMessage(
+        "sim_slot must be a non-negative integer",
+      ),
+
+    body("sim_wallet_id")
+      .not()
+      .exists()
+      .withMessage(
+        "sim_wallet_id must not be supplied",
+      ),
+
+    body("source")
+      .not()
+      .exists()
+      .withMessage(
+        "source is server controlled",
+      ),
+
+    body("sms_body")
+      .not()
+      .exists()
+      .withMessage(
+        "raw SMS must not be submitted",
+      ),
+  ],
+  handleValidation,
+  authorize(
+    "agent",
+    "business_owner",
+    "manager",
+  ),
+  telecelMerchantBalanceObservationController
+    .ingestBalanceObservation,
 );
 
 // PATCH /api/v1/transactions/:transaction_id/complete — Mark success, failure, or unconfirmed

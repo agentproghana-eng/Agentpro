@@ -26,6 +26,12 @@ const { postPayToAgent } = require("../services/payToAgentPostingService");
 const {
   postWorkingFloatTransfer,
 } = require("../services/workingFloatPostingService");
+const {
+  postTelecelMerchantECash,
+} = require("../services/telecelMerchantECashPostingService");
+const {
+  requireTelecelMerchantECashReadiness,
+} = require("../services/telecelMerchantECashReadinessService");
 const { enqueueOutboxEvent } = require("../services/outboxService");
 const {
   recordOperationalEvent,
@@ -429,16 +435,56 @@ exports.initiateTransaction = async (req, res) => {
     // but their financial balance semantics are intentionally not inferred
     // from the proven Agent ledger.
     //
-    // Until dedicated role-specific accounting is validated, fail before
-    // USSD execution so provider money cannot move without a matching
-    // AgentPro financial model.
-    if (["evd", "merchant"].includes(businessSimRole)) {
+    // Only the two validated Telecel Merchant E-Cash directions currently
+    // have dedicated role-specific accounting. Every other Merchant action,
+    // and every EVD action, remains fail-closed before USSD execution.
+    const isValidatedTelecelMerchantECash =
+      businessSimRole === "merchant" &&
+      provider === "telecel" &&
+      ["float_to_working", "working_to_float"].includes(
+        transaction_type,
+      );
+
+    if (
+      ["evd", "merchant"].includes(businessSimRole) &&
+      !isValidatedTelecelMerchantECash
+    ) {
       return res.status(422).json({
         success: false,
         code: "SIM_ROLE_ACCOUNTING_NOT_CONFIGURED",
         message:
           "This SIM role is recognized, but its financial accounting has not yet been validated and enabled.",
       });
+    }
+
+    // A Telecel Merchant E-Cash transfer must never reach provider USSD
+    // unless both role-specific balances are already initialized for this
+    // exact physical SIM. This check is lookup-only and cannot create or
+    // initialize financial state.
+    if (isValidatedTelecelMerchantECash) {
+      try {
+        await withTransaction((client) =>
+          requireTelecelMerchantECashReadiness(client, {
+            agentId,
+            simIccid: sim_iccid,
+            installationId: installation_id,
+            simSubscriptionId: sim_subscription_id,
+            simSlot: sim_slot,
+          }),
+        );
+      } catch (error) {
+        if (error?.statusCode === 422) {
+          return res.status(422).json({
+            success: false,
+            code:
+              error.code ||
+              "MERCHANT_BALANCE_INITIALIZATION_REQUIRED",
+            message: error.message,
+          });
+        }
+
+        throw error;
+      }
     }
 
     // Run independent transaction preflight queries concurrently.
@@ -1041,6 +1087,26 @@ exports.completeTransaction = async (req, res) => {
           tx.sim_wallet_id = posting.simWalletId;
 
           await calculateAndPostCommission(client, tx, agentId);
+        } else if (
+          tx.provider === "telecel" &&
+          tx.sim_role === "merchant" &&
+          (
+            tx.transaction_type === "working_to_float" ||
+            tx.transaction_type === "float_to_working"
+          )
+        ) {
+          // Telecel Merchant E-Cash reallocates value only between the
+          // validated role-specific Merchant Account and Working Account.
+          //
+          // No physical cash, Agent e-Float, Agent working balance,
+          // commission, or branch treasury movement.
+          const posting = await postTelecelMerchantECash(
+            client,
+            tx,
+            agentId,
+          );
+
+          tx.sim_wallet_id = posting.simWalletId;
         } else if (
           tx.transaction_type === "working_to_float" ||
           tx.transaction_type === "float_to_working"

@@ -161,6 +161,19 @@
             </intent-filter>
         </receiver>
 
+        <!-- Telecel Merchant balance observation.
+             Processes only newly delivered SMS broadcasts and fails closed
+             unless the receiving subscription resolves to an exact active
+             Telecel SIM. It never scans the historical SMS inbox. -->
+        <receiver
+            android:name=".TelecelMerchantBalanceSmsReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+
         <!-- FCM default channel -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
