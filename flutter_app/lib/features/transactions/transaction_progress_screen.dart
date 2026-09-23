@@ -652,6 +652,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         businessSimRole: expectedBusinessRole,
         flowData: Map<String, dynamic>.from(suppliedCachedFlow),
         selectionsInOrder: selectionsInOrder,
+        isOnlineResolvedFlow: false,
       );
       return;
     }
@@ -721,6 +722,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         businessSimRole: expectedBusinessRole,
         flowData: flowData,
         selectionsInOrder: selectionsInOrder,
+        isOnlineResolvedFlow: true,
       );
       return;
     } on DioException catch (error) {
@@ -787,6 +789,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
           businessSimRole: expectedBusinessRole,
           flowData: fallbackCachedFlow,
           selectionsInOrder: selectionsInOrder,
+          isOnlineResolvedFlow: false,
         );
         return;
       }
@@ -932,6 +935,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     String? businessSimRole,
     required Map<String, dynamic> flowData,
     required List<String> selectionsInOrder,
+    required bool isOnlineResolvedFlow,
   }) async {
     final rawSteps = flowData['steps'];
     final dialCode = flowData['dial_code'];
@@ -1020,9 +1024,11 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         return;
       }
 
-      // A protected cached/offline flow must fail closed. AgentPro does not
-      // keep recoverable Telecel credentials in AuthBloc or local flow cache.
-      if (resolvedFlowId.isEmpty) {
+      // Protected Telecel credentials may only be requested for a flow
+      // freshly resolved from the authenticated online resolver. Cached flows
+      // can retain a valid server flow ID, so ID presence alone is not proof
+      // of online provenance.
+      if (!isOnlineResolvedFlow || resolvedFlowId.isEmpty) {
         const reason =
             'This Telecel transaction needs a protected credential and '
             'requires an online connection before USSD can start.';

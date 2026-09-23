@@ -46,13 +46,41 @@ void main() {
     );
   });
 
-  test('protected cached flow fails closed', () {
+  test('protected Telecel execution requires online flow provenance', () {
+    expect(
+      RegExp(r'isOnlineResolvedFlow:\s*false').allMatches(progress).length,
+      2,
+    );
+    expect(
+      RegExp(r'isOnlineResolvedFlow:\s*true').allMatches(progress).length,
+      1,
+    );
+    expect(
+      progress.contains('required bool isOnlineResolvedFlow'),
+      isTrue,
+    );
+    expect(
+      progress.contains(
+        'if (!isOnlineResolvedFlow || resolvedFlowId.isEmpty)',
+      ),
+      isTrue,
+    );
     expect(
       progress.contains(
         'requires an online connection before USSD can start',
       ),
       isTrue,
     );
+
+    final provenanceGuard = progress.indexOf(
+      'if (!isOnlineResolvedFlow || resolvedFlowId.isEmpty)',
+    );
+    final credentialRequest = progress.indexOf(
+      "'/ussd-flows/execution-credentials'",
+    );
+
+    expect(provenanceGuard, greaterThanOrEqualTo(0));
+    expect(credentialRequest, greaterThan(provenanceGuard));
   });
 
   test('organisation shortcode reaches native channel', () {
