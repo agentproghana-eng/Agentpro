@@ -240,42 +240,13 @@ List<QuickActionCatalogDefinition> normalizeBusinessQuickActionDefinitions({
   required String provider,
   required List<QuickActionCatalogDefinition> definitions,
 }) {
-  if (provider != 'mtn') {
-    return List<QuickActionCatalogDefinition>.from(definitions);
-  }
-
-  final legacyCashInIndex = definitions.indexWhere(
-    (definition) => definition.type == 'cash_in',
-  );
-
-  final canonicalCashInIndex = definitions.indexWhere(
-    (definition) => definition.type == 'send_money',
-  );
-
-  if (legacyCashInIndex < 0 || canonicalCashInIndex < 0) {
-    return List<QuickActionCatalogDefinition>.from(definitions);
-  }
-
-  final canonicalCashIn = definitions[canonicalCashInIndex];
-  final normalized = <QuickActionCatalogDefinition>[];
-
-  for (var index = 0; index < definitions.length; index++) {
-    if (index == legacyCashInIndex) {
-      // Put the real MTN Cash In action where the legacy Cash In
-      // template previously lived.
-      normalized.add(canonicalCashIn);
-      continue;
-    }
-
-    if (index == canonicalCashInIndex) {
-      // Its original later position is now redundant.
-      continue;
-    }
-
-    normalized.add(definitions[index]);
-  }
-
-  return normalized;
+  // Keep the server catalog authoritative.
+  //
+  // In particular, MTN Agent customization may contain the canonical
+  // send_money action used by the Cash In/Out workspace as well as
+  // individually supported cash actions. Do not collapse one into another:
+  // if the user selects all supported actions, all remain selectable.
+  return List<QuickActionCatalogDefinition>.from(definitions);
 }
 
 String quickActionDisplayLabel({

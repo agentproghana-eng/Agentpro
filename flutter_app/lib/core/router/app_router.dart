@@ -256,6 +256,30 @@ class AppRouter {
             );
           },
         ),
+        // Telecel Merchant Transfer E-Cash is a UI workspace. It keeps the
+        // verified canonical transaction identities underneath:
+        // float_to_working and working_to_float.
+        GoRoute(
+          path: '/transactions/telecel-merchant-ecash',
+          builder: (_, state) {
+            final simSlotStr = state.uri.queryParameters['sim_slot'];
+            final simIccid = state.uri.queryParameters['sim_iccid'];
+            final simSubscriptionIdStr =
+                state.uri.queryParameters['sim_subscription_id'];
+
+            return TransactionScreen(
+              transactionType: 'float_to_working',
+              initialProvider: 'telecel',
+              initialSimSlot:
+                  simSlotStr != null ? int.tryParse(simSlotStr) : null,
+              initialSimIccid: simIccid,
+              initialSimSubscriptionId: simSubscriptionIdStr != null
+                  ? int.tryParse(simSubscriptionIdStr)
+                  : null,
+              telecelMerchantECashWorkspace: true,
+            );
+          },
+        ),
         GoRoute(
           path: '/transactions',
           builder: (_, state) {

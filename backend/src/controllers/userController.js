@@ -1865,43 +1865,16 @@ function quickActionDisplayLabel(provider, transactionType, capabilityLabel) {
 }
 
 function normalizeBusinessQuickActionActions(provider, actionMap) {
-  const actions = Array.from(actionMap.values());
-
-  if (
-    String(provider || "")
-      .trim()
-      .toLowerCase() !== "mtn"
-  ) {
-    return actions;
-  }
-
-  const legacyCashInIndex = actions.findIndex(
-    (action) => action.transaction_type === "cash_in",
-  );
-
-  const canonicalCashInIndex = actions.findIndex(
-    (action) => action.transaction_type === "send_money",
-  );
-
-  if (legacyCashInIndex < 0 || canonicalCashInIndex < 0) {
-    return actions;
-  }
-
-  const canonicalCashIn = actions[canonicalCashInIndex];
-
-  return actions.flatMap((action, index) => {
-    if (index === legacyCashInIndex) {
-      // Real MTN Cash In takes the old Cash In position.
-      return [canonicalCashIn];
-    }
-
-    if (index === canonicalCashInIndex) {
-      // Remove the duplicate later Send Money/Cash In position.
-      return [];
-    }
-
-    return [action];
-  });
+  // The database-backed capability/flow catalog is authoritative.
+  //
+  // Do not collapse MTN cash_in into send_money here. MTN Agent Quick
+  // Action customization may deliberately expose the combined Cash In/Out
+  // workspace alongside individually supported cash actions.
+  //
+  // send_money remains the canonical transaction used by the combined
+  // workspace; preserving cash_in here does not invent or rewrite a
+  // transaction type.
+  return Array.from(actionMap.values());
 }
 
 exports.getMyQuickActionCatalog = async (req, res) => {

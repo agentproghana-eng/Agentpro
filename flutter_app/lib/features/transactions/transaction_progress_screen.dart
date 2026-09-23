@@ -2327,6 +2327,25 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       widget.data['mtn_cash_in_out_workspace'] == true &&
       widget.data['provider']?.toString() == 'mtn';
 
+  bool get _isTelecelMerchantECashWorkspace =>
+      !widget.isPersonal &&
+      widget.data['telecel_merchant_ecash_workspace'] == true &&
+      widget.data['provider']?.toString() == 'telecel';
+
+  bool get _isPersistentBusinessWorkspace =>
+      _isMtnCashInOutWorkspace ||
+      _isTelecelMerchantECashWorkspace;
+
+  String get _persistentWorkspaceLabel =>
+      _isTelecelMerchantECashWorkspace
+          ? 'Back to Transfer E-Cash'
+          : 'Back to Cash In/Out';
+
+  IconData get _persistentWorkspaceIcon =>
+      _isTelecelMerchantECashWorkspace
+          ? Icons.swap_vert_rounded
+          : Icons.swap_horiz_rounded;
+
   void _notifyTransactionCompleted() {
     DashboardRefreshService.notifyTransactionCompleted(
       isPersonal: widget.isPersonal,
@@ -2349,7 +2368,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
   }) {
     if (!mounted) return;
 
-    if (_isMtnCashInOutWorkspace) {
+    if (_isPersistentBusinessWorkspace) {
       if (refreshDashboard) {
         _notifyTransactionCompleted();
       }
@@ -2722,11 +2741,11 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             ),
             const SizedBox(height: 12),
             AppButton(
-              label: _isMtnCashInOutWorkspace
-                  ? 'Back to Cash In/Out'
+              label: _isPersistentBusinessWorkspace
+                  ? _persistentWorkspaceLabel
                   : 'Done',
-              icon: _isMtnCashInOutWorkspace
-                  ? Icons.swap_horiz_rounded
+              icon: _isPersistentBusinessWorkspace
+                  ? _persistentWorkspaceIcon
                   : Icons.home_outlined,
               onPressed: () => _finishResult(
                 workspaceAction: 'success',
@@ -2744,11 +2763,11 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             ),
             const SizedBox(height: 12),
             AppButton(
-              label: _isMtnCashInOutWorkspace
-                  ? 'Back to Cash In/Out'
+              label: _isPersistentBusinessWorkspace
+                  ? _persistentWorkspaceLabel
                   : 'Go Home',
-              icon: _isMtnCashInOutWorkspace
-                  ? Icons.swap_horiz_rounded
+              icon: _isPersistentBusinessWorkspace
+                  ? _persistentWorkspaceIcon
                   : Icons.home_outlined,
               onPressed: () => _finishResult(
                 workspaceAction: 'pending_confirmation',
@@ -2771,11 +2790,11 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             ),
             const SizedBox(height: 12),
             AppButton(
-              label: _isMtnCashInOutWorkspace
-                  ? 'Back to Cash In/Out'
+              label: _isPersistentBusinessWorkspace
+                  ? _persistentWorkspaceLabel
                   : 'Go Home',
-              icon: _isMtnCashInOutWorkspace
-                  ? Icons.swap_horiz_rounded
+              icon: _isPersistentBusinessWorkspace
+                  ? _persistentWorkspaceIcon
                   : Icons.home_outlined,
               onPressed: () => _finishResult(
                 workspaceAction: 'failed',
@@ -2794,11 +2813,11 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             ),
             const SizedBox(height: 12),
             AppButton(
-              label: _isMtnCashInOutWorkspace
-                  ? 'Back to Cash In/Out'
+              label: _isPersistentBusinessWorkspace
+                  ? _persistentWorkspaceLabel
                   : 'Go Home',
-              icon: _isMtnCashInOutWorkspace
-                  ? Icons.swap_horiz_rounded
+              icon: _isPersistentBusinessWorkspace
+                  ? _persistentWorkspaceIcon
                   : Icons.home_outlined,
               onPressed: () => _finishResult(
                 workspaceAction: 'failed',
@@ -2808,11 +2827,11 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             ),
           ] else ...[
             AppButton(
-              label: _isMtnCashInOutWorkspace
-                  ? 'Back to Cash In/Out'
+              label: _isPersistentBusinessWorkspace
+                  ? _persistentWorkspaceLabel
                   : 'Go Home',
-              icon: _isMtnCashInOutWorkspace
-                  ? Icons.swap_horiz_rounded
+              icon: _isPersistentBusinessWorkspace
+                  ? _persistentWorkspaceIcon
                   : Icons.home_outlined,
               onPressed: () => _finishResult(
                 workspaceAction: 'failed',
