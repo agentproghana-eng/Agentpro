@@ -2175,7 +2175,6 @@ class _TransactionScreenState extends State<TransactionScreen> {
           ),
         ),
       ),
-      ),
       bottomNavigationBar: SafeArea(
         top: false,
         child: AnimatedPadding(
