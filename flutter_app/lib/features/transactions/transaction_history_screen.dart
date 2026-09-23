@@ -1150,16 +1150,18 @@ class _TransactionRow extends StatelessWidget {
         ? DateFormat('dd MMM, HH:mm').format(created.toLocal())
         : '';
 
-    final subParts = <String>[];
-    if (tx['customer_phone'] != null) {
-      subParts.add(tx['customer_phone'].toString());
+    final customerPhone =
+        tx['customer_phone']?.toString().trim() ?? '';
+
+    final metadataParts = <String>[];
+    if (dateStr.isNotEmpty) {
+      metadataParts.add(dateStr);
     }
-    subParts.add(dateStr);
     if (commission != null && commission > 0) {
-      subParts.add('Comm. GH₵${commission.toStringAsFixed(2)}');
+      metadataParts.add('Comm. GH₵${commission.toStringAsFixed(2)}');
     }
     if (fee != null && fee > 0) {
-      subParts.add('Charge GH₵${fee.toStringAsFixed(2)}');
+      metadataParts.add('Charge GH₵${fee.toStringAsFixed(2)}');
     }
 
     return Card(
@@ -1188,9 +1190,23 @@ class _TransactionRow extends StatelessWidget {
             ProviderBadge(provider: tx['provider'] ?? ''),
           ],
         ),
-        subtitle: Text(
-          subParts.join(' · '),
-          style: const TextStyle(fontSize: 11),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (customerPhone.isNotEmpty)
+              Text(
+                customerPhone,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            if (metadataParts.isNotEmpty)
+              Text(
+                metadataParts.join(' · '),
+                style: const TextStyle(fontSize: 11),
+              ),
+          ],
         ),
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,

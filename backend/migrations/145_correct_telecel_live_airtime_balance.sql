@@ -227,6 +227,13 @@ BEGIN
       ARRAY['enter pin'],
       'pin_prompt'::ussd_flow_action,
       NULL
+    ),
+    (
+      balance_flow_id,
+      5,
+      ARRAY['confirm to query', '1 ok', '0 cancel'],
+      'auto_confirm_once'::ussd_flow_action,
+      '1'
     );
 
 END

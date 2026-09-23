@@ -66,6 +66,11 @@ class TransactionScreen extends StatefulWidget {
   final String? initialBundleCategory;
   final String? initialRecipientMode;
 
+  /// MTN Agent-only workspace that keeps Cash In and Cash Out on one
+  /// stateful form. The underlying transaction identities remain
+  /// send_money and cash_out.
+  final bool mtnCashInOutWorkspace;
+
   const TransactionScreen({
     super.key,
     required this.transactionType,
@@ -75,6 +80,7 @@ class TransactionScreen extends StatefulWidget {
     this.initialSimSubscriptionId,
     this.initialBundleCategory,
     this.initialRecipientMode,
+    this.mtnCashInOutWorkspace = false,
   });
 
   @override
@@ -100,7 +106,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
   String _selectedProvider =
       'mtn'; // overridden in initState if initialProvider is passed
   bool _loading = false;
-  bool _feeAutoCalculated = true;
+  bool _agentServiceFeeEnabled = false;
+  bool _feeManuallyOverridden = false;
   Map<String, SimCard?>? _simMap;
   List<SimCard> _simCards = const [];
   int? _selectedSimSlot;
@@ -108,6 +115,18 @@ class _TransactionScreenState extends State<TransactionScreen> {
   bool _simDetectionComplete = false;
   bool _simPermissionDenied = false;
   AgentTelecelBundleOption? _selectedTelecelBundle;
+
+  // The MTN Agent Cash In/Out tile is a UI workspace only. Never send
+  // a combined workspace transaction type to the backend:
+  // Cash In remains send_money and Cash Out remains cash_out.
+  String _mtnCashInOutOperation = 'send_money';
+
+  String get _transactionType => widget.mtnCashInOutWorkspace
+      ? _mtnCashInOutOperation
+      : widget.transactionType;
+
+  bool get _isMtnCashInOutWorkspace =>
+      widget.mtnCashInOutWorkspace && _selectedProvider == 'mtn';
 
   // Retained only when manual Cash Out initiation ended ambiguously.
   // The fingerprint prevents reuse if amount/customer/provider/SIM changes.
@@ -141,15 +160,44 @@ class _TransactionScreenState extends State<TransactionScreen> {
     _scheduleFlowPreload(immediate: true);
 
     _amountCtrl.addListener(() {
-      if (!_isAgentServiceFeeFlow || !_feeAutoCalculated) return;
-      final amount = double.tryParse(_amountCtrl.text.replaceAll(',', '')) ?? 0;
-      final fee = amount * 0.01;
-      _feeCtrl.text = fee > 0 ? fee.toStringAsFixed(2) : '';
+      if (!_isAgentServiceFeeFlow ||
+          !_agentServiceFeeEnabled ||
+          _feeManuallyOverridden) {
+        return;
+      }
+
+      _recalculateAgentServiceFee();
     });
   }
 
-  String get _title =>
-      transactionTypeLabel(widget.transactionType, _selectedProvider);
+  void _recalculateAgentServiceFee() {
+    if (!_agentServiceFeeEnabled) {
+      _feeCtrl.text = '0.00';
+      return;
+    }
+
+    final amount =
+        double.tryParse(_amountCtrl.text.replaceAll(',', '').trim()) ?? 0;
+    final fee = amount * 0.01;
+    _feeCtrl.text = fee.toStringAsFixed(2);
+  }
+
+  void _setAgentServiceFeeEnabled(bool enabled) {
+    setState(() {
+      _agentServiceFeeEnabled = enabled;
+      _feeManuallyOverridden = false;
+
+      if (enabled) {
+        _recalculateAgentServiceFee();
+      } else {
+        _feeCtrl.text = '0.00';
+      }
+    });
+  }
+
+  String get _title => _isMtnCashInOutWorkspace
+      ? 'Cash In/Out'
+      : transactionTypeLabel(_transactionType, _selectedProvider);
 
   bool get _providerLocked {
     final initialProvider = widget.initialProvider?.trim();
@@ -177,7 +225,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         _ => _selectedProvider,
       };
 
-  bool get _needsRecipient => ['send_money'].contains(widget.transactionType);
+  bool get _needsRecipient => ['send_money'].contains(_transactionType);
   // Pay to Agent and Pay to Merchant (MTN's "Pay To" menu, both
   // branches) - both confirmed via live device mapping to need a
   // free-text Reference. Agent additionally needs a phone number
@@ -186,19 +234,19 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // number - this fully replaces what used to be a biller-code-style
   // Bill Payment form. MTN-only for both.
   bool get _needsReference =>
-      ['pay_to_agent', 'merchant_payment'].contains(widget.transactionType);
-  bool get _needsMerchantId => widget.transactionType == 'merchant_payment';
+      ['pay_to_agent', 'merchant_payment'].contains(_transactionType);
+  bool get _needsMerchantId => _transactionType == 'merchant_payment';
 
   bool get _isTelecelDataBundle =>
-      widget.transactionType == 'data_bundle' && _selectedProvider == 'telecel';
+      _transactionType == 'data_bundle' && _selectedProvider == 'telecel';
 
   bool _providerSupportsTransaction(String provider) {
-    if (widget.transactionType == 'data_bundle') {
+    if (_transactionType == 'data_bundle') {
       return provider == 'mtn' || provider == 'telecel';
     }
 
-    if (widget.transactionType == 'working_to_float' ||
-        widget.transactionType == 'float_to_working') {
+    if (_transactionType == 'working_to_float' ||
+        _transactionType == 'float_to_working') {
       return provider == 'telecel';
     }
 
@@ -211,7 +259,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'mini_statement',
         'commission_balance',
         'cash_in_commission',
-      ].contains(widget.transactionType) &&
+      ].contains(_transactionType) &&
       !_isTelecelDataBundle;
   // Telecel Agent Data Bundle selects the bundle directly from the
   // provider menu and does not ask for a customer phone. MTN Data Bundle
@@ -228,12 +276,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'working_to_float',
         'float_to_working',
         'commission_transfer',
-      ].contains(widget.transactionType);
+      ].contains(_transactionType);
   bool get _isMtnCashIn =>
-      widget.transactionType == 'send_money' && _selectedProvider == 'mtn';
+      _transactionType == 'send_money' && _selectedProvider == 'mtn';
 
   bool get _isDeposit =>
-      widget.transactionType == 'cash_in' &&
+      _transactionType == 'cash_in' &&
       (_selectedProvider == 'telecel' || _selectedProvider == 'at_money');
 
   // Agent Service Fee defaults to 1% but remains editable because the
@@ -247,7 +295,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // showing the actual PIN/USSD security notice here would be actively
   // wrong, since no PIN entry or dialing ever happens in this flow.
   bool get _isManualCashOut =>
-      widget.transactionType == 'cash_out' &&
+      _transactionType == 'cash_out' &&
       (_selectedProvider == 'telecel' || _selectedProvider == 'at_money');
 
   List<String> get _availableProviders {
@@ -463,7 +511,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
     }
 
     final provider = _selectedProvider;
-    final transactionType = widget.transactionType;
+    final transactionType = _transactionType;
     final bundleCategory = _initialBundleCategory;
     final recipientMode = _initialRecipientMode;
 
@@ -552,7 +600,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
       _selectedSimSlot = providerSims.isEmpty ? null : providerSims.first.slot;
 
-      if (provider != 'telecel' || widget.transactionType != 'data_bundle') {
+      if (provider != 'telecel' || _transactionType != 'data_bundle') {
         return;
       }
 
@@ -572,8 +620,46 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
     setState(() {
       _selectedTelecelBundle = null;
-      _feeAutoCalculated = true;
+      _agentServiceFeeEnabled = false;
+      _feeManuallyOverridden = false;
+      _feeCtrl.text = '0.00';
     });
+  }
+
+  Future<void> _handleProgressAction(String? action) async {
+    if (!mounted || action == null) return;
+
+    // Retry Now deliberately repeats the current transaction immediately.
+    if (action == 'retry_now') {
+      await _proceed();
+      return;
+    }
+
+    // MTN Agent Cash In/Out is a persistent workspace.
+    //
+    // Success clears the completed transaction but stays on this form.
+    // Cancel, failure, timeout/error, pending/uncertain and edit/retry all
+    // return to this form without clearing what the agent entered.
+    if (_isMtnCashInOutWorkspace) {
+      if (action == 'success') {
+        _clearTransactionInputsAfterSuccess();
+      }
+      return;
+    }
+
+    // Ordinary business transactions return Home after a confirmed success
+    // or an explicit cancellation. Failure/pending outcomes remain distinct.
+    if (action == 'success') {
+      _clearTransactionInputsAfterSuccess();
+
+      if (!mounted) return;
+      context.go('/agent');
+      return;
+    }
+
+    if (action == 'cancelled') {
+      context.go('/agent');
+    }
   }
 
   Future<void> _proceed() async {
@@ -687,7 +773,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
     final transactionDisabled = await FeatureFlagService.isTransactionDisabled(
       provider: _selectedProvider,
-      transactionType: widget.transactionType,
+      transactionType: _transactionType,
       allowNetwork: !isOffline,
     );
 
@@ -738,7 +824,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         ? null
         : OfflineQueueService.getCachedTemplate(
             _selectedProvider,
-            widget.transactionType,
+            _transactionType,
             identity: identity,
             businessSimRole: businessSimRole,
           );
@@ -747,7 +833,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         ? null
         : OfflineQueueService.getCachedFlow(
             _selectedProvider,
-            widget.transactionType,
+            _transactionType,
             identity: identity,
             isPersonal: false,
             businessSimRole: businessSimRole,
@@ -764,11 +850,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
     // genuinely needs a prior online run to learn its dial code.
     final isAccessibilityHardcodedFlow = businessSimRole == 'agent' &&
         ((_selectedProvider == 'mtn' &&
-                (widget.transactionType == 'cash_in' ||
-                    widget.transactionType == 'cash_out' ||
-                    widget.transactionType == 'send_money')) ||
+                (_transactionType == 'cash_in' ||
+                    _transactionType == 'cash_out' ||
+                    _transactionType == 'send_money')) ||
             (_selectedProvider == 'telecel' &&
-                widget.transactionType == 'cash_in'));
+                _transactionType == 'cash_in'));
 
     if (isOffline &&
         (isAccessibilityHardcodedFlow ||
@@ -782,7 +868,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
       final localId = 'local_${DateTime.now().millisecondsSinceEpoch}';
       final requestFields = {
         'provider': _selectedProvider,
-        'transaction_type': widget.transactionType,
+        'transaction_type': _transactionType,
         'sim_role': businessSimRole,
         'amount': double.tryParse(_amountCtrl.text.replaceAll(',', '')) ?? 0,
         'customer_phone': _customerPhoneCtrl.text.trim(),
@@ -792,7 +878,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'account_number': '',
         'payment_reference': _referenceCtrl.text.trim(),
         'merchant_id': _merchantIdCtrl.text.trim(),
-        'fee': _isAgentServiceFeeFlow
+        'fee': _isAgentServiceFeeFlow && _agentServiceFeeEnabled
             ? (double.tryParse(_feeCtrl.text.replaceAll(',', '')) ?? 0)
             : 0,
         'notes': '',
@@ -816,7 +902,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
             'cached_flow': cachedFlow,
           },
           'provider': _selectedProvider,
-          'transaction_type': widget.transactionType,
+          'transaction_type': _transactionType,
+          'mtn_cash_in_out_workspace': _isMtnCashInOutWorkspace,
           'sim_role': businessSimRole,
           if (_initialBundleCategory != null)
             'bundle_category': _initialBundleCategory,
@@ -839,17 +926,13 @@ class _TransactionScreenState extends State<TransactionScreen> {
       );
       if (mounted) setState(() => _loading = false);
 
-      if (mounted && progressAction == 'success') {
-      _clearTransactionInputsAfterSuccess();
-    } else if (mounted && progressAction == 'retry_now') {
-        await _proceed();
-      }
+    await _handleProgressAction(progressAction);
       return;
     }
 
     final requestFields = <String, dynamic>{
       'provider': _selectedProvider,
-      'transaction_type': widget.transactionType,
+      'transaction_type': _transactionType,
       'sim_role': businessSimRole,
       'amount': double.tryParse(_amountCtrl.text.replaceAll(',', '')) ?? 0,
       'customer_phone': _customerPhoneCtrl.text.trim(),
@@ -859,7 +942,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
       'account_number': '',
       'payment_reference': _referenceCtrl.text.trim(),
       'merchant_id': _merchantIdCtrl.text.trim(),
-      'fee': _isAgentServiceFeeFlow
+      'fee': _isAgentServiceFeeFlow && _agentServiceFeeEnabled
           ? (double.tryParse(_feeCtrl.text.replaceAll(',', '')) ?? 0)
           : 0,
       'notes': '',
@@ -877,7 +960,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
     final transactionFuture = _initiateOnlineTransaction(
       requestFields: requestFields,
       provider: _selectedProvider,
-      transactionType: widget.transactionType,
+      transactionType: _transactionType,
       businessSimRole: businessSimRole,
     );
 
@@ -888,7 +971,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
       extra: {
         'transaction_future': transactionFuture,
         'provider': _selectedProvider,
-        'transaction_type': widget.transactionType,
+        'transaction_type': _transactionType,
+        'mtn_cash_in_out_workspace': _isMtnCashInOutWorkspace,
         'sim_role': businessSimRole,
         if (_initialBundleCategory != null)
           'bundle_category': _initialBundleCategory,
@@ -912,11 +996,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
       setState(() => _loading = false);
     }
 
-    if (mounted && progressAction == 'success') {
-      _clearTransactionInputsAfterSuccess();
-    } else if (mounted && progressAction == 'retry_now') {
-      await _proceed();
-    }
+    await _handleProgressAction(progressAction);
   }
 
   Future<Map<String, dynamic>> _initiateOnlineTransaction({
@@ -1446,7 +1526,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                           child: Text(
                             _simPermissionDenied
                                 ? 'Allow phone permission to detect your SIM cards.'
-                                : widget.transactionType == 'data_bundle'
+                                : _transactionType == 'data_bundle'
                                     ? 'Insert an MTN or Telecel SIM to continue.'
                                     : 'Insert an MTN, Telecel or AT Money SIM to continue.',
                             style: TextStyle(
@@ -1719,6 +1799,76 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 ],
               ],
 
+              if (_isMtnCashInOutWorkspace) ...[
+                Text(
+                  'Choose transaction',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: context.appSecondaryText,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ChoiceChip(
+                        selected: _mtnCashInOutOperation == 'send_money',
+                        label: const SizedBox(
+                          width: double.infinity,
+                          child: Text(
+                            'CASH IN',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        onSelected: _loading
+                            ? null
+                            : (selected) {
+                                if (!selected) return;
+                                setState(() {
+                                  _mtnCashInOutOperation = 'send_money';
+                                  _agentServiceFeeEnabled = false;
+                                  _feeManuallyOverridden = false;
+                                  _feeCtrl.text = '0.00';
+                                });
+                              },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ChoiceChip(
+                        selected: _mtnCashInOutOperation == 'cash_out',
+                        label: const SizedBox(
+                          width: double.infinity,
+                          child: Text(
+                            'CASH OUT',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        onSelected: _loading
+                            ? null
+                            : (selected) {
+                                if (!selected) return;
+                                setState(() {
+                                  _mtnCashInOutOperation = 'cash_out';
+                                  _agentServiceFeeEnabled = false;
+                                  _feeManuallyOverridden = false;
+                                  _feeCtrl.text = '0.00';
+                                });
+                              },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+              ],
+
               // Provider-specific identifier.
               //
               // Pay to Merchant uses a Merchant ID rather than a phone
@@ -1782,13 +1932,13 @@ class _TransactionScreenState extends State<TransactionScreen> {
                   label: [
                     'business_deposit',
                     'business_withdrawal',
-                  ].contains(widget.transactionType)
+                  ].contains(_transactionType)
                       ? 'Agent Short Code'
                       : 'Phone Number',
                   hint: [
                     'business_deposit',
                     'business_withdrawal',
-                  ].contains(widget.transactionType)
+                  ].contains(_transactionType)
                       ? 'Enter agent short code'
                       : '024XXXXXXX',
                   keyboardType: TextInputType.phone,
@@ -1798,7 +1948,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     final isAgentShortCode = [
                       'business_deposit',
                       'business_withdrawal',
-                    ].contains(widget.transactionType);
+                    ].contains(_transactionType);
 
                     if (value.isEmpty) {
                       return isAgentShortCode
@@ -1868,7 +2018,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     fillColor: context.appSurface,
                   ),
                   style: const TextStyle(
-                    fontSize: 20,
+                    fontSize: 30,
                     fontWeight: FontWeight.bold,
                   ),
                   validator: (v) {
@@ -1892,7 +2042,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
               if (_needsReference) ...[
                 AppTextField(
                   transactionEmphasis: true,
-                  transactionLabelFontSize: 20,
+                  transactionValueFontSize: 28,
                   controller: _referenceCtrl,
                   label: 'Reference',
                   prefixIcon: Icons.notes_outlined,
@@ -1903,10 +2053,34 @@ class _TransactionScreenState extends State<TransactionScreen> {
               ],
 
               // 4. AGENT SERVICE FEE — only for Cash In / Deposit.
-              // This is business income collected from the customer.
+              //
+              // Disabled:
+              //   no fee calculation and the submitted fee is zero.
+              //
+              // Enabled:
+              //   starts at 1% of the transaction amount but the agent can
+              //   manually replace the calculated figure.
               if (_isAgentServiceFeeFlow) ...[
+                CheckboxListTile(
+                  value: _agentServiceFeeEnabled,
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: const Text(
+                    'Agent Service Fee',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: const Text(
+                    'Select to calculate 1%. You can edit the calculated fee.',
+                  ),
+                  onChanged: _loading
+                      ? null
+                      : (value) =>
+                          _setAgentServiceFeeEnabled(value ?? false),
+                ),
+                const SizedBox(height: 8),
                 TextFormField(
                   controller: _feeCtrl,
+                  enabled: _agentServiceFeeEnabled && !_loading,
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
@@ -1925,17 +2099,25 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     ),
                     filled: true,
                     fillColor: context.appSurface,
-                    helperText:
-                        'Defaults to 1% • edit if your business charge differs',
+                    helperText: _agentServiceFeeEnabled
+                        ? '1% automatic calculation • manually editable'
+                        : 'No service fee',
                   ),
-                  onChanged: (_) => _feeAutoCalculated = false,
+                  onChanged: (_) {
+                    if (_agentServiceFeeEnabled) {
+                      _feeManuallyOverridden = true;
+                    }
+                  },
                   validator: (v) {
-                    if (v == null || v.isEmpty) {
+                    if (!_agentServiceFeeEnabled) {
                       return null;
                     }
 
-                    final n = double.tryParse(v);
+                    if (v == null || v.isEmpty) {
+                      return 'Enter a valid service fee';
+                    }
 
+                    final n = double.tryParse(v);
                     if (n == null || n < 0) {
                       return 'Enter a valid service fee';
                     }
@@ -1945,8 +2127,6 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 ),
                 const SizedBox(height: 14),
               ],
-
-              const SizedBox(height: 10),
 
               // Security/info notice - content depends on whether this is
               // a real USSD dial (PIN entered on the network's own screen)

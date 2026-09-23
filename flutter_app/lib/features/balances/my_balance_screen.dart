@@ -558,7 +558,7 @@ class _ProviderBalanceCard extends StatelessWidget {
                 Expanded(
                   child: _ActionChip(
                     icon: Icons.move_to_inbox_outlined,
-                    label: 'Working Account to Float',
+                    label: 'Working Account to Merchant Account',
                     route: _transactionRoute('working_to_float'),
                     onChanged: onChanged,
                   ),
@@ -571,7 +571,7 @@ class _ProviderBalanceCard extends StatelessWidget {
                 Expanded(
                   child: _ActionChip(
                     icon: Icons.outbox_outlined,
-                    label: 'Float to Working Account',
+                    label: 'Merchant Account to Working Account',
                     route: _transactionRoute('float_to_working'),
                     onChanged: onChanged,
                   ),

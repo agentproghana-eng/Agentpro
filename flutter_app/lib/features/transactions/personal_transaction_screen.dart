@@ -1766,7 +1766,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           if (_needsReference) ...[
             AppTextField(
               transactionEmphasis: true,
-              transactionLabelFontSize: 20,
+              transactionValueFontSize: 28,
               controller: _referenceCtrl,
               label: _referenceRequired ? 'Reference' : 'Reference (optional)',
               prefixIcon: Icons.notes_outlined,

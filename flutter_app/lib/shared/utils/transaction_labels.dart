@@ -43,6 +43,17 @@ String transactionTypeLabel(String type, String provider) {
   if (provider == 'telecel' && type == 'cash_out') {
     return 'Withdrawal';
   }
+
+  // Telecel's live Agent menu calls e-Float the Merchant Account.
+  // Keep the internal transaction identifiers stable for accounting.
+  if (provider == 'telecel' && type == 'working_to_float') {
+    return 'Working Account to Merchant Account';
+  }
+
+  if (provider == 'telecel' && type == 'float_to_working') {
+    return 'Merchant Account to Working Account';
+  }
+
   switch (type) {
     case 'cash_in':
       return 'Cash In';

@@ -86,14 +86,21 @@ class DashboardRecentTransactionItem extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '${transaction['customer_phone'] ?? ''}'
-                    ' · $time',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      color: context.appSecondaryText,
-                      fontWeight: FontWeight.w700,
+                    '${transaction['customer_phone'] ?? ''}',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
+                  if (time.isNotEmpty)
+                    Text(
+                      time,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        color: context.appSecondaryText,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                 ],
               ),
             ),

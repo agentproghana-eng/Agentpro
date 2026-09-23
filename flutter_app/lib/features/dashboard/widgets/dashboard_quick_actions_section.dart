@@ -485,6 +485,16 @@ class DashboardQuickActionsSection extends StatelessWidget {
       final preference = actions[index];
       final type = preference.actionKey;
 
+      // MTN Agent Cash In and Cash Out share one operational workspace.
+      // Suppress only the duplicate Cash Out tile at render time; the saved
+      // preference and backend transaction type remain untouched.
+      final isMtnAgentCashWorkspace =
+          provider == 'mtn' && role == 'agent' && type == 'send_money';
+
+      if (provider == 'mtn' && role == 'agent' && type == 'cash_out') {
+        continue;
+      }
+
       final definition = _definition(
         type,
         role,
@@ -496,9 +506,11 @@ class DashboardQuickActionsSection extends StatelessWidget {
         catalogLabel: definition?.displayLabel,
       );
 
-      final label = preference.resolvedDisplayLabel(
-        defaultLabel,
-      );
+      final label = isMtnAgentCashWorkspace
+          ? 'Cash In/Out'
+          : preference.resolvedDisplayLabel(
+              defaultLabel,
+            );
 
       final icon = quickActionIconFromKey(
             preference.iconKey,
@@ -535,7 +547,9 @@ class DashboardQuickActionsSection extends StatelessWidget {
 
             final path = role == 'subscriber'
                 ? '/personal-transactions/new'
-                : '/transactions';
+                : isMtnAgentCashWorkspace
+                    ? '/transactions/mtn-cash-in-out'
+                    : '/transactions';
 
             context.push(
               Uri(

@@ -91,7 +91,7 @@ describe('Telecel Global merchant live Airtime and Balance correction', () => {
     expect(balanceSql).toContain("'1'");
   });
 
-  test('Balance stops at the secure PIN boundary', () => {
+  test('Balance keeps PIN manual and sends only the verified post-PIN OK', () => {
     const balanceStart = sql.indexOf(
       '-- balance enquiry',
     );
@@ -110,6 +110,27 @@ describe('Telecel Global merchant live Airtime and Balance correction', () => {
     expect(balanceSql).toContain(
       "'pin_prompt'::ussd_flow_action",
     );
+    expect(balanceSql).toContain(
+      "array['confirm to query', '1 ok', '0 cancel']",
+    );
+    expect(balanceSql).toContain(
+      "'auto_confirm_once'::ussd_flow_action",
+    );
+
+    const pinIndex = balanceSql.indexOf(
+      "'pin_prompt'::ussd_flow_action",
+    );
+    const confirmIndex = balanceSql.indexOf(
+      "'auto_confirm_once'::ussd_flow_action",
+    );
+
+    expect(confirmIndex).toBeGreaterThan(pinIndex);
+
+    expect(
+      balanceSql.match(
+        /'auto_confirm_once'::ussd_flow_action/g,
+      ) || [],
+    ).toHaveLength(1);
   });
 
   test('uses the verified Balance USSD terminal success', () => {
