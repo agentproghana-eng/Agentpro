@@ -1285,7 +1285,10 @@ class _TransactionScreenState extends State<TransactionScreen> {
           const SizedBox(width: 4),
         ],
       ),
-      body: Form(
+      body: Column(
+        children: [
+          Expanded(
+            child: Form(
         key: _formKey,
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -2108,14 +2111,22 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 2),
                 CheckboxListTile(
                   value: _agentServiceFeeEnabled,
                   contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  visualDensity: const VisualDensity(
+                    horizontal: -2,
+                    vertical: -4,
+                  ),
                   controlAffinity: ListTileControlAffinity.leading,
                   title: const Text(
                     'Charge agent service fee',
-                    style: TextStyle(fontWeight: FontWeight.w700),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   onChanged: _loading
                       ? null
@@ -2175,26 +2186,22 @@ class _TransactionScreenState extends State<TransactionScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: AnimatedPadding(
-          duration: const Duration(milliseconds: 120),
-          curve: Curves.easeOut,
-          padding: EdgeInsets.fromLTRB(
-            16,
-            8,
-            16,
-            MediaQuery.viewInsetsOf(context).bottom > 0 ? 8 : 16,
           ),
-          child: AppButton(
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+              child: AppButton(
             label: _isManualCashOut
                 ? 'Record Cash Out'
                 : 'Proceed to ${_needsAmount ? 'Confirm' : 'Execute'}',
             onPressed: _proceed,
             isLoading: _loading,
             icon: Icons.arrow_forward,
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
