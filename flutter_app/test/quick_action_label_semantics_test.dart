@@ -47,7 +47,7 @@ void main() {
   });
 
   group('MTN Cash In canonical position', () {
-    test('catalog moves send_money into the former cash_in position', () {
+    test('catalog preserves all supported MTN actions', () {
       const definitions = [
         QuickActionCatalogDefinition(
           provider: 'mtn',
@@ -77,8 +77,9 @@ void main() {
       expect(
         normalized.map((item) => item.type).toList(),
         [
-          'send_money',
+          'cash_in',
           'airtime',
+          'send_money',
         ],
       );
     });

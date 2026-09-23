@@ -191,11 +191,16 @@ class DashboardQuickActionsSection extends StatelessWidget {
       // Merchant SIM does not render an empty dashboard merely because
       // the user has not saved custom Merchant preferences yet.
       if (role == 'merchant' && provider == 'telecel') {
+        // Merchant fallback exposes only role-specific actions whose
+        // Merchant execution path is established. Transfer E-Cash is one
+        // workspace backed by the canonical internal-transfer directions.
+        //
+        // Do not default Merchant Send Money or Bank Transfer until their
+        // Merchant-role USSD execution and accounting have been validated.
         const telecelMerchantDefaults = <String>[
           'airtime',
           'balance_enquiry',
           'float_to_working',
-          'working_to_float',
         ];
 
         return telecelMerchantDefaults
@@ -508,18 +513,36 @@ class DashboardQuickActionsSection extends StatelessWidget {
       Color(0xFFB33F6B),
     ];
 
+    var telecelMerchantECashAdded = false;
+
     for (var index = 0; index < actions.length; index++) {
       final preference = actions[index];
       final type = preference.actionKey;
 
-      // MTN Agent Cash In and Cash Out share one operational workspace.
-      // Suppress only the duplicate Cash Out tile at render time; the saved
-      // preference and backend transaction type remain untouched.
+      // MTN Agent may deliberately select both the combined Cash In/Out
+      // workspace and the individual Cash Out action. Quick Action
+      // customization is authoritative, so do not suppress either tile.
       final isMtnAgentCashWorkspace =
           provider == 'mtn' && role == 'agent' && type == 'send_money';
 
-      if (provider == 'mtn' && role == 'agent' && type == 'cash_out') {
-        continue;
+      final isTelecelMerchantSendMoney =
+          provider == 'telecel' && role == 'merchant' && type == 'send_money';
+      final isTelecelMerchantECash =
+          provider == 'telecel' &&
+          role == 'merchant' &&
+          (type == 'float_to_working' || type == 'working_to_float');
+      final isTelecelMerchantBankTransfer =
+          provider == 'telecel' &&
+          role == 'merchant' &&
+          type == 'send_money_to_bank';
+
+      // Both canonical E-Cash directions represent one dashboard workspace.
+      // Saved customization remains untouched; only presentation is deduped.
+      if (isTelecelMerchantECash) {
+        if (telecelMerchantECashAdded) {
+          continue;
+        }
+        telecelMerchantECashAdded = true;
       }
 
       final definition = _definition(
@@ -535,7 +558,13 @@ class DashboardQuickActionsSection extends StatelessWidget {
 
       final label = isMtnAgentCashWorkspace
           ? 'Cash In/Out'
-          : preference.resolvedDisplayLabel(
+          : isTelecelMerchantSendMoney
+              ? 'Send Money'
+              : isTelecelMerchantECash
+                  ? 'Transfer E-Cash'
+                  : isTelecelMerchantBankTransfer
+                      ? 'Bank Transfer'
+                      : preference.resolvedDisplayLabel(
               defaultLabel,
             );
 
@@ -576,7 +605,9 @@ class DashboardQuickActionsSection extends StatelessWidget {
                 ? '/personal-transactions/new'
                 : isMtnAgentCashWorkspace
                     ? '/transactions/mtn-cash-in-out'
-                    : '/transactions';
+                    : isTelecelMerchantECash
+                        ? '/transactions/telecel-merchant-ecash'
+                        : '/transactions';
 
             context.push(
               Uri(

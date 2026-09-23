@@ -71,6 +71,11 @@ class TransactionScreen extends StatefulWidget {
   /// send_money and cash_out.
   final bool mtnCashInOutWorkspace;
 
+  /// Telecel Merchant-only workspace for moving E-Cash between the
+  /// Merchant Account and Working Account. The backend continues to receive
+  /// the canonical float_to_working / working_to_float transaction types.
+  final bool telecelMerchantECashWorkspace;
+
   const TransactionScreen({
     super.key,
     required this.transactionType,
@@ -81,6 +86,7 @@ class TransactionScreen extends StatefulWidget {
     this.initialBundleCategory,
     this.initialRecipientMode,
     this.mtnCashInOutWorkspace = false,
+    this.telecelMerchantECashWorkspace = false,
   });
 
   @override
@@ -121,12 +127,27 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // Cash In remains send_money and Cash Out remains cash_out.
   String _mtnCashInOutOperation = 'send_money';
 
-  String get _transactionType => widget.mtnCashInOutWorkspace
-      ? _mtnCashInOutOperation
-      : widget.transactionType;
+  // Historical names are retained as canonical backend identities:
+  // float_to_working = Merchant Account -> Working Account
+  // working_to_float = Working Account -> Merchant Account
+  String _telecelMerchantECashOperation = 'float_to_working';
+
+  String get _transactionType {
+    if (widget.mtnCashInOutWorkspace) {
+      return _mtnCashInOutOperation;
+    }
+    if (widget.telecelMerchantECashWorkspace) {
+      return _telecelMerchantECashOperation;
+    }
+    return widget.transactionType;
+  }
 
   bool get _isMtnCashInOutWorkspace =>
       widget.mtnCashInOutWorkspace && _selectedProvider == 'mtn';
+
+  bool get _isTelecelMerchantECashWorkspace =>
+      widget.telecelMerchantECashWorkspace &&
+      _selectedProvider == 'telecel';
 
   // Retained only when manual Cash Out initiation ended ambiguously.
   // The fingerprint prevents reuse if amount/customer/provider/SIM changes.
@@ -195,9 +216,15 @@ class _TransactionScreenState extends State<TransactionScreen> {
     });
   }
 
-  String get _title => _isMtnCashInOutWorkspace
-      ? 'Cash In/Out'
-      : transactionTypeLabel(_transactionType, _selectedProvider);
+  String get _title {
+    if (_isMtnCashInOutWorkspace) {
+      return 'Cash In/Out';
+    }
+    if (_isTelecelMerchantECashWorkspace) {
+      return 'Transfer E-Cash';
+    }
+    return transactionTypeLabel(_transactionType, _selectedProvider);
+  }
 
   bool get _providerLocked {
     final initialProvider = widget.initialProvider?.trim();
@@ -637,12 +664,14 @@ class _TransactionScreenState extends State<TransactionScreen> {
       return;
     }
 
-    // MTN Agent Cash In/Out is a persistent workspace.
+    // MTN Agent Cash In/Out and Telecel Merchant Transfer E-Cash are
+    // persistent workspaces.
     //
     // Success clears the completed transaction but stays on this form.
     // Cancel, failure, timeout/error, pending/uncertain and edit/retry all
-    // return to this form without clearing what the agent entered.
-    if (_isMtnCashInOutWorkspace) {
+    // return to the workspace without clearing what the user entered.
+    if (_isMtnCashInOutWorkspace ||
+        _isTelecelMerchantECashWorkspace) {
       if (action == 'success') {
         _clearTransactionInputsAfterSuccess();
       }
@@ -908,6 +937,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
           'provider': _selectedProvider,
           'transaction_type': _transactionType,
           'mtn_cash_in_out_workspace': _isMtnCashInOutWorkspace,
+          'telecel_merchant_ecash_workspace':
+              _isTelecelMerchantECashWorkspace,
           'sim_role': businessSimRole,
           if (_initialBundleCategory != null)
             'bundle_category': _initialBundleCategory,
@@ -981,6 +1012,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'provider': _selectedProvider,
         'transaction_type': _transactionType,
         'mtn_cash_in_out_workspace': _isMtnCashInOutWorkspace,
+        'telecel_merchant_ecash_workspace':
+            _isTelecelMerchantECashWorkspace,
         'sim_role': businessSimRole,
         if (_initialBundleCategory != null)
           'bundle_category': _initialBundleCategory,
@@ -1866,6 +1899,66 @@ class _TransactionScreenState extends State<TransactionScreen> {
                                   _agentServiceFeeEnabled = false;
                                   _feeManuallyOverridden = false;
                                   _feeCtrl.text = '0.00';
+                                });
+                              },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+              ],
+
+              if (_isTelecelMerchantECashWorkspace) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ChoiceChip(
+                        selected: _telecelMerchantECashOperation ==
+                            'float_to_working',
+                        label: const SizedBox(
+                          width: double.infinity,
+                          child: Text(
+                            'TRANSFER TO WORKING ACCOUNT',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        onSelected: _loading
+                            ? null
+                            : (selected) {
+                                if (!selected) return;
+                                setState(() {
+                                  _telecelMerchantECashOperation =
+                                      'float_to_working';
+                                });
+                              },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ChoiceChip(
+                        selected: _telecelMerchantECashOperation ==
+                            'working_to_float',
+                        label: const SizedBox(
+                          width: double.infinity,
+                          child: Text(
+                            'TRANSFER TO MERCHANT ACCOUNT',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        onSelected: _loading
+                            ? null
+                            : (selected) {
+                                if (!selected) return;
+                                setState(() {
+                                  _telecelMerchantECashOperation =
+                                      'working_to_float';
                                 });
                               },
                       ),

@@ -47,7 +47,8 @@ void main() {
       expect(
         form,
         contains(
-          "if (_isMtnCashInOutWorkspace) {\n"
+          "if (_isMtnCashInOutWorkspace ||\n"
+          "        _isTelecelMerchantECashWorkspace) {\n"
           "      if (action == 'success') {\n"
           "        _clearTransactionInputsAfterSuccess();",
         ),

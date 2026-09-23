@@ -51,7 +51,7 @@ void main() {
       );
     });
 
-    test('MTN Agent dashboard renders one combined cash tile', () {
+    test('MTN Agent dashboard supports combined and individual cash actions', () {
       expect(
         dashboard,
         contains(
@@ -61,8 +61,10 @@ void main() {
 
       expect(
         dashboard,
-        contains(
-          "provider == 'mtn' && role == 'agent' && type == 'cash_out'",
+        isNot(
+          contains(
+            "if (provider == 'mtn' && role == 'agent' && type == 'cash_out')",
+          ),
         ),
       );
 
@@ -118,9 +120,9 @@ void main() {
       expect(
         transaction,
         contains(
-          "widget.mtnCashInOutWorkspace\n"
-          "      ? _mtnCashInOutOperation\n"
-          "      : widget.transactionType",
+          "if (widget.mtnCashInOutWorkspace) {\n"
+          "      return _mtnCashInOutOperation;\n"
+          "    }",
         ),
       );
     });

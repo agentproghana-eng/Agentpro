@@ -425,7 +425,7 @@ describe("Quick Action catalog controller behavior", () => {
     ]);
   });
 
-  test("MTN catalog moves send_money into the legacy cash_in position and removes duplicate cash_in", async () => {
+  test("MTN catalog preserves all supported cash actions", async () => {
     mockQuery.mockResolvedValueOnce({
       rows: [
         {
@@ -449,6 +449,13 @@ describe("Quick Action catalog controller behavior", () => {
           bundle_category: null,
           recipient_mode: null,
         },
+        {
+          provider: "mtn",
+          transaction_type: "cash_out",
+          display_label: "Cash Out",
+          bundle_category: null,
+          recipient_mode: null,
+        },
       ],
     });
 
@@ -463,17 +470,34 @@ describe("Quick Action catalog controller behavior", () => {
 
     await userController.getMyQuickActionCatalog(req, res);
 
-    const actions = res.json.mock.calls[0][0].data.providers[0].actions;
-
-    expect(actions.map((action) => action.transaction_type)).toEqual([
-      "send_money",
-      "airtime",
-    ]);
-
-    expect(actions[0].display_label).toBe("Cash In");
+    const actions =
+      res.json.mock.calls[0][0].data.providers[0].actions;
 
     expect(
-      actions.some((action) => action.transaction_type === "cash_in"),
-    ).toBe(false);
+      actions.map((action) => action.transaction_type),
+    ).toEqual([
+      "cash_in",
+      "airtime",
+      "send_money",
+      "cash_out",
+    ]);
+
+    expect(
+      actions.find(
+        (action) => action.transaction_type === "send_money",
+      ).display_label,
+    ).toBe("Cash In");
+
+    expect(
+      actions.some(
+        (action) => action.transaction_type === "cash_in",
+      ),
+    ).toBe(true);
+
+    expect(
+      actions.some(
+        (action) => action.transaction_type === "cash_out",
+      ),
+    ).toBe(true);
   });
 });
