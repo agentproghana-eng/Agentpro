@@ -11,8 +11,24 @@ void main() {
     // Merchant execution must never silently fall through to a Personal
     // Telecel send-money implementation.
     expect(
-      progress.contains('telecelMerchantECashWorkspace'),
-      isTrue,
+      progress,
+      contains("const {'agent', 'merchant'}.contains(role)"),
+    );
+    expect(
+      progress,
+      contains("? '/personal-ussd-flows/resolve'"),
+    );
+    expect(
+      progress,
+      contains("widget.isPersonal ? '/personal-transactions' : '/transactions'"),
+    );
+    expect(
+      progress,
+      contains("widget.data['telecel_merchant_ecash_workspace'] == true"),
+    );
+    expect(
+      progress,
+      contains("widget.data['provider']?.toString() == 'telecel'"),
     );
   });
 
