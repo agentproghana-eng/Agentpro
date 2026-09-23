@@ -225,7 +225,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
         _ => _selectedProvider,
       };
 
-  bool get _needsRecipient => ['send_money'].contains(_transactionType);
+  bool get _needsRecipient =>
+      _isMtnCashInOutWorkspace || ['send_money'].contains(_transactionType);
   // Pay to Agent and Pay to Merchant (MTN's "Pay To" menu, both
   // branches) - both confirmed via live device mapping to need a
   // free-text Reference. Agent additionally needs a phone number
@@ -265,6 +266,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // provider menu and does not ask for a customer phone. MTN Data Bundle
   // does ask for the recipient number, so it keeps the customer field.
   bool get _needsCustomer =>
+      !_isMtnCashInOutWorkspace &&
       !_isTelecelDataBundle &&
       ![
         'balance_enquiry',
@@ -871,7 +873,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'transaction_type': _transactionType,
         'sim_role': businessSimRole,
         'amount': double.tryParse(_amountCtrl.text.replaceAll(',', '')) ?? 0,
-        'customer_phone': _customerPhoneCtrl.text.trim(),
+        'customer_phone': _isMtnCashInOutWorkspace
+            ? _recipientPhoneCtrl.text.trim()
+            : _customerPhoneCtrl.text.trim(),
         'customer_name': '',
         'recipient_phone': _recipientPhoneCtrl.text.trim(),
         'biller_code': '',
@@ -910,7 +914,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
           if (_initialRecipientMode != null)
             'recipient_mode': _initialRecipientMode,
           'amount': _amountCtrl.text,
-          'customer_phone': _customerPhoneCtrl.text.trim(),
+          'customer_phone': _isMtnCashInOutWorkspace
+              ? _recipientPhoneCtrl.text.trim()
+              : _customerPhoneCtrl.text.trim(),
           'customer_name': '',
           'sim_slot': _selectedSim?.slot,
           'sim_iccid': _selectedSim?.iccid,
@@ -935,7 +941,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
       'transaction_type': _transactionType,
       'sim_role': businessSimRole,
       'amount': double.tryParse(_amountCtrl.text.replaceAll(',', '')) ?? 0,
-      'customer_phone': _customerPhoneCtrl.text.trim(),
+      'customer_phone': _isMtnCashInOutWorkspace
+          ? _recipientPhoneCtrl.text.trim()
+          : _customerPhoneCtrl.text.trim(),
       'customer_name': '',
       'recipient_phone': _recipientPhoneCtrl.text.trim(),
       'biller_code': '',
@@ -979,7 +987,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
         if (_initialRecipientMode != null)
           'recipient_mode': _initialRecipientMode,
         'amount': _amountCtrl.text,
-        'customer_phone': _customerPhoneCtrl.text.trim(),
+        'customer_phone': _isMtnCashInOutWorkspace
+            ? _recipientPhoneCtrl.text.trim()
+            : _customerPhoneCtrl.text.trim(),
         'customer_name': '',
         'sim_slot': _selectedSim?.slot,
         'sim_iccid': _selectedSim?.iccid,
@@ -2061,23 +2071,6 @@ class _TransactionScreenState extends State<TransactionScreen> {
               //   starts at 1% of the transaction amount but the agent can
               //   manually replace the calculated figure.
               if (_isAgentServiceFeeFlow) ...[
-                CheckboxListTile(
-                  value: _agentServiceFeeEnabled,
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  title: const Text(
-                    'Agent Service Fee',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  subtitle: const Text(
-                    'Select to calculate 1%. You can edit the calculated fee.',
-                  ),
-                  onChanged: _loading
-                      ? null
-                      : (value) =>
-                          _setAgentServiceFeeEnabled(value ?? false),
-                ),
-                const SizedBox(height: 8),
                 TextFormField(
                   controller: _feeCtrl,
                   enabled: _agentServiceFeeEnabled && !_loading,
@@ -2099,9 +2092,6 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     ),
                     filled: true,
                     fillColor: context.appSurface,
-                    helperText: _agentServiceFeeEnabled
-                        ? '1% automatic calculation • manually editable'
-                        : 'No service fee',
                   ),
                   onChanged: (_) {
                     if (_agentServiceFeeEnabled) {
@@ -2124,6 +2114,20 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
                     return null;
                   },
+                ),
+                const SizedBox(height: 8),
+                CheckboxListTile(
+                  value: _agentServiceFeeEnabled,
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: const Text(
+                    'Charge agent service fee',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  onChanged: _loading
+                      ? null
+                      : (value) =>
+                          _setAgentServiceFeeEnabled(value ?? false),
                 ),
                 const SizedBox(height: 14),
               ],
