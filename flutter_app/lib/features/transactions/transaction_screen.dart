@@ -21,6 +21,7 @@ import '../../core/services/sim_card_service.dart';
 import '../../core/services/sim_role_assignment_service.dart';
 import '../../core/services/storage_service.dart';
 import '../../core/services/transaction_device_preparation_service.dart';
+import 'models/telecel_merchant_bank_selections.dart';
 
 class AgentTelecelBundleOption {
   final String label;
@@ -108,6 +109,13 @@ class _TransactionScreenState extends State<TransactionScreen> {
   final _referenceCtrl = TextEditingController();
   final _merchantIdCtrl = TextEditingController();
   final _feeCtrl = TextEditingController();
+  final _accountNumberCtrl = TextEditingController();
+
+  // Telecel Merchant Send Money is one UI workspace backed by two
+  // distinct provider transaction types.
+  String _telecelMerchantSendMoneyMode = 'telecel';
+  String? _telecelMerchantNetworkSelection;
+  String? _selectedTelecelMerchantBank;
 
   String _selectedProvider =
       'mtn'; // overridden in initState if initialProvider is passed
@@ -139,7 +147,51 @@ class _TransactionScreenState extends State<TransactionScreen> {
     if (widget.telecelMerchantECashWorkspace) {
       return _telecelMerchantECashOperation;
     }
+
+    if (_isTelecelMerchantSendMoneyWorkspace) {
+      return _telecelMerchantSendMoneyMode == 'telecel'
+          ? 'send_money_same_network'
+          : 'send_money_cross_network';
+    }
+
     return widget.transactionType;
+  }
+
+  bool get _isTelecelMerchantSendMoneyWorkspace =>
+      _selectedProvider == 'telecel' &&
+      widget.transactionType == 'send_money';
+
+  bool get _isTelecelMerchantBankTransfer =>
+      _selectedProvider == 'telecel' &&
+      widget.transactionType == 'send_money_to_bank';
+
+  bool get _needsTelecelMerchantReference =>
+      _isTelecelMerchantSendMoneyWorkspace ||
+      _isTelecelMerchantBankTransfer;
+
+  bool get _needsTelecelMerchantAccountNumber =>
+      _isTelecelMerchantBankTransfer;
+
+  List<String> get _telecelMerchantSelectionsInOrder {
+    if (_isTelecelMerchantSendMoneyWorkspace &&
+        _telecelMerchantSendMoneyMode == 'other_network') {
+      final selection = _telecelMerchantNetworkSelection;
+      return selection == null
+          ? const <String>[]
+          : <String>[selection];
+    }
+
+    if (_isTelecelMerchantBankTransfer) {
+      final bank = _selectedTelecelMerchantBank;
+      if (bank == null) return const <String>[];
+
+      return List<String>.unmodifiable(
+        kTelecelMerchantBankSelections[bank] ??
+            const <String>[],
+      );
+    }
+
+    return const <String>[];
   }
 
   bool get _isMtnCashInOutWorkspace =>
@@ -253,7 +305,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
       };
 
   bool get _needsRecipient =>
-      _isMtnCashInOutWorkspace || ['send_money'].contains(_transactionType);
+      _isMtnCashInOutWorkspace ||
+      _isTelecelMerchantSendMoneyWorkspace ||
+      ['send_money'].contains(_transactionType);
   // Pay to Agent and Pay to Merchant (MTN's "Pay To" menu, both
   // branches) - both confirmed via live device mapping to need a
   // free-text Reference. Agent additionally needs a phone number
@@ -299,6 +353,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'balance_enquiry',
         'mini_statement',
         'send_money',
+        'send_money_same_network',
+        'send_money_cross_network',
+        'send_money_to_bank',
         'merchant_payment',
         'commission_balance',
         'cash_in_commission',
@@ -967,7 +1024,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'customer_name': '',
         'recipient_phone': _recipientPhoneCtrl.text.trim(),
         'biller_code': '',
-        'account_number': '',
+        'account_number': _needsTelecelMerchantAccountNumber
+            ? _accountNumberCtrl.text.trim()
+            : '',
         'payment_reference': _referenceCtrl.text.trim(),
         'merchant_id': _merchantIdCtrl.text.trim(),
         'fee': _isAgentServiceFeeFlow && _agentServiceFeeEnabled
@@ -1012,9 +1071,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
           'sim_iccid': _selectedSim?.iccid,
           'sim_subscription_id': _selectedSim?.subscriptionId,
           'selections_in_order':
-              _isTelecelDataBundle && _selectedTelecelBundle != null
-                  ? <String>[_selectedTelecelBundle!.digit]
-                  : const <String>[],
+              _telecelMerchantSelectionsInOrder.isNotEmpty
+                  ? _telecelMerchantSelectionsInOrder
+                  : _isTelecelDataBundle &&
+                          _selectedTelecelBundle != null
+                      ? <String>[_selectedTelecelBundle!.digit]
+                      : const <String>[],
           'request_fields': requestFields,
           if (offlineAuthorizationReceipt != null)
             'offline_authorization_receipt': offlineAuthorizationReceipt,
@@ -1037,7 +1099,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
       'customer_name': '',
       'recipient_phone': _recipientPhoneCtrl.text.trim(),
       'biller_code': '',
-      'account_number': '',
+      'account_number': _needsTelecelMerchantAccountNumber
+            ? _accountNumberCtrl.text.trim()
+            : '',
       'payment_reference': _referenceCtrl.text.trim(),
       'merchant_id': _merchantIdCtrl.text.trim(),
       'fee': _isAgentServiceFeeFlow && _agentServiceFeeEnabled
@@ -1087,9 +1151,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'sim_iccid': _selectedSim?.iccid,
         'sim_subscription_id': _selectedSim?.subscriptionId,
         'selections_in_order':
-            _isTelecelDataBundle && _selectedTelecelBundle != null
-                ? <String>[_selectedTelecelBundle!.digit]
-                : const <String>[],
+            _telecelMerchantSelectionsInOrder.isNotEmpty
+                ? _telecelMerchantSelectionsInOrder
+                : _isTelecelDataBundle &&
+                        _selectedTelecelBundle != null
+                    ? <String>[_selectedTelecelBundle!.digit]
+                    : const <String>[],
         'request_fields': requestFields,
       },
     );
@@ -2033,6 +2100,134 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 const SizedBox(height: 20),
               ],
 
+              // Telecel Merchant Send Money keeps the user-facing action
+              // grouped while preserving distinct provider transaction
+              // identities underneath.
+              if (_isTelecelMerchantSendMoneyWorkspace) ...[
+                DropdownButtonFormField<String>(
+                  initialValue: _telecelMerchantSendMoneyMode,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Send Money To',
+                    prefixIcon: Icon(Icons.send_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'telecel',
+                      child: Text('Telecel'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'other_network',
+                      child: Text('Other Network'),
+                    ),
+                  ],
+                  onChanged: _loading
+                      ? null
+                      : (value) {
+                          if (value == null) return;
+                          setState(() {
+                            _telecelMerchantSendMoneyMode = value;
+                            if (value == 'telecel') {
+                              _telecelMerchantNetworkSelection = null;
+                            }
+                          });
+                        },
+                ),
+                const SizedBox(height: 14),
+
+                if (_telecelMerchantSendMoneyMode ==
+                    'other_network') ...[
+                  DropdownButtonFormField<String>(
+                    initialValue:
+                        _telecelMerchantNetworkSelection,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Network',
+                      prefixIcon:
+                          Icon(Icons.cell_tower_outlined),
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: '1',
+                        child: Text('MTN'),
+                      ),
+                      DropdownMenuItem(
+                        value: '2',
+                        child: Text('ATMoney'),
+                      ),
+                    ],
+                    onChanged: _loading
+                        ? null
+                        : (value) {
+                            setState(() {
+                              _telecelMerchantNetworkSelection =
+                                  value;
+                            });
+                          },
+                    validator: (value) =>
+                        value == null || value.isEmpty
+                            ? 'Select network'
+                            : null,
+                  ),
+                  const SizedBox(height: 14),
+                ],
+              ],
+
+              // Telecel Merchant bank routing is deliberately independent
+              // from Telecel Personal. The selected bank resolves to the
+              // Merchant-specific alphabet-group and bank menu digits.
+              if (_isTelecelMerchantBankTransfer) ...[
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedTelecelMerchantBank,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Bank Name',
+                    prefixIcon:
+                        Icon(Icons.account_balance_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                  items: kTelecelMerchantBankSelections.keys
+                      .map(
+                        (bank) => DropdownMenuItem<String>(
+                          value: bank,
+                          child: Text(
+                            bank,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: _loading
+                      ? null
+                      : (value) {
+                          setState(() {
+                            _selectedTelecelMerchantBank = value;
+                          });
+                        },
+                  validator: (value) =>
+                      value == null || value.isEmpty
+                          ? 'Select bank'
+                          : null,
+                ),
+                const SizedBox(height: 14),
+
+                AppTextField(
+                  transactionEmphasis: true,
+                  controller: _accountNumberCtrl,
+                  label: 'Account Number',
+                  keyboardType: TextInputType.number,
+                  prefixIcon:
+                      Icons.account_balance_wallet_outlined,
+                  validator: (value) =>
+                      value == null || value.trim().isEmpty
+                          ? 'Account number is required'
+                          : null,
+                ),
+                const SizedBox(height: 14),
+              ],
+
               // Provider-specific identifier.
               //
               // Pay to Merchant uses a Merchant ID rather than a phone
@@ -2203,7 +2398,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
               ],
 
               // 3. REFERENCE — only when required by the provider flow.
-              if (_needsReference) ...[
+              if (_needsReference ||
+                  _needsTelecelMerchantReference) ...[
                 AppTextField(
                   transactionEmphasis: true,
                   transactionValueFontSize: 20,
@@ -2375,6 +2571,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
       _referenceCtrl,
       _merchantIdCtrl,
       _feeCtrl,
+      _accountNumberCtrl,
     ]) {
       c.dispose();
     }
