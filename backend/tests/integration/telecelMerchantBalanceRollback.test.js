@@ -36,11 +36,16 @@ describe("Telecel Merchant balance reconciliation rollback", () => {
           `INSERT INTO companies (
              name,
              phone,
+             email,
              status
            )
-           VALUES ($1, $2, 'active')
+           VALUES ($1, $2, $3, 'active')
            RETURNING id`,
-          [`Telecel rollback ${suffix}`, `024${suffix.slice(-7)}`],
+          [
+            `Telecel rollback ${suffix}`,
+            `024${suffix.slice(-7)}`,
+            `telecel-rollback-${suffix}@example.com`,
+          ],
         )
       ).rows[0].id;
 
@@ -265,11 +270,16 @@ describe("Telecel Merchant E-Cash posting rollback", () => {
           `INSERT INTO companies (
              name,
              phone,
+             email,
              status
            )
-           VALUES ($1, $2, 'active')
+           VALUES ($1, $2, $3, 'active')
            RETURNING id`,
-          [`Telecel E-Cash rollback ${suffix}`, `025${suffix.slice(-7)}`],
+          [
+            `Telecel E-Cash rollback ${suffix}`,
+            `025${suffix.slice(-7)}`,
+            `telecel-ecash-rollback-${suffix}@example.com`,
+          ],
         )
       ).rows[0].id;
 
