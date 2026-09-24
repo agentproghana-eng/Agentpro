@@ -1,6 +1,10 @@
 package com.agentpro.ghana
 
-import android.content.Context
+import android.Manifest
+import android.app.Activity
+import android.content.pm.PackageManager
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -16,10 +20,17 @@ import io.flutter.plugin.common.MethodChannel
  * this channel.
  */
 class TelecelMerchantBalanceSmsChannel(
-    context: Context,
+    private val activity: Activity,
 ) : MethodChannel.MethodCallHandler {
+    companion object {
+        private const val REQUEST_RECEIVE_SMS = 7402
+    }
+
     private val appContext =
-        context.applicationContext
+        activity.applicationContext
+
+    private var pendingPermissionResult:
+        MethodChannel.Result? = null
 
     fun register(
         messenger: BinaryMessenger,
@@ -36,6 +47,14 @@ class TelecelMerchantBalanceSmsChannel(
         result: MethodChannel.Result,
     ) {
         when (call.method) {
+            "hasReceiveSmsPermission" ->
+                result.success(
+                    hasReceiveSmsPermission(),
+                )
+
+            "requestReceiveSmsPermission" ->
+                requestReceiveSmsPermission(result)
+
             "getPendingTelecelMerchantBalanceObservations" -> {
                 val observations =
                     TelecelMerchantBalanceSmsStore
@@ -90,5 +109,57 @@ class TelecelMerchantBalanceSmsChannel(
 
             else -> result.notImplemented()
         }
+    }
+
+    fun onRequestPermissionsResult(
+        requestCode: Int,
+        grantResults: IntArray,
+    ): Boolean {
+        if (requestCode != REQUEST_RECEIVE_SMS) {
+            return false
+        }
+
+        val callback = pendingPermissionResult
+        pendingPermissionResult = null
+
+        callback?.success(
+            grantResults.isNotEmpty() &&
+                grantResults[0] ==
+                PackageManager.PERMISSION_GRANTED,
+        )
+
+        return true
+    }
+
+    private fun hasReceiveSmsPermission(): Boolean =
+        ContextCompat.checkSelfPermission(
+            activity,
+            Manifest.permission.RECEIVE_SMS,
+        ) == PackageManager.PERMISSION_GRANTED
+
+    private fun requestReceiveSmsPermission(
+        result: MethodChannel.Result,
+    ) {
+        if (hasReceiveSmsPermission()) {
+            result.success(true)
+            return
+        }
+
+        if (pendingPermissionResult != null) {
+            result.error(
+                "PERMISSION_REQUEST_IN_PROGRESS",
+                "An SMS permission request is already in progress.",
+                null,
+            )
+            return
+        }
+
+        pendingPermissionResult = result
+
+        ActivityCompat.requestPermissions(
+            activity,
+            arrayOf(Manifest.permission.RECEIVE_SMS),
+            REQUEST_RECEIVE_SMS,
+        )
     }
 }

@@ -757,6 +757,65 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
     if (!mounted) return;
 
+    // Telecel Merchant balance enquiry completes asynchronously through a
+    // newly delivered T-CASH SMS. Request RECEIVE_SMS before starting the
+    // USSD flow so the resulting balance observation cannot be missed.
+    if (_selectedProvider == 'telecel' &&
+        businessSimRole == 'merchant' &&
+        _transactionType == 'balance_enquiry') {
+      try {
+        const channel = MethodChannel(
+          'com.agentpro.ghana/telecel_merchant_balance_sms',
+        );
+
+        final granted =
+            await channel.invokeMethod<bool>(
+              'requestReceiveSmsPermission',
+            ) ??
+            false;
+
+        if (!granted) {
+          if (!mounted) return;
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Allow SMS permission to receive and reconcile '
+                'your Telecel Merchant balances.',
+              ),
+            ),
+          );
+          return;
+        }
+      } on PlatformException {
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'AgentPro could not enable Telecel balance SMS '
+              'reconciliation. Please try again.',
+            ),
+          ),
+        );
+        return;
+      } on MissingPluginException {
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Telecel balance SMS reconciliation is unavailable '
+              'on this device.',
+            ),
+          ),
+        );
+        return;
+      }
+    }
+
+    if (!mounted) return;
+
     if (_isTelecelDataBundle && _selectedTelecelBundle == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Select a Telecel data bundle')),

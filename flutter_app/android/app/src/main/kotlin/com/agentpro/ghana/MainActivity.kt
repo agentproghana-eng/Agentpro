@@ -18,6 +18,8 @@ class MainActivity : FlutterFragmentActivity() {
         "com.agentpro.ghana/telecel_merchant_balance_sms"
 
     private lateinit var mtnCashOutSmsChannel: MtnCashOutSmsChannel
+    private lateinit var telecelMerchantBalanceSmsChannel:
+        TelecelMerchantBalanceSmsChannel
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -46,11 +48,12 @@ class MainActivity : FlutterFragmentActivity() {
         // Native SMS parsing owns creation; Flutter can only read pending
         // observations and acknowledge an exact reference after backend
         // acceptance.
-        TelecelMerchantBalanceSmsChannel(this)
-            .register(
-                flutterEngine.dartExecutor.binaryMessenger,
-                TELECEL_MERCHANT_BALANCE_SMS_CHANNEL,
-            )
+        telecelMerchantBalanceSmsChannel =
+            TelecelMerchantBalanceSmsChannel(this)
+        telecelMerchantBalanceSmsChannel.register(
+            flutterEngine.dartExecutor.binaryMessenger,
+            TELECEL_MERCHANT_BALANCE_SMS_CHANNEL,
+        )
 
         // Monotonic Android clock used for bounded offline transaction trust.
         DeviceClockChannel(this)
@@ -86,6 +89,17 @@ class MainActivity : FlutterFragmentActivity() {
                 requestCode,
                 grantResults
             )
+        ) {
+            return
+        }
+
+        if (
+            ::telecelMerchantBalanceSmsChannel.isInitialized &&
+            telecelMerchantBalanceSmsChannel
+                .onRequestPermissionsResult(
+                    requestCode,
+                    grantResults,
+                )
         ) {
             return
         }
