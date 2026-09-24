@@ -79,8 +79,7 @@ void main() {
     expect(
       source,
       contains(
-        'if (!accepted) {\n'
-        '          return;',
+        'if (!accepted) {',
       ),
     );
   });
@@ -127,15 +126,15 @@ void main() {
     expect(
       source,
       contains(
-        'if (!acknowledged) {\n'
-        '          return;',
+        'if (!acknowledged) {',
       ),
     );
   });
 
   test('prevents overlapping FIFO processors', () {
     expect(source, contains('bool _processing = false;'));
-    expect(source, contains('if (_processing) return;'));
+    expect(source, contains('if (_processing) {'));
+    expect(source, contains('_rerunRequested = true;'));
     expect(source, contains('_processing = true;'));
     expect(source, contains('_processing = false;'));
   });

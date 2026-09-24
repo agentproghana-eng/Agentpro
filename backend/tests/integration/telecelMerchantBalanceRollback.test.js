@@ -35,11 +35,12 @@ describe("Telecel Merchant balance reconciliation rollback", () => {
         await client.query(
           `INSERT INTO companies (
              name,
+             phone,
              status
            )
-           VALUES ($1, 'active')
+           VALUES ($1, $2, 'active')
            RETURNING id`,
-          [`Telecel rollback ${suffix}`],
+          [`Telecel rollback ${suffix}`, `024${suffix.slice(-7)}`],
         )
       ).rows[0].id;
 
@@ -263,11 +264,12 @@ describe("Telecel Merchant E-Cash posting rollback", () => {
         await client.query(
           `INSERT INTO companies (
              name,
+             phone,
              status
            )
-           VALUES ($1, 'active')
+           VALUES ($1, $2, 'active')
            RETURNING id`,
-          [`Telecel E-Cash rollback ${suffix}`],
+          [`Telecel E-Cash rollback ${suffix}`, `025${suffix.slice(-7)}`],
         )
       ).rows[0].id;
 
