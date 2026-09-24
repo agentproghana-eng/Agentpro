@@ -15,7 +15,22 @@
 DO $$
 DECLARE
   merchant_balance_flow_id UUID;
+  superuser_id UUID;
 BEGIN
+  -- ussd_flows.created_by is NOT NULL. Resolve the seed owner
+  -- deterministically and fail closed rather than creating an invalid flow.
+  SELECT id
+  INTO superuser_id
+  FROM users
+  WHERE role = 'superuser'
+  ORDER BY created_at ASC, id ASC
+  LIMIT 1;
+
+  IF superuser_id IS NULL THEN
+    RAISE EXCEPTION
+      'Cannot seed Telecel Merchant balance flow: no superuser exists';
+  END IF;
+
   -- Find an existing active global Merchant-specific flow first.
   SELECT id
   INTO merchant_balance_flow_id
@@ -38,6 +53,7 @@ BEGIN
       business_sim_role,
       company_id,
       owner_user_id,
+      created_by,
       is_active,
       execution_mode,
       success_markers,
@@ -50,6 +66,7 @@ BEGIN
       'merchant',
       NULL,
       NULL,
+      superuser_id,
       TRUE,
       'interactive',
       ARRAY[

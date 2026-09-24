@@ -26,6 +26,17 @@ describe("Telecel Merchant balance enquiry flow contract", () => {
     expect(sql).toContain("'*110#'");
   });
 
+  test("assigns the required flow creator from a superuser", () => {
+    expect(sql).toContain("superuser_id UUID");
+    expect(sql).toContain("WHERE role = 'superuser'");
+    expect(sql).toContain("ORDER BY created_at ASC, id ASC");
+    expect(sql).toContain("created_by");
+    expect(sql).toContain("superuser_id");
+    expect(sql).toContain(
+      "Cannot seed Telecel Merchant balance flow: no superuser exists",
+    );
+  });
+
   test("uses the five verified live Merchant balance steps", () => {
     expect(sql).toContain("ARRAY['my account']");
     expect(sql).toContain("'send_digit'::ussd_flow_action");
