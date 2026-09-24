@@ -1012,6 +1012,21 @@ exports.getExecutionCredentials = async (req, res) => {
         "send_organisation_shortcode",
       );
 
+    // Organisation Shortcode is Merchant-only. Fail closed if an
+    // Agent flow is ever misconfigured to request one.
+    if (
+      simRole === "agent" &&
+      needsOrganisationShortcode
+    ) {
+      return res.status(422).json({
+        success: false,
+        code:
+          "INVALID_TELECEL_CREDENTIAL_FOR_SIM_ROLE",
+        message:
+          "Organisation Shortcode is not supported for a Telecel Agent SIM",
+      });
+    }
+
     // A credential-free Telecel flow never needs to read the user's
     // protected credential columns at all.
     if (

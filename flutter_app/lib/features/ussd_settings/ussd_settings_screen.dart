@@ -28,7 +28,6 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
   bool _savingTelecelCredential = false;
 
   bool _agentOperatorConfigured = false;
-  bool _agentShortcodeConfigured = false;
   bool _merchantOperatorConfigured = false;
   bool _merchantShortcodeConfigured = false;
 
@@ -66,8 +65,6 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
       setState(() {
         _agentOperatorConfigured =
             data['telecel_agent_operator_id_configured'] == true;
-        _agentShortcodeConfigured =
-            data['telecel_agent_organisation_shortcode_configured'] == true;
         _merchantOperatorConfigured =
             data['telecel_merchant_operator_id_configured'] == true;
         _merchantShortcodeConfigured =
@@ -299,9 +296,9 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
       icon: Icons.shield_outlined,
       title: 'Telecel protected credentials',
       description:
-          'Operator IDs and Organisation Shortcodes stay masked '
-          'after saving. Phone authentication is required before '
-          'setting or replacing them.',
+          'Protected Telecel credentials stay masked after saving. '
+          'Phone authentication is required before setting or '
+          'replacing them.',
       child: _loadingTelecelCredentialStatus
           ? const Padding(
               padding: EdgeInsets.all(18),
@@ -324,12 +321,6 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
                   credentialType: 'operator_id',
                   label: 'Operator ID',
                   configured: _agentOperatorConfigured,
-                ),
-                _protectedCredentialRow(
-                  simRole: 'agent',
-                  credentialType: 'organisation_shortcode',
-                  label: 'Organisation Shortcode',
-                  configured: _agentShortcodeConfigured,
                 ),
                 const Divider(),
                 const SizedBox(height: 6),
