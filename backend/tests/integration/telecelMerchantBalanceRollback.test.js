@@ -533,3 +533,7 @@ describe("Telecel Merchant E-Cash posting rollback", () => {
     },
   );
 });
+
+afterAll(async () => {
+  await pool.end();
+});
