@@ -54,7 +54,7 @@ object TelecelMerchantBalanceSmsStore {
 
         observations.add(observation)
 
-        persist(
+        return persist(
             context,
             observations.sortedWith(
                 compareBy<PendingObservation> {
@@ -64,8 +64,6 @@ object TelecelMerchantBalanceSmsStore {
                 },
             ),
         )
-
-        return true
     }
 
     @Synchronized
@@ -138,22 +136,23 @@ object TelecelMerchantBalanceSmsStore {
             return false
         }
 
-        persist(context, remaining)
-
-        return true
+        return persist(
+            context,
+            remaining,
+        )
     }
 
     private fun persist(
         context: Context,
         observations: List<PendingObservation>,
-    ) {
+    ): Boolean {
         val array = JSONArray()
 
         observations.forEach { observation ->
             array.put(encode(observation))
         }
 
-        context
+        return context
             .getSharedPreferences(
                 PREFS,
                 Context.MODE_PRIVATE,

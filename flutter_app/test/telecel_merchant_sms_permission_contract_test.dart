@@ -74,6 +74,41 @@ void main() {
     );
   });
 
+  test('Telecel balance observation persistence propagates commit result', () {
+    final store = File(
+      'android/app/src/main/kotlin/com/agentpro/ghana/'
+      'TelecelMerchantBalanceSmsStore.kt',
+    ).readAsStringSync();
+
+    expect(
+      RegExp(r'return persist\([\s\S]*?observations\.sortedWith')
+          .hasMatch(store),
+      isTrue,
+    );
+
+    expect(
+      RegExp(r'return persist\(\s*context,\s*remaining,\s*\)')
+          .hasMatch(store),
+      isTrue,
+    );
+
+    expect(
+      store,
+      contains('): Boolean {'),
+    );
+
+    expect(
+      store,
+      contains('.commit()'),
+    );
+
+    expect(
+      store,
+      isNot(contains('.apply()')),
+    );
+  });
+
+
   test('MainActivity forwards Telecel permission results', () {
     final source = mainActivity.readAsStringSync();
 
