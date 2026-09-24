@@ -305,9 +305,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
       };
 
   bool get _needsRecipient =>
-      _isMtnCashInOutWorkspace ||
-      _isTelecelMerchantSendMoneyWorkspace ||
-      ['send_money'].contains(_transactionType);
+      _isMtnCashInOutWorkspace || ['send_money'].contains(_transactionType) ||
+      _isTelecelMerchantSendMoneyWorkspace;
   // Pay to Agent and Pay to Merchant (MTN's "Pay To" menu, both
   // branches) - both confirmed via live device mapping to need a
   // free-text Reference. Agent additionally needs a phone number
