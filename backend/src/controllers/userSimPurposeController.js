@@ -1,5 +1,8 @@
 const { query, withTransaction } = require("../config/database");
 const { logger } = require("../utils/logger");
+const {
+  bootstrapTelecelMerchantWallet,
+} = require("../services/telecelMerchantWalletBootstrapService");
 
 const CANONICAL_PURPOSES = ["agent", "subscriber", "evd", "merchant"];
 
@@ -231,6 +234,33 @@ exports.setPurposes = async (req, res) => {
             assignment.sim_subscription_id ?? null,
           ],
         );
+
+        /*
+         * A verified Telecel Merchant assignment is the trusted
+         * provisioning boundary for its structural accounting wallet.
+         *
+         * This does not establish monetary balances. The two balance
+         * accounts remain unknown until reconciled from a subsequent
+         * Telecel balance observation.
+         */
+        if (
+          provider === "telecel" &&
+          purpose === "merchant"
+        ) {
+          await bootstrapTelecelMerchantWallet(
+            client,
+            {
+              agentId: req.user.id,
+              simIccid:
+                assignment.sim_iccid || null,
+              installationId:
+                assignment.installation_id || null,
+              simSubscriptionId:
+                assignment.sim_subscription_id ?? null,
+              simSlot: assignment.sim_slot,
+            },
+          );
+        }
       }
     });
 

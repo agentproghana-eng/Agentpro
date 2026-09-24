@@ -68,11 +68,44 @@ describe("Business transaction role execution contract", () => {
     expect(controller).toContain('sim_role: existing.sim_role || "agent"');
   });
 
-  test("unvalidated EVD and Merchant accounting fails before USSD", () => {
+  test("EVD and unvalidated Merchant accounting remain blocked before USSD", () => {
     expect(controller).toContain("SIM_ROLE_ACCOUNTING_NOT_CONFIGURED");
 
     expect(controller).toContain(
       '["evd", "merchant"].includes(businessSimRole)',
+    );
+  });
+
+  test("Telecel Merchant E-Cash requires initialized balances before USSD", () => {
+    expect(controller).toContain(
+      "requireTelecelMerchantECashReadiness",
+    );
+
+    const roleVerification =
+      controller.indexOf("roleVerification.ok === false");
+
+    const readiness =
+      controller.indexOf(
+        "requireTelecelMerchantECashReadiness(client",
+      );
+
+    const preflight =
+      controller.indexOf(
+        "Run independent transaction preflight queries concurrently",
+      );
+
+    expect(roleVerification).toBeGreaterThan(-1);
+    expect(readiness).toBeGreaterThan(roleVerification);
+    expect(preflight).toBeGreaterThan(readiness);
+  });
+
+  test("Merchant Send Money remains outside the validated E-Cash exception", () => {
+    expect(controller).toContain(
+      '["float_to_working", "working_to_float"].includes',
+    );
+
+    expect(controller).not.toMatch(
+      /isValidatedTelecelMerchantECash[\s\S]{0,250}send_money/,
     );
   });
 });

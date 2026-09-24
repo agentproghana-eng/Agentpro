@@ -19,6 +19,7 @@ import 'core/auth/auth_bloc.dart';
 import 'core/router/app_router.dart';
 import 'core/services/inactivity_service.dart';
 import 'core/services/mtn_cash_out_reconciliation_service.dart';
+import 'core/services/telecel_merchant_balance_reconciliation_service.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/permission_service.dart';
 import 'core/services/offline_queue_service.dart';
@@ -180,6 +181,11 @@ class _AgentProAppState extends State<AgentProApp>
           unawaited(
             MtnCashOutReconciliationService.reconcile(),
           );
+
+          unawaited(
+            TelecelMerchantBalanceReconciliationService
+                .reconcilePending(),
+          );
         }
       });
     }
@@ -275,6 +281,11 @@ class _AgentProAppState extends State<AgentProApp>
       if (_authBloc?.state is AuthAuthenticated) {
         unawaited(
           MtnCashOutReconciliationService.reconcile(),
+        );
+
+        unawaited(
+          TelecelMerchantBalanceReconciliationService
+              .reconcilePending(),
         );
       }
     }

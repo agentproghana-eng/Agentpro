@@ -22,6 +22,8 @@ const mockPostDataBundle = jest.fn();
 const mockPostMerchantPayment = jest.fn();
 const mockPostPayToAgent = jest.fn();
 const mockPostWorkingFloatTransfer = jest.fn();
+const mockPostTelecelMerchantECash = jest.fn();
+const mockRequireTelecelMerchantECashReadiness = jest.fn();
 const mockVerifyBusinessSimRoleAssignment = jest.fn();
 
 jest.mock('../../src/config/database', () => ({
@@ -103,6 +105,16 @@ jest.mock('../../src/services/payToAgentPostingService', () => ({
 jest.mock('../../src/services/workingFloatPostingService', () => ({
   postWorkingFloatTransfer: (...args) =>
     mockPostWorkingFloatTransfer(...args),
+}));
+
+jest.mock('../../src/services/telecelMerchantECashPostingService', () => ({
+  postTelecelMerchantECash: (...args) =>
+    mockPostTelecelMerchantECash(...args),
+}));
+
+jest.mock('../../src/services/telecelMerchantECashReadinessService', () => ({
+  requireTelecelMerchantECashReadiness: (...args) =>
+    mockRequireTelecelMerchantECashReadiness(...args),
 }));
 
 
@@ -1073,6 +1085,196 @@ it('accepts identified ICCID and slot and returns the winning concurrent transac
         }),
       }),
     );
+  });
+});
+
+
+describe('Telecel Merchant E-Cash initiation accounting gate', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    mockVerifyBusinessSimRoleAssignment.mockResolvedValue({
+      ok: true,
+    });
+
+    mockRequireTelecelMerchantECashReadiness.mockResolvedValue({
+      simWallet: {
+        id: 'merchant-wallet-1',
+      },
+      merchantAccount: {
+        id: 'merchant-account-1',
+        balance_state: 'known',
+      },
+      workingAccount: {
+        id: 'working-account-1',
+        balance_state: 'known',
+      },
+    });
+
+    mockWithTransaction.mockImplementation(async (callback) =>
+      callback({
+        query: mockClientQuery,
+      }),
+    );
+  });
+
+  async function expectMerchantECashPassesAccountingGate(transactionType) {
+    const sentinel = new Error('PREFLIGHT_REACHED');
+
+    mockQuery.mockRejectedValue(sentinel);
+
+    const req = makeReq({
+      provider: 'telecel',
+      transaction_type: transactionType,
+      sim_role: 'merchant',
+      client_operation_id: null,
+    });
+    const res = makeRes();
+
+    await transactionController.initiateTransaction(req, res);
+
+    // The sentinel query can only be reached after:
+    // SIM identity validation -> persisted role verification ->
+    // Merchant accounting gate.
+    expect(mockVerifyBusinessSimRoleAssignment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'agent-1',
+        provider: 'telecel',
+        claimedRole: 'merchant',
+      }),
+    );
+
+    expect(mockRequireTelecelMerchantECashReadiness)
+      .toHaveBeenCalledWith(
+        expect.objectContaining({
+          query: expect.any(Function),
+        }),
+        expect.objectContaining({
+          agentId: 'agent-1',
+          simIccid: 'ICCID-DEFAULT',
+          simSlot: 0,
+        }),
+      );
+
+    expect(mockQuery).toHaveBeenCalled();
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      message: 'Failed to initiate transaction',
+    });
+
+    expect(res.json).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'SIM_ROLE_ACCOUNTING_NOT_CONFIGURED',
+      }),
+    );
+  }
+
+  it('allows Telecel Merchant float_to_working past the accounting gate', async () => {
+    await expectMerchantECashPassesAccountingGate('float_to_working');
+  });
+
+  it('allows Telecel Merchant working_to_float past the accounting gate', async () => {
+    await expectMerchantECashPassesAccountingGate('working_to_float');
+  });
+
+  it('blocks Telecel Merchant E-Cash before preflight when balances are not initialized', async () => {
+    const readinessError = new Error(
+      'Telecel Merchant balances must be initialized before Transfer E-Cash can start',
+    );
+    readinessError.statusCode = 422;
+    readinessError.code =
+      'MERCHANT_BALANCE_INITIALIZATION_REQUIRED';
+
+    mockRequireTelecelMerchantECashReadiness.mockRejectedValue(
+      readinessError,
+    );
+
+    const req = makeReq({
+      provider: 'telecel',
+      transaction_type: 'float_to_working',
+      sim_role: 'merchant',
+      client_operation_id: null,
+    });
+    const res = makeRes();
+
+    await transactionController.initiateTransaction(req, res);
+
+    expect(mockVerifyBusinessSimRoleAssignment).toHaveBeenCalled();
+
+    expect(mockRequireTelecelMerchantECashReadiness)
+      .toHaveBeenCalled();
+
+    expect(mockQuery).not.toHaveBeenCalled();
+
+    expect(res.status).toHaveBeenCalledWith(422);
+
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      code: 'MERCHANT_BALANCE_INITIALIZATION_REQUIRED',
+      message:
+        'Telecel Merchant balances must be initialized before Transfer E-Cash can start',
+    });
+  });
+
+  it('keeps Telecel Merchant Send Money blocked before preflight', async () => {
+    const req = makeReq({
+      provider: 'telecel',
+      transaction_type: 'send_money',
+      sim_role: 'merchant',
+      client_operation_id: null,
+    });
+    const res = makeRes();
+
+    await transactionController.initiateTransaction(req, res);
+
+    expect(mockVerifyBusinessSimRoleAssignment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'telecel',
+        claimedRole: 'merchant',
+      }),
+    );
+
+    expect(res.status).toHaveBeenCalledWith(422);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: false,
+        code: 'SIM_ROLE_ACCOUNTING_NOT_CONFIGURED',
+      }),
+    );
+
+    // No feature-flag/template/flow preflight may run.
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  it('keeps EVD accounting blocked before preflight', async () => {
+    const req = makeReq({
+      provider: 'mtn',
+      transaction_type: 'airtime',
+      sim_role: 'evd',
+      client_operation_id: null,
+    });
+    const res = makeRes();
+
+    await transactionController.initiateTransaction(req, res);
+
+    expect(mockVerifyBusinessSimRoleAssignment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'mtn',
+        claimedRole: 'evd',
+      }),
+    );
+
+    expect(res.status).toHaveBeenCalledWith(422);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: false,
+        code: 'SIM_ROLE_ACCOUNTING_NOT_CONFIGURED',
+      }),
+    );
+
+    expect(mockQuery).not.toHaveBeenCalled();
   });
 });
 
