@@ -435,9 +435,14 @@ exports.initiateTransaction = async (req, res) => {
     // but their financial balance semantics are intentionally not inferred
     // from the proven Agent ledger.
     //
-    // Only the two validated Telecel Merchant E-Cash directions currently
-    // have dedicated role-specific accounting. Every other Merchant action,
-    // and every EVD action, remains fail-closed before USSD execution.
+    // The two validated Telecel Merchant E-Cash directions have dedicated
+    // role-specific accounting. Telecel Merchant Check Balance is also
+    // allowed through this execution boundary because it is observational:
+    // it moves no money and its provider-reported balances are reconciled
+    // separately from the T-CASH SMS observation.
+    //
+    // Every other Merchant financial action, and every EVD action, remains
+    // fail-closed before USSD execution.
     const isValidatedTelecelMerchantECash =
       businessSimRole === "merchant" &&
       provider === "telecel" &&
@@ -445,9 +450,15 @@ exports.initiateTransaction = async (req, res) => {
         transaction_type,
       );
 
+    const isTelecelMerchantBalanceEnquiry =
+      businessSimRole === "merchant" &&
+      provider === "telecel" &&
+      transaction_type === "balance_enquiry";
+
     if (
       ["evd", "merchant"].includes(businessSimRole) &&
-      !isValidatedTelecelMerchantECash
+      !isValidatedTelecelMerchantECash &&
+      !isTelecelMerchantBalanceEnquiry
     ) {
       return res.status(422).json({
         success: false,
