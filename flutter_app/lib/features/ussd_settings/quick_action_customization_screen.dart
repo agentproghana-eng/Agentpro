@@ -114,27 +114,9 @@ class _QuickActionCustomizationScreenState
     return <String>{...?_catalog?.providers, ..._preferences.keys}.toList();
   }
 
-  bool _isEnabledTelecelMerchantAction(String type) {
-    if (_role != 'merchant' || _provider != 'telecel') {
-      return true;
-    }
-
-    return const <String>{
-      'airtime',
-      'balance_enquiry',
-      'float_to_working',
-      'working_to_float',
-    }.contains(type);
-  }
-
   List<QuickActionCatalogDefinition> get _availableDefinitions =>
-      (_catalog?.definitionsFor(_provider) ??
-              const <QuickActionCatalogDefinition>[])
-          .where(
-            (definition) =>
-                _isEnabledTelecelMerchantAction(definition.type),
-          )
-          .toList();
+      _catalog?.definitionsFor(_provider) ??
+      const <QuickActionCatalogDefinition>[];
 
   List<_QuickActionChoice> get _availableChoices {
     final choices = <_QuickActionChoice>[];
