@@ -16,7 +16,7 @@ void main() {
   ).readAsStringSync();
 
   group('Telecel Merchant Transfer E-Cash workspace', () {
-    test('fallback exposes only established Merchant actions', () {
+    test('fallback exposes validated Merchant business actions', () {
       final start = dashboard.indexOf(
         'const telecelMerchantDefaults = <String>[',
       );
@@ -31,8 +31,8 @@ void main() {
       expect(defaults, contains("'balance_enquiry'"));
       expect(defaults, contains("'float_to_working'"));
 
-      expect(defaults, isNot(contains("'send_money'")));
-      expect(defaults, isNot(contains("'send_money_to_bank'")));
+      expect(defaults, contains("'send_money'"));
+      expect(defaults, contains("'send_money_to_bank'"));
     });
 
     test('uses canonical internal-transfer identities', () {

@@ -100,7 +100,7 @@ void main() {
     expect(section, contains('_accountNumberCtrl'));
   });
 
-  test('Merchant outgoing actions are not fallback-enabled yet', () {
+  test('validated Merchant outgoing actions are fallback-enabled', () {
     final start = dashboard.indexOf(
       'const telecelMerchantDefaults',
     );
@@ -113,7 +113,7 @@ void main() {
     expect(defaults, contains("'balance_enquiry'"));
     expect(defaults, contains("'float_to_working'"));
 
-    expect(defaults, isNot(contains("'send_money'")));
-    expect(defaults, isNot(contains("'send_money_to_bank'")));
+    expect(defaults, contains("'send_money'"));
+    expect(defaults, contains("'send_money_to_bank'"));
   });
 }
