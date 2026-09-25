@@ -54,6 +54,35 @@ const CUSTOMER_PHONE_BUSINESS_TYPES = new Set([
   "reversal",
 ]);
 
+const TELECEL_MERCHANT_PHONE_OUTGOING_TYPES = new Set([
+  "send_money_same_network",
+  "send_money_cross_network",
+]);
+
+const TELECEL_MERCHANT_OUTGOING_TYPES = new Set([
+  ...TELECEL_MERCHANT_PHONE_OUTGOING_TYPES,
+  "send_money_to_bank",
+]);
+
+const isTelecelMerchantOutgoing = (payload) =>
+  payload?.provider === "telecel" &&
+  payload?.sim_role === "merchant" &&
+  TELECEL_MERCHANT_OUTGOING_TYPES.has(
+    payload?.transaction_type,
+  );
+
+const isTelecelMerchantPhoneOutgoing = (payload) =>
+  payload?.provider === "telecel" &&
+  payload?.sim_role === "merchant" &&
+  TELECEL_MERCHANT_PHONE_OUTGOING_TYPES.has(
+    payload?.transaction_type,
+  );
+
+const isTelecelMerchantBankOutgoing = (payload) =>
+  payload?.provider === "telecel" &&
+  payload?.sim_role === "merchant" &&
+  payload?.transaction_type === "send_money_to_bank";
+
 const requiresCustomerPhone = (payload) => {
   const type = payload?.transaction_type;
   const provider = payload?.provider;
@@ -163,6 +192,11 @@ router.post(
       .isString()
       .withMessage("merchant_id must be a string")
       .trim(),
+    body("account_number")
+      .optional({ nullable: true })
+      .isString()
+      .withMessage("account_number must be a string")
+      .trim(),
 
     // Required fields depend on the actual financial operation.
     body("customer_phone").custom(
@@ -173,7 +207,9 @@ router.post(
     ),
     body("recipient_phone").custom(
       requireNonBlankStringWhen(
-        (payload) => payload?.transaction_type === "send_money",
+        (payload) =>
+          payload?.transaction_type === "send_money" ||
+          isTelecelMerchantPhoneOutgoing(payload),
         "Recipient phone number is required for Send Money",
       ),
     ),
@@ -181,8 +217,15 @@ router.post(
       requireNonBlankStringWhen(
         (payload) =>
           payload?.transaction_type === "pay_to_agent" ||
-          payload?.transaction_type === "merchant_payment",
+          payload?.transaction_type === "merchant_payment" ||
+          isTelecelMerchantOutgoing(payload),
         "Reference is required for this transaction type",
+      ),
+    ),
+    body("account_number").custom(
+      requireNonBlankStringWhen(
+        isTelecelMerchantBankOutgoing,
+        "Account number is required for Bank Transfer",
       ),
     ),
     body("merchant_id").custom(
