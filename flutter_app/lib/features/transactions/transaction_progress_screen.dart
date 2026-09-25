@@ -1463,7 +1463,13 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         (provider == 'mtn' && transactionType == 'send_money')
             ? 'cash_in'
             : transactionType;
-    final phoneForAutomation = transactionType == 'send_money'
+    final usesRecipientPhone = const {
+      'send_money',
+      'send_money_same_network',
+      'send_money_cross_network',
+    }.contains(transactionType);
+
+    final phoneForAutomation = usesRecipientPhone
         ? automationParams['recipient_phone']
         : automationParams['customer_phone'];
 

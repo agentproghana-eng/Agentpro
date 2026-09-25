@@ -1001,6 +1001,7 @@ class UssdAccessibilityEngine {
         'PERMISSION_DENIED',
         'SERVICE_DISABLED',
         'MISSING_CUSTOMER_PHONE',
+        'INVALID_CUSTOMER_PHONE',
         'MISSING_AMOUNT',
         'MISSING_REFERENCE',
         'INVALID_ACCOUNT_NUMBER',
@@ -1022,8 +1023,9 @@ class UssdAccessibilityEngine {
             'Phone permission is required before USSD automation can start.',
           'SERVICE_DISABLED' =>
             'AgentPro Accessibility Service is not enabled.',
-          'MISSING_CUSTOMER_PHONE' =>
-            'This USSD flow requires a customer phone number.',
+          'MISSING_CUSTOMER_PHONE' ||
+          'INVALID_CUSTOMER_PHONE' =>
+            'This USSD flow requires a valid 10-digit customer phone number.',
           'MISSING_AMOUNT' => 'This USSD flow requires an amount.',
           'MISSING_REFERENCE' => 'This USSD flow requires a reference.',
           'INVALID_ACCOUNT_NUMBER' =>
