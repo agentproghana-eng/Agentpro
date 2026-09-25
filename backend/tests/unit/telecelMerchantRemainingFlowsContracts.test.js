@@ -117,23 +117,19 @@ describe('Telecel Merchant remaining flow contracts', () => {
     expect(section).toContain("'pin_prompt'::ussd_flow_action");
   });
 
-  test('does not reopen unvalidated Merchant outgoing accounting', () => {
-    expect(transactionController).not.toContain(
+  test('Merchant outgoing accounting uses the dedicated validated boundary', () => {
+    expect(transactionController).toContain(
       'postTelecelMerchantOutgoing',
     );
-    expect(transactionController).not.toContain(
+    expect(transactionController).toContain(
       'isValidatedTelecelMerchantOutgoing',
     );
-    expect(transactionController).not.toContain(
-      'requireTelecelMerchantOutgoingReadiness',
-    );
-
-    expect(readinessService).not.toContain(
+    expect(transactionController).toContain(
       'requireTelecelMerchantOutgoingReadiness',
     );
   });
 
-  test('does not introduce an outgoing posting service contract', () => {
+  test('Merchant outgoing accounting has a dedicated posting service', () => {
     expect(
       fs.existsSync(
         path.join(
@@ -141,7 +137,7 @@ describe('Telecel Merchant remaining flow contracts', () => {
           'src/services/telecelMerchantOutgoingPostingService.js',
         ),
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 });
 
