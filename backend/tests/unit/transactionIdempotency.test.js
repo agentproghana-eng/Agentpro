@@ -24,6 +24,8 @@ const mockPostPayToAgent = jest.fn();
 const mockPostWorkingFloatTransfer = jest.fn();
 const mockPostTelecelMerchantECash = jest.fn();
 const mockRequireTelecelMerchantECashReadiness = jest.fn();
+const mockPostTelecelMerchantOutgoing = jest.fn();
+const mockRequireTelecelMerchantOutgoingReadiness = jest.fn();
 const mockVerifyBusinessSimRoleAssignment = jest.fn();
 
 jest.mock('../../src/config/database', () => ({
@@ -115,6 +117,16 @@ jest.mock('../../src/services/telecelMerchantECashPostingService', () => ({
 jest.mock('../../src/services/telecelMerchantECashReadinessService', () => ({
   requireTelecelMerchantECashReadiness: (...args) =>
     mockRequireTelecelMerchantECashReadiness(...args),
+}));
+
+jest.mock('../../src/services/telecelMerchantOutgoingPostingService', () => ({
+  postTelecelMerchantOutgoing: (...args) =>
+    mockPostTelecelMerchantOutgoing(...args),
+}));
+
+jest.mock('../../src/services/telecelMerchantOutgoingReadinessService', () => ({
+  requireTelecelMerchantOutgoingReadiness: (...args) =>
+    mockRequireTelecelMerchantOutgoingReadiness(...args),
 }));
 
 
@@ -294,6 +306,13 @@ beforeEach(() => {
     simWalletId: 'sim-wallet-working-float',
   });
 
+  mockPostTelecelMerchantOutgoing.mockResolvedValue({
+    simWalletId: 'sim-wallet-telecel-merchant-outgoing',
+  });
+
+  mockRequireTelecelMerchantOutgoingReadiness.mockResolvedValue({
+    workingAccountBalance: 100,
+  });
 
   mockWithTransaction.mockImplementation(async (callback) => {
     return callback({
@@ -2795,6 +2814,211 @@ it('does not post Commission Transfer balances while outcome is pending confirma
           .mock.invocationCallOrder[0]
       );
     }
+  );
+
+  it.each([
+    'send_money_same_network',
+    'send_money_cross_network',
+    'send_money_to_bank',
+  ])(
+    'posts Telecel Merchant %s through dedicated Working Account accounting',
+    async (transactionType) => {
+      const initiated = existingTransaction({
+        status: 'initiated',
+        provider: 'telecel',
+        sim_role: 'merchant',
+        transaction_type: transactionType,
+        amount: '10.00',
+        fee: '25.00',
+        recipient_phone: '0240000000',
+        sim_iccid: '8901000000000000001',
+        sim_slot: 0,
+        installation_id:
+          '11111111-1111-4111-8111-111111111111',
+        sim_subscription_id: 7,
+        sim_wallet_id: null,
+      });
+
+      const completed = {
+        ...initiated,
+        status: 'success',
+        network_reference:
+          `NETWORK-MERCHANT-${transactionType}`,
+        sim_wallet_id:
+          'sim-wallet-telecel-merchant-outgoing',
+      };
+
+      // 1. Lock canonical transaction.
+      // 2. Persist final transaction status.
+      mockClientQuery
+        .mockResolvedValueOnce({
+          rows: [initiated],
+        })
+        .mockResolvedValueOnce({
+          rows: [],
+        });
+
+      mockQuery.mockResolvedValue({
+        rows: [completed],
+      });
+
+      const req = makeReq();
+
+      req.params = {
+        transaction_id: 'tx-1',
+      };
+
+      req.body = {
+        status: 'success',
+        network_reference:
+          `NETWORK-MERCHANT-${transactionType}`,
+        failure_reason: null,
+        ussd_session_log: [],
+      };
+
+      const res = makeRes();
+
+      await transactionController.completeTransaction(
+        req,
+        res,
+      );
+
+      expect(
+        mockPostTelecelMerchantOutgoing,
+      ).toHaveBeenCalledTimes(1);
+
+      expect(
+        mockPostTelecelMerchantOutgoing,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          query: mockClientQuery,
+        }),
+        initiated,
+        'agent-1',
+      );
+
+      // Merchant outgoing is not Agent Send Money:
+      // no physical-cash/e-Float posting and no commission.
+      expect(
+        mockPostSendMoney,
+      ).not.toHaveBeenCalled();
+
+      expect(
+        mockCalculateAndPostCommission,
+      ).not.toHaveBeenCalled();
+
+      expect(
+        mockPostTelecelMerchantECash,
+      ).not.toHaveBeenCalled();
+
+      expect(
+        mockPostWorkingFloatTransfer,
+      ).not.toHaveBeenCalled();
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            id: 'tx-1',
+            status: 'success',
+            sim_wallet_id:
+              'sim-wallet-telecel-merchant-outgoing',
+          }),
+        }),
+      );
+    },
+  );
+
+  it(
+    'does not repost Telecel Merchant outgoing accounting on successful completion replay',
+    async () => {
+      const committed = existingTransaction({
+        status: 'success',
+        provider: 'telecel',
+        sim_role: 'merchant',
+        transaction_type:
+          'send_money_cross_network',
+        amount: '10.00',
+        fee: '1.00',
+        sim_iccid: '8901000000000000001',
+        sim_slot: 0,
+        installation_id:
+          '11111111-1111-4111-8111-111111111111',
+        sim_subscription_id: 7,
+        sim_wallet_id:
+          'sim-wallet-telecel-merchant-outgoing',
+      });
+
+      // The FOR UPDATE read sees an already committed success.
+      // No status UPDATE and no financial posting may follow.
+      mockClientQuery.mockResolvedValueOnce({
+        rows: [committed],
+      });
+
+      const req = makeReq();
+
+      req.params = {
+        transaction_id: 'tx-1',
+      };
+
+      req.body = {
+        status: 'success',
+        network_reference:
+          'NETWORK-MERCHANT-REPLAY',
+        failure_reason: null,
+        ussd_session_log: [],
+      };
+
+      const res = makeRes();
+
+      await transactionController.completeTransaction(
+        req,
+        res,
+      );
+
+      expect(
+        mockClientQuery,
+      ).toHaveBeenCalledTimes(1);
+
+      expect(
+        mockClientQuery.mock.calls[0][0],
+      ).toContain('FOR UPDATE');
+
+      expect(
+        mockPostTelecelMerchantOutgoing,
+      ).not.toHaveBeenCalled();
+
+      expect(
+        mockPostSendMoney,
+      ).not.toHaveBeenCalled();
+
+      expect(
+        mockCalculateAndPostCommission,
+      ).not.toHaveBeenCalled();
+
+      expect(
+        mockPostTelecelMerchantECash,
+      ).not.toHaveBeenCalled();
+
+      expect(
+        mockQuery,
+      ).not.toHaveBeenCalled();
+
+      expect(
+        mockRecordOperationalEvent,
+      ).not.toHaveBeenCalled();
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            id: 'tx-1',
+            status: 'success',
+            idempotent_replay: true,
+          }),
+        }),
+      );
+    },
   );
 
   it('returns success when the same final completion is retried', async () => {
