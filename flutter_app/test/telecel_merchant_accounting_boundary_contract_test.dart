@@ -15,66 +15,22 @@ void main() {
     'lib/features/transactions/transaction_screen.dart',
   ).readAsStringSync();
 
-  group('Telecel Merchant accounting presentation boundary', () {
-    test('customization exposes only currently enabled Merchant actions', () {
+  group('Telecel Merchant validated action presentation', () {
+    test('temporary Merchant accounting presentation gate is removed', () {
       expect(
         customization,
-        contains('_isEnabledTelecelMerchantAction'),
-      );
-
-      expect(customization, contains("'airtime'"));
-      expect(customization, contains("'balance_enquiry'"));
-      expect(customization, contains("'float_to_working'"));
-      expect(customization, contains("'working_to_float'"));
-
-      expect(
-        customization,
-        contains(
-          '_isEnabledTelecelMerchantAction(definition.type)',
-        ),
-      );
-    });
-
-    test('saved Merchant preferences are filtered only for presentation', () {
-      expect(
-        dashboard,
-        contains('final presentationOrdered ='),
+        isNot(contains('_isEnabledTelecelMerchantAction')),
       );
 
       expect(
         dashboard,
-        contains(
-          "role == 'merchant' && provider == 'telecel'",
-        ),
-      );
-
-      expect(dashboard, contains("'airtime'"));
-      expect(dashboard, contains("'balance_enquiry'"));
-      expect(dashboard, contains("'float_to_working'"));
-      expect(dashboard, contains("'working_to_float'"));
-
-      expect(
-        dashboard,
-        contains('Keep saved preferences intact'),
+        isNot(contains(
+          'until Merchant accounting is enabled',
+        )),
       );
     });
 
-    test('outgoing Merchant implementation remains available underneath', () {
-      expect(
-        transaction,
-        contains("'send_money_same_network'"),
-      );
-      expect(
-        transaction,
-        contains("'send_money_cross_network'"),
-      );
-      expect(
-        transaction,
-        contains("'send_money_to_bank'"),
-      );
-    });
-
-    test('Merchant fallback remains restricted', () {
+    test('Merchant fallback exposes the five business workspaces', () {
       final start = dashboard.indexOf(
         'const telecelMerchantDefaults',
       );
@@ -87,11 +43,74 @@ void main() {
 
       expect(defaults, contains("'airtime'"));
       expect(defaults, contains("'balance_enquiry'"));
+      expect(defaults, contains("'send_money'"));
       expect(defaults, contains("'float_to_working'"));
-      expect(defaults, isNot(contains("'send_money'")));
+      expect(defaults, contains("'send_money_to_bank'"));
+
+      final entries =
+          RegExp(r"'[^']+'").allMatches(defaults).toList();
+      expect(entries, hasLength(5));
+    });
+
+    test('Send Money remains a grouped Merchant workspace', () {
       expect(
-        defaults,
-        isNot(contains("'send_money_to_bank'")),
+        dashboard,
+        contains("type == 'send_money'"),
+      );
+      expect(
+        dashboard,
+        contains("'Send Money'"),
+      );
+
+      expect(
+        transaction,
+        contains("'send_money_same_network'"),
+      );
+      expect(
+        transaction,
+        contains("'send_money_cross_network'"),
+      );
+    });
+
+    test('Transfer E-Cash remains one grouped Merchant workspace', () {
+      expect(
+        dashboard,
+        contains(
+          "type == 'float_to_working' || "
+          "type == 'working_to_float'",
+        ),
+      );
+      expect(
+        dashboard,
+        contains("'Transfer E-Cash'"),
+      );
+      expect(
+        dashboard,
+        contains(
+          "'/transactions/telecel-merchant-ecash'",
+        ),
+      );
+    });
+
+    test('Bank Transfer remains a standalone Merchant action', () {
+      expect(
+        dashboard,
+        contains("type == 'send_money_to_bank'"),
+      );
+      expect(
+        dashboard,
+        contains("'Bank Transfer'"),
+      );
+      expect(
+        transaction,
+        contains("'send_money_to_bank'"),
+      );
+    });
+
+    test('saved Merchant preferences are not rewritten for exposure', () {
+      expect(
+        dashboard,
+        contains('final presentationOrdered = ordered;'),
       );
     });
   });

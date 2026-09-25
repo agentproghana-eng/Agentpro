@@ -191,16 +191,16 @@ class DashboardQuickActionsSection extends StatelessWidget {
       // Merchant SIM does not render an empty dashboard merely because
       // the user has not saved custom Merchant preferences yet.
       if (role == 'merchant' && provider == 'telecel') {
-        // Merchant fallback exposes only role-specific actions whose
-        // Merchant execution path is established. Transfer E-Cash is one
-        // workspace backed by the canonical internal-transfer directions.
-        //
-        // Do not default Merchant Send Money or Bank Transfer until their
-        // Merchant-role USSD execution and accounting have been validated.
+        // Telecel Merchant exposes five business workspaces.
+        // Send Money is one grouped workspace for Telecel and Other Network.
+        // Transfer E-Cash is one grouped workspace backed by the canonical
+        // internal-transfer directions.
         const telecelMerchantDefaults = <String>[
           'airtime',
           'balance_enquiry',
+          'send_money',
           'float_to_working',
+          'send_money_to_bank',
         ];
 
         return telecelMerchantDefaults
@@ -225,21 +225,10 @@ class DashboardQuickActionsSection extends StatelessWidget {
         (a, b) => a.position.compareTo(b.position),
       );
 
-    // Telecel Merchant outgoing Send Money and Bank Transfer flows are
-    // implemented, but their principal accounting semantics have not yet
-    // been validated. Keep saved preferences intact and hide only their
-    // dashboard presentation until Merchant accounting is enabled.
-    final presentationOrdered =
-        role == 'merchant' && provider == 'telecel'
-            ? ordered.where((item) {
-                return const <String>{
-                  'airtime',
-                  'balance_enquiry',
-                  'float_to_working',
-                  'working_to_float',
-                }.contains(item.actionKey);
-              }).toList()
-            : ordered;
+    // Saved Merchant preferences remain authoritative. Telecel Merchant
+    // outgoing accounting is validated, so no temporary presentation
+    // filter is required here.
+    final presentationOrdered = ordered;
 
     if (role == 'subscriber') {
       return normalizePersonalQuickActionPreferences(
