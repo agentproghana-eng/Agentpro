@@ -225,20 +225,39 @@ class DashboardQuickActionsSection extends StatelessWidget {
         (a, b) => a.position.compareTo(b.position),
       );
 
+    // Telecel Merchant outgoing Send Money and Bank Transfer flows are
+    // implemented, but their principal accounting semantics have not yet
+    // been validated. Keep saved preferences intact and hide only their
+    // dashboard presentation until Merchant accounting is enabled.
+    final presentationOrdered =
+        role == 'merchant' && provider == 'telecel'
+            ? ordered.where((item) {
+                return const <String>{
+                  'airtime',
+                  'balance_enquiry',
+                  'float_to_working',
+                  'working_to_float',
+                }.contains(item.actionKey);
+              }).toList()
+            : ordered;
+
     if (role == 'subscriber') {
       return normalizePersonalQuickActionPreferences(
-        preferences: ordered,
+        preferences: presentationOrdered,
       ).where((item) => item.isVisible).take(9).toList();
     }
 
     if (role == 'agent') {
       return normalizeBusinessQuickActionPreferences(
         provider: provider,
-        preferences: ordered,
+        preferences: presentationOrdered,
       ).where((item) => item.isVisible).take(9).toList();
     }
 
-    return ordered.where((item) => item.isVisible).take(9).toList();
+    return presentationOrdered
+        .where((item) => item.isVisible)
+        .take(9)
+        .toList();
   }
 
   QuickActionCatalogDefinition? _definition(
