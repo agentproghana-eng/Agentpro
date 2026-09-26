@@ -424,9 +424,20 @@ class UssdAccessibilityChannel(
             needsOrganisationShortcode &&
             organisationShortcode.isNullOrBlank()
         ) {
+            val shortcodeLabel =
+                if (normalizedBusinessSimRole == "agent") {
+                    "Agent Shortcode"
+                } else {
+                    "Organisation Shortcode"
+                }
+
             result.error(
-                "MISSING_ORGANISATION_SHORTCODE",
-                "Telecel Organisation Shortcode is required - set it in USSD Automation settings",
+                if (normalizedBusinessSimRole == "agent") {
+                    "MISSING_AGENT_SHORTCODE"
+                } else {
+                    "MISSING_ORGANISATION_SHORTCODE"
+                },
+                "Telecel $shortcodeLabel is required - set it in USSD Automation settings",
                 null
             )
             return

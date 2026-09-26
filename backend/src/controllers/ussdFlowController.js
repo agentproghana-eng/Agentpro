@@ -1078,12 +1078,19 @@ exports.getExecutionCredentials = async (req, res) => {
       needsOrganisationShortcode &&
       !encrypted.organisation_shortcode_enc
     ) {
+      const shortcodeLabel =
+        simRole === "agent"
+          ? "Agent Shortcode"
+          : "Organisation Shortcode";
+
       return res.status(409).json({
         success: false,
         code:
-          "TELECEL_ORGANISATION_SHORTCODE_NOT_CONFIGURED",
+          simRole === "agent"
+            ? "TELECEL_AGENT_SHORTCODE_NOT_CONFIGURED"
+            : "TELECEL_ORGANISATION_SHORTCODE_NOT_CONFIGURED",
         message:
-          "Set the Telecel Organisation Shortcode for this SIM role before starting this transaction",
+          `Set the Telecel ${shortcodeLabel} before starting this transaction`,
       });
     }
 

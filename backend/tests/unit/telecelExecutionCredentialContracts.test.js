@@ -146,6 +146,35 @@ describe(
     );
 
     test(
+      'distinguishes Agent Shortcode from Merchant Organisation Shortcode',
+      () => {
+        expect(block).toContain(
+          'simRole === "agent"',
+        );
+        expect(block).toContain(
+          '"Agent Shortcode"',
+        );
+        expect(block).toContain(
+          '"Organisation Shortcode"',
+        );
+        expect(block).toContain(
+          '"TELECEL_AGENT_SHORTCODE_NOT_CONFIGURED"',
+        );
+        expect(block).toContain(
+          '"TELECEL_ORGANISATION_SHORTCODE_NOT_CONFIGURED"',
+        );
+
+        // Storage remains role-separated and backward compatible.
+        expect(block).toContain(
+          '"telecel_agent_organisation_shortcode_enc"',
+        );
+        expect(block).toContain(
+          '"telecel_merchant_organisation_shortcode_enc"',
+        );
+      },
+    );
+
+    test(
       'client cannot choose requested credential types',
       () => {
         expect(block).not.toContain(

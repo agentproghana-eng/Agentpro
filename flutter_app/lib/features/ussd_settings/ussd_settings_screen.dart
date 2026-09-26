@@ -299,8 +299,9 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
       icon: Icons.shield_outlined,
       title: 'Telecel protected credentials',
       description:
-          'Operator IDs and Organisation Shortcodes stay masked '
-          'after saving. Phone authentication is required before '
+          'Telecel Agent SIMs use an Agent Shortcode; Merchant SIMs '
+          'use an Organisation Shortcode. Protected credentials stay '
+          'masked after saving. Phone authentication is required before '
           'setting or replacing them.',
       child: _loadingTelecelCredentialStatus
           ? const Padding(
@@ -328,7 +329,7 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
                 _protectedCredentialRow(
                   simRole: 'agent',
                   credentialType: 'organisation_shortcode',
-                  label: 'Organisation Shortcode',
+                  label: 'Agent Shortcode',
                   configured: _agentShortcodeConfigured,
                 ),
                 const Divider(),
