@@ -1101,8 +1101,10 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
                   ?.toString();
 
           if (value == null || value.trim().isEmpty) {
-            throw const FormatException(
-              'Required Telecel Organisation Shortcode unavailable',
+            throw FormatException(
+              role == 'agent'
+                  ? 'Required Telecel Agent Shortcode unavailable'
+                  : 'Required Telecel Organisation Shortcode unavailable',
             );
           }
 
