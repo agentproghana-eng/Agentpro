@@ -285,14 +285,12 @@ List<QuickActionPreference> normalizePersonalQuickActionPreferences({
     }
 
     if (actionKey == 'buy_airtime') {
-      if (airtimeInserted) {
-        continue;
-      }
-
+      // Airtime may expose provider-backed recipient variants such as
+      // Telecel Merchant Self and Other. Keep the selected recipient mode so
+      // dashboard routing resolves the exact USSD flow.
       normalized.add(
         preference.copyWith(
           clearBundleCategory: true,
-          clearRecipientMode: true,
         ),
       );
 

@@ -345,9 +345,15 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // Telecel Agent Data Bundle selects the bundle directly from the
   // provider menu and does not ask for a customer phone. MTN Data Bundle
   // does ask for the recipient number, so it keeps the customer field.
+  bool get _isTelecelAirtimeSelf =>
+      _selectedProvider == 'telecel' &&
+      _transactionType == 'airtime' &&
+      _initialRecipientMode?.toLowerCase() == 'self';
+
   bool get _needsCustomer =>
       !_isMtnCashInOutWorkspace &&
       !_isTelecelDataBundle &&
+      !_isTelecelAirtimeSelf &&
       ![
         'balance_enquiry',
         'mini_statement',
