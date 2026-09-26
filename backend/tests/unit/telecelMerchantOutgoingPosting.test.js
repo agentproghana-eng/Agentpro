@@ -18,6 +18,8 @@ const {
 );
 
 const TYPES = [
+  "airtime",
+  "data_bundle",
   "send_money_same_network",
   "send_money_cross_network",
   "send_money_to_bank",

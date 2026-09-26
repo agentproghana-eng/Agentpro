@@ -73,11 +73,14 @@ describe(
       "Merchant outgoing branch does not dispatch Agent Send Money",
       () => {
         const start = controller.indexOf(
-          'tx.transaction_type === "send_money_same_network"',
+          'tx.provider === "telecel" &&\n' +
+          '          tx.sim_role === "merchant" &&\n' +
+          '          (\n' +
+          '            tx.transaction_type === "airtime"',
         );
 
         const end = controller.indexOf(
-          'tx.transaction_type === "working_to_float"',
+          '} else if (tx.transaction_type === "airtime") {',
           start,
         );
 
@@ -87,10 +90,31 @@ describe(
         const branch = controller.slice(start, end);
 
         expect(branch).toContain(
+          'tx.transaction_type === "airtime"',
+        );
+        expect(branch).toContain(
+          'tx.transaction_type === "data_bundle"',
+        );
+        expect(branch).toContain(
+          'tx.transaction_type === "send_money_same_network"',
+        );
+        expect(branch).toContain(
+          'tx.transaction_type === "send_money_cross_network"',
+        );
+        expect(branch).toContain(
+          'tx.transaction_type === "send_money_to_bank"',
+        );
+        expect(branch).toContain(
           "postTelecelMerchantOutgoing",
         );
         expect(branch).not.toContain(
           "postSendMoney(",
+        );
+        expect(branch).not.toContain(
+          "postAirtime(",
+        );
+        expect(branch).not.toContain(
+          "postDataBundle(",
         );
         expect(branch).not.toContain(
           "calculateAndPostCommission(",
