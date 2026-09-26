@@ -23,41 +23,6 @@ import '../../core/services/storage_service.dart';
 import '../../core/services/transaction_device_preparation_service.dart';
 import 'models/telecel_merchant_bank_selections.dart';
 
-class AgentTelecelBundleOption {
-  final String label;
-  final String digit;
-  final double amount;
-
-  const AgentTelecelBundleOption({
-    required this.label,
-    required this.digit,
-    required this.amount,
-  });
-}
-
-const List<AgentTelecelBundleOption> kAgentTelecelBundles = [
-  AgentTelecelBundleOption(
-    label: '1GB + 200 All-Net mins — GHS 10 — 15 days',
-    digit: '1',
-    amount: 10,
-  ),
-  AgentTelecelBundleOption(
-    label: '200 All-Net Minutes — GHS 5 — 7 days',
-    digit: '2',
-    amount: 5,
-  ),
-  AgentTelecelBundleOption(
-    label: '1.5GB — GHS 5 — 3 days',
-    digit: '3',
-    amount: 5,
-  ),
-  AgentTelecelBundleOption(
-    label: '3.5GB — GHS 13 — 3 days',
-    digit: '4',
-    amount: 13,
-  ),
-];
-
 class TransactionScreen extends StatefulWidget {
   final String transactionType;
   final String? initialProvider;
@@ -128,7 +93,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
   bool _initialSimIdentityUnavailable = false;
   bool _simDetectionComplete = false;
   bool _simPermissionDenied = false;
-  AgentTelecelBundleOption? _selectedTelecelBundle;
+  // Telecel Merchant Data uses exact Self / Other flow variants.
+  // Telecel owns the changing live bundle catalogue.
+  String _telecelMerchantDataRecipientMode = 'self';
 
   // The MTN Agent Cash In/Out tile is a UI workspace only. Never send
   // a combined workspace transaction type to the backend:
@@ -212,6 +179,13 @@ class _TransactionScreenState extends State<TransactionScreen> {
   @override
   void initState() {
     super.initState();
+
+    final initialRecipientMode =
+        widget.initialRecipientMode?.trim().toLowerCase();
+    if (initialRecipientMode == 'self' ||
+        initialRecipientMode == 'other') {
+      _telecelMerchantDataRecipientMode = initialRecipientMode!;
+    }
 
     if (widget.initialProvider != null) {
       _selectedProvider = widget.initialProvider!;
@@ -321,6 +295,17 @@ class _TransactionScreenState extends State<TransactionScreen> {
   bool get _isTelecelDataBundle =>
       _transactionType == 'data_bundle' && _selectedProvider == 'telecel';
 
+  bool get _isTelecelMerchantData => _isTelecelDataBundle;
+
+  String? get _effectiveRecipientMode =>
+      _isTelecelMerchantData
+          ? _telecelMerchantDataRecipientMode
+          : _initialRecipientMode;
+
+  bool get _isTelecelMerchantDataOther =>
+      _isTelecelMerchantData &&
+      _telecelMerchantDataRecipientMode == 'other';
+
   bool _providerSupportsTransaction(String provider) {
     if (_transactionType == 'data_bundle') {
       return provider == 'mtn' || provider == 'telecel';
@@ -342,9 +327,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'cash_in_commission',
       ].contains(_transactionType) &&
       !_isTelecelDataBundle;
-  // Telecel Agent Data Bundle selects the bundle directly from the
-  // provider menu and does not ask for a customer phone. MTN Data Bundle
-  // does ask for the recipient number, so it keeps the customer field.
+  // Telecel Merchant Data leaves the changing bundle catalogue on the
+  // provider menu. Self needs no customer number; Other requires one.
   bool get _isTelecelAirtimeSelf =>
       _selectedProvider == 'telecel' &&
       _transactionType == 'airtime' &&
@@ -352,7 +336,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
   bool get _needsCustomer =>
       !_isMtnCashInOutWorkspace &&
-      !_isTelecelDataBundle &&
+      (!_isTelecelDataBundle || _isTelecelMerchantDataOther) &&
       !_isTelecelAirtimeSelf &&
       ![
         'balance_enquiry',
@@ -483,7 +467,6 @@ class _TransactionScreenState extends State<TransactionScreen> {
             !available.contains(_selectedProvider)) {
           providerChanged = true;
           _selectedProvider = available.first;
-          _selectedTelecelBundle = null;
         }
 
         final providerSims = supportedSims
@@ -604,7 +587,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
     final provider = _selectedProvider;
     final transactionType = _transactionType;
     final bundleCategory = _initialBundleCategory;
-    final recipientMode = _initialRecipientMode;
+    final recipientMode = _effectiveRecipientMode;
 
     final cacheKey = <String>[
       provider,
@@ -682,7 +665,6 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
     setState(() {
       _selectedProvider = provider;
-      _selectedTelecelBundle = null;
 
       final providerSims = _simCards
           .where((sim) => sim.network == provider)
@@ -710,7 +692,6 @@ class _TransactionScreenState extends State<TransactionScreen> {
     _feeCtrl.clear();
 
     setState(() {
-      _selectedTelecelBundle = null;
       _agentServiceFeeEnabled = false;
       _feeManuallyOverridden = false;
       _feeCtrl.text = '0.00';
@@ -878,13 +859,6 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
     if (!mounted) return;
 
-    if (_isTelecelDataBundle && _selectedTelecelBundle == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select a Telecel data bundle')),
-      );
-      return;
-    }
-
     if (_isManualCashOut) {
       await _submitManualCashOut();
       return;
@@ -990,7 +964,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
             isPersonal: false,
             businessSimRole: businessSimRole,
             bundleCategory: _initialBundleCategory,
-            recipientMode: _initialRecipientMode,
+            recipientMode: _effectiveRecipientMode,
           );
 
     // MTN Cash In/Out/Send Money and Telecel Deposit never need a
@@ -1065,8 +1039,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
           'sim_role': businessSimRole,
           if (_initialBundleCategory != null)
             'bundle_category': _initialBundleCategory,
-          if (_initialRecipientMode != null)
-            'recipient_mode': _initialRecipientMode,
+          if (_effectiveRecipientMode != null)
+            'recipient_mode': _effectiveRecipientMode,
           'amount': _amountCtrl.text,
           'customer_phone': _isMtnCashInOutWorkspace
               ? _recipientPhoneCtrl.text.trim()
@@ -1078,10 +1052,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
           'selections_in_order':
               _telecelMerchantSelectionsInOrder.isNotEmpty
                   ? _telecelMerchantSelectionsInOrder
-                  : _isTelecelDataBundle &&
-                          _selectedTelecelBundle != null
-                      ? <String>[_selectedTelecelBundle!.digit]
-                      : const <String>[],
+                  : const <String>[],
           'request_fields': requestFields,
           if (offlineAuthorizationReceipt != null)
             'offline_authorization_receipt': offlineAuthorizationReceipt,
@@ -1145,8 +1116,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'sim_role': businessSimRole,
         if (_initialBundleCategory != null)
           'bundle_category': _initialBundleCategory,
-        if (_initialRecipientMode != null)
-          'recipient_mode': _initialRecipientMode,
+        if (_effectiveRecipientMode != null)
+          'recipient_mode': _effectiveRecipientMode,
         'amount': _amountCtrl.text,
         'customer_phone': _isMtnCashInOutWorkspace
             ? _recipientPhoneCtrl.text.trim()
@@ -1158,10 +1129,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'selections_in_order':
             _telecelMerchantSelectionsInOrder.isNotEmpty
                 ? _telecelMerchantSelectionsInOrder
-                : _isTelecelDataBundle &&
-                        _selectedTelecelBundle != null
-                    ? <String>[_selectedTelecelBundle!.digit]
-                    : const <String>[],
+                : const <String>[],
         'request_fields': requestFields,
       },
     );
@@ -1202,7 +1170,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         businessSimRole: businessSimRole,
         template: template,
         bundleCategory: _initialBundleCategory,
-        recipientMode: _initialRecipientMode,
+        recipientMode: _effectiveRecipientMode,
       ),
     );
 
@@ -2250,37 +2218,39 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 const SizedBox(height: 14),
               ],
 
-              // Telecel Agent Data Bundle is selected from the provider
-              // bundle menu and therefore has its own specialized control.
-              if (_isTelecelDataBundle) ...[
-                DropdownButtonFormField<AgentTelecelBundleOption>(
-                  initialValue: _selectedTelecelBundle,
+              // Telecel Merchant Data automates only the stable prefix.
+              // Bundle/package navigation remains on Telecel's live menu.
+              if (_isTelecelMerchantData) ...[
+                DropdownButtonFormField<String>(
+                  initialValue: _telecelMerchantDataRecipientMode,
                   isExpanded: true,
                   decoration: const InputDecoration(
-                    labelText: 'Select Data Bundle',
-                    prefixIcon: Icon(Icons.data_usage_outlined),
+                    labelText: 'Data Recipient',
+                    prefixIcon: Icon(Icons.person_outline),
                     border: OutlineInputBorder(),
                   ),
-                  items: kAgentTelecelBundles
-                      .map(
-                        (bundle) => DropdownMenuItem(
-                          value: bundle,
-                          child: Text(
-                            bundle.label,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (bundle) {
-                    setState(() {
-                      _selectedTelecelBundle = bundle;
-                      _amountCtrl.text =
-                          bundle?.amount.toStringAsFixed(2) ?? '';
-                    });
-                  },
-                  validator: (bundle) =>
-                      bundle == null ? 'Select a data bundle' : null,
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'self',
+                      child: Text('My Number'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'other',
+                      child: Text('Another Telecel Number'),
+                    ),
+                  ],
+                  onChanged: _loading
+                      ? null
+                      : (mode) {
+                          if (mode == null) return;
+                          setState(() {
+                            _telecelMerchantDataRecipientMode = mode;
+                            if (mode == 'self') {
+                              _customerPhoneCtrl.clear();
+                            }
+                          });
+                          _scheduleFlowPreload();
+                        },
                 ),
                 const SizedBox(height: 14),
               ],

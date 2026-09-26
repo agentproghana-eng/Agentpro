@@ -75,7 +75,7 @@ void main() {
       );
 
       final end = source.indexOf(
-        'if (_isTelecelDataBundle',
+        '// Telecel Merchant balance enquiry completes asynchronously',
         start,
       );
 
