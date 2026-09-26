@@ -227,10 +227,23 @@ class DashboardQuickActionsSection extends StatelessWidget {
         (a, b) => a.position.compareTo(b.position),
       );
 
-    // Saved Merchant preferences remain authoritative. Telecel Merchant
-    // outgoing accounting is validated, so no temporary presentation
-    // filter is required here.
-    final presentationOrdered = ordered;
+    // Existing Telecel Merchant profiles may predate the verified Data
+    // workspace. Preserve every saved action, order, visibility and
+    // customization, but append Data when that action has never existed in
+    // the saved profile. An explicitly saved (including hidden) Data action
+    // remains authoritative and is never duplicated or forced visible.
+    final presentationOrdered =
+        role == 'merchant' &&
+                provider == 'telecel' &&
+                !ordered.any((item) => item.actionKey == 'data_bundle')
+            ? <QuickActionPreference>[
+                ...ordered,
+                QuickActionPreference(
+                  actionKey: 'data_bundle',
+                  position: ordered.length,
+                ),
+              ]
+            : ordered;
 
     if (role == 'subscriber') {
       return normalizePersonalQuickActionPreferences(

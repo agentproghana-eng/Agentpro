@@ -108,11 +108,27 @@ void main() {
       );
     });
 
-    test('saved Merchant preferences are not rewritten for exposure', () {
-      expect(
-        dashboard,
-        contains('final presentationOrdered = ordered;'),
-      );
+    test(
+      'saved Merchant preferences are preserved while new Data is reconciled',
+      () {
+        expect(
+          dashboard,
+          contains('...ordered,'),
+        );
+        expect(
+          dashboard,
+          contains(
+            "!ordered.any((item) => item.actionKey == 'data_bundle')",
+          ),
+        );
+        expect(
+          dashboard,
+          contains("actionKey: 'data_bundle'"),
+        );
+        expect(
+          dashboard,
+          contains('position: ordered.length'),
+        );
     });
   });
 }
