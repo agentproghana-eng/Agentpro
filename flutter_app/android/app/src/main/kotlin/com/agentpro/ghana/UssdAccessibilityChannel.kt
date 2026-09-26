@@ -518,6 +518,10 @@ class UssdAccessibilityChannel(
         channel.invokeMethod("onPinPromptReached", null)
     }
 
+    override fun onPostPinProviderActivity() {
+        channel.invokeMethod("onPostPinProviderActivity", null)
+    }
+
     override fun onResult(
         outcome: String,
         message: String,

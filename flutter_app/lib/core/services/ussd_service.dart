@@ -479,6 +479,7 @@ class UssdAccessibilityEngine {
   Timer? _customerConfirmationTimeout;
   bool _pinPromptReached = false;
   bool _waitingForMtnCashOutPinPrompt = false;
+  String? _activeProvider;
 
   bool get reachedPinPrompt =>
       _pinPromptReached;
@@ -549,6 +550,32 @@ class UssdAccessibilityEngine {
     }
   }
 
+  void _armPostPinInactivityTimeout() {
+    _postPinTimeout?.cancel();
+
+    _postPinTimeout = Timer(const Duration(seconds: 45), () async {
+      final completer = _resultCompleter;
+
+      if (completer == null || completer.isCompleted) {
+        return;
+      }
+
+      await cancelAutomation();
+
+      if (!completer.isCompleted) {
+        completer.complete(
+          const USSDResult(
+            outcome: USSDStatus.pendingConfirmation,
+            failureReason:
+                'No final network result was received after PIN entry. '
+                'Please verify the transaction before trying again.',
+            sessionLog: [],
+          ),
+        );
+      }
+    });
+  }
+
   Future<dynamic> _handleNativeCall(MethodCall call) async {
     switch (call.method) {
       case 'onWaitingForPinPrompt':
@@ -605,28 +632,7 @@ class UssdAccessibilityEngine {
         // persisted only after native Accessibility observes that the
         // provider has actually moved away from this PIN screen.
 
-        _postPinTimeout?.cancel();
-        _postPinTimeout = Timer(const Duration(seconds: 45), () async {
-          final completer = _resultCompleter;
-
-          if (completer == null || completer.isCompleted) {
-            return;
-          }
-
-          await cancelAutomation();
-
-          if (!completer.isCompleted) {
-            completer.complete(
-              const USSDResult(
-                outcome: USSDStatus.pendingConfirmation,
-                failureReason:
-                    'No final network result was received after PIN entry. '
-                    'Please verify the transaction before trying again.',
-                sessionLog: [],
-              ),
-            );
-          }
-        });
+        _armPostPinInactivityTimeout();
 
         _progressController.add(
           const USSDProgress(
@@ -636,6 +642,22 @@ class UssdAccessibilityEngine {
           ),
         );
         break;
+
+      case 'onPostPinProviderActivity':
+        // Telecel can legitimately remain on provider-owned confirmation
+        // screens after PIN. Each observed screen proves the USSD session is
+        // still alive, so restart the inactivity window without changing the
+        // transaction outcome or performing any Accessibility write.
+        if (
+            _pinPromptReached &&
+            _activeProvider == 'telecel' &&
+            _resultCompleter != null &&
+            !_resultCompleter!.isCompleted
+        ) {
+          _armPostPinInactivityTimeout();
+        }
+        break;
+
       case 'onResult':
         final args = call.arguments as Map;
         final outcome = args['outcome'] as String? ?? 'failure';
@@ -850,6 +872,7 @@ class UssdAccessibilityEngine {
     List<String>? failureMarkers,
     Map<String, String>? selections,
   }) async {
+    _activeProvider = provider.trim().toLowerCase();
     _prePinTimeout?.cancel();
     _postPinTimeout?.cancel();
     _customerConfirmationTimeout?.cancel();

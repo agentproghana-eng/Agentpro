@@ -176,6 +176,12 @@ class UssdAccessibilityService : AccessibilityService() {
         @Volatile private var postPinProviderProgressObserved:
             Boolean = false
 
+        // Last distinct provider-owned screen observed after the PIN
+        // boundary. This stores only a SHA-256 digest of normalized text,
+        // never raw USSD content.
+        @Volatile private var lastPostPinProviderActivityScreenHash:
+            String? = null
+
         // Duplicate-event suppression is session state too. lastScreenText
         // may contain raw provider text, while lastResponseValue may contain
         // a phone number, amount, operator ID, reference, or menu selection.
@@ -311,12 +317,14 @@ class UssdAccessibilityService : AccessibilityService() {
             isSessionActive = true
             reachedPinPrompt = false
             postPinProviderProgressObserved = false
+            lastPostPinProviderActivityScreenHash = null
         }
 
         fun endSession() {
             isSessionActive = false
             reachedPinPrompt = false
             postPinProviderProgressObserved = false
+            lastPostPinProviderActivityScreenHash = null
             pendingCustomerPhone = null
             pendingAmount = null
             pendingTransactionType = null
@@ -364,6 +372,7 @@ class UssdAccessibilityService : AccessibilityService() {
     interface UssdAccessibilityListener {
         fun onWaitingForPinPrompt()
         fun onPinPromptReached()
+        fun onPostPinProviderActivity()
 
         fun onResult(
             outcome: String,
@@ -874,6 +883,30 @@ class UssdAccessibilityService : AccessibilityService() {
 
             endSession()
             UssdForegroundService.stop(this)
+            return
+        }
+
+        // After PIN, AgentPro is observation-only. A Telecel generic flow can
+        // legitimately show another provider confirmation screen before the
+        // terminal result. Keep the session alive and let the user operate
+        // that network-owned screen manually; never turn an intermediate
+        // post-PIN screen into a result and never write to it.
+        if (
+            pendingProvider == "telecel" &&
+            pendingSteps != null
+        ) {
+            // Read-only heartbeat only. No provider input is submitted here.
+            // Accessibility can emit the same provider screen repeatedly.
+            // Only a distinct normalized provider screen may extend the
+            // Flutter inactivity window.
+            val screenHash = hashUssdScreen(screenText)
+
+            if (screenHash != lastPostPinProviderActivityScreenHash) {
+                lastPostPinProviderActivityScreenHash = screenHash
+                listener?.onPostPinProviderActivity()
+            }
+
+            return
         }
     }
 
