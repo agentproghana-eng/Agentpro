@@ -30,7 +30,7 @@ void main() {
       );
     });
 
-    test('Merchant fallback exposes the five business workspaces', () {
+    test('Merchant fallback exposes the six business workspaces', () {
       final start = dashboard.indexOf(
         'const telecelMerchantDefaults',
       );
@@ -42,6 +42,7 @@ void main() {
       final defaults = dashboard.substring(start, end + 2);
 
       expect(defaults, contains("'airtime'"));
+      expect(defaults, contains("'data_bundle'"));
       expect(defaults, contains("'balance_enquiry'"));
       expect(defaults, contains("'send_money'"));
       expect(defaults, contains("'float_to_working'"));
@@ -49,7 +50,7 @@ void main() {
 
       final entries =
           RegExp(r"'[^']+'").allMatches(defaults).toList();
-      expect(entries, hasLength(5));
+      expect(entries, hasLength(6));
     });
 
     test('Send Money remains a grouped Merchant workspace', () {

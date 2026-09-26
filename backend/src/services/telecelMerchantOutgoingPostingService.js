@@ -3,6 +3,8 @@ const {
 } = require("./telecelMerchantWalletService");
 
 const SUPPORTED_TYPES = new Set([
+  "airtime",
+  "data_bundle",
   "send_money_same_network",
   "send_money_cross_network",
   "send_money_to_bank",

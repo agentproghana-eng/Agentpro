@@ -465,6 +465,8 @@ exports.initiateTransaction = async (req, res) => {
       businessSimRole === "merchant" &&
       provider === "telecel" &&
       [
+        "airtime",
+        "data_bundle",
         "send_money_same_network",
         "send_money_cross_network",
         "send_money_to_bank",
@@ -1118,6 +1120,29 @@ exports.completeTransaction = async (req, res) => {
           tx.sim_wallet_id = posting.simWalletId;
 
           await calculateAndPostCommission(client, tx, agentId);
+        } else if (
+          tx.provider === "telecel" &&
+          tx.sim_role === "merchant" &&
+          (
+            tx.transaction_type === "airtime" ||
+            tx.transaction_type === "data_bundle" ||
+            tx.transaction_type === "send_money_same_network" ||
+            tx.transaction_type === "send_money_cross_network" ||
+            tx.transaction_type === "send_money_to_bank"
+          )
+        ) {
+          // Telecel Merchant Airtime, Data, Send Money and Bank Transfer
+          // spend the role-specific Working Account.
+          //
+          // They must never use Agent e-Float, the Agent cash drawer,
+          // or Agent commission posting.
+          const posting = await postTelecelMerchantOutgoing(
+            client,
+            tx,
+            agentId,
+          );
+
+          tx.sim_wallet_id = posting.simWalletId;
         } else if (tx.transaction_type === "airtime") {
           // Agent Airtime sale for MTN, Telecel and AT Money:
           //
@@ -1144,27 +1169,6 @@ exports.completeTransaction = async (req, res) => {
           tx.sim_wallet_id = posting.simWalletId;
 
           await calculateAndPostCommission(client, tx, agentId);
-        } else if (
-          tx.provider === "telecel" &&
-          tx.sim_role === "merchant" &&
-          (
-            tx.transaction_type === "send_money_same_network" ||
-            tx.transaction_type === "send_money_cross_network" ||
-            tx.transaction_type === "send_money_to_bank"
-          )
-        ) {
-          // Telecel Merchant outgoing transactions are business
-          // electronic payments from the Working Account.
-          //
-          // Unlike Agent Send Money, there is no physical cash
-          // counter-entry and no Agent e-Float movement.
-          const posting = await postTelecelMerchantOutgoing(
-            client,
-            tx,
-            agentId,
-          );
-
-          tx.sim_wallet_id = posting.simWalletId;
         } else if (
           tx.provider === "telecel" &&
           tx.sim_role === "merchant" &&

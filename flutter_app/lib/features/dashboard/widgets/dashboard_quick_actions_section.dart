@@ -191,12 +191,14 @@ class DashboardQuickActionsSection extends StatelessWidget {
       // Merchant SIM does not render an empty dashboard merely because
       // the user has not saved custom Merchant preferences yet.
       if (role == 'merchant' && provider == 'telecel') {
-        // Telecel Merchant exposes five business workspaces.
+        // Telecel Merchant exposes its verified business workspaces.
         // Send Money is one grouped workspace for Telecel and Other Network.
         // Transfer E-Cash is one grouped workspace backed by the canonical
         // internal-transfer directions.
+        // Data uses the verified Merchant data_bundle live-flow identity.
         const telecelMerchantDefaults = <String>[
           'airtime',
+          'data_bundle',
           'balance_enquiry',
           'send_money',
           'float_to_working',
