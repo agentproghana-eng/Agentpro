@@ -69,6 +69,41 @@ describe('Telecel protected credential contracts', () => {
     );
   });
 
+
+  test('Organisation Shortcode is Merchant-only', () => {
+    const settings = read(
+      'src/controllers/userController.js',
+    );
+
+    expect(settings).toContain(
+      'simRole === "agent"',
+    );
+
+    expect(settings).toContain(
+      '"INVALID_TELECEL_CREDENTIAL_FOR_SIM_ROLE"',
+    );
+
+    expect(settings).toContain(
+      '"Organisation Shortcode is not supported for a Telecel Agent SIM"',
+    );
+
+    const execution = read(
+      'src/controllers/ussdFlowController.js',
+    );
+
+    expect(execution).toContain(
+      'simRole === "agent" &&',
+    );
+
+    expect(execution).toContain(
+      'needsOrganisationShortcode',
+    );
+
+    expect(execution).toContain(
+      '"INVALID_TELECEL_CREDENTIAL_FOR_SIM_ROLE"',
+    );
+  });
+
   test('account deletion erases all protected Telecel credentials', () => {
     const auth = read(
       'src/controllers/authController.js',

@@ -1613,6 +1613,21 @@ exports.updateMySettings = async (req, res) => {
     });
   }
 
+  // Telecel Agent flows use an Operator ID only. Organisation
+  // Shortcode is a Merchant-only protected credential.
+  if (
+    simRole === "agent" &&
+    suppliedOrganisationShortcode
+  ) {
+    return res.status(422).json({
+      success: false,
+      code:
+        "INVALID_TELECEL_CREDENTIAL_FOR_SIM_ROLE",
+      message:
+        "Organisation Shortcode is not supported for a Telecel Agent SIM",
+    });
+  }
+
   const normalizeCredential = (
     value,
     fieldName,

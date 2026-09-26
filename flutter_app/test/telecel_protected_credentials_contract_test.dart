@@ -4,6 +4,36 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
+    'Telecel Agent exposes Operator ID only while Merchant keeps shortcode',
+    () {
+      final settings = File(
+        'lib/features/ussd_settings/ussd_settings_screen.dart',
+      ).readAsStringSync();
+
+      expect(
+        settings,
+        isNot(contains('_agentShortcodeConfigured')),
+      );
+
+      expect(
+        RegExp(
+          r"simRole: 'agent',[\\s\\S]{0,120}"
+          r"credentialType: 'organisation_shortcode'",
+        ).hasMatch(settings),
+        isFalse,
+      );
+
+      expect(
+        RegExp(
+          r"simRole: 'merchant',[\\s\\S]{0,120}"
+          r"credentialType: 'organisation_shortcode'",
+        ).hasMatch(settings),
+        isTrue,
+      );
+    },
+  );
+
+  test(
     'protected Telecel credential editing has isolated device auth',
     () {
       final biometric = File(
