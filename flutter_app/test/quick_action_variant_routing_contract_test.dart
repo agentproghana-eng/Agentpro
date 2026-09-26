@@ -92,7 +92,14 @@ void main() {
       expect(
         business,
         contains(
-          'recipientMode: _initialRecipientMode',
+          'recipientMode: _effectiveRecipientMode',
+        ),
+      );
+
+      expect(
+        business,
+        contains(
+          'final recipientMode = _effectiveRecipientMode',
         ),
       );
 

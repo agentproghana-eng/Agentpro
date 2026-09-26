@@ -587,7 +587,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
     final provider = _selectedProvider;
     final transactionType = _transactionType;
     final bundleCategory = _initialBundleCategory;
-    final recipientMode = _initialRecipientMode;
+    final recipientMode = _effectiveRecipientMode;
 
     final cacheKey = <String>[
       provider,
@@ -692,7 +692,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
     _feeCtrl.clear();
 
     setState(() {
-        _agentServiceFeeEnabled = false;
+      _agentServiceFeeEnabled = false;
       _feeManuallyOverridden = false;
       _feeCtrl.text = '0.00';
     });

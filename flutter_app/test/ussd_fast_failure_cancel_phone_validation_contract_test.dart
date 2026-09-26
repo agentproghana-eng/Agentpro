@@ -197,7 +197,7 @@ void main() {
     );
     expect(
       transaction,
-      contains('_selectedTelecelBundle = null'),
+      isNot(contains('_selectedTelecelBundle')),
     );
     expect(
       transaction,
