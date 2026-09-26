@@ -297,10 +297,20 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
   bool get _isTelecelMerchantData => _isTelecelDataBundle;
 
-  String? get _effectiveRecipientMode =>
-      _isTelecelMerchantData
-          ? _telecelMerchantDataRecipientMode
-          : _initialRecipientMode;
+  String? get _effectiveRecipientMode {
+    if (_isTelecelMerchantData) {
+      return _telecelMerchantDataRecipientMode;
+    }
+
+    if (_selectedProvider == 'telecel' &&
+        _transactionType == 'airtime') {
+      return _initialRecipientMode?.toLowerCase() == 'self'
+          ? 'self'
+          : 'other';
+    }
+
+    return _initialRecipientMode;
+  }
 
   bool get _isTelecelMerchantDataOther =>
       _isTelecelMerchantData &&
