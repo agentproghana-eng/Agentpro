@@ -24,8 +24,8 @@ void main() {
         dashboard,
         contains(
           "role == 'merchant' &&\n"
-          "                provider == 'telecel' &&\n"
-          "                !ordered.any((item) => "
+          "          provider == 'telecel' &&\n"
+          "          !ordered.any((item) => "
           "item.actionKey == 'data_bundle')",
         ),
       );
