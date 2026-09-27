@@ -2097,14 +2097,59 @@ exports.getMyQuickActionCatalog = async (req, res) => {
     .trim()
     .toLowerCase();
 
-  const accountMode = requestedMode === "agent" ? "business" : requestedMode;
+  const catalogIdentity = {
+    business: {
+      accountMode: "business",
+      businessSimRole: "agent",
+      responseMode: "business",
+      role: "agent",
+    },
+    agent: {
+      accountMode: "business",
+      businessSimRole: "agent",
+      responseMode: "business",
+      role: "agent",
+    },
+    evd: {
+      accountMode: "business",
+      businessSimRole: "evd",
+      responseMode: "business",
+      role: "evd",
+    },
+    merchant: {
+      accountMode: "business",
+      businessSimRole: "merchant",
+      responseMode: "business",
+      role: "merchant",
+    },
+    personal: {
+      accountMode: "personal",
+      businessSimRole: null,
+      responseMode: "personal",
+      role: "subscriber",
+    },
+    subscriber: {
+      accountMode: "personal",
+      businessSimRole: null,
+      responseMode: "personal",
+      role: "subscriber",
+    },
+  }[requestedMode];
 
-  if (accountMode !== "business" && accountMode !== "personal") {
+  if (!catalogIdentity) {
     return res.status(422).json({
       success: false,
-      message: "mode must be business, agent, or personal",
+      message:
+        "mode must be business, agent, evd, merchant, personal, or subscriber",
     });
   }
+
+  const {
+    accountMode,
+    businessSimRole,
+    responseMode,
+    role: catalogRole,
+  } = catalogIdentity;
 
   try {
     const result = await query(
@@ -2126,13 +2171,18 @@ exports.getMyQuickActionCatalog = async (req, res) => {
          AND f.is_active = TRUE
          AND c.is_active = TRUE
          AND c.can_initiate = TRUE
+         AND (
+           ($1 = 'personal' AND f.business_sim_role IS NULL)
+           OR
+           ($1 = 'business' AND COALESCE(f.business_sim_role, 'agent') = $2)
+         )
        ORDER BY
          f.provider::text,
          display_label,
          f.transaction_type::text,
          COALESCE(f.bundle_category, ''),
          COALESCE(f.recipient_mode, '')`,
-      [accountMode],
+      [accountMode, businessSimRole],
     );
 
     const providerMap = new Map();
@@ -2205,7 +2255,9 @@ exports.getMyQuickActionCatalog = async (req, res) => {
     res.json({
       success: true,
       data: {
-        mode: accountMode,
+        mode: responseMode,
+        role: catalogRole,
+        schema_version: 1,
         providers,
       },
     });

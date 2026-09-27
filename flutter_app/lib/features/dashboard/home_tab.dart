@@ -40,10 +40,14 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   Map<String, List<QuickActionPreference>> _merchantQuickActions = {};
   QuickActionCatalog? _agentQuickActionCatalog;
   QuickActionCatalog? _personalQuickActionCatalog;
+  QuickActionCatalog? _evdQuickActionCatalog;
+  QuickActionCatalog? _merchantQuickActionCatalog;
 
   bool _simPurposesResolved = false;
   bool _agentQuickActionCatalogResolved = false;
   bool _personalQuickActionCatalogResolved = false;
+  bool _evdQuickActionCatalogResolved = false;
+  bool _merchantQuickActionCatalogResolved = false;
 
   StreamSubscription<DashboardRefreshEvent>? _dashboardRefreshSubscription;
   final DashboardRecentTransactionsController _recentTransactionsController =
@@ -229,6 +233,28 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
         } catch (_) {}
       }
 
+      final evdCatalog = durable['evd_catalog'];
+
+      if (evdCatalog is Map) {
+        try {
+          _evdQuickActionCatalog = QuickActionCatalog.fromCacheJson(
+            Map<String, dynamic>.from(evdCatalog),
+            fallbackMode: 'business',
+          );
+        } catch (_) {}
+      }
+
+      final merchantCatalog = durable['merchant_catalog'];
+
+      if (merchantCatalog is Map) {
+        try {
+          _merchantQuickActionCatalog = QuickActionCatalog.fromCacheJson(
+            Map<String, dynamic>.from(merchantCatalog),
+            fallbackMode: 'business',
+          );
+        } catch (_) {}
+      }
+
       setState(() {});
     }
 
@@ -242,6 +268,10 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
               _agentQuickActionCatalog != null;
           _personalQuickActionCatalogResolved =
               _personalQuickActionCatalog != null;
+          _evdQuickActionCatalogResolved =
+              _evdQuickActionCatalog != null;
+          _merchantQuickActionCatalogResolved =
+              _merchantQuickActionCatalog != null;
         });
       }
 
@@ -289,7 +319,6 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
 
     Future<void> loadCatalog({
       required String mode,
-      required bool personal,
     }) async {
       QuickActionCatalog? freshCatalog;
 
@@ -300,35 +329,57 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
       if (!mounted) return;
 
       setState(() {
-        if (personal) {
-          if (freshCatalog != null) {
-            _personalQuickActionCatalog = freshCatalog;
-          }
-
-          _personalQuickActionCatalogResolved = true;
-        } else {
-          if (freshCatalog != null) {
-            _agentQuickActionCatalog = freshCatalog;
-          }
-
-          _agentQuickActionCatalogResolved = true;
+        switch (mode) {
+          case 'agent':
+            if (freshCatalog != null) {
+              _agentQuickActionCatalog = freshCatalog;
+            }
+            _agentQuickActionCatalogResolved = true;
+            break;
+          case 'subscriber':
+            if (freshCatalog != null) {
+              _personalQuickActionCatalog = freshCatalog;
+            }
+            _personalQuickActionCatalogResolved = true;
+            break;
+          case 'evd':
+            if (freshCatalog != null) {
+              _evdQuickActionCatalog = freshCatalog;
+            }
+            _evdQuickActionCatalogResolved = true;
+            break;
+          case 'merchant':
+            if (freshCatalog != null) {
+              _merchantQuickActionCatalog = freshCatalog;
+            }
+            _merchantQuickActionCatalogResolved = true;
+            break;
         }
       });
 
       if (freshCatalog != null) {
+        final cacheKey = switch (mode) {
+          'agent' => 'business_catalog',
+          'subscriber' => 'personal_catalog',
+          'evd' => 'evd_catalog',
+          'merchant' => 'merchant_catalog',
+          _ => throw StateError('Unsupported Quick Action catalog role: $mode'),
+        };
+
         await StorageService.mergeOfflineDashboardSnapshot(
           widget.user,
           {
-            personal ? 'personal_catalog' : 'business_catalog':
-                freshCatalog.toCacheJson(),
+            cacheKey: freshCatalog.toCacheJson(),
           },
         );
       }
     }
 
     await Future.wait([
-      loadCatalog(mode: 'business', personal: false),
-      loadCatalog(mode: 'personal', personal: true),
+      loadCatalog(mode: 'agent'),
+      loadCatalog(mode: 'subscriber'),
+      loadCatalog(mode: 'evd'),
+      loadCatalog(mode: 'merchant'),
     ]);
   }
 
@@ -647,11 +698,16 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
                     merchantQuickActions: _merchantQuickActions,
                     agentCatalog: _agentQuickActionCatalog,
                     subscriberCatalog: _personalQuickActionCatalog,
+                    evdCatalog: _evdQuickActionCatalog,
+                    merchantCatalog: _merchantQuickActionCatalog,
                     simDetectionComplete: _simDetectionComplete,
                     simPurposesResolved: _simPurposesResolved,
                     agentCatalogResolved: _agentQuickActionCatalogResolved,
                     subscriberCatalogResolved:
                         _personalQuickActionCatalogResolved,
+                    evdCatalogResolved: _evdQuickActionCatalogResolved,
+                    merchantCatalogResolved:
+                        _merchantQuickActionCatalogResolved,
                     onReloadQuickActions: () {
                       unawaited(_loadQuickActions());
                     },
