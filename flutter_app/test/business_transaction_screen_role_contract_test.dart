@@ -30,13 +30,32 @@ void main() {
   test(
     'Business runtime propagates SIM role',
     () {
-      final count = RegExp(
-        r"'sim_role': businessSimRole",
-      ).allMatches(source).length;
+      expect(
+        source,
+        contains(
+          "'sim_role': businessSimRole",
+        ),
+      );
 
       expect(
-        count,
-        greaterThanOrEqualTo(6),
+        source,
+        contains(
+          'Map<String, dynamic> _buildTransactionRequestFields',
+        ),
+      );
+
+      expect(
+        source,
+        contains(
+          'required String businessSimRole',
+        ),
+      );
+
+      expect(
+        RegExp(
+          r'businessSimRole: businessSimRole',
+        ).allMatches(source).length,
+        greaterThanOrEqualTo(4),
       );
     },
   );

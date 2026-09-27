@@ -65,7 +65,7 @@ void main() {
         () => QuickActionCatalog.fromCacheJson({
           'mode': 'business',
           'role': 'agent',
-          'schema_version': 2,
+          'schema_version': 3,
           'providers': const [],
         }),
         throwsFormatException,
