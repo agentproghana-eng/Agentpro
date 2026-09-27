@@ -8,6 +8,7 @@ const SUPPORTED_TYPES = new Set([
   "send_money_same_network",
   "send_money_cross_network",
   "send_money_to_bank",
+  "cash_out",
 ]);
 
 function accountingError(message, code) {
@@ -76,14 +77,19 @@ async function postTelecelMerchantOutgoing(
     },
   );
 
-  // Merchant Send Money and Bank Transfer are business electronic
-  // payments. They spend the Merchant SIM Working Account.
+  // Validated Merchant outgoing operations spend the Merchant SIM
+  // Working Account.
   //
-  // They do NOT represent an Agent cash exchange:
+  // Merchant cash_out is a withdrawal from an external Agent Till:
   //   Working Account  - principal
   //   Merchant Account   no movement
-  //   physical cash      no movement
   //   Agent e-Float      no movement
+  //   Agent cash drawer  no movement
+  //   Agent commission   no movement
+  //
+  // The cash received is not posted into Agent-domain cash accounting.
+  // The successful transaction remains the record of the external cash
+  // receipt until a role-neutral/business cash ledger is introduced.
   //
   // transaction.fee is pre-USSD metadata and is deliberately not
   // posted here. A later provider balance observation reconciles the

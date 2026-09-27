@@ -24,8 +24,8 @@ void main() {
         dashboard,
         contains(
           "role == 'merchant' &&\n"
-          "                provider == 'telecel' &&\n"
-          "                !ordered.any((item) => "
+          "          provider == 'telecel' &&\n"
+          "          !ordered.any((item) => "
           "item.actionKey == 'data_bundle')",
         ),
       );
@@ -33,10 +33,12 @@ void main() {
       expect(
         dashboard,
         contains(
-          "QuickActionPreference(\n"
-          "                  actionKey: 'data_bundle',\n"
-          "                  position: ordered.length,",
+          "actionKey: 'data_bundle'",
         ),
+      );
+      expect(
+        dashboard,
+        contains('position: ordered.length'),
       );
 
       // Existing entries remain the source of truth and are copied as-is.

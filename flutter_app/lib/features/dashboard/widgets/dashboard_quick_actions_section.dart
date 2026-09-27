@@ -203,6 +203,7 @@ class DashboardQuickActionsSection extends StatelessWidget {
           'send_money',
           'float_to_working',
           'send_money_to_bank',
+          'cash_out',
         ];
 
         return telecelMerchantDefaults
@@ -232,18 +233,24 @@ class DashboardQuickActionsSection extends StatelessWidget {
     // customization, but append Data when that action has never existed in
     // the saved profile. An explicitly saved (including hidden) Data action
     // remains authoritative and is never duplicated or forced visible.
-    final presentationOrdered =
-        role == 'merchant' &&
-                provider == 'telecel' &&
-                !ordered.any((item) => item.actionKey == 'data_bundle')
-            ? <QuickActionPreference>[
-                ...ordered,
-                QuickActionPreference(
-                  actionKey: 'data_bundle',
-                  position: ordered.length,
-                ),
-              ]
-            : ordered;
+    final presentationOrdered = <QuickActionPreference>[
+      ...ordered,
+      if (role == 'merchant' &&
+          provider == 'telecel' &&
+          !ordered.any((item) => item.actionKey == 'data_bundle'))
+        QuickActionPreference(
+          actionKey: 'data_bundle',
+          position: ordered.length,
+        ),
+      if (role == 'merchant' &&
+          provider == 'telecel' &&
+          !ordered.any((item) => item.actionKey == 'cash_out'))
+        QuickActionPreference(
+          actionKey: 'cash_out',
+          position: ordered.length +
+              (ordered.any((item) => item.actionKey == 'data_bundle') ? 0 : 1),
+        ),
+    ];
 
     if (role == 'subscriber') {
       return normalizePersonalQuickActionPreferences(
