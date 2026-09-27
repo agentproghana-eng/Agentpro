@@ -187,7 +187,7 @@ export function USSDTemplatesPage() {
             <div className="p-6 border-t flex gap-3">
               <button onClick={save} disabled={saving}
                 className="flex-1 bg-primary text-white py-2.5 rounded-lg font-semibold hover:bg-primary-dark disabled:opacity-60 transition">
-                {saving ? 'Saving...' : '✅ Save & Deploy'}
+                {saving ? 'Saving...' : '✅ Save Draft'}
               </button>
               <button onClick={() => setEditing(null)}
                 className="flex-1 border border-gray-200 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-gray-50 transition">
@@ -868,10 +868,9 @@ export function FlowsPage() {
     parsed.form_schema =
       normalizeFormSchema(formSchema);
 
-    // Flow configuration editing must never implicitly activate or
-    // deactivate a flow. Preserve the state loaded from the server.
-    parsed.is_active =
-      editing.is_active === true;
+    // Activation/deactivation uses the dedicated control below.
+    // Ordinary configuration saves never transport is_active.
+    delete parsed.is_active;
 
     setSaving(true);
 
@@ -891,7 +890,7 @@ export function FlowsPage() {
       );
 
       toast.success(
-        'Flow updated and verified live ✅',
+        'Flow draft updated and verified ✅',
       );
 
       setEditing(null);
@@ -910,6 +909,67 @@ export function FlowsPage() {
           'Flow save or verification failed',
         );
       }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const changeActivation = async (
+    flow,
+    nextActive,
+  ) => {
+    const verb =
+      nextActive ? 'activate' : 'deactivate';
+
+    const confirmed =
+      window.confirm(
+        nextActive
+          ? `Activate ${flow.provider?.toUpperCase()} ${flow.transaction_type?.replace(/_/g, ' ')}? The backend will run activation-readiness checks before making it available.`
+          : `Deactivate ${flow.provider?.toUpperCase()} ${flow.transaction_type?.replace(/_/g, ' ')}?`
+      );
+
+    if (!confirmed) return;
+
+    setSaving(true);
+
+    try {
+      const response =
+        await API.patch(
+          `/admin/ussd-flows/${flow.id}/activation`,
+          {
+            is_active: nextActive,
+          },
+        );
+
+      const persisted =
+        response.data?.data;
+
+      if (
+        !persisted ||
+        persisted.is_active !== nextActive
+      ) {
+        throw new Error(
+          'FLOW_ACTIVATION_READ_AFTER_WRITE_MISMATCH'
+        );
+      }
+
+      toast.success(
+        nextActive
+          ? 'Flow activated after readiness checks ✅'
+          : 'Flow deactivated ✅',
+      );
+
+      await load();
+    } catch (e) {
+      toast.error(
+        e.response?.data?.message ||
+        (
+          e.message ===
+          'FLOW_ACTIVATION_READ_AFTER_WRITE_MISMATCH'
+            ? 'Activation response did not match the requested state.'
+            : `Failed to ${verb} flow`
+        ),
+      );
     } finally {
       setSaving(false);
     }
@@ -1080,10 +1140,39 @@ export function FlowsPage() {
                     </span>
                   </div>
                 </div>
-                <button onClick={() => startEdit(f)}
-                  className="bg-primary/10 text-primary px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-primary/20 transition">
-                  Edit
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() =>
+                      changeActivation(
+                        f,
+                        !f.is_active,
+                      )
+                    }
+                    disabled={saving}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition disabled:opacity-50 ${
+                      f.is_active
+                        ? 'bg-red-50 text-red-700 hover:bg-red-100'
+                        : 'bg-green-50 text-green-700 hover:bg-green-100'
+                    }`}
+                  >
+                    {f.is_active
+                      ? 'Deactivate'
+                      : 'Activate'}
+                  </button>
+
+                  <button
+                    onClick={() => startEdit(f)}
+                    disabled={saving || f.is_active}
+                    title={
+                      f.is_active
+                        ? 'Deactivate this flow before editing its configuration.'
+                        : 'Edit flow configuration'
+                    }
+                    className="bg-primary/10 text-primary px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-primary/20 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Edit
+                  </button>
+                </div>
               </div>
             </div>
           ))}
@@ -1173,7 +1262,7 @@ export function FlowsPage() {
             <div className="p-6 border-t flex gap-3">
               <button onClick={save} disabled={saving}
                 className="flex-1 bg-primary text-white py-2.5 rounded-lg font-semibold hover:bg-primary-dark disabled:opacity-60 transition">
-                {saving ? 'Saving...' : '✅ Save & Deploy'}
+                {saving ? 'Saving...' : '✅ Save Draft'}
               </button>
               <button onClick={() => setEditing(null)}
                 className="flex-1 border border-gray-200 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-gray-50 transition">

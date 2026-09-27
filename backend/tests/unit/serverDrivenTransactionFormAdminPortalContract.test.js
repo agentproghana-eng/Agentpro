@@ -159,14 +159,18 @@ describe(
     );
 
     test(
-      'normal flow editing preserves the persisted activation state',
+      'normal flow editing cannot change activation state',
       () => {
         expect(portal).toContain(
-          'parsed.is_active =',
+          'delete parsed.is_active',
         );
 
         expect(portal).toContain(
-          'editing.is_active === true',
+          'delete parsed.is_active',
+        );
+
+        expect(portal).toContain(
+          '/activation',
         );
 
         const start =

@@ -2439,9 +2439,22 @@ router.patch('/ussd-flows/:id', async (req, res) => {
     bundle_category,
     recipient_mode,
     form_schema,
-    is_active,
     steps,
   } = req.body;
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+      req.body,
+      'is_active'
+    )
+  ) {
+    return res.status(422).json({
+      success: false,
+      code: 'USSD_FLOW_ACTIVATION_ENDPOINT_REQUIRED',
+      message:
+        'Flow activation state must be changed through the dedicated activation endpoint.',
+    });
+  }
 
   const hasBundleCategory =
     Object.prototype.hasOwnProperty.call(req.body, 'bundle_category');
@@ -2475,6 +2488,35 @@ router.patch('/ussd-flows/:id', async (req, res) => {
 
   try {
     const flow = await withTransaction(async (client) => {
+      // Configuration changes must never mutate a live flow in place.
+      // Deactivate first, edit the draft, then explicitly reactivate so
+      // the complete persisted configuration passes readiness checks.
+      const currentResult = await client.query(
+        `SELECT id, is_active
+         FROM ussd_flows
+         WHERE id = $1
+           AND owner_user_id IS NULL
+         FOR UPDATE`,
+        [req.params.id]
+      );
+
+      if (!currentResult.rows.length) {
+        throw {
+          statusCode: 404,
+          code: 'USSD_FLOW_NOT_FOUND',
+          message: 'Flow not found',
+        };
+      }
+
+      if (currentResult.rows[0].is_active === true) {
+        throw {
+          statusCode: 409,
+          code: 'USSD_FLOW_DEACTIVATE_BEFORE_EDIT',
+          message:
+            'Deactivate this flow before changing its configuration.',
+        };
+      }
+
       const flowResult = await client.query(
         `UPDATE ussd_flows SET
            dial_code = COALESCE($1, dial_code),
@@ -2492,9 +2534,8 @@ router.patch('/ussd-flows/:id', async (req, res) => {
              WHEN $8 THEN $9
              ELSE form_schema
            END,
-           is_active = COALESCE($10, is_active),
            updated_at = NOW()
-         WHERE id = $11
+         WHERE id = $10
            AND owner_user_id IS NULL
          RETURNING *`,
         [
@@ -2507,7 +2548,6 @@ router.patch('/ussd-flows/:id', async (req, res) => {
           recipient_mode || null,
           hasFormSchema,
           form_schema ?? [],
-          is_active,
           req.params.id,
         ]
       );
@@ -2541,7 +2581,6 @@ router.patch('/ussd-flows/:id', async (req, res) => {
         ...(hasFormSchema
           ? { form_schema: form_schema ?? [] }
           : {}),
-        is_active,
         step_count: steps ? steps.length : undefined,
       },
       ipAddress: req.ip, requestId: req.requestId,
@@ -2549,7 +2588,11 @@ router.patch('/ussd-flows/:id', async (req, res) => {
     res.json({ success: true, data: flow });
   } catch (e) {
     if (e.statusCode) {
-      return res.status(e.statusCode).json({ success: false, message: e.message });
+      return res.status(e.statusCode).json({
+        success: false,
+        ...(e.code ? { code: e.code } : {}),
+        message: e.message,
+      });
     }
     if (e.code === '23505') {
       return res.status(409).json({
@@ -2560,6 +2603,202 @@ router.patch('/ussd-flows/:id', async (req, res) => {
     }
     logger.error('Update flow error:', e);
     res.status(500).json({ success: false, message: 'Failed to update flow' });
+  }
+});
+
+
+// Flow activation is intentionally separate from configuration editing.
+// The persisted flow is re-read and validated immediately before its
+// visibility can change. Financial posting policy is never configured
+// here.
+router.patch('/ussd-flows/:id/activation', async (req, res) => {
+  const { is_active } = req.body;
+
+  if (typeof is_active !== 'boolean') {
+    return res.status(422).json({
+      success: false,
+      code: 'USSD_FLOW_ACTIVATION_VALUE_INVALID',
+      message: 'is_active must be boolean.',
+    });
+  }
+
+  try {
+    const result = await withTransaction(async (client) => {
+      const flowResult = await client.query(
+        `SELECT *
+         FROM ussd_flows
+         WHERE id = $1
+           AND owner_user_id IS NULL
+         FOR UPDATE`,
+        [req.params.id]
+      );
+
+      if (!flowResult.rows.length) {
+        throw {
+          statusCode: 404,
+          code: 'USSD_FLOW_NOT_FOUND',
+          message: 'Flow not found',
+        };
+      }
+
+      const flow = flowResult.rows[0];
+
+      const stepsResult = await client.query(
+        `SELECT *
+         FROM ussd_flow_steps
+         WHERE flow_id = $1
+         ORDER BY step_order`,
+        [req.params.id]
+      );
+
+      const steps = stepsResult.rows;
+
+      if (is_active) {
+        const stepsError =
+          validateFlowSteps(steps);
+
+        if (stepsError) {
+          throw {
+            statusCode: 422,
+            code: 'USSD_FLOW_NOT_ACTIVATION_READY',
+            message: stepsError,
+          };
+        }
+
+        const formSchema =
+          Array.isArray(flow.form_schema)
+            ? flow.form_schema
+            : [];
+
+        const formSchemaError =
+          validateTransactionFormSchema(
+            formSchema
+          );
+
+        if (formSchemaError) {
+          throw {
+            statusCode: 422,
+            code: 'USSD_FLOW_NOT_ACTIVATION_READY',
+            message: formSchemaError,
+          };
+        }
+
+        // operator_id is understood by the V2 schema/client but the
+        // transaction initiation API does not yet accept it as a
+        // validated transport destination. Fail closed until that
+        // transport is implemented and contract-tested.
+        if (
+          formSchema.some(
+            field => field?.key === 'operator_id'
+          )
+        ) {
+          throw {
+            statusCode: 422,
+            code: 'USSD_FORM_FIELD_TRANSPORT_NOT_READY',
+            message:
+              'operator_id transaction transport is not yet enabled.',
+          };
+        }
+
+        // MTN EVD is structurally recognized, but its financial posting
+        // semantics have not yet been validated. Do not expose an EVD
+        // action merely because its USSD/form configuration exists.
+        if (flow.business_sim_role === 'evd') {
+          throw {
+            statusCode: 422,
+            code: 'USSD_SIM_ROLE_ACCOUNTING_NOT_READY',
+            message:
+              'EVD flow activation is blocked until EVD accounting has been validated and enabled.',
+          };
+        }
+      }
+
+      const updatedResult = await client.query(
+        `UPDATE ussd_flows
+         SET is_active = $1,
+             updated_at = NOW()
+         WHERE id = $2
+           AND owner_user_id IS NULL
+         RETURNING *`,
+        [
+          is_active,
+          req.params.id,
+        ]
+      );
+
+      return {
+        before: flow,
+        after: updatedResult.rows[0],
+        steps,
+      };
+    });
+
+    await auditLog({
+      userId: req.user.id,
+      companyId: result.after.company_id,
+      action: is_active
+        ? 'USSD_FLOW_ACTIVATED'
+        : 'USSD_FLOW_DEACTIVATED',
+      entityType: 'ussd_flow',
+      entityId: req.params.id,
+      oldValues: {
+        is_active:
+          result.before.is_active === true,
+      },
+      newValues: {
+        is_active,
+        provider:
+          result.after.provider,
+        transaction_type:
+          result.after.transaction_type,
+        business_sim_role:
+          result.after.business_sim_role || null,
+        form_schema:
+          result.after.form_schema || [],
+        step_count:
+          result.steps.length,
+      },
+      ipAddress: req.ip,
+      requestId: req.requestId,
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        ...result.after,
+        steps: result.steps,
+      },
+    });
+  } catch (e) {
+    if (e.statusCode) {
+      return res.status(e.statusCode).json({
+        success: false,
+        code:
+          e.code ||
+          'USSD_FLOW_ACTIVATION_FAILED',
+        message: e.message,
+      });
+    }
+
+    if (e.code === '23505') {
+      return res.status(409).json({
+        success: false,
+        code: 'USSD_FLOW_ACTIVE_CONFLICT',
+        message:
+          'Another active flow already exists for this provider, transaction type, and flow variant.',
+      });
+    }
+
+    logger.error(
+      'Flow activation change error:',
+      e
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        'Failed to change flow activation state',
+    });
   }
 });
 
