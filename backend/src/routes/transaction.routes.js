@@ -93,6 +93,9 @@ const requiresCustomerPhone = (payload) => {
     return false;
   }
 
+  // Telecel Merchant cash_out uses customer_phone as an opaque external
+  // Agent Till identifier. It remains required by the transaction form and
+  // flow, but it must never be interpreted as an AgentPro Agent wallet.
   return CUSTOMER_PHONE_BUSINESS_TYPES.has(type);
 };
 

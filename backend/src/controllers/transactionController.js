@@ -470,6 +470,7 @@ exports.initiateTransaction = async (req, res) => {
         "send_money_same_network",
         "send_money_cross_network",
         "send_money_to_bank",
+        "cash_out",
       ].includes(transaction_type);
 
     if (
@@ -1128,11 +1129,13 @@ exports.completeTransaction = async (req, res) => {
             tx.transaction_type === "data_bundle" ||
             tx.transaction_type === "send_money_same_network" ||
             tx.transaction_type === "send_money_cross_network" ||
-            tx.transaction_type === "send_money_to_bank"
+            tx.transaction_type === "send_money_to_bank" ||
+            tx.transaction_type === "cash_out"
           )
         ) {
-          // Telecel Merchant Airtime, Data, Send Money and Bank Transfer
-          // spend the role-specific Working Account.
+          // Validated Telecel Merchant outgoing operations spend the
+          // role-specific Working Account. Merchant cash_out represents
+          // withdrawal from an external Agent Till.
           //
           // They must never use Agent e-Float, the Agent cash drawer,
           // or Agent commission posting.

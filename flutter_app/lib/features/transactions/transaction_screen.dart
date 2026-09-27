@@ -93,6 +93,13 @@ class _TransactionScreenState extends State<TransactionScreen> {
   bool _initialSimIdentityUnavailable = false;
   bool _simDetectionComplete = false;
   bool _simPermissionDenied = false;
+
+  // Authoritative business role for the currently selected physical SIM.
+  // This lets role-specific presentation remain isolated: a Telecel Agent
+  // cash_out stays the legacy manual flow, while a Telecel Merchant cash_out
+  // is the automated Agent Till withdrawal.
+  String? _selectedBusinessSimRole;
+
   // Telecel Merchant Data uses exact Self / Other flow variants.
   // Telecel owns the changing live bundle catalogue.
   String _telecelMerchantDataRecipientMode = 'self';
@@ -379,9 +386,15 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // just a local var in _proceed()) so the UI can also reflect this -
   // showing the actual PIN/USSD security notice here would be actively
   // wrong, since no PIN entry or dialing ever happens in this flow.
+  bool get _isTelecelMerchantWithdrawal =>
+      _selectedProvider == 'telecel' &&
+      _transactionType == 'cash_out' &&
+      _selectedBusinessSimRole == 'merchant';
+
   bool get _isManualCashOut =>
       _transactionType == 'cash_out' &&
-      (_selectedProvider == 'telecel' || _selectedProvider == 'at_money');
+      (_selectedProvider == 'telecel' || _selectedProvider == 'at_money') &&
+      !_isTelecelMerchantWithdrawal;
 
   List<String> get _availableProviders {
     if (!_simDetectionComplete) {
@@ -594,6 +607,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
       return;
     }
 
+    if (mounted && _selectedBusinessSimRole != businessSimRole) {
+      setState(() {
+        _selectedBusinessSimRole = businessSimRole;
+      });
+    }
+
     final provider = _selectedProvider;
     final transactionType = _transactionType;
     final bundleCategory = _initialBundleCategory;
@@ -675,6 +694,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
     setState(() {
       _selectedProvider = provider;
+      _selectedBusinessSimRole = null;
 
       final providerSims = _simCards
           .where((sim) => sim.network == provider)
@@ -809,6 +829,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
     }
 
     if (!mounted) return;
+
+    if (_selectedBusinessSimRole != businessSimRole) {
+      setState(() {
+        _selectedBusinessSimRole = businessSimRole;
+      });
+    }
 
     // Telecel Merchant balance enquiry completes asynchronously through a
     // newly delivered T-CASH SMS. Request RECEIVE_SMS before starting the
@@ -2273,38 +2299,54 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 AppTextField(
                   transactionEmphasis: true,
                   controller: _customerPhoneCtrl,
-                  label: [
-                    'business_deposit',
-                    'business_withdrawal',
-                  ].contains(_transactionType)
-                      ? 'Agent Short Code'
-                      : 'Phone Number',
-                  hint: [
-                    'business_deposit',
-                    'business_withdrawal',
-                  ].contains(_transactionType)
-                      ? 'Enter agent short code'
-                      : '024XXXXXXX',
+                  label: _isTelecelMerchantWithdrawal
+                      ? 'Till Number'
+                      : [
+                          'business_deposit',
+                          'business_withdrawal',
+                        ].contains(_transactionType)
+                          ? 'Agent Short Code'
+                          : 'Phone Number',
+                  hint: _isTelecelMerchantWithdrawal
+                      ? 'Enter till number'
+                      : [
+                          'business_deposit',
+                          'business_withdrawal',
+                        ].contains(_transactionType)
+                          ? 'Enter agent short code'
+                          : '024XXXXXXX',
                   keyboardType: TextInputType.phone,
-                  prefixIcon: Icons.phone_outlined,
+                  prefixIcon: _isTelecelMerchantWithdrawal
+                      ? Icons.storefront_outlined
+                      : Icons.phone_outlined,
                   validator: (v) {
                     final value = (v ?? '').trim();
                     final isAgentShortCode = [
                       'business_deposit',
                       'business_withdrawal',
                     ].contains(_transactionType);
+                    final isTelecelTillNumber =
+                        _isTelecelMerchantWithdrawal;
 
                     if (value.isEmpty) {
+                      if (isTelecelTillNumber) {
+                        return 'Till number is required';
+                      }
+
                       return isAgentShortCode
                           ? 'Agent short code is required'
                           : 'Phone number is required';
                     }
 
-                    if (
-                      !isAgentShortCode &&
-                      !RegExp(r'^\d{10}$').hasMatch(value)
-                    ) {
+                    if (!isAgentShortCode &&
+                        !isTelecelTillNumber &&
+                        !RegExp(r'^\d{10}$').hasMatch(value)) {
                       return 'Enter a valid 10-digit mobile number';
+                    }
+
+                    if (isTelecelTillNumber &&
+                        !RegExp(r'^\d+$').hasMatch(value)) {
+                      return 'Enter a valid till number';
                     }
 
                     return null;
