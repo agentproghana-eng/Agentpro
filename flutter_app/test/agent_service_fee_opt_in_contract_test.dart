@@ -77,12 +77,26 @@ void main() {
       );
     });
 
-    test('offline and online payloads submit zero while disabled', () {
+    test('shared request builder submits zero while disabled', () {
       expect(
         RegExp(
           r"'fee': _isAgentServiceFeeFlow && _agentServiceFeeEnabled",
         ).allMatches(source).length,
-        2,
+        1,
+      );
+
+      expect(
+        source,
+        contains(
+          'Map<String, dynamic> _buildTransactionRequestFields',
+        ),
+      );
+
+      expect(
+        RegExp(
+          r'_buildTransactionRequestFields\(',
+        ).allMatches(source).length,
+        greaterThanOrEqualTo(3),
       );
     });
 

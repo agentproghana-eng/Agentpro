@@ -30,8 +30,16 @@ describe("Server-Driven Transaction Catalog V1", () => {
     );
   });
 
-  test("catalog publishes an explicit version and resolved role", () => {
-    expect(controller).toContain("schema_version: 1");
+  test("catalog defaults legacy clients to V1 and publishes the negotiated version", () => {
+    expect(controller).toContain(
+      "rawSchemaVersion === undefined || rawSchemaVersion === null",
+    );
+    expect(controller).toContain(
+      "? 1",
+    );
+    expect(controller).toContain(
+      "schema_version: requestedSchemaVersion",
+    );
     expect(controller).toContain("role: catalogRole");
     expect(controller).toContain("mode: responseMode");
   });

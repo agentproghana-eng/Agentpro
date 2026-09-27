@@ -1,6 +1,9 @@
 const express = require('express');
 const { validateFlowSteps } = require('../utils/ussdFlowValidation');
 const {
+  validateTransactionFormSchema,
+} = require('../utils/ussdTransactionFormSchemaValidation');
+const {
   getFlowBuilderEligibility,
   getGlobalFlowBuilderEligibility,
 } = require('../utils/ussdFlowCapabilities');
@@ -2273,6 +2276,7 @@ router.post('/ussd-flows', async (req, res) => {
     failure_markers,
     bundle_category,
     recipient_mode,
+    form_schema,
     steps,
     company_id,
   } = req.body;
@@ -2286,6 +2290,17 @@ router.post('/ussd-flows', async (req, res) => {
   const stepsError = validateFlowSteps(steps);
   if (stepsError) {
     return res.status(422).json({ success: false, message: stepsError });
+  }
+
+  const formSchemaError =
+    validateTransactionFormSchema(form_schema);
+
+  if (formSchemaError) {
+    return res.status(422).json({
+      success: false,
+      code: 'USSD_FORM_SCHEMA_INVALID',
+      message: formSchemaError,
+    });
   }
 
   const hasCompanyId =
@@ -2350,9 +2365,10 @@ router.post('/ussd-flows', async (req, res) => {
            company_id,
            bundle_category,
            recipient_mode,
+           form_schema,
            created_by
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING *`,
         [
           provider,
@@ -2363,6 +2379,7 @@ router.post('/ussd-flows', async (req, res) => {
           targetCompanyId,
           bundle_category || null,
           recipient_mode || null,
+          form_schema ?? [],
           req.user.id,
         ]
       );
@@ -2418,6 +2435,7 @@ router.patch('/ussd-flows/:id', async (req, res) => {
     failure_markers,
     bundle_category,
     recipient_mode,
+    form_schema,
     is_active,
     steps,
   } = req.body;
@@ -2426,6 +2444,8 @@ router.patch('/ussd-flows/:id', async (req, res) => {
     Object.prototype.hasOwnProperty.call(req.body, 'bundle_category');
   const hasRecipientMode =
     Object.prototype.hasOwnProperty.call(req.body, 'recipient_mode');
+  const hasFormSchema =
+    Object.prototype.hasOwnProperty.call(req.body, 'form_schema');
 
   if (dial_code && (!dial_code.startsWith('*') || !dial_code.endsWith('#'))) {
     return res.status(422).json({ success: false, message: 'dial_code must start with * and end with #.' });
@@ -2434,6 +2454,19 @@ router.patch('/ussd-flows/:id', async (req, res) => {
     const stepsError = validateFlowSteps(steps);
     if (stepsError) {
       return res.status(422).json({ success: false, message: stepsError });
+    }
+  }
+
+  if (hasFormSchema) {
+    const formSchemaError =
+      validateTransactionFormSchema(form_schema);
+
+    if (formSchemaError) {
+      return res.status(422).json({
+        success: false,
+        code: 'USSD_FORM_SCHEMA_INVALID',
+        message: formSchemaError,
+      });
     }
   }
 
@@ -2452,9 +2485,13 @@ router.patch('/ussd-flows/:id', async (req, res) => {
              WHEN $6 THEN $7
              ELSE recipient_mode
            END,
-           is_active = COALESCE($8, is_active),
+           form_schema = CASE
+             WHEN $8 THEN $9
+             ELSE form_schema
+           END,
+           is_active = COALESCE($10, is_active),
            updated_at = NOW()
-         WHERE id = $9
+         WHERE id = $11
            AND owner_user_id IS NULL
          RETURNING *`,
         [
@@ -2465,6 +2502,8 @@ router.patch('/ussd-flows/:id', async (req, res) => {
           bundle_category || null,
           hasRecipientMode,
           recipient_mode || null,
+          hasFormSchema,
+          form_schema ?? [],
           is_active,
           req.params.id,
         ]

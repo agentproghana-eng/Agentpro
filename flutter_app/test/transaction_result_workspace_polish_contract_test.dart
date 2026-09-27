@@ -31,7 +31,21 @@ void main() {
       expect(
         form,
         contains(
-          "'customer_phone': _isMtnCashInOutWorkspace",
+          "'customer_phone': _effectiveCustomerPhone",
+        ),
+      );
+
+      expect(
+        form,
+        contains(
+          'String get _effectiveCustomerPhone',
+        ),
+      );
+
+      expect(
+        form,
+        contains(
+          'return _isMtnCashInOutWorkspace',
         ),
       );
 

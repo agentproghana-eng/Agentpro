@@ -41,6 +41,7 @@ import '../../features/reports/personal_reports_screen.dart';
 import '../../features/transactions/personal_transaction_history_screen.dart';
 import '../../features/ussd_settings/ussd_settings_screen.dart';
 import '../../features/ussd_settings/quick_action_customization_screen.dart';
+import '../../features/ussd_settings/quick_action_catalog.dart';
 import '../../features/ussd_flows/ussd_flow_list_screen.dart';
 import '../../features/community/community_feed_screen.dart';
 import '../../features/shifts/close_shift_screen.dart';
@@ -302,9 +303,20 @@ class AppRouter {
             final bundleCategory = state.uri.queryParameters['bundle_category'];
             final recipientMode = state.uri.queryParameters['recipient_mode'];
 
+            final routeExtra = state.extra;
+            final catalogDefinition =
+                routeExtra is QuickActionCatalogDefinition &&
+                        routeExtra.provider.trim().toLowerCase() ==
+                            (provider ?? '').trim().toLowerCase() &&
+                        routeExtra.type.trim().toLowerCase() ==
+                            type.trim().toLowerCase()
+                    ? routeExtra
+                    : null;
+
             return TransactionScreen(
               transactionType: type,
               initialProvider: provider,
+              catalogDefinition: catalogDefinition,
               initialSimSlot:
                   simSlotStr != null ? int.tryParse(simSlotStr) : null,
               initialSimIccid: simIccid,

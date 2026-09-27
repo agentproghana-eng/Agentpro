@@ -22,6 +22,8 @@ import '../../core/services/sim_role_assignment_service.dart';
 import '../../core/services/storage_service.dart';
 import '../../core/services/transaction_device_preparation_service.dart';
 import 'models/telecel_merchant_bank_selections.dart';
+import '../ussd_settings/quick_action_catalog.dart';
+import 'widgets/server_driven_transaction_form.dart';
 
 class TransactionScreen extends StatefulWidget {
   final String transactionType;
@@ -31,6 +33,12 @@ class TransactionScreen extends StatefulWidget {
   final int? initialSimSubscriptionId;
   final String? initialBundleCategory;
   final String? initialRecipientMode;
+
+  /// Optional V2 server-described presentation schema for this exact
+  /// provider + transaction identity. It controls only pre-transaction
+  /// input rendering; it never defines PIN handling, USSD execution,
+  /// authorization, or financial posting.
+  final QuickActionCatalogDefinition? catalogDefinition;
 
   /// MTN Agent-only workspace that keeps Cash In and Cash Out on one
   /// stateful form. The underlying transaction identities remain
@@ -51,6 +59,7 @@ class TransactionScreen extends StatefulWidget {
     this.initialSimSubscriptionId,
     this.initialBundleCategory,
     this.initialRecipientMode,
+    this.catalogDefinition,
     this.mtnCashInOutWorkspace = false,
     this.telecelMerchantECashWorkspace = false,
   });
@@ -68,6 +77,10 @@ class _TransactionScreenState extends State<TransactionScreen> {
   }
 
   final _formKey = GlobalKey<FormState>();
+
+  final Map<String, String> _serverDrivenFormValues =
+      <String, String>{};
+
   final _customerPhoneCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
   final _recipientPhoneCtrl = TextEditingController();
@@ -134,6 +147,124 @@ class _TransactionScreenState extends State<TransactionScreen> {
   bool get _isTelecelMerchantSendMoneyWorkspace =>
       _selectedProvider == 'telecel' &&
       widget.transactionType == 'send_money';
+
+  bool get _usesServerDrivenForm {
+    final definition = widget.catalogDefinition;
+
+    if (definition == null ||
+        definition.formFields.isEmpty ||
+        widget.mtnCashInOutWorkspace ||
+        widget.telecelMerchantECashWorkspace) {
+      return false;
+    }
+
+    return definition.provider.trim().toLowerCase() ==
+            _selectedProvider.trim().toLowerCase() &&
+        definition.type.trim().toLowerCase() ==
+            widget.transactionType.trim().toLowerCase();
+  }
+
+  void _updateServerDrivenFormValues(
+    Map<String, String> values,
+  ) {
+    _serverDrivenFormValues
+      ..clear()
+      ..addAll(values);
+  }
+
+  static const Set<String> _serverDrivenSubmissionKeys = {
+    'customer_phone',
+    'recipient_phone',
+    'amount',
+    'account_number',
+    'merchant_id',
+    'reference',
+    'operator_id',
+  };
+
+  String _serverDrivenValue(String key) {
+    if (!_usesServerDrivenForm ||
+        !_serverDrivenSubmissionKeys.contains(key)) {
+      return '';
+    }
+
+    return _serverDrivenFormValues[key]?.trim() ?? '';
+  }
+
+  String get _effectiveAmountText => _usesServerDrivenForm
+      ? _serverDrivenValue('amount')
+      : _amountCtrl.text.trim();
+
+  double get _effectiveAmount =>
+      double.tryParse(
+        _effectiveAmountText.replaceAll(',', ''),
+      ) ??
+      0;
+
+  String get _effectiveCustomerPhone {
+    if (_usesServerDrivenForm) {
+      return _serverDrivenValue('customer_phone');
+    }
+
+    return _isMtnCashInOutWorkspace
+        ? _recipientPhoneCtrl.text.trim()
+        : _customerPhoneCtrl.text.trim();
+  }
+
+  String get _effectiveRecipientPhone => _usesServerDrivenForm
+      ? _serverDrivenValue('recipient_phone')
+      : _recipientPhoneCtrl.text.trim();
+
+  String get _effectiveAccountNumber => _usesServerDrivenForm
+      ? _serverDrivenValue('account_number')
+      : _needsTelecelMerchantAccountNumber
+          ? _accountNumberCtrl.text.trim()
+          : '';
+
+  String get _effectiveReference => _usesServerDrivenForm
+      ? _serverDrivenValue('reference')
+      : _referenceCtrl.text.trim();
+
+  String get _effectiveMerchantId => _usesServerDrivenForm
+      ? _serverDrivenValue('merchant_id')
+      : _merchantIdCtrl.text.trim();
+
+  String get _effectiveOperatorId =>
+      _serverDrivenValue('operator_id');
+
+  Map<String, dynamic> _buildTransactionRequestFields({
+    required String businessSimRole,
+    required String installationId,
+    required String clientOperationId,
+  }) {
+    return <String, dynamic>{
+      'provider': _selectedProvider,
+      'transaction_type': _transactionType,
+      'sim_role': businessSimRole,
+      'amount': _effectiveAmount,
+      'customer_phone': _effectiveCustomerPhone,
+      'customer_name': '',
+      'recipient_phone': _effectiveRecipientPhone,
+      'biller_code': '',
+      'account_number': _effectiveAccountNumber,
+      'payment_reference': _effectiveReference,
+      'merchant_id': _effectiveMerchantId,
+      if (_effectiveOperatorId.isNotEmpty)
+        'operator_id': _effectiveOperatorId,
+      'fee': _isAgentServiceFeeFlow && _agentServiceFeeEnabled
+          ? (double.tryParse(
+                  _feeCtrl.text.replaceAll(',', ''),
+                ) ??
+              0)
+          : 0,
+      'notes': '',
+      'sim_iccid': _selectedSim?.iccid ?? '',
+      'sim_slot': _selectedSim?.slot,
+      'installation_id': installationId,
+      'sim_subscription_id': _selectedSim?.subscriptionId,
+      'client_operation_id': clientOperationId,
+    };
+  }
 
   bool get _isTelecelMerchantBankTransfer =>
       _selectedProvider == 'telecel' &&
@@ -714,6 +845,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
   }
 
   void _clearTransactionInputsAfterSuccess() {
+    _serverDrivenFormValues.clear();
     _customerPhoneCtrl.clear();
     _amountCtrl.clear();
     _recipientPhoneCtrl.clear();
@@ -769,8 +901,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
   Future<void> _proceed() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final amountForWarning =
-        double.tryParse(_amountCtrl.text.replaceAll(',', '').trim()) ?? 0;
+    final amountForWarning = _effectiveAmount;
 
     final continueAfterAmountWarning = await confirmHighAmountIfNeeded(
       context,
@@ -1028,32 +1159,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
       );
 
       final localId = 'local_${DateTime.now().millisecondsSinceEpoch}';
-      final requestFields = {
-        'provider': _selectedProvider,
-        'transaction_type': _transactionType,
-        'sim_role': businessSimRole,
-        'amount': double.tryParse(_amountCtrl.text.replaceAll(',', '')) ?? 0,
-        'customer_phone': _isMtnCashInOutWorkspace
-            ? _recipientPhoneCtrl.text.trim()
-            : _customerPhoneCtrl.text.trim(),
-        'customer_name': '',
-        'recipient_phone': _recipientPhoneCtrl.text.trim(),
-        'biller_code': '',
-        'account_number': _needsTelecelMerchantAccountNumber
-            ? _accountNumberCtrl.text.trim()
-            : '',
-        'payment_reference': _referenceCtrl.text.trim(),
-        'merchant_id': _merchantIdCtrl.text.trim(),
-        'fee': _isAgentServiceFeeFlow && _agentServiceFeeEnabled
-            ? (double.tryParse(_feeCtrl.text.replaceAll(',', '')) ?? 0)
-            : 0,
-        'notes': '',
-        'sim_iccid': _selectedSim?.iccid ?? '',
-        'sim_slot': _selectedSim?.slot,
-        'installation_id': installationId,
-        'sim_subscription_id': _selectedSim?.subscriptionId,
-        'client_operation_id': clientOperationId,
-      };
+      final requestFields = _buildTransactionRequestFields(
+        businessSimRole: businessSimRole,
+        installationId: installationId,
+        clientOperationId: clientOperationId,
+      );
 
       if (!mounted) return;
       final progressAction = await context.push<String>(
@@ -1077,10 +1187,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
             'bundle_category': _initialBundleCategory,
           if (_effectiveRecipientMode != null)
             'recipient_mode': _effectiveRecipientMode,
-          'amount': _amountCtrl.text,
-          'customer_phone': _isMtnCashInOutWorkspace
-              ? _recipientPhoneCtrl.text.trim()
-              : _customerPhoneCtrl.text.trim(),
+          'amount': _effectiveAmountText,
+          'customer_phone': _effectiveCustomerPhone,
           'customer_name': '',
           'sim_slot': _selectedSim?.slot,
           'sim_iccid': _selectedSim?.iccid,
@@ -1100,32 +1208,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
       return;
     }
 
-    final requestFields = <String, dynamic>{
-      'provider': _selectedProvider,
-      'transaction_type': _transactionType,
-      'sim_role': businessSimRole,
-      'amount': double.tryParse(_amountCtrl.text.replaceAll(',', '')) ?? 0,
-      'customer_phone': _isMtnCashInOutWorkspace
-          ? _recipientPhoneCtrl.text.trim()
-          : _customerPhoneCtrl.text.trim(),
-      'customer_name': '',
-      'recipient_phone': _recipientPhoneCtrl.text.trim(),
-      'biller_code': '',
-      'account_number': _needsTelecelMerchantAccountNumber
-            ? _accountNumberCtrl.text.trim()
-            : '',
-      'payment_reference': _referenceCtrl.text.trim(),
-      'merchant_id': _merchantIdCtrl.text.trim(),
-      'fee': _isAgentServiceFeeFlow && _agentServiceFeeEnabled
-          ? (double.tryParse(_feeCtrl.text.replaceAll(',', '')) ?? 0)
-          : 0,
-      'notes': '',
-      'sim_iccid': _selectedSim?.iccid ?? '',
-      'sim_slot': _selectedSim?.slot,
-      'installation_id': installationId,
-      'sim_subscription_id': _selectedSim?.subscriptionId,
-      'client_operation_id': clientOperationId,
-    };
+    final requestFields = _buildTransactionRequestFields(
+      businessSimRole: businessSimRole,
+      installationId: installationId,
+      clientOperationId: clientOperationId,
+    );
 
     // Start backend validation/creation now, but do not wait on this
     // form screen. TransactionProgressScreen prepares permission and
@@ -1154,10 +1241,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
           'bundle_category': _initialBundleCategory,
         if (_effectiveRecipientMode != null)
           'recipient_mode': _effectiveRecipientMode,
-        'amount': _amountCtrl.text,
-        'customer_phone': _isMtnCashInOutWorkspace
-            ? _recipientPhoneCtrl.text.trim()
-            : _customerPhoneCtrl.text.trim(),
+        'amount': _effectiveAmountText,
+        'customer_phone': _effectiveCustomerPhone,
         'customer_name': '',
         'sim_slot': _selectedSim?.slot,
         'sim_iccid': _selectedSim?.iccid,
@@ -2237,12 +2322,21 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 const SizedBox(height: 14),
               ],
 
+              if (_usesServerDrivenForm) ...[
+                ServerDrivenTransactionForm(
+                  fields: widget.catalogDefinition!.formFields,
+                  onChanged: _updateServerDrivenFormValues,
+                ),
+                const SizedBox(height: 14),
+              ],
+
               // Provider-specific identifier.
               //
               // Pay to Merchant uses a Merchant ID rather than a phone
               // number. Keep that identifier truthful instead of presenting
               // it as a phone field.
-              if (_needsMerchantId) ...[
+              if (!_usesServerDrivenForm &&
+                  _needsMerchantId) ...[
                 AppTextField(
                   transactionEmphasis: true,
                   controller: _merchantIdCtrl,
@@ -2295,7 +2389,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
               //
               // Business Deposit / Withdrawal genuinely use an Agent Short
               // Code, so retain that terminology for those specific flows.
-              if (_needsCustomer) ...[
+              if (!_usesServerDrivenForm &&
+                  _needsCustomer) ...[
                 AppTextField(
                   transactionEmphasis: true,
                   controller: _customerPhoneCtrl,
@@ -2355,7 +2450,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 const SizedBox(height: 14),
               ],
 
-              if (_needsRecipient) ...[
+              if (!_usesServerDrivenForm &&
+                  _needsRecipient) ...[
                 AppTextField(
                   transactionEmphasis: true,
                   controller: _recipientPhoneCtrl,
@@ -2381,7 +2477,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
               ],
 
               // 2. AMOUNT
-              if (_needsAmount) ...[
+              if (!_usesServerDrivenForm &&
+                  _needsAmount) ...[
                 TextFormField(
                   controller: _amountCtrl,
                   keyboardType: const TextInputType.numberWithOptions(
@@ -2425,8 +2522,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
               ],
 
               // 3. REFERENCE — only when required by the provider flow.
-              if (_needsReference ||
-                  _needsTelecelMerchantReference) ...[
+              if (!_usesServerDrivenForm &&
+                  (_needsReference ||
+                      _needsTelecelMerchantReference)) ...[
                 AppTextField(
                   transactionEmphasis: true,
                   transactionValueFontSize: 20,

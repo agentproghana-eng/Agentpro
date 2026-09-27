@@ -8,6 +8,9 @@ const { auditLog } = require("../services/auditService");
 const { validateFlowSteps } = require("../utils/ussdFlowValidation");
 const { validateFlowMetadata } = require("../utils/ussdFlowMetadataValidation");
 const {
+  validateTransactionFormSchema,
+} = require("../utils/ussdTransactionFormSchemaValidation");
+const {
   getFlowBuilderCapabilities,
   getFlowBuilderEligibility,
   getGlobalFlowBuilderEligibility,
@@ -153,6 +156,7 @@ exports.createFlow = async (req, res) => {
     business_sim_role,
     account_mode,
     execution_mode,
+    form_schema,
     steps,
   } = req.body;
 
@@ -190,6 +194,17 @@ exports.createFlow = async (req, res) => {
       success: false,
       code: "USSD_FLOW_INVALID_METADATA",
       message: metadataError,
+    });
+  }
+
+  const formSchemaError =
+    validateTransactionFormSchema(form_schema);
+
+  if (formSchemaError) {
+    return res.status(422).json({
+      success: false,
+      code: "USSD_FORM_SCHEMA_INVALID",
+      message: formSchemaError,
     });
   }
 
@@ -288,11 +303,12 @@ exports.createFlow = async (req, res) => {
            recipient_mode,
            execution_mode,
            business_sim_role,
+           form_schema,
            created_by
          )
          VALUES (
            $1, $2, $3, $4, $5, $6,
-           $7, $8, $9, $10, $11
+           $7, $8, $9, $10, $11, $12
          )
          RETURNING *`,
         [
@@ -306,6 +322,7 @@ exports.createFlow = async (req, res) => {
           recipient_mode || null,
           executionMode,
           persistedBusinessSimRole,
+          form_schema ?? [],
           req.user.id,
         ],
       );
@@ -388,6 +405,7 @@ exports.updateFlow = async (req, res) => {
     recipient_mode,
     business_sim_role,
     execution_mode,
+    form_schema,
     is_active,
     steps,
   } = req.body;
@@ -408,6 +426,10 @@ exports.updateFlow = async (req, res) => {
   const hasExecutionMode = Object.prototype.hasOwnProperty.call(
     req.body,
     "execution_mode",
+  );
+  const hasFormSchema = Object.prototype.hasOwnProperty.call(
+    req.body,
+    "form_schema",
   );
 
   const requestedExecutionMode = hasExecutionMode
@@ -431,6 +453,19 @@ exports.updateFlow = async (req, res) => {
       code: "INVALID_BUSINESS_SIM_ROLE",
       message: "business_sim_role must be agent, evd, or merchant",
     });
+  }
+
+  if (hasFormSchema) {
+    const formSchemaError =
+      validateTransactionFormSchema(form_schema);
+
+    if (formSchemaError) {
+      return res.status(422).json({
+        success: false,
+        code: "USSD_FORM_SCHEMA_INVALID",
+        message: formSchemaError,
+      });
+    }
   }
 
   try {
@@ -583,9 +618,11 @@ exports.updateFlow = async (req, res) => {
              CASE WHEN $8 THEN $9 ELSE business_sim_role END,
            execution_mode =
              CASE WHEN $10 THEN $11 ELSE execution_mode END,
-           is_active = COALESCE($12, is_active),
+           form_schema =
+             CASE WHEN $12 THEN $13 ELSE form_schema END,
+           is_active = COALESCE($14, is_active),
            updated_at = NOW()
-         WHERE id = $13
+         WHERE id = $15
          RETURNING *`,
         [
           dial_code,
@@ -599,6 +636,8 @@ exports.updateFlow = async (req, res) => {
           requestedBusinessSimRole,
           hasExecutionMode,
           requestedExecutionMode,
+          hasFormSchema,
+          form_schema ?? [],
           is_active,
           id,
         ],

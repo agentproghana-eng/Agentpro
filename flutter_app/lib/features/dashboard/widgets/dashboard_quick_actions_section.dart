@@ -673,6 +673,11 @@ class DashboardQuickActionsSection extends StatelessWidget {
                 path: path,
                 queryParameters: query,
               ).toString(),
+              extra: role != 'subscriber' &&
+                      definition != null &&
+                      definition.formFields.isNotEmpty
+                  ? definition
+                  : null,
             );
           },
         ),
