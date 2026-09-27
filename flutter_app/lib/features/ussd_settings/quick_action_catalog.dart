@@ -3,12 +3,202 @@ import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/utils/transaction_labels.dart';
 
+
+class TransactionFormFieldDefinition {
+  static const Set<String> supportedTypes = {
+    'phone',
+    'amount',
+    'digits',
+    'account_number',
+    'selection',
+    'text',
+    'operator_id',
+    'reference',
+  };
+
+  final String key;
+  final String type;
+  final String label;
+  final bool isRequired;
+  final int? minLength;
+  final int? maxLength;
+  final List<TransactionFormFieldOption> options;
+
+  const TransactionFormFieldDefinition({
+    required this.key,
+    required this.type,
+    required this.label,
+    required this.isRequired,
+    this.minLength,
+    this.maxLength,
+    this.options = const [],
+  });
+
+  factory TransactionFormFieldDefinition.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    final key = (json['key'] ?? '').toString().trim();
+    final type = (json['type'] ?? '').toString().trim().toLowerCase();
+    final label = (json['label'] ?? '').toString().trim();
+
+    if (key.isEmpty ||
+        !RegExp(r'^[a-z][a-z0-9_]{0,63}$').hasMatch(key)) {
+      throw FormatException(
+        'Invalid transaction form field key: $key',
+      );
+    }
+
+    if (!supportedTypes.contains(type)) {
+      throw FormatException(
+        'Unsupported transaction form field type: $type',
+      );
+    }
+
+    if (label.isEmpty) {
+      throw FormatException(
+        'Transaction form field label is required: $key',
+      );
+    }
+
+    final minLength = _nullableCatalogInt(json['min_length']);
+    final maxLength = _nullableCatalogInt(json['max_length']);
+
+    if (minLength != null && minLength < 0) {
+      throw FormatException(
+        'Invalid min_length for transaction form field: $key',
+      );
+    }
+
+    if (maxLength != null && maxLength < 1) {
+      throw FormatException(
+        'Invalid max_length for transaction form field: $key',
+      );
+    }
+
+    if (minLength != null &&
+        maxLength != null &&
+        minLength > maxLength) {
+      throw FormatException(
+        'min_length cannot exceed max_length '
+        'for transaction form field: $key',
+      );
+    }
+
+    final optionsValue = json['options'];
+
+    if (optionsValue != null && optionsValue is! List) {
+      throw FormatException(
+        'Invalid options for transaction form field: $key',
+      );
+    }
+
+    final options = <TransactionFormFieldOption>[];
+
+    if (optionsValue is List) {
+      for (final value in optionsValue) {
+        if (value is! Map) {
+          throw FormatException(
+            'Invalid option for transaction form field: $key',
+          );
+        }
+
+        options.add(
+          TransactionFormFieldOption.fromJson(
+            Map<String, dynamic>.from(value),
+          ),
+        );
+      }
+    }
+
+    if (type == 'selection' && options.isEmpty) {
+      throw FormatException(
+        'Selection transaction form field requires options: $key',
+      );
+    }
+
+    final optionValues = <String>{};
+
+    for (final option in options) {
+      if (!optionValues.add(option.value)) {
+        throw FormatException(
+          'Duplicate transaction form option value '
+          'for field $key: ${option.value}',
+        );
+      }
+    }
+
+    if (type != 'selection' && options.isNotEmpty) {
+      throw FormatException(
+        'Only selection transaction form fields '
+        'may define options: $key',
+      );
+    }
+
+    return TransactionFormFieldDefinition(
+      key: key,
+      type: type,
+      label: label,
+      isRequired: json['required'] != false,
+      minLength: minLength,
+      maxLength: maxLength,
+      options: options,
+    );
+  }
+
+  Map<String, dynamic> toCacheJson() => {
+        'key': key,
+        'type': type,
+        'label': label,
+        'required': isRequired,
+        if (minLength != null) 'min_length': minLength,
+        if (maxLength != null) 'max_length': maxLength,
+        if (options.isNotEmpty)
+          'options':
+              options.map((option) => option.toCacheJson()).toList(),
+      };
+}
+
+class TransactionFormFieldOption {
+  final String value;
+  final String label;
+
+  const TransactionFormFieldOption({
+    required this.value,
+    required this.label,
+  });
+
+  factory TransactionFormFieldOption.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    final value = (json['value'] ?? '').toString().trim();
+    final label = (json['label'] ?? '').toString().trim();
+
+    if (value.isEmpty || label.isEmpty) {
+      throw const FormatException(
+        'Transaction form selection options '
+        'require value and label',
+      );
+    }
+
+    return TransactionFormFieldOption(
+      value: value,
+      label: label,
+    );
+  }
+
+  Map<String, dynamic> toCacheJson() => {
+        'value': value,
+        'label': label,
+      };
+}
+
 class QuickActionCatalogDefinition {
   final String provider;
   final String type;
   final String displayLabel;
   final String quickActionGroup;
   final List<QuickActionCatalogVariant> variants;
+  final List<TransactionFormFieldDefinition> formFields;
 
   const QuickActionCatalogDefinition({
     required this.provider,
@@ -16,6 +206,7 @@ class QuickActionCatalogDefinition {
     required this.displayLabel,
     required this.quickActionGroup,
     this.variants = const [],
+    this.formFields = const [],
   });
 
   factory QuickActionCatalogDefinition.fromJson(
@@ -46,6 +237,9 @@ class QuickActionCatalogDefinition {
               )
               .toList()
           : const [],
+      formFields: _parseTransactionFormFields(
+        json['form_fields'],
+      ),
     );
   }
 
@@ -58,8 +252,52 @@ class QuickActionCatalogDefinition {
       'display_label': displayLabel,
       'quick_action_group': quickActionGroup,
       'variants': variants.map((variant) => variant.toCacheJson()).toList(),
+      if (formFields.isNotEmpty)
+        'form_fields':
+            formFields.map((field) => field.toCacheJson()).toList(),
     };
   }
+}
+
+List<TransactionFormFieldDefinition> _parseTransactionFormFields(
+  dynamic rawValue,
+) {
+  if (rawValue == null) {
+    return const <TransactionFormFieldDefinition>[];
+  }
+
+  if (rawValue is! List) {
+    throw const FormatException(
+      'Transaction form_fields must be a list',
+    );
+  }
+
+  final fields = <TransactionFormFieldDefinition>[];
+  final fieldKeys = <String>{};
+
+  for (final rawField in rawValue) {
+    if (rawField is! Map) {
+      throw const FormatException(
+        'Transaction form_fields entries must be objects',
+      );
+    }
+
+    final field = TransactionFormFieldDefinition.fromJson(
+      Map<String, dynamic>.from(rawField),
+    );
+
+    if (!fieldKeys.add(field.key)) {
+      throw FormatException(
+        'Duplicate transaction form field key: ${field.key}',
+      );
+    }
+
+    fields.add(field);
+  }
+
+  return List<TransactionFormFieldDefinition>.unmodifiable(
+    fields,
+  );
 }
 
 class QuickActionCatalogVariant {
@@ -92,7 +330,7 @@ class QuickActionCatalogVariant {
 }
 
 class QuickActionCatalog {
-  static const int supportedSchemaVersion = 1;
+  static const int supportedSchemaVersion = 2;
 
   final String mode;
   final String role;
@@ -257,6 +495,7 @@ class QuickActionCatalog {
       '/users/me/quick-actions/catalog',
       queryParameters: {
         'mode': mode,
+        'schema_version': supportedSchemaVersion,
       },
     );
 
@@ -453,6 +692,27 @@ String _humanizeCatalogValue(String value) {
       .toList();
 
   return words.isEmpty ? value : words.join(' ');
+}
+
+
+int? _nullableCatalogInt(dynamic value) {
+  if (value == null) {
+    return null;
+  }
+
+  if (value is int) {
+    return value;
+  }
+
+  final parsed = int.tryParse(value.toString().trim());
+
+  if (parsed == null) {
+    throw const FormatException(
+      'Transaction form numeric constraint must be an integer',
+    );
+  }
+
+  return parsed;
 }
 
 String? _nullableCatalogString(dynamic value) {

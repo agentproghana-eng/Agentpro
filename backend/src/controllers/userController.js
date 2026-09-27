@@ -2093,6 +2093,22 @@ function normalizeBusinessQuickActionActions(provider, actionMap) {
 }
 
 exports.getMyQuickActionCatalog = async (req, res) => {
+  const rawSchemaVersion = req.query?.schema_version;
+  const requestedSchemaVersion =
+    rawSchemaVersion === undefined || rawSchemaVersion === null
+      ? 1
+      : Number(rawSchemaVersion);
+
+  if (
+    !Number.isInteger(requestedSchemaVersion) ||
+    ![1, 2].includes(requestedSchemaVersion)
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: "schema_version must be 1 or 2",
+    });
+  }
+
   const requestedMode = String(req.query.mode || "business")
     .trim()
     .toLowerCase();
@@ -2156,6 +2172,7 @@ exports.getMyQuickActionCatalog = async (req, res) => {
       `SELECT
          f.provider::text AS provider,
          f.transaction_type::text AS transaction_type,
+         f.form_schema,
          COALESCE(
            NULLIF(BTRIM(c.display_label), ''),
            INITCAP(REPLACE(f.transaction_type::text, '_', ' '))
@@ -2211,6 +2228,13 @@ exports.getMyQuickActionCatalog = async (req, res) => {
             row.display_label,
           ),
           quick_action_group: quickActionGroupForType(transactionType),
+          ...(requestedSchemaVersion >= 2
+            ? {
+                form_fields: Array.isArray(row.form_schema)
+                  ? row.form_schema
+                  : [],
+              }
+            : {}),
           variants: [],
         });
       }
@@ -2257,7 +2281,7 @@ exports.getMyQuickActionCatalog = async (req, res) => {
       data: {
         mode: responseMode,
         role: catalogRole,
-        schema_version: 1,
+        schema_version: requestedSchemaVersion,
         providers,
       },
     });
