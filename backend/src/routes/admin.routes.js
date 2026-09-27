@@ -2366,9 +2366,10 @@ router.post('/ussd-flows', async (req, res) => {
            bundle_category,
            recipient_mode,
            form_schema,
+           is_active,
            created_by
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, FALSE, $10)
          RETURNING *`,
         [
           provider,
@@ -2403,6 +2404,8 @@ router.post('/ussd-flows', async (req, res) => {
         dial_code,
         bundle_category: bundle_category || null,
         recipient_mode: recipient_mode || null,
+        form_schema: form_schema ?? [],
+        is_active: false,
         step_count: steps.length,
       },
       ipAddress: req.ip, requestId: req.requestId,
@@ -2534,6 +2537,9 @@ router.patch('/ussd-flows/:id', async (req, res) => {
           : {}),
         ...(hasRecipientMode
           ? { recipient_mode: recipient_mode || null }
+          : {}),
+        ...(hasFormSchema
+          ? { form_schema: form_schema ?? [] }
           : {}),
         is_active,
         step_count: steps ? steps.length : undefined,
