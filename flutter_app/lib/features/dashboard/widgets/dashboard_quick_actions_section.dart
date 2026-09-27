@@ -26,10 +26,14 @@ class DashboardQuickActionsSection extends StatelessWidget {
     required this.merchantQuickActions,
     required this.agentCatalog,
     required this.subscriberCatalog,
+    required this.evdCatalog,
+    required this.merchantCatalog,
     required this.simDetectionComplete,
     required this.simPurposesResolved,
     required this.agentCatalogResolved,
     required this.subscriberCatalogResolved,
+    required this.evdCatalogResolved,
+    required this.merchantCatalogResolved,
     required this.onReloadQuickActions,
   });
 
@@ -52,11 +56,15 @@ class DashboardQuickActionsSection extends StatelessWidget {
 
   final QuickActionCatalog? agentCatalog;
   final QuickActionCatalog? subscriberCatalog;
+  final QuickActionCatalog? evdCatalog;
+  final QuickActionCatalog? merchantCatalog;
 
   final bool simDetectionComplete;
   final bool simPurposesResolved;
   final bool agentCatalogResolved;
   final bool subscriberCatalogResolved;
+  final bool evdCatalogResolved;
+  final bool merchantCatalogResolved;
 
   final VoidCallback onReloadQuickActions;
 
@@ -139,6 +147,8 @@ class DashboardQuickActionsSection extends StatelessWidget {
   ) {
     return switch (role) {
       'subscriber' => subscriberCatalog,
+      'evd' => evdCatalog,
+      'merchant' => merchantCatalog,
       'agent' => agentCatalog,
       _ => null,
     };
@@ -149,6 +159,8 @@ class DashboardQuickActionsSection extends StatelessWidget {
   ) {
     return switch (role) {
       'subscriber' => subscriberCatalogResolved,
+      'evd' => evdCatalogResolved,
+      'merchant' => merchantCatalogResolved,
       'agent' => agentCatalogResolved,
       _ => true,
     };
@@ -183,6 +195,12 @@ class DashboardQuickActionsSection extends StatelessWidget {
       }
 
       if (role == 'agent') {
+        return fallback.where((item) => item.isVisible).take(9).toList();
+      }
+
+      // EVD and Merchant now consume their own server-trusted role catalog.
+      // Never inherit Agent actions across SIM roles.
+      if ((role == 'evd' || role == 'merchant') && fallback.isNotEmpty) {
         return fallback.where((item) => item.isVisible).take(9).toList();
       }
 
@@ -336,7 +354,14 @@ class DashboardQuickActionsSection extends StatelessWidget {
     final hasVisibleSavedActions =
         saved?.any((item) => item.isVisible) ?? false;
 
-    final roleUsesDedicatedCatalog = role == 'agent' || role == 'subscriber';
+    const catalogRoles = {
+      'agent',
+      'subscriber',
+      'evd',
+      'merchant',
+    };
+
+    final roleUsesDedicatedCatalog = catalogRoles.contains(role);
 
     if (roleUsesDedicatedCatalog &&
         catalogResolved == false &&
@@ -367,8 +392,12 @@ class DashboardQuickActionsSection extends StatelessWidget {
     final hasRoleSpecificDefaults =
         role == 'merchant' && provider == 'telecel';
 
+    final hasServerCatalogActions =
+        catalog?.definitionsFor(provider).isNotEmpty ?? false;
+
     if ((role == 'evd' || role == 'merchant') &&
         hasVisibleSavedActions == false &&
+        hasServerCatalogActions == false &&
         hasRoleSpecificDefaults == false) {
       return _withSimSelector(
         sims: sims,

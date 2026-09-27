@@ -51,6 +51,8 @@ void main() {
 
       expect(load, contains("'business_catalog'"));
       expect(load, contains("'personal_catalog'"));
+      expect(load, contains("'evd_catalog'"));
+      expect(load, contains("'merchant_catalog'"));
       expect(load, contains("'quick_actions'"));
     });
 

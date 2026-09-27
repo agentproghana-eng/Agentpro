@@ -118,12 +118,14 @@ describe("Quick Action catalog controller behavior", () => {
     expect(sql).toContain("f.owner_user_id IS NULL");
     expect(sql).toContain("f.is_active = TRUE");
     expect(sql).toContain("c.can_initiate = TRUE");
-    expect(params).toEqual(["business"]);
+    expect(params).toEqual(["business", "agent"]);
 
     expect(res.json).toHaveBeenCalledWith({
       success: true,
       data: {
         mode: "business",
+        role: "agent",
+        schema_version: 1,
         providers: [
           {
             provider: "future_money",
@@ -185,12 +187,14 @@ describe("Quick Action catalog controller behavior", () => {
     await userController.getMyQuickActionCatalog(req, res);
 
     expect(mockQuery).toHaveBeenCalledTimes(1);
-    expect(mockQuery.mock.calls[0][1]).toEqual(["personal"]);
+    expect(mockQuery.mock.calls[0][1]).toEqual(["personal", null]);
 
     expect(res.json).toHaveBeenCalledWith({
       success: true,
       data: {
         mode: "personal",
+        role: "subscriber",
+        schema_version: 1,
         providers: [
           {
             provider: "mtn",
@@ -226,12 +230,118 @@ describe("Quick Action catalog controller behavior", () => {
     await userController.getMyQuickActionCatalog(req, res);
 
     expect(mockQuery).toHaveBeenCalledTimes(1);
-    expect(mockQuery.mock.calls[0][1]).toEqual(["business"]);
+    expect(mockQuery.mock.calls[0][1]).toEqual(["business", "agent"]);
 
     expect(res.json).toHaveBeenCalledWith({
       success: true,
       data: {
         mode: "business",
+        role: "agent",
+        schema_version: 1,
+        providers: [],
+      },
+    });
+  });
+
+  test("evd mode queries only the EVD Business catalog", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [],
+    });
+
+    const req = {
+      user: makeUser(),
+      query: {
+        mode: "evd",
+      },
+    };
+
+    const res = makeResponse();
+
+    await userController.getMyQuickActionCatalog(req, res);
+
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+
+    const [sql, params] = mockQuery.mock.calls[0];
+
+    expect(params).toEqual(["business", "evd"]);
+    expect(sql).toContain(
+      "COALESCE(f.business_sim_role, 'agent') = $2",
+    );
+
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: {
+        mode: "business",
+        role: "evd",
+        schema_version: 1,
+        providers: [],
+      },
+    });
+  });
+
+  test("merchant mode queries only the Merchant Business catalog", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [],
+    });
+
+    const req = {
+      user: makeUser(),
+      query: {
+        mode: "merchant",
+      },
+    };
+
+    const res = makeResponse();
+
+    await userController.getMyQuickActionCatalog(req, res);
+
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+    expect(mockQuery.mock.calls[0][1]).toEqual(["business", "merchant"]);
+
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: {
+        mode: "business",
+        role: "merchant",
+        schema_version: 1,
+        providers: [],
+      },
+    });
+  });
+
+  test("subscriber alias stays inside the Personal catalog", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [],
+    });
+
+    const req = {
+      user: makeUser({
+        company_id: null,
+      }),
+      query: {
+        mode: "subscriber",
+      },
+    };
+
+    const res = makeResponse();
+
+    await userController.getMyQuickActionCatalog(req, res);
+
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+
+    const [sql, params] = mockQuery.mock.calls[0];
+
+    expect(params).toEqual(["personal", null]);
+    expect(sql).toContain(
+      "$1 = 'personal' AND f.business_sim_role IS NULL",
+    );
+
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: {
+        mode: "personal",
+        role: "subscriber",
+        schema_version: 1,
         providers: [],
       },
     });
@@ -253,7 +363,7 @@ describe("Quick Action catalog controller behavior", () => {
 
     expect(res.json).toHaveBeenCalledWith({
       success: false,
-      message: "mode must be business, agent, or personal",
+      message: "mode must be business, agent, evd, merchant, personal, or subscriber",
     });
 
     expect(mockQuery).not.toHaveBeenCalled();

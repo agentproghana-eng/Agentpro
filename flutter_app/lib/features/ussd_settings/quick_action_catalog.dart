@@ -92,11 +92,17 @@ class QuickActionCatalogVariant {
 }
 
 class QuickActionCatalog {
+  static const int supportedSchemaVersion = 1;
+
   final String mode;
+  final String role;
+  final int schemaVersion;
   final Map<String, List<QuickActionCatalogDefinition>> byProvider;
 
   const QuickActionCatalog({
     required this.mode,
+    required this.role,
+    required this.schemaVersion,
     required this.byProvider,
   });
 
@@ -124,6 +130,8 @@ class QuickActionCatalog {
   Map<String, dynamic> toCacheJson() {
     return {
       'mode': mode,
+      'role': role,
+      'schema_version': schemaVersion,
       'providers': byProvider.entries
           .map(
             (entry) => {
@@ -140,6 +148,7 @@ class QuickActionCatalog {
   static QuickActionCatalog fromCacheJson(
     Map<String, dynamic> data, {
     String? fallbackMode,
+    String? fallbackRole,
   }) {
     final providerRows = data['providers'];
     final resolvedMode = (data['mode'] ?? fallbackMode ?? '').toString().trim();
@@ -147,6 +156,42 @@ class QuickActionCatalog {
     if (resolvedMode.isEmpty) {
       throw const FormatException(
         'Quick Action catalog mode is unavailable',
+      );
+    }
+
+    final schemaValue = data['schema_version'];
+    final schemaVersion = schemaValue == null
+        ? 1
+        : schemaValue is int
+            ? schemaValue
+            : int.tryParse(schemaValue.toString());
+
+    if (schemaVersion == null ||
+        schemaVersion < 1 ||
+        schemaVersion > supportedSchemaVersion) {
+      throw FormatException(
+        'Unsupported Quick Action catalog schema: $schemaValue',
+      );
+    }
+
+    final serverRole = (data['role'] ?? '').toString().trim();
+    final resolvedRole = serverRole.isNotEmpty
+        ? serverRole
+        : (fallbackRole ?? _legacyCatalogRole(resolvedMode)).trim();
+
+    if (resolvedRole.isEmpty) {
+      throw const FormatException(
+        'Quick Action catalog role is unavailable',
+      );
+    }
+
+    if (!_catalogRoleMatchesMode(
+      role: resolvedRole,
+      mode: resolvedMode,
+    )) {
+      throw FormatException(
+        'Quick Action catalog role $resolvedRole '
+        'does not match mode $resolvedMode',
       );
     }
 
@@ -199,6 +244,8 @@ class QuickActionCatalog {
 
     return QuickActionCatalog(
       mode: resolvedMode,
+      role: resolvedRole,
+      schemaVersion: schemaVersion,
       byProvider: byProvider,
     );
   }
@@ -231,9 +278,56 @@ class QuickActionCatalog {
 
     return fromCacheJson(
       Map<String, dynamic>.from(root),
-      fallbackMode: mode,
+      fallbackMode: _catalogAccountMode(mode),
+      fallbackRole: _catalogRequestedRole(mode),
     );
   }
+}
+
+String _catalogRequestedRole(String value) {
+  return switch (value.trim().toLowerCase()) {
+    'business' || 'agent' => 'agent',
+    'evd' => 'evd',
+    'merchant' => 'merchant',
+    'personal' || 'subscriber' => 'subscriber',
+    _ => value.trim().toLowerCase(),
+  };
+}
+
+String _catalogAccountMode(String value) {
+  return switch (_catalogRequestedRole(value)) {
+    'agent' || 'evd' || 'merchant' => 'business',
+    'subscriber' => 'personal',
+    _ => value.trim().toLowerCase(),
+  };
+}
+
+String _legacyCatalogRole(String mode) {
+  return switch (mode.trim().toLowerCase()) {
+    'business' => 'agent',
+    'personal' => 'subscriber',
+    _ => '',
+  };
+}
+
+bool _catalogRoleMatchesMode({
+  required String role,
+  required String mode,
+}) {
+  final normalizedRole = role.trim().toLowerCase();
+  final normalizedMode = mode.trim().toLowerCase();
+
+  if (normalizedMode == 'business') {
+    return normalizedRole == 'agent' ||
+        normalizedRole == 'evd' ||
+        normalizedRole == 'merchant';
+  }
+
+  if (normalizedMode == 'personal') {
+    return normalizedRole == 'subscriber';
+  }
+
+  return false;
 }
 
 List<QuickActionCatalogDefinition> normalizeBusinessQuickActionDefinitions({
