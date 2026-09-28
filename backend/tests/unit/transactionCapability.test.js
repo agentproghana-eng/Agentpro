@@ -39,7 +39,8 @@ describe('transaction initiation capability guard', () => {
       'future_provider',
       'future_type',
       undefined,
-      'agent'
+      'agent',
+      null
     );
     expect(res.status).not.toHaveBeenCalled();
     expect(res.json).not.toHaveBeenCalled();

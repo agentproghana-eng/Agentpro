@@ -192,6 +192,7 @@ describe('USSD Flow Builder capabilities', () => {
         'business',
         'future_type',
         'agent',
+        null,
       ]
     );
   });
