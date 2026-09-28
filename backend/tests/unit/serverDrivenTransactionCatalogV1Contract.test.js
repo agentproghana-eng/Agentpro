@@ -17,7 +17,7 @@ describe("Server-Driven Transaction Catalog V1", () => {
 
   test("Business catalog is isolated by server-trusted business SIM role", () => {
     expect(controller).toContain(
-      "COALESCE(f.business_sim_role, 'agent') = $2",
+      "f.business_sim_role = $2",
     );
     expect(controller).toContain(
       "[accountMode, businessSimRole]",

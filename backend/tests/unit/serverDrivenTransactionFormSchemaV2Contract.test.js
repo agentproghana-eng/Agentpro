@@ -68,7 +68,7 @@ describe("server-driven transaction form schema V2", () => {
 
   test("existing role isolation remains in the catalog query", () => {
     expect(controller).toContain(
-      "COALESCE(f.business_sim_role, 'agent') = $2",
+      "f.business_sim_role = $2",
     );
   });
 });

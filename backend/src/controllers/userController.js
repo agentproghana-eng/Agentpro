@@ -2191,7 +2191,7 @@ exports.getMyQuickActionCatalog = async (req, res) => {
          AND (
            ($1 = 'personal' AND f.business_sim_role IS NULL)
            OR
-           ($1 = 'business' AND COALESCE(f.business_sim_role, 'agent') = $2)
+           ($1 = 'business' AND f.business_sim_role = $2)
          )
        ORDER BY
          f.provider::text,

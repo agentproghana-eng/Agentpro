@@ -353,7 +353,7 @@ describe("Quick Action catalog controller behavior", () => {
 
     expect(params).toEqual(["business", "evd"]);
     expect(sql).toContain(
-      "COALESCE(f.business_sim_role, 'agent') = $2",
+      "f.business_sim_role = $2",
     );
 
     expect(res.json).toHaveBeenCalledWith({

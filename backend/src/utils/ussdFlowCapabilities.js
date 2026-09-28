@@ -135,7 +135,8 @@ async function getInitiationCapability(
   provider,
   transactionType,
   queryFn = query,
-  businessSimRole = 'agent'
+  businessSimRole = 'agent',
+  companyId = null
 ) {
   if (accountMode !== 'business' && accountMode !== 'personal') {
     throw new TypeError(
@@ -186,17 +187,21 @@ async function getInitiationCapability(
          WHERE f.provider::text = $1
            AND f.transaction_type::text = $3
            AND f.owner_user_id IS NULL
-           AND f.company_id IS NULL
            AND f.is_active = TRUE
            AND (
              (
                $2 = 'personal'
+               AND f.company_id IS NULL
                AND f.business_sim_role IS NULL
              )
              OR
              (
                $2 = 'business'
                AND f.business_sim_role = $4
+               AND (
+                 f.company_id IS NULL
+                 OR f.company_id = $5
+               )
              )
            )
        ) AS active_flow_available`,
@@ -205,6 +210,7 @@ async function getInitiationCapability(
       accountMode,
       transactionType,
       normalizedBusinessSimRole,
+      accountMode === 'business' ? companyId : null,
     ]
   );
 

@@ -33,7 +33,10 @@ function createInitiationCapabilityGuard(
         provider,
         transactionType,
         undefined,
-        businessSimRole
+        businessSimRole,
+        accountMode === 'business'
+          ? req.user?.company_id || null
+          : null
       );
 
       const errors = [];
