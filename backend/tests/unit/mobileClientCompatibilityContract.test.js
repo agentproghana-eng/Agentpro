@@ -109,7 +109,7 @@ describe('AgentPro mobile release contract', () => {
     );
 
     expect(source).toContain(
-      'Flow updated and verified live'
+      'Flow draft updated and verified'
     );
   });
 

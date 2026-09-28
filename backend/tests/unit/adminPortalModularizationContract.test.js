@@ -233,7 +233,7 @@ describe(
       () => {
         expect(ussdAdmin).toContain('verifyPersistedFlow');
         expect(ussdAdmin).toContain('FLOW_READ_AFTER_WRITE_MISMATCH');
-        expect(ussdAdmin).toContain('Flow updated and verified live');
+        expect(ussdAdmin).toContain('Flow draft updated and verified');
         expect(ussdAdmin).toContain("from '../../components/AdminUi.jsx'");
         expect(ussdAdmin).toContain("from '../../lib/api.js'");
         expect(ussdAdmin).not.toContain("from '../../pages.jsx'");

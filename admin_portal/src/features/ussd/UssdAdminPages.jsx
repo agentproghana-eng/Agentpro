@@ -187,7 +187,7 @@ export function USSDTemplatesPage() {
             <div className="p-6 border-t flex gap-3">
               <button onClick={save} disabled={saving}
                 className="flex-1 bg-primary text-white py-2.5 rounded-lg font-semibold hover:bg-primary-dark disabled:opacity-60 transition">
-                {saving ? 'Saving...' : '✅ Save & Deploy'}
+                {saving ? 'Saving...' : '✅ Save Draft'}
               </button>
               <button onClick={() => setEditing(null)}
                 className="flex-1 border border-gray-200 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-gray-50 transition">
@@ -209,6 +209,430 @@ export function USSDTemplatesPage() {
 
 const VALID_FLOW_ACTIONS = ['send_digit', 'send_customer_phone', 'send_account_number', 'send_amount', 'send_operator_id', 'send_reference', 'send_merchant_id', 'send_selection', 'await_user_selection', 'send_literal', 'pin_prompt', 'auto_confirm_once'];
 const VALUE_REQUIRED_FLOW_ACTIONS = ['send_digit', 'send_literal', 'auto_confirm_once'];
+
+// operator_id is understood by the V2 client/schema, but is intentionally
+// not exposed by this Admin builder yet. The transaction initiation API
+// does not currently accept it as a validated request field.
+const FORM_FIELD_CONFIG = Object.freeze({
+  customer_phone: {
+    label: 'Customer Phone',
+    types: ['phone'],
+  },
+  recipient_phone: {
+    label: 'Recipient Phone',
+    types: ['phone'],
+  },
+  amount: {
+    label: 'Amount',
+    types: ['amount'],
+  },
+  account_number: {
+    label: 'Account Number',
+    types: ['account_number', 'digits', 'text'],
+  },
+  merchant_id: {
+    label: 'Merchant ID',
+    types: ['digits', 'text'],
+  },
+  reference: {
+    label: 'Reference',
+    types: ['reference', 'text'],
+  },
+});
+
+const FORBIDDEN_FORM_KEYS = new Set([
+  'pin',
+  'password',
+  'otp',
+  'sim_role',
+  'sim_role_override',
+  'balance',
+  'balance_adjustment',
+  'commission',
+  'posting_policy',
+  'ledger_account',
+  'ledger_entry',
+]);
+
+function normalizeFormSchema(value) {
+  if (!Array.isArray(value)) return [];
+
+  return value.map(field => ({
+    key: String(field?.key || ''),
+    type: String(field?.type || ''),
+    label: String(field?.label || ''),
+    required: field?.required !== false,
+    ...(Number.isInteger(field?.min_length)
+      ? { min_length: field.min_length }
+      : {}),
+    ...(Number.isInteger(field?.max_length)
+      ? { max_length: field.max_length }
+      : {}),
+  }));
+}
+
+function validateFormSchema(schema) {
+  if (!Array.isArray(schema)) {
+    return 'form_schema must be a list.';
+  }
+
+  if (schema.length > 20) {
+    return 'form_schema cannot contain more than 20 fields.';
+  }
+
+  const seen = new Set();
+
+  for (const field of schema) {
+    if (FORBIDDEN_FORM_KEYS.has(field?.key)) {
+      return `Form field "${field.key}" is forbidden.`;
+    }
+
+    const config = FORM_FIELD_CONFIG[field?.key];
+
+    if (!config) {
+      return (
+        `Form field "${field?.key || ''}" is not supported ` +
+        'by the installed transaction client.'
+      );
+    }
+
+    if (seen.has(field.key)) {
+      return `Form field "${field.key}" is duplicated.`;
+    }
+
+    seen.add(field.key);
+
+    if (!config.types.includes(field.type)) {
+      return (
+        `Form field "${field.key}" cannot use type ` +
+        `"${field.type}".`
+      );
+    }
+
+    if (!String(field.label || '').trim()) {
+      return `Form field "${field.key}" requires a label.`;
+    }
+
+    if (String(field.label).trim().length > 120) {
+      return (
+        `Form field "${field.key}" label cannot exceed ` +
+        '120 characters.'
+      );
+    }
+
+    if (
+      field.required !== undefined &&
+      typeof field.required !== 'boolean'
+    ) {
+      return (
+        `Form field "${field.key}" required must be boolean.`
+      );
+    }
+
+    if (
+      field.min_length !== undefined &&
+      (
+        !Number.isInteger(field.min_length) ||
+        field.min_length < 0 ||
+        field.min_length > 500
+      )
+    ) {
+      return (
+        `Form field "${field.key}" min_length must be an ` +
+        'integer from 0 to 500.'
+      );
+    }
+
+    if (
+      field.max_length !== undefined &&
+      (
+        !Number.isInteger(field.max_length) ||
+        field.max_length < 1 ||
+        field.max_length > 500
+      )
+    ) {
+      return (
+        `Form field "${field.key}" max_length must be an ` +
+        'integer from 1 to 500.'
+      );
+    }
+
+    if (
+      field.min_length !== undefined &&
+      field.max_length !== undefined &&
+      field.min_length > field.max_length
+    ) {
+      return (
+        `Form field "${field.key}" min_length cannot exceed ` +
+        'max_length.'
+      );
+    }
+  }
+
+  return null;
+}
+
+function FormSchemaBuilder({ value, onChange }) {
+  const fields = normalizeFormSchema(value);
+
+  const update = (index, patch) => {
+    onChange(
+      fields.map((field, i) =>
+        i === index
+          ? { ...field, ...patch }
+          : field
+      ),
+    );
+  };
+
+  const remove = index => {
+    onChange(
+      fields.filter((_, i) => i !== index),
+    );
+  };
+
+  const move = (index, delta) => {
+    const target = index + delta;
+
+    if (target < 0 || target >= fields.length) {
+      return;
+    }
+
+    const next = [...fields];
+
+    [next[index], next[target]] =
+      [next[target], next[index]];
+
+    onChange(next);
+  };
+
+  const availableKeys =
+    Object.keys(FORM_FIELD_CONFIG).filter(
+      key =>
+        !fields.some(field => field.key === key),
+    );
+
+  const addField = () => {
+    const key = availableKeys[0];
+
+    if (!key) return;
+
+    const config = FORM_FIELD_CONFIG[key];
+
+    onChange([
+      ...fields,
+      {
+        key,
+        type: config.types[0],
+        label: config.label,
+        required: true,
+      },
+    ]);
+  };
+
+  return (
+    <div className="border border-gray-200 rounded-xl p-4 mb-4">
+      <div className="flex items-start justify-between gap-4 mb-3">
+        <div>
+          <div className="text-sm font-semibold text-gray-800">
+            Transaction Form
+          </div>
+          <div className="text-xs text-gray-500 mt-1">
+            Server-driven V2 input fields. This controls presentation
+            and transaction input collection only.
+          </div>
+        </div>
+
+        <button
+          type="button"
+          disabled={!availableKeys.length}
+          onClick={addField}
+          className="px-3 py-1.5 rounded-lg text-xs font-semibold
+            bg-primary/10 text-primary disabled:opacity-40"
+        >
+          + Add field
+        </button>
+      </div>
+
+      <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-3 text-xs text-red-700">
+        🔒 <strong>Protected:</strong> PIN, OTP, SIM role,
+        balances, commissions, posting policy and ledger controls
+        cannot be configured here. Financial accounting remains
+        backend-controlled.
+      </div>
+
+      {fields.length === 0 ? (
+        <div className="text-xs text-gray-400 py-3">
+          No server-driven fields. Existing native transaction UI
+          remains in control.
+        </div>
+      ) : (
+        fields.map((field, index) => {
+          const config =
+            FORM_FIELD_CONFIG[field.key];
+
+          const selectableKeys =
+            Object.keys(FORM_FIELD_CONFIG).filter(
+              key =>
+                key === field.key ||
+                !fields.some(
+                  existing => existing.key === key,
+                ),
+            );
+
+          return (
+            <div
+              key={`${field.key}-${index}`}
+              className="border-t border-gray-100 py-3"
+            >
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
+                <label className="md:col-span-3 text-xs text-gray-600">
+                  Field
+                  <select
+                    value={field.key}
+                    onChange={e => {
+                      const key = e.target.value;
+                      const next =
+                        FORM_FIELD_CONFIG[key];
+
+                      update(index, {
+                        key,
+                        type: next.types[0],
+                        label: next.label,
+                      });
+                    }}
+                    className="mt-1 w-full border border-gray-200 rounded p-2 text-xs"
+                  >
+                    {selectableKeys.map(key => (
+                      <option key={key} value={key}>
+                        {FORM_FIELD_CONFIG[key].label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="md:col-span-2 text-xs text-gray-600">
+                  Type
+                  <select
+                    value={field.type}
+                    onChange={e =>
+                      update(index, {
+                        type: e.target.value,
+                      })
+                    }
+                    className="mt-1 w-full border border-gray-200 rounded p-2 text-xs"
+                  >
+                    {(config?.types || []).map(type => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="md:col-span-3 text-xs text-gray-600">
+                  Label
+                  <input
+                    value={field.label}
+                    maxLength={120}
+                    onChange={e =>
+                      update(index, {
+                        label: e.target.value,
+                      })
+                    }
+                    className="mt-1 w-full border border-gray-200 rounded p-2 text-xs"
+                  />
+                </label>
+
+                <label className="md:col-span-1 text-xs text-gray-600">
+                  Min
+                  <input
+                    type="number"
+                    min="0"
+                    max="500"
+                    value={field.min_length ?? ''}
+                    onChange={e =>
+                      update(index, {
+                        min_length:
+                          e.target.value === ''
+                            ? undefined
+                            : Number(e.target.value),
+                      })
+                    }
+                    className="mt-1 w-full border border-gray-200 rounded p-2 text-xs"
+                  />
+                </label>
+
+                <label className="md:col-span-1 text-xs text-gray-600">
+                  Max
+                  <input
+                    type="number"
+                    min="1"
+                    max="500"
+                    value={field.max_length ?? ''}
+                    onChange={e =>
+                      update(index, {
+                        max_length:
+                          e.target.value === ''
+                            ? undefined
+                            : Number(e.target.value),
+                      })
+                    }
+                    className="mt-1 w-full border border-gray-200 rounded p-2 text-xs"
+                  />
+                </label>
+
+                <div className="md:col-span-2 flex flex-wrap gap-2 items-end justify-end">
+                  <label className="text-xs text-gray-600 flex items-center gap-1">
+                    <input
+                      type="checkbox"
+                      checked={field.required !== false}
+                      onChange={e =>
+                        update(index, {
+                          required: e.target.checked,
+                        })
+                      }
+                    />
+                    Required
+                  </label>
+
+                  <button
+                    type="button"
+                    title="Move up"
+                    disabled={index === 0}
+                    onClick={() => move(index, -1)}
+                    className="px-1 text-gray-500 disabled:opacity-30"
+                  >
+                    ↑
+                  </button>
+
+                  <button
+                    type="button"
+                    title="Move down"
+                    disabled={index === fields.length - 1}
+                    onClick={() => move(index, 1)}
+                    className="px-1 text-gray-500 disabled:opacity-30"
+                  >
+                    ↓
+                  </button>
+
+                  <button
+                    type="button"
+                    title="Remove field"
+                    onClick={() => remove(index)}
+                    className="px-1 text-red-600"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
 
 // Mirrors the backend's validateFlowSteps exactly - this is a UX
 // convenience only, the server-side check is what actually matters.
@@ -245,6 +669,9 @@ function normalizeFlowSnapshot(flow) {
 
     is_active:
       flow?.is_active !== false,
+
+    form_schema:
+      normalizeFormSchema(flow?.form_schema),
 
     steps:
       Array.isArray(flow?.steps)
@@ -304,6 +731,7 @@ export function FlowsPage() {
   const [newProvider, setNewProvider] = useState('mtn');
   const [newType, setNewType] = useState('');
   const [newDialCode, setNewDialCode] = useState('');
+  const [newFormSchema, setNewFormSchema] = useState([]);
   const [newJson, setNewJson] = useState(JSON.stringify({
     success_markers: [],
     failure_markers: [],
@@ -311,6 +739,7 @@ export function FlowsPage() {
   }, null, 2));
   const [saving, setSaving] = useState(false);
   const [validationError, setValidationError] = useState(null);
+  const [formSchema, setFormSchema] = useState([]);
   const [testScreenText, setTestScreenText] = useState('');
   const [testFromStep, setTestFromStep] = useState(1);
   const [testResult, setTestResult] = useState(undefined); // undefined = not run, null = no match, object = matched
@@ -366,11 +795,13 @@ export function FlowsPage() {
       const res = await API.get(`/admin/ussd-flows/${f.id}`);
       const full = res.data.data;
       setEditing(full);
+      setFormSchema(
+        normalizeFormSchema(full.form_schema),
+      );
       setEditJson(JSON.stringify({
         dial_code: full.dial_code,
         success_markers: full.success_markers,
         failure_markers: full.failure_markers,
-        is_active: full.is_active,
         steps: full.steps.map(s => ({ match_all: s.match_all, action: s.action, action_value: s.action_value })),
       }, null, 2));
     } catch (_) {
@@ -425,6 +856,22 @@ export function FlowsPage() {
       setValidationError(stepsError);
       return;
     }
+
+    const formSchemaError =
+      validateFormSchema(formSchema);
+
+    if (formSchemaError) {
+      setValidationError(formSchemaError);
+      return;
+    }
+
+    parsed.form_schema =
+      normalizeFormSchema(formSchema);
+
+    // Activation/deactivation uses the dedicated control below.
+    // Ordinary configuration saves never transport is_active.
+    delete parsed.is_active;
+
     setSaving(true);
 
     try {
@@ -443,7 +890,7 @@ export function FlowsPage() {
       );
 
       toast.success(
-        'Flow updated and verified live ✅',
+        'Flow draft updated and verified ✅',
       );
 
       setEditing(null);
@@ -462,6 +909,67 @@ export function FlowsPage() {
           'Flow save or verification failed',
         );
       }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const changeActivation = async (
+    flow,
+    nextActive,
+  ) => {
+    const verb =
+      nextActive ? 'activate' : 'deactivate';
+
+    const confirmed =
+      window.confirm(
+        nextActive
+          ? `Activate ${flow.provider?.toUpperCase()} ${flow.transaction_type?.replace(/_/g, ' ')}? The backend will run activation-readiness checks before making it available.`
+          : `Deactivate ${flow.provider?.toUpperCase()} ${flow.transaction_type?.replace(/_/g, ' ')}?`
+      );
+
+    if (!confirmed) return;
+
+    setSaving(true);
+
+    try {
+      const response =
+        await API.patch(
+          `/admin/ussd-flows/${flow.id}/activation`,
+          {
+            is_active: nextActive,
+          },
+        );
+
+      const persisted =
+        response.data?.data;
+
+      if (
+        !persisted ||
+        persisted.is_active !== nextActive
+      ) {
+        throw new Error(
+          'FLOW_ACTIVATION_READ_AFTER_WRITE_MISMATCH'
+        );
+      }
+
+      toast.success(
+        nextActive
+          ? 'Flow activated after readiness checks ✅'
+          : 'Flow deactivated ✅',
+      );
+
+      await load();
+    } catch (e) {
+      toast.error(
+        e.response?.data?.message ||
+        (
+          e.message ===
+          'FLOW_ACTIVATION_READ_AFTER_WRITE_MISMATCH'
+            ? 'Activation response did not match the requested state.'
+            : `Failed to ${verb} flow`
+        ),
+      );
     } finally {
       setSaving(false);
     }
@@ -489,6 +997,15 @@ export function FlowsPage() {
       setValidationError(stepsError);
       return;
     }
+
+    const formSchemaError =
+      validateFormSchema(newFormSchema);
+
+    if (formSchemaError) {
+      setValidationError(formSchemaError);
+      return;
+    }
+
     setSaving(true);
 
     try {
@@ -505,6 +1022,9 @@ export function FlowsPage() {
               parsed.success_markers || [],
             failure_markers:
               parsed.failure_markers || [],
+            form_schema:
+              normalizeFormSchema(newFormSchema),
+            is_active: false,
             steps:
               parsed.steps,
           },
@@ -529,19 +1049,22 @@ export function FlowsPage() {
             parsed.success_markers || [],
           failure_markers:
             parsed.failure_markers || [],
-          is_active: true,
+          form_schema:
+            normalizeFormSchema(newFormSchema),
+          is_active: false,
           steps:
             parsed.steps,
         },
       );
 
       toast.success(
-        'Flow created and verified live ✅',
+        'Flow draft created and verified ✅',
       );
 
       setCreating(false);
       setNewType('');
       setNewDialCode('');
+      setNewFormSchema([]);
 
       await load();
     } catch (e) {
@@ -609,12 +1132,47 @@ export function FlowsPage() {
                     <span>{f.step_count} step{f.step_count === 1 ? '' : 's'}</span>
                     <span>{f.success_markers?.length || 0} success marker{(f.success_markers?.length || 0) === 1 ? '' : 's'}</span>
                     <span>{f.failure_markers?.length || 0} failure marker{(f.failure_markers?.length || 0) === 1 ? '' : 's'}</span>
+                    <span>
+                      Form:{' '}
+                      {Array.isArray(f.form_schema) && f.form_schema.length
+                        ? `${f.form_schema.length} server field${f.form_schema.length === 1 ? '' : 's'}`
+                        : 'native/default'}
+                    </span>
                   </div>
                 </div>
-                <button onClick={() => startEdit(f)}
-                  className="bg-primary/10 text-primary px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-primary/20 transition">
-                  Edit
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() =>
+                      changeActivation(
+                        f,
+                        !f.is_active,
+                      )
+                    }
+                    disabled={saving}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition disabled:opacity-50 ${
+                      f.is_active
+                        ? 'bg-red-50 text-red-700 hover:bg-red-100'
+                        : 'bg-green-50 text-green-700 hover:bg-green-100'
+                    }`}
+                  >
+                    {f.is_active
+                      ? 'Deactivate'
+                      : 'Activate'}
+                  </button>
+
+                  <button
+                    onClick={() => startEdit(f)}
+                    disabled={saving || f.is_active}
+                    title={
+                      f.is_active
+                        ? 'Deactivate this flow before editing its configuration.'
+                        : 'Edit flow configuration'
+                    }
+                    className="bg-primary/10 text-primary px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-primary/20 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Edit
+                  </button>
+                </div>
               </div>
             </div>
           ))}
@@ -648,6 +1206,14 @@ export function FlowsPage() {
                 <code>auto_confirm_once</code> sends a
                 fixed value exactly once, after the PIN.
               </div>
+              <FormSchemaBuilder
+                value={formSchema}
+                onChange={value => {
+                  setFormSchema(value);
+                  setValidationError(null);
+                }}
+              />
+
               {validationError && (
                 <div className="bg-red-100 border border-red-300 rounded-lg p-3 mb-4 text-xs text-red-800 font-medium">
                   ⚠️ {validationError}
@@ -696,7 +1262,7 @@ export function FlowsPage() {
             <div className="p-6 border-t flex gap-3">
               <button onClick={save} disabled={saving}
                 className="flex-1 bg-primary text-white py-2.5 rounded-lg font-semibold hover:bg-primary-dark disabled:opacity-60 transition">
-                {saving ? 'Saving...' : '✅ Save & Deploy'}
+                {saving ? 'Saving...' : '✅ Save Draft'}
               </button>
               <button onClick={() => setEditing(null)}
                 className="flex-1 border border-gray-200 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-gray-50 transition">
@@ -743,6 +1309,14 @@ export function FlowsPage() {
                 in <code>match_all</code> (lowercase text from that screen) and the matching{' '}
                 <code>action</code> for each step, in order. Must include a <code>pin_prompt</code> step.
               </div>
+              <FormSchemaBuilder
+                value={newFormSchema}
+                onChange={value => {
+                  setNewFormSchema(value);
+                  setValidationError(null);
+                }}
+              />
+
               {validationError && (
                 <div className="bg-red-100 border border-red-300 rounded-lg p-3 mb-4 text-xs text-red-800 font-medium">
                   ⚠️ {validationError}
@@ -757,7 +1331,7 @@ export function FlowsPage() {
             <div className="p-6 border-t flex gap-3">
               <button onClick={createFlow} disabled={saving}
                 className="flex-1 bg-primary text-white py-2.5 rounded-lg font-semibold hover:bg-primary-dark disabled:opacity-60 transition">
-                {saving ? 'Creating...' : '✅ Create & Deploy'}
+                {saving ? 'Creating...' : 'Create Draft'}
               </button>
               <button onClick={() => setCreating(false)}
                 className="flex-1 border border-gray-200 py-2.5 rounded-lg font-semibold text-gray-600 hover:bg-gray-50 transition">
