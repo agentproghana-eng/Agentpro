@@ -28,6 +28,12 @@ function createInitiationCapabilityGuard(
               .toLowerCase()
           : null;
 
+      const bundleCategory =
+        String(req.body.bundle_category || '').trim() || null;
+
+      const recipientMode =
+        String(req.body.recipient_mode || '').trim() || null;
+
       const capability = await capabilityLookup(
         accountMode,
         provider,
@@ -36,7 +42,9 @@ function createInitiationCapabilityGuard(
         businessSimRole,
         accountMode === 'business'
           ? req.user?.company_id || null
-          : null
+          : null,
+        bundleCategory,
+        recipientMode
       );
 
       const errors = [];
