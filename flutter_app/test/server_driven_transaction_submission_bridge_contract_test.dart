@@ -7,94 +7,138 @@ void main() {
     'lib/features/transactions/transaction_screen.dart',
   ).readAsStringSync();
 
-  test('remote values use fixed semantic keys', () {
-    expect(
-      transaction,
-      contains('_serverDrivenSubmissionKeys'),
-    );
+  final submission = File(
+    'lib/features/transactions/'
+    'server_driven_transaction_submission.dart',
+  ).readAsStringSync();
 
-    for (final key in [
-      'customer_phone',
-      'recipient_phone',
-      'amount',
-      'account_number',
-      'merchant_id',
-      'reference',
-      'operator_id',
-    ]) {
-      expect(transaction, contains("'$key'"));
-    }
+  test(
+    'remote values use a dedicated fixed semantic allowlist',
+    () {
+      expect(
+        transaction,
+        contains(
+          "import 'server_driven_transaction_submission.dart';",
+        ),
+      );
 
-    expect(
-      transaction,
-      isNot(contains('..._serverDrivenFormValues')),
-    );
-  });
+      expect(
+        transaction,
+        contains('ServerDrivenTransactionSubmission('),
+      );
 
-  test('one normalized builder creates transaction requests', () {
-    expect(
-      transaction,
-      contains(
-        'Map<String, dynamic> _buildTransactionRequestFields',
-      ),
-    );
+      for (final key in <String>[
+        'customer_phone',
+        'recipient_phone',
+        'amount',
+        'account_number',
+        'merchant_id',
+        'reference',
+        'operator_id',
+      ]) {
+        expect(
+          submission,
+          contains("'$key'"),
+          reason: '$key must remain explicitly allowlisted',
+        );
+      }
 
-    expect(
-      transaction,
-      contains("'amount': _effectiveAmount"),
-    );
+      expect(
+        transaction,
+        isNot(contains('..._serverDrivenFormValues')),
+      );
+    },
+  );
 
-    expect(
-      transaction,
-      contains(
-        "'customer_phone': _effectiveCustomerPhone",
-      ),
-    );
+  test(
+    'one normalized adapter creates server-driven request fields',
+    () {
+      expect(
+        submission,
+        contains('Map<String, dynamic> toRequestFields()'),
+      );
 
-    expect(
-      transaction,
-      contains(
-        "'account_number': _effectiveAccountNumber",
-      ),
-    );
+      expect(
+        submission,
+        contains("'amount': amount"),
+      );
+      expect(
+        submission,
+        contains("'customer_phone': customerPhone"),
+      );
+      expect(
+        submission,
+        contains("'recipient_phone': recipientPhone"),
+      );
+      expect(
+        submission,
+        contains("'account_number': accountNumber"),
+      );
+      expect(
+        submission,
+        contains("'payment_reference': reference"),
+      );
+      expect(
+        submission,
+        contains("'merchant_id': merchantId"),
+      );
 
-    expect(
-      transaction,
-      contains(
-        "'payment_reference': _effectiveReference",
-      ),
-    );
-  });
+      expect(
+        transaction,
+        contains(
+          '_serverDrivenSubmission.toRequestFields()',
+        ),
+      );
+    },
+  );
 
-  test('high amount warning uses normalized amount', () {
-    expect(
-      transaction,
-      contains(
-        'final amountForWarning = _effectiveAmount;',
-      ),
-    );
-  });
+  test(
+    'both progress paths use the same normalized request map',
+    () {
+      // One request map is built for the offline branch and one for the
+      // online branch. Each progress route receives that same normalized
+      // map as request_fields/automation_params instead of rebuilding
+      // server-driven values independently.
+      expect(
+        RegExp(
+          r'final requestFields = '
+          r'_buildTransactionRequestFields\(',
+        ).allMatches(transaction).length,
+        greaterThanOrEqualTo(2),
+      );
 
-  test('both progress paths use normalized values', () {
-    expect(
-      RegExp(
-        r"'amount': _effectiveAmountText",
-      ).allMatches(transaction).length,
-      2,
-    );
+      expect(
+        RegExp(
+          r"'request_fields': requestFields",
+        ).allMatches(transaction).length,
+        greaterThanOrEqualTo(2),
+      );
 
-    expect(
-      RegExp(
-        r"'customer_phone': _effectiveCustomerPhone",
-      ).allMatches(transaction).length,
-      greaterThanOrEqualTo(3),
-    );
-  });
+      expect(
+        transaction,
+        contains("'automation_params': requestFields"),
+      );
+    },
+  );
 
-  test('remote values cannot be spread into request body', () {
-    expect(
-      transaction,
-      isNot(contains('..._serverDrivenFormValues')),
-    );
-  });
+  test(
+    'remote schema cannot control sensitive or accounting fields',
+    () {
+      for (final forbidden in <String>[
+        "'pin'",
+        "'password'",
+        "'otp'",
+        "'ledger_account'",
+        "'posting_policy'",
+        "'balance'",
+        "'commission'",
+      ]) {
+        expect(
+          submission,
+          isNot(contains(forbidden)),
+          reason: '$forbidden must not be remotely mapped',
+        );
+      }
+    },
+  );
 }

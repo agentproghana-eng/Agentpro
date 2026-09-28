@@ -152,7 +152,7 @@ class ServerDrivenTransactionFormState
     if (field.type == 'amount') {
       formatters.add(
         FilteringTextInputFormatter.allow(
-          RegExp(r'^\d*(?:\.\d{0,2})?\$'),
+          RegExp(r'^\d*(?:\.\d{0,2})?$'),
         ),
       );
     }
