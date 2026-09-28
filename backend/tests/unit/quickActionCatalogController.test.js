@@ -160,6 +160,94 @@ describe("Quick Action catalog controller behavior", () => {
     });
   });
 
+  test("V2 catalog exposes persisted form schema without inventing transaction UI", async () => {
+    const formSchema = [
+      {
+        key: "customer_phone",
+        type: "phone",
+        label: "Customer Number",
+        required: true,
+        min_length: 10,
+        max_length: 10,
+      },
+      {
+        key: "amount",
+        type: "amount",
+        label: "Amount",
+        required: true,
+      },
+      {
+        key: "merchant_id",
+        type: "text",
+        label: "Merchant ID",
+        required: true,
+      },
+      {
+        key: "reference",
+        type: "reference",
+        label: "Reference",
+        required: true,
+      },
+    ];
+
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          provider: "future_money",
+          transaction_type: "merchant_payment",
+          display_label: "Future Merchant Payment",
+          bundle_category: null,
+          recipient_mode: null,
+          form_schema: formSchema,
+        },
+      ],
+    });
+
+    const req = {
+      user: makeUser(),
+      query: {
+        mode: "business",
+        schema_version: "2",
+      },
+    };
+
+    const res = makeResponse();
+
+    await userController.getMyQuickActionCatalog(req, res);
+
+    expect(res.status).not.toHaveBeenCalled();
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+
+    const [sql, params] = mockQuery.mock.calls[0];
+
+    expect(sql).toContain("f.form_schema");
+    expect(params).toEqual(["business", "agent"]);
+
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: {
+        mode: "business",
+        role: "agent",
+        schema_version: 2,
+        providers: [
+          {
+            provider: "future_money",
+            actions: [
+              {
+                provider: "future_money",
+                transaction_type: "merchant_payment",
+                display_label: "Future Merchant Payment",
+                quick_action_group: "Transfers & Payments",
+                form_fields: formSchema,
+                variants: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
   test("Personal catalog passes personal account mode to the capability query", async () => {
     mockQuery.mockResolvedValueOnce({
       rows: [
