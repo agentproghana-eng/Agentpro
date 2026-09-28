@@ -82,19 +82,29 @@ void main() {
     );
   });
 
-  test('server-driven values are not yet injected into API payload', () {
-    expect(
-      transaction,
-      contains('_serverDrivenFormValues'),
-    );
+  test(
+    'server-driven values reach only the allowlisted payload adapter',
+    () {
+      expect(
+        transaction,
+        contains('_serverDrivenFormValues'),
+      );
+      expect(
+        transaction,
+        contains('ServerDrivenTransactionSubmission('),
+      );
+      expect(
+        transaction,
+        contains('_serverDrivenSubmission.toRequestFields()'),
+      );
 
-    // This stage deliberately establishes rendering/transport only.
-    // Arbitrary remotely supplied keys must not be spread into requests.
-    expect(
-      transaction,
-      isNot(contains('..._serverDrivenFormValues')),
-    );
-  });
+      // Remote form values must never be spread directly into the API body.
+      expect(
+        transaction,
+        isNot(contains('..._serverDrivenFormValues')),
+      );
+    },
+  );
 
   test('PIN remains outside remotely rendered transaction fields', () {
     expect(

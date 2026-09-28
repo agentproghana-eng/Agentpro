@@ -23,6 +23,7 @@ import '../../core/services/storage_service.dart';
 import '../../core/services/transaction_device_preparation_service.dart';
 import 'models/telecel_merchant_bank_selections.dart';
 import '../ussd_settings/quick_action_catalog.dart';
+import 'server_driven_transaction_submission.dart';
 import 'widgets/server_driven_transaction_form.dart';
 
 class TransactionScreen extends StatefulWidget {
@@ -172,27 +173,15 @@ class _TransactionScreenState extends State<TransactionScreen> {
       ..addAll(values);
   }
 
-  static const Set<String> _serverDrivenSubmissionKeys = {
-    'customer_phone',
-    'recipient_phone',
-    'amount',
-    'account_number',
-    'merchant_id',
-    'reference',
-    'operator_id',
-  };
-
-  String _serverDrivenValue(String key) {
-    if (!_usesServerDrivenForm ||
-        !_serverDrivenSubmissionKeys.contains(key)) {
-      return '';
-    }
-
-    return _serverDrivenFormValues[key]?.trim() ?? '';
-  }
+  ServerDrivenTransactionSubmission get _serverDrivenSubmission =>
+      ServerDrivenTransactionSubmission(
+        _usesServerDrivenForm
+            ? _serverDrivenFormValues
+            : const <String, String>{},
+      );
 
   String get _effectiveAmountText => _usesServerDrivenForm
-      ? _serverDrivenValue('amount')
+      ? _serverDrivenSubmission.amountText
       : _amountCtrl.text.trim();
 
   double get _effectiveAmount =>
@@ -203,7 +192,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
   String get _effectiveCustomerPhone {
     if (_usesServerDrivenForm) {
-      return _serverDrivenValue('customer_phone');
+      return _serverDrivenSubmission.customerPhone;
     }
 
     return _isMtnCashInOutWorkspace
@@ -212,43 +201,60 @@ class _TransactionScreenState extends State<TransactionScreen> {
   }
 
   String get _effectiveRecipientPhone => _usesServerDrivenForm
-      ? _serverDrivenValue('recipient_phone')
+      ? _serverDrivenSubmission.recipientPhone
       : _recipientPhoneCtrl.text.trim();
 
   String get _effectiveAccountNumber => _usesServerDrivenForm
-      ? _serverDrivenValue('account_number')
+      ? _serverDrivenSubmission.accountNumber
       : _needsTelecelMerchantAccountNumber
           ? _accountNumberCtrl.text.trim()
           : '';
 
   String get _effectiveReference => _usesServerDrivenForm
-      ? _serverDrivenValue('reference')
+      ? _serverDrivenSubmission.reference
       : _referenceCtrl.text.trim();
 
   String get _effectiveMerchantId => _usesServerDrivenForm
-      ? _serverDrivenValue('merchant_id')
+      ? _serverDrivenSubmission.merchantId
       : _merchantIdCtrl.text.trim();
 
-  String get _effectiveOperatorId =>
-      _serverDrivenValue('operator_id');
+  String get _effectiveOperatorId => _usesServerDrivenForm
+      ? _serverDrivenSubmission.operatorId
+      : '';
 
   Map<String, dynamic> _buildTransactionRequestFields({
     required String businessSimRole,
     required String installationId,
     required String clientOperationId,
   }) {
+    final serverDrivenRequestFields = _usesServerDrivenForm
+        ? _serverDrivenSubmission.toRequestFields()
+        : const <String, dynamic>{};
+
     return <String, dynamic>{
       'provider': _selectedProvider,
       'transaction_type': _transactionType,
       'sim_role': businessSimRole,
-      'amount': _effectiveAmount,
-      'customer_phone': _effectiveCustomerPhone,
+      'amount': _usesServerDrivenForm
+          ? serverDrivenRequestFields['amount']
+          : _effectiveAmount,
+      'customer_phone': _usesServerDrivenForm
+          ? serverDrivenRequestFields['customer_phone']
+          : _effectiveCustomerPhone,
       'customer_name': '',
-      'recipient_phone': _effectiveRecipientPhone,
+      'recipient_phone': _usesServerDrivenForm
+          ? serverDrivenRequestFields['recipient_phone']
+          : _effectiveRecipientPhone,
       'biller_code': '',
-      'account_number': _effectiveAccountNumber,
-      'payment_reference': _effectiveReference,
-      'merchant_id': _effectiveMerchantId,
+      'account_number': _usesServerDrivenForm
+          ? serverDrivenRequestFields['account_number']
+          : _effectiveAccountNumber,
+      'payment_reference': _usesServerDrivenForm
+          ? serverDrivenRequestFields['payment_reference']
+          : _effectiveReference,
+      'merchant_id': _usesServerDrivenForm
+          ? serverDrivenRequestFields['merchant_id']
+          : _effectiveMerchantId,
       if (_effectiveOperatorId.isNotEmpty)
         'operator_id': _effectiveOperatorId,
       'fee': _isAgentServiceFeeFlow && _agentServiceFeeEnabled
