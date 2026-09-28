@@ -168,6 +168,7 @@ describe('USSD Flow Builder capabilities', () => {
       rows: [{
         provider_registered: true,
         transaction_type_initiable: true,
+        active_flow_available: true,
       }],
     });
 
@@ -181,11 +182,17 @@ describe('USSD Flow Builder capabilities', () => {
     ).resolves.toEqual({
       provider_registered: true,
       transaction_type_initiable: true,
+      active_flow_available: true,
     });
 
     expect(queryFn).toHaveBeenCalledWith(
       expect.stringContaining('can_initiate = TRUE'),
-      ['future_provider', 'business', 'future_type']
+      [
+        'future_provider',
+        'business',
+        'future_type',
+        'agent',
+      ]
     );
   });
 
@@ -194,6 +201,7 @@ describe('USSD Flow Builder capabilities', () => {
       rows: [{
         provider_registered: false,
         transaction_type_initiable: false,
+        active_flow_available: false,
       }],
     });
 
@@ -207,6 +215,7 @@ describe('USSD Flow Builder capabilities', () => {
     ).resolves.toEqual({
       provider_registered: false,
       transaction_type_initiable: false,
+      active_flow_available: false,
     });
   });
 
