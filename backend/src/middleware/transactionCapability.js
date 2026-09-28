@@ -21,10 +21,19 @@ function createInitiationCapabilityGuard(
         req.body.transaction_type || ''
       ).trim();
 
+      const businessSimRole =
+        accountMode === 'business'
+          ? String(req.body.sim_role || 'agent')
+              .trim()
+              .toLowerCase()
+          : null;
+
       const capability = await capabilityLookup(
         accountMode,
         provider,
-        transactionType
+        transactionType,
+        undefined,
+        businessSimRole
       );
 
       const errors = [];
@@ -36,7 +45,10 @@ function createInitiationCapabilityGuard(
         });
       }
 
-      if (!capability.transaction_type_initiable) {
+      if (
+        !capability.transaction_type_initiable ||
+        !capability.active_flow_available
+      ) {
         errors.push({
           field: 'transaction_type',
           message: 'Invalid transaction type',

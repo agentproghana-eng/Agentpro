@@ -134,12 +134,33 @@ async function getInitiationCapability(
   accountMode,
   provider,
   transactionType,
-  queryFn = query
+  queryFn = query,
+  businessSimRole = 'agent'
 ) {
   if (accountMode !== 'business' && accountMode !== 'personal') {
     throw new TypeError(
       'accountMode must be either business or personal'
     );
+  }
+
+  const normalizedBusinessSimRole =
+    accountMode === 'business'
+      ? String(businessSimRole || 'agent')
+          .trim()
+          .toLowerCase()
+      : null;
+
+  if (
+    accountMode === 'business' &&
+    !['agent', 'evd', 'merchant'].includes(
+      normalizedBusinessSimRole
+    )
+  ) {
+    return {
+      provider_registered: true,
+      transaction_type_initiable: false,
+      active_flow_available: false,
+    };
   }
 
   const result = await queryFn(
@@ -158,16 +179,44 @@ async function getInitiationCapability(
          WHERE account_mode = $2
            AND transaction_type::text = $3
            AND can_initiate = TRUE
-       ) AS transaction_type_initiable`,
-    [provider, accountMode, transactionType]
+       ) AS transaction_type_initiable,
+       EXISTS (
+         SELECT 1
+         FROM ussd_flows f
+         WHERE f.provider::text = $1
+           AND f.transaction_type::text = $3
+           AND f.owner_user_id IS NULL
+           AND f.company_id IS NULL
+           AND f.is_active = TRUE
+           AND (
+             (
+               $2 = 'personal'
+               AND f.business_sim_role IS NULL
+             )
+             OR
+             (
+               $2 = 'business'
+               AND f.business_sim_role = $4
+             )
+           )
+       ) AS active_flow_available`,
+    [
+      provider,
+      accountMode,
+      transactionType,
+      normalizedBusinessSimRole,
+    ]
   );
 
   const row = result.rows[0] || {};
 
   return {
-    provider_registered: row.provider_registered === true,
+    provider_registered:
+      row.provider_registered === true,
     transaction_type_initiable:
       row.transaction_type_initiable === true,
+    active_flow_available:
+      row.active_flow_available === true,
   };
 }
 

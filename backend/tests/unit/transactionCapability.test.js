@@ -16,6 +16,7 @@ describe('transaction initiation capability guard', () => {
     const lookup = jest.fn().mockResolvedValue({
       provider_registered: true,
       transaction_type_initiable: true,
+      active_flow_available: true,
     });
 
     const guard =
@@ -36,7 +37,9 @@ describe('transaction initiation capability guard', () => {
     expect(lookup).toHaveBeenCalledWith(
       'business',
       'future_provider',
-      'future_type'
+      'future_type',
+      undefined,
+      'agent'
     );
     expect(res.status).not.toHaveBeenCalled();
     expect(res.json).not.toHaveBeenCalled();
@@ -47,6 +50,7 @@ describe('transaction initiation capability guard', () => {
     const lookup = jest.fn().mockResolvedValue({
       provider_registered: false,
       transaction_type_initiable: true,
+      active_flow_available: true,
     });
 
     const guard =
