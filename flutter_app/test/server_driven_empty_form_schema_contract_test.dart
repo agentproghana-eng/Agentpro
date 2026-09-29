@@ -133,4 +133,40 @@ void main() {
       );
     },
   );
+
+  test(
+    'explicit empty schema preserves provider-owned customer phone',
+    () {
+      final transaction = File(
+        'lib/features/transactions/transaction_screen.dart',
+      ).readAsStringSync();
+
+      expect(
+        transaction,
+        contains(
+          "bool _serverDrivenFormOwnsField(String key)",
+        ),
+      );
+      expect(
+        transaction,
+        contains(
+          "_serverDrivenFormOwnsField('customer_phone')",
+        ),
+      );
+      expect(
+        transaction,
+        contains(
+          "_needsCustomer &&\n"
+          "                  !_serverDrivenFormOwnsField('customer_phone')",
+        ),
+      );
+      expect(
+        transaction,
+        contains(
+          "? serverDrivenRequestFields['customer_phone']\n"
+          "              : _effectiveCustomerPhone",
+        ),
+      );
+    },
+  );
 }
