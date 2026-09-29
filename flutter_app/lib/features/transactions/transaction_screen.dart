@@ -153,7 +153,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
     final definition = widget.catalogDefinition;
 
     if (definition == null ||
-        definition.formFields.isEmpty ||
+        !definition.hasServerDrivenFormSchema ||
         widget.mtnCashInOutWorkspace ||
         widget.telecelMerchantECashWorkspace) {
       return false;

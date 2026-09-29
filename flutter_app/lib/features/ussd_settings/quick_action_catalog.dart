@@ -200,6 +200,13 @@ class QuickActionCatalogDefinition {
   final List<QuickActionCatalogVariant> variants;
   final List<TransactionFormFieldDefinition> formFields;
 
+  /// True when the server explicitly supplied V2 form_fields.
+  ///
+  /// An empty list is meaningful: the action is server-described but
+  /// requires no generic transaction-form fields. This must remain
+  /// distinguishable from legacy/V1 metadata where form_fields is absent.
+  final bool hasServerDrivenFormSchema;
+
   const QuickActionCatalogDefinition({
     required this.provider,
     required this.type,
@@ -207,6 +214,7 @@ class QuickActionCatalogDefinition {
     required this.quickActionGroup,
     this.variants = const [],
     this.formFields = const [],
+    this.hasServerDrivenFormSchema = false,
   });
 
   factory QuickActionCatalogDefinition.fromJson(
@@ -240,6 +248,7 @@ class QuickActionCatalogDefinition {
       formFields: _parseTransactionFormFields(
         json['form_fields'],
       ),
+      hasServerDrivenFormSchema: json.containsKey('form_fields'),
     );
   }
 
@@ -252,7 +261,7 @@ class QuickActionCatalogDefinition {
       'display_label': displayLabel,
       'quick_action_group': quickActionGroup,
       'variants': variants.map((variant) => variant.toCacheJson()).toList(),
-      if (formFields.isNotEmpty)
+      if (hasServerDrivenFormSchema)
         'form_fields':
             formFields.map((field) => field.toCacheJson()).toList(),
     };
