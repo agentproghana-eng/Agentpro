@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:agentpro_ghana/features/ussd_settings/quick_action_catalog.dart';
+import '../lib/features/ussd_settings/quick_action_catalog.dart';
 
 void main() {
   test('explicit empty V2 form schema survives parse and cache', () {
