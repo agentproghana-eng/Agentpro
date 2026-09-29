@@ -38,7 +38,7 @@ describe("server-driven flow resolution convergence", () => {
       "f.company_id IS NULL",
     );
     expect(capabilitySource).toContain(
-      "f.company_id = $5",
+      "f.company_id = $7",
     );
     expect(capabilitySource).toContain(
       "f.business_sim_role = $4",
@@ -50,7 +50,7 @@ describe("server-driven flow resolution convergence", () => {
 
   test("personal initiation remains isolated from company flows", () => {
     expect(capabilitySource).toMatch(
-      /\$2 = 'personal'[\s\S]*?f\.company_id IS NULL[\s\S]*?f\.business_sim_role IS NULL/,
+      /\$3 = 'personal'[\s\S]*?f\.company_id IS NULL[\s\S]*?f\.business_sim_role IS NULL/,
     );
   });
 
@@ -63,30 +63,27 @@ describe("server-driven flow resolution convergence", () => {
     );
   });
 
-  test("transaction execution accepts own company override or global flow", () => {
+  test("transaction execution delegates active-flow selection to the authoritative resolver", () => {
     expect(transactionSource).toContain(
-      "(company_id = $3 AND owner_user_id IS NULL)",
+      "resolveActiveTransactionFlow",
     );
     expect(transactionSource).toContain(
-      "(company_id IS NULL AND owner_user_id IS NULL)",
+      'accountMode: "business"',
     );
     expect(transactionSource).toContain(
-      "business_sim_role = $4",
+      "transactionType: transaction_type",
     );
   });
 
-  test("flow resolver prefers company override and excludes personal ownership", () => {
+  test("runtime flow resolution delegates to the authoritative resolver", () => {
     expect(flowControllerSource).toContain(
-      "company_id = $1",
+      "resolveActiveTransactionFlow",
     );
     expect(flowControllerSource).toContain(
-      "owner_user_id IS NULL",
+      'accountMode: "business"',
     );
     expect(flowControllerSource).toContain(
-      "business_sim_role = $4",
-    );
-    expect(flowControllerSource).toContain(
-      "company_id IS NULL",
+      "companyId: req.user.company_id || null",
     );
   });
 

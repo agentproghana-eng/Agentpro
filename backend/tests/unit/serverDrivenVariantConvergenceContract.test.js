@@ -23,6 +23,12 @@ const flowController = fs.readFileSync(
   "utf8",
 );
 
+
+const flowCapabilities = fs.readFileSync(
+  path.join(__dirname, "../../src/utils/ussdFlowCapabilities.js"),
+  "utf8",
+);
+
 describe("server-driven transaction variant convergence", () => {
   test("initiation guard transports only normalized requested variant identity", () => {
     expect(capabilityGuard).toContain(
@@ -49,37 +55,34 @@ describe("server-driven transaction variant convergence", () => {
       "COALESCE(f.recipient_mode, '') =",
     );
     expect(capabilityUtility).toContain(
-      "COALESCE($7, '')",
+      "COALESCE($6, '')",
     );
   });
 
-  test("business transaction preflight uses the same exact variant dimensions", () => {
+  test("business transaction preflight delegates exact variant resolution", () => {
     expect(transactionController).toContain(
-      "COALESCE(bundle_category, '') = COALESCE($5, '')",
+      "resolveActiveTransactionFlow({",
     );
     expect(transactionController).toContain(
-      "COALESCE(recipient_mode, '') = COALESCE($6, '')",
+      "bundleCategory: bundle_category",
     );
     expect(transactionController).toContain(
-      "bundle_category || null",
+      "recipientMode: recipient_mode",
     );
-    expect(transactionController).toContain(
-      "recipient_mode || null",
+    expect(flowCapabilities).toContain(
+      "COALESCE(f.bundle_category, '') =",
+    );
+    expect(flowCapabilities).toContain(
+      "COALESCE(f.recipient_mode, '') =",
     );
   });
 
   test("runtime resolver remains exact on both variant dimensions", () => {
-    expect(flowController).toContain(
-      "COALESCE(bundle_category,'') = COALESCE($5,'')",
+    expect(flowCapabilities).toContain(
+      "COALESCE(f.bundle_category, '') =",
     );
-    expect(flowController).toContain(
-      "COALESCE(recipient_mode,'') = COALESCE($6,'')",
-    );
-    expect(flowController).toContain(
-      "COALESCE(bundle_category,'') = COALESCE($4,'')",
-    );
-    expect(flowController).toContain(
-      "COALESCE(recipient_mode,'') = COALESCE($5,'')",
+    expect(flowCapabilities).toContain(
+      "COALESCE(f.recipient_mode, '') =",
     );
   });
 
@@ -88,10 +91,10 @@ describe("server-driven transaction variant convergence", () => {
       "f.owner_user_id IS NULL",
     );
     expect(transactionController).toContain(
-      "company_id = $3 AND owner_user_id IS NULL",
+      "resolveActiveTransactionFlow",
     );
     expect(transactionController).toContain(
-      "company_id IS NULL AND owner_user_id IS NULL",
+      "companyId",
     );
   });
 });

@@ -6,6 +6,7 @@ const mockAuditLog = jest.fn();
 const mockGetFlowBuilderCapabilities = jest.fn();
 const mockGetFlowBuilderEligibility = jest.fn();
 const mockGetGlobalFlowBuilderEligibility = jest.fn();
+const mockResolveActiveTransactionFlow = jest.fn();
 
 jest.mock('../../src/config/database', () => ({
   query: (...args) => mockQuery(...args),
@@ -31,6 +32,8 @@ jest.mock('../../src/utils/ussdFlowCapabilities', () => ({
     mockGetFlowBuilderEligibility(...args),
   getGlobalFlowBuilderEligibility: (...args) =>
     mockGetGlobalFlowBuilderEligibility(...args),
+  resolveActiveTransactionFlow: (...args) =>
+    mockResolveActiveTransactionFlow(...args),
 }));
 
 const ussdFlowController =
@@ -82,6 +85,7 @@ describe('USSD Flow Builder capability enforcement', () => {
     });
 
     mockAuditLog.mockResolvedValue(undefined);
+    mockResolveActiveTransactionFlow.mockResolvedValue(null);
   });
 
   test('Business list excludes Personal-owned rows even for superuser', async () => {
@@ -888,28 +892,25 @@ describe('USSD Flow Builder capability enforcement', () => {
   });
 
   test('Business resolver refuses an unsafe active stored flow', async () => {
-    mockQuery
-      .mockResolvedValueOnce({
-        rows: [
-          {
-            id: 'company-active-unsafe',
-            company_id: 'company-1',
-            owner_user_id: null,
-            provider: 'mtn',
-            transaction_type: 'cash_in',
-            is_active: true,
-          },
-        ],
-      })
-      .mockResolvedValueOnce({
-        rows: [
-          {
-            match_all: ['menu'],
-            action: 'send_digit',
-            action_value: '1',
-          },
-        ],
-      });
+    mockResolveActiveTransactionFlow.mockResolvedValueOnce({
+      id: 'company-active-unsafe',
+      company_id: 'company-1',
+      owner_user_id: null,
+      provider: 'mtn',
+      transaction_type: 'cash_in',
+      business_sim_role: 'agent',
+      is_active: true,
+    });
+
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          match_all: ['menu'],
+          action: 'send_digit',
+          action_value: '1',
+        },
+      ],
+    });
 
     const req = {
       user: {
@@ -1083,20 +1084,17 @@ describe('USSD Flow Builder capability enforcement', () => {
   });
 
   test('Business resolver refuses unsafe stored metadata', async () => {
-    mockQuery.mockResolvedValueOnce({
-      rows: [
-        {
-          id: 'company-flow-bad-metadata',
-          company_id: 'company-1',
-          owner_user_id: null,
-          provider: 'mtn',
-          transaction_type: 'cash_in',
-          dial_code: 'tel:*170#',
-          success_markers: ['successful'],
-          failure_markers: ['failed'],
-          is_active: true,
-        },
-      ],
+    mockResolveActiveTransactionFlow.mockResolvedValueOnce({
+      id: 'company-flow-bad-metadata',
+      company_id: 'company-1',
+      owner_user_id: null,
+      provider: 'mtn',
+      transaction_type: 'cash_in',
+      business_sim_role: 'agent',
+      dial_code: 'tel:*170#',
+      success_markers: ['successful'],
+      failure_markers: ['failed'],
+      is_active: true,
     });
 
     const req = {
@@ -1114,7 +1112,8 @@ describe('USSD Flow Builder capability enforcement', () => {
 
     await ussdFlowController.resolveFlow(req, res);
 
-    expect(mockQuery).toHaveBeenCalledTimes(1);
+    expect(mockResolveActiveTransactionFlow).toHaveBeenCalledTimes(1);
+    expect(mockQuery).not.toHaveBeenCalled();
 
     expect(res.status).toHaveBeenCalledWith(409);
     expect(res.json).toHaveBeenCalledWith(

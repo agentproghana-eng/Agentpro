@@ -2203,6 +2203,13 @@ exports.getMyQuickActionCatalog = async (req, res) => {
     );
 
     const providerMap = new Map();
+    const ambiguousV2Actions = new Set();
+
+    const normalizedFormSchema = (rawSchema) =>
+      Array.isArray(rawSchema) ? rawSchema : [];
+
+    const formSchemaFingerprint = (rawSchema) =>
+      JSON.stringify(normalizedFormSchema(rawSchema));
 
     for (const row of result.rows) {
       const provider = String(row.provider || "").trim();
@@ -2218,6 +2225,11 @@ exports.getMyQuickActionCatalog = async (req, res) => {
 
       const actions = providerMap.get(provider);
 
+      const actionKey = `${provider}:${transactionType}`;
+      const currentFormSchema = normalizedFormSchema(row.form_schema);
+      const currentFormSchemaFingerprint =
+        formSchemaFingerprint(currentFormSchema);
+
       if (!actions.has(transactionType)) {
         actions.set(transactionType, {
           provider,
@@ -2230,13 +2242,21 @@ exports.getMyQuickActionCatalog = async (req, res) => {
           quick_action_group: quickActionGroupForType(transactionType),
           ...(requestedSchemaVersion >= 2
             ? {
-                form_fields: Array.isArray(row.form_schema)
-                  ? row.form_schema
-                  : [],
+                form_fields: currentFormSchema,
+                _form_schema_fingerprint: currentFormSchemaFingerprint,
               }
             : {}),
           variants: [],
         });
+      } else if (requestedSchemaVersion >= 2) {
+        const existingAction = actions.get(transactionType);
+
+        if (
+          existingAction._form_schema_fingerprint !==
+          currentFormSchemaFingerprint
+        ) {
+          ambiguousV2Actions.add(actionKey);
+        }
       }
 
       const bundleCategory =
@@ -2270,10 +2290,35 @@ exports.getMyQuickActionCatalog = async (req, res) => {
     const providers = [];
 
     for (const [provider, actionMap] of providerMap.entries()) {
-      providers.push({
-        provider,
-        actions: normalizeBusinessQuickActionActions(provider, actionMap),
-      });
+      const safeActionMap = new Map();
+
+      for (const [transactionType, action] of actionMap.entries()) {
+        const actionKey = `${provider}:${transactionType}`;
+
+        if (
+          requestedSchemaVersion >= 2 &&
+          ambiguousV2Actions.has(actionKey)
+        ) {
+          continue;
+        }
+
+        const {
+          _form_schema_fingerprint: _ignoredFormSchemaFingerprint,
+          ...publicAction
+        } = action;
+
+        safeActionMap.set(transactionType, publicAction);
+      }
+
+      const normalizedActions =
+        normalizeBusinessQuickActionActions(provider, safeActionMap);
+
+      if (normalizedActions.length > 0) {
+        providers.push({
+          provider,
+          actions: normalizedActions,
+        });
+      }
     }
 
     res.json({

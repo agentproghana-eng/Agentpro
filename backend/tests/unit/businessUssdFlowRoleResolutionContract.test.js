@@ -7,6 +7,11 @@ describe("Business USSD role resolution contract", () => {
     "utf8",
   );
 
+  const capabilities = fs.readFileSync(
+    path.join(__dirname, "../../src/utils/ussdFlowCapabilities.js"),
+    "utf8",
+  );
+
   const rolloutMigration = fs.readFileSync(
     path.join(__dirname, "../../migrations/091_business_ussd_flow_roles.sql"),
     "utf8",
@@ -31,12 +36,14 @@ describe("Business USSD role resolution contract", () => {
   });
 
   test("Business database lookup requires explicit role", () => {
-    const occurrences = (controller.match(/business_sim_role = \$/g) || [])
-      .length;
+    expect(controller).toContain("resolveActiveTransactionFlow({");
+    expect(controller).toContain("businessSimRole,");
 
-    expect(occurrences).toBeGreaterThanOrEqual(2);
+    expect(capabilities).toContain("f.business_sim_role = $4");
 
-    expect(controller).not.toContain("COALESCE(business_sim_role, 'agent') =");
+    expect(capabilities).not.toContain(
+      "COALESCE(f.business_sim_role, 'agent') = $4",
+    );
   });
 
   test("historical migration backfilled legacy Business rows", () => {

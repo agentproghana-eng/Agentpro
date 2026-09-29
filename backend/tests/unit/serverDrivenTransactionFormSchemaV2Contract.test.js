@@ -35,21 +35,24 @@ describe("server-driven transaction form schema V2", () => {
     );
   });
 
-  test("catalog selects form schema from the role-scoped USSD flow", () => {
+  test("catalog selects normalized form schema from the role-scoped USSD flow", () => {
     expect(controller).toContain(
-      "f.form_schema",
+      "const currentFormSchema = normalizedFormSchema(row.form_schema)",
     );
     expect(controller).toContain(
-      "requestedSchemaVersion >= 2",
-    );
-    expect(controller).toContain(
-      "form_fields: Array.isArray(row.form_schema)",
+      "form_fields: currentFormSchema",
     );
   });
 
-  test("catalog fails safely to no dynamic fields", () => {
-    expect(controller).toMatch(
-      /form_fields:\s*Array\.isArray\(row\.form_schema\)\s*\?\s*row\.form_schema\s*:\s*\[\]/,
+  test("catalog normalizes persisted form schema and fails closed on ambiguous grouped variants", () => {
+    expect(controller).toContain(
+      "Array.isArray(rawSchema) ? rawSchema : []",
+    );
+    expect(controller).toContain(
+      "ambiguousV2Actions.add(actionKey)",
+    );
+    expect(controller).toContain(
+      "ambiguousV2Actions.has(actionKey)",
     );
   });
 

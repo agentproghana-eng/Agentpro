@@ -14,6 +14,7 @@ const {
   getFlowBuilderCapabilities,
   getFlowBuilderEligibility,
   getGlobalFlowBuilderEligibility,
+  resolveActiveTransactionFlow,
 } = require("../utils/ussdFlowCapabilities");
 
 // Mirrors the ussd_flow_action enum - kept in sync manually since
@@ -789,62 +790,15 @@ exports.resolveFlow = async (req, res) => {
   }
 
   try {
-    let flow = null;
-
-    if (req.user.company_id) {
-      // Business mode resolves only the caller's Company override first.
-      // owner_user_id IS NULL is explicit so Personal-owned or malformed
-      // mixed-ownership rows can never cross into Business execution.
-      const companyResult = await query(
-        `SELECT * FROM ussd_flows
-         WHERE company_id = $1
-           AND owner_user_id IS NULL
-           AND provider = $2
-           AND transaction_type = $3
-           AND business_sim_role = $4
-           AND is_active = TRUE
-           AND COALESCE(bundle_category,'') = COALESCE($5,'')
-           AND COALESCE(recipient_mode,'') = COALESCE($6,'')`,
-        [
-          req.user.company_id,
-          provider,
-          transaction_type,
-          businessSimRole,
-          bundle_category || null,
-          recipient_mode || null,
-        ],
-      );
-
-      if (companyResult.rows.length > 0) {
-        flow = companyResult.rows[0];
-      }
-    }
-
-    if (!flow) {
-      // Global means BOTH ownership columns are NULL.
-      const globalResult = await query(
-        `SELECT * FROM ussd_flows
-         WHERE company_id IS NULL
-           AND owner_user_id IS NULL
-           AND provider = $1
-           AND transaction_type = $2
-           AND business_sim_role = $3
-           AND is_active = TRUE
-           AND COALESCE(bundle_category,'') = COALESCE($4,'')
-           AND COALESCE(recipient_mode,'') = COALESCE($5,'')`,
-        [
-          provider,
-          transaction_type,
-          businessSimRole,
-          bundle_category || null,
-          recipient_mode || null,
-        ],
-      );
-
-      if (globalResult.rows.length > 0) {
-        flow = globalResult.rows[0];
-      }
-    }
+    const flow = await resolveActiveTransactionFlow({
+      accountMode: "business",
+      provider,
+      transactionType: transaction_type,
+      businessSimRole,
+      companyId: req.user.company_id || null,
+      bundleCategory: bundle_category,
+      recipientMode: recipient_mode,
+    });
 
     if (!flow) {
       return res.status(404).json({

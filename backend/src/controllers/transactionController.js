@@ -1,5 +1,8 @@
 const { v4: uuidv4 } = require("uuid");
 const { query, withTransaction } = require("../config/database");
+const {
+  resolveActiveTransactionFlow,
+} = require("../utils/ussdFlowCapabilities");
 const { logger } = require("../utils/logger");
 const { auditLog } = require("../services/auditService");
 const {
@@ -591,30 +594,15 @@ exports.initiateTransaction = async (req, res) => {
           [provider, transaction_type, agentId, businessSimRole],
         ),
 
-        query(
-          `SELECT 1
-         FROM ussd_flows
-         WHERE provider = $1
-           AND transaction_type = $2
-           AND is_active = TRUE
-           AND business_sim_role = $4
-           AND COALESCE(bundle_category, '') = COALESCE($5, '')
-           AND COALESCE(recipient_mode, '') = COALESCE($6, '')
-           AND (
-             (company_id = $3 AND owner_user_id IS NULL)
-             OR
-             (company_id IS NULL AND owner_user_id IS NULL)
-           )
-         LIMIT 1`,
-          [
-            provider,
-            transaction_type,
-            companyId,
-            businessSimRole,
-            bundle_category || null,
-            recipient_mode || null,
-          ],
-        ),
+        resolveActiveTransactionFlow({
+          accountMode: "business",
+          provider,
+          transactionType: transaction_type,
+          businessSimRole,
+          companyId,
+          bundleCategory: bundle_category,
+          recipientMode: recipient_mode,
+        }),
       ]);
 
     if (flagResult.rows.length > 0) {
@@ -704,7 +692,7 @@ exports.initiateTransaction = async (req, res) => {
 
     const branch_id = branchResolution.branchId;
 
-    if (templateResult.rows.length === 0 && flowResult.rows.length === 0) {
+    if (templateResult.rows.length === 0 && !flowResult) {
       return res.status(400).json({
         success: false,
         message:
