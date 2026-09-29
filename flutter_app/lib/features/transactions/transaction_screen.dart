@@ -190,8 +190,16 @@ class _TransactionScreenState extends State<TransactionScreen> {
       ) ??
       0;
 
+  bool _serverDrivenFormOwnsField(String key) {
+    if (!_usesServerDrivenForm) return false;
+
+    return widget.catalogDefinition!.formFields.any(
+      (field) => field.key == key,
+    );
+  }
+
   String get _effectiveCustomerPhone {
-    if (_usesServerDrivenForm) {
+    if (_serverDrivenFormOwnsField('customer_phone')) {
       return _serverDrivenSubmission.customerPhone;
     }
 
@@ -238,9 +246,10 @@ class _TransactionScreenState extends State<TransactionScreen> {
       'amount': _usesServerDrivenForm
           ? serverDrivenRequestFields['amount']
           : _effectiveAmount,
-      'customer_phone': _usesServerDrivenForm
-          ? serverDrivenRequestFields['customer_phone']
-          : _effectiveCustomerPhone,
+      'customer_phone':
+          _serverDrivenFormOwnsField('customer_phone')
+              ? serverDrivenRequestFields['customer_phone']
+              : _effectiveCustomerPhone,
       'customer_name': '',
       'recipient_phone': _usesServerDrivenForm
           ? serverDrivenRequestFields['recipient_phone']
@@ -2395,8 +2404,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
               //
               // Business Deposit / Withdrawal genuinely use an Agent Short
               // Code, so retain that terminology for those specific flows.
-              if (!_usesServerDrivenForm &&
-                  _needsCustomer) ...[
+              if (_needsCustomer &&
+                  !_serverDrivenFormOwnsField('customer_phone')) ...[
                 AppTextField(
                   transactionEmphasis: true,
                   controller: _customerPhoneCtrl,
