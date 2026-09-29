@@ -33,8 +33,9 @@ describe("Business transaction role execution contract", () => {
     expect(controller).toContain("AND $4 = 'agent'");
   });
 
-  test("Flow Builder existence check uses exact role", () => {
-    expect(controller).toContain("AND business_sim_role = $4");
+  test("Flow Builder existence check delegates exact role resolution", () => {
+    expect(controller).toContain("resolveActiveTransactionFlow({");
+    expect(controller).toContain("businessSimRole,");
 
     expect(controller).not.toContain(
       "COALESCE(business_sim_role, 'agent') = $4",

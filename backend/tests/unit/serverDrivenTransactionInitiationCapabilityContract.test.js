@@ -30,7 +30,7 @@ describe(
           'f.provider::text = $1'
         );
         expect(capabilitySource).toContain(
-          'f.transaction_type::text = $3'
+          'f.transaction_type::text = $2'
         );
         expect(capabilitySource).toContain(
           'f.is_active = TRUE'

@@ -248,6 +248,146 @@ describe("Quick Action catalog controller behavior", () => {
     });
   });
 
+  test("V2 catalog fails closed when grouped variants disagree on form schema", async () => {
+    const selfSchema = [
+      {
+        key: "amount",
+        type: "amount",
+        label: "Amount",
+        required: true,
+      },
+    ];
+
+    const otherSchema = [
+      {
+        key: "recipient_phone",
+        type: "phone",
+        label: "Recipient Number",
+        required: true,
+        min_length: 10,
+        max_length: 10,
+      },
+      {
+        key: "amount",
+        type: "amount",
+        label: "Amount",
+        required: true,
+      },
+    ];
+
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          provider: "future_money",
+          transaction_type: "buy_data",
+          display_label: "Buy Data",
+          bundle_category: "daily",
+          recipient_mode: "self",
+          form_schema: selfSchema,
+        },
+        {
+          provider: "future_money",
+          transaction_type: "buy_data",
+          display_label: "Buy Data",
+          bundle_category: "daily",
+          recipient_mode: "other",
+          form_schema: otherSchema,
+        },
+      ],
+    });
+
+    const req = {
+      user: makeUser(),
+      query: {
+        mode: "business",
+        schema_version: "2",
+      },
+    };
+    const res = makeResponse();
+
+    await userController.getMyQuickActionCatalog(req, res);
+
+    expect(res.status).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: {
+        mode: "business",
+        role: "agent",
+        schema_version: 2,
+        providers: [],
+      },
+    });
+  });
+
+  test("V2 catalog keeps grouped variants when their form schemas agree", async () => {
+    const sharedSchema = [
+      {
+        key: "recipient_phone",
+        type: "phone",
+        label: "Recipient Number",
+        required: true,
+        min_length: 10,
+        max_length: 10,
+      },
+      {
+        key: "amount",
+        type: "amount",
+        label: "Amount",
+        required: true,
+      },
+    ];
+
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          provider: "future_money",
+          transaction_type: "buy_data",
+          display_label: "Buy Data",
+          bundle_category: "daily",
+          recipient_mode: "self",
+          form_schema: sharedSchema,
+        },
+        {
+          provider: "future_money",
+          transaction_type: "buy_data",
+          display_label: "Buy Data",
+          bundle_category: "weekly",
+          recipient_mode: "other",
+          form_schema: sharedSchema,
+        },
+      ],
+    });
+
+    const req = {
+      user: makeUser(),
+      query: {
+        mode: "business",
+        schema_version: "2",
+      },
+    };
+    const res = makeResponse();
+
+    await userController.getMyQuickActionCatalog(req, res);
+
+    const payload = res.json.mock.calls[0][0];
+    const action = payload.data.providers[0].actions[0];
+
+    expect(action.form_fields).toEqual(sharedSchema);
+    expect(action.variants).toEqual([
+      {
+        bundle_category: "daily",
+        recipient_mode: "self",
+      },
+      {
+        bundle_category: "weekly",
+        recipient_mode: "other",
+      },
+    ]);
+    expect(action).not.toHaveProperty(
+      "_form_schema_fingerprint",
+    );
+  });
+
   test("Personal catalog passes personal account mode to the capability query", async () => {
     mockQuery.mockResolvedValueOnce({
       rows: [

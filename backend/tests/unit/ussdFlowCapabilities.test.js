@@ -185,12 +185,23 @@ describe('USSD Flow Builder capabilities', () => {
       active_flow_available: true,
     });
 
-    expect(queryFn).toHaveBeenCalledWith(
+    expect(queryFn).toHaveBeenNthCalledWith(
+      1,
       expect.stringContaining('can_initiate = TRUE'),
       [
         'future_provider',
         'business',
         'future_type',
+      ]
+    );
+
+    expect(queryFn).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('FROM ussd_flows f'),
+      [
+        'future_provider',
+        'future_type',
+        'business',
         'agent',
         null,
         null,
