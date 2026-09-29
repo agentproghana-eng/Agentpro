@@ -675,7 +675,7 @@ class DashboardQuickActionsSection extends StatelessWidget {
               ).toString(),
               extra: role != 'subscriber' &&
                       definition != null &&
-                      definition.formFields.isNotEmpty
+                      definition.hasServerDrivenFormSchema
                   ? definition
                   : null,
             );

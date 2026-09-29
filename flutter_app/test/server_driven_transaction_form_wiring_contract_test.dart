@@ -19,7 +19,7 @@ void main() {
   test('business Quick Action carries V2 definition outside URL', () {
     expect(
       dashboard,
-      contains('definition.formFields.isNotEmpty'),
+      contains('definition.hasServerDrivenFormSchema'),
     );
     expect(
       dashboard,
@@ -59,7 +59,7 @@ void main() {
     );
     expect(
       transaction,
-      contains('definition.formFields.isEmpty'),
+      contains('!definition.hasServerDrivenFormSchema'),
     );
     expect(
       transaction,
