@@ -992,7 +992,7 @@ it('accepts a complete unresolved SIM identity for a new transaction', async () 
     }
 
     if (sql.includes('FROM ussd_flows')) {
-      return { rows: [] };
+      return { rows: [{ id: 'flow-1' }] };
     }
 
     if (sql.includes('INSERT INTO transactions')) {
@@ -1072,7 +1072,7 @@ it('accepts identified ICCID and slot and returns the winning concurrent transac
       }
 
       if (sql.includes('FROM ussd_flows')) {
-        return { rows: [] };
+        return { rows: [{ id: 'flow-1' }] };
       }
 
       if (sql.includes('INSERT INTO transactions')) {
@@ -1140,7 +1140,21 @@ describe('Telecel Merchant E-Cash initiation accounting gate', () => {
   async function expectMerchantECashPassesAccountingGate(transactionType) {
     const sentinel = new Error('PREFLIGHT_REACHED');
 
-    mockQuery.mockRejectedValue(sentinel);
+    mockQuery.mockImplementation(async (sql) => {
+      if (sql.includes('FROM system_config')) {
+        return { rows: [] };
+      }
+
+      if (sql.includes('FROM ussd_templates')) {
+        return { rows: [] };
+      }
+
+      if (sql.includes('FROM ussd_flows')) {
+        throw sentinel;
+      }
+
+      return { rows: [] };
+    });
 
     const req = makeReq({
       provider: 'telecel',

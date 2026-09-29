@@ -140,6 +140,8 @@ exports.initiateTransaction = async (req, res) => {
     fee,
     payment_reference,
     merchant_id,
+    bundle_category,
+    recipient_mode,
     sim_iccid,
     sim_slot,
     installation_id,
