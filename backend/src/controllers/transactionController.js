@@ -140,6 +140,8 @@ exports.initiateTransaction = async (req, res) => {
     fee,
     payment_reference,
     merchant_id,
+    bundle_category,
+    recipient_mode,
     sim_iccid,
     sim_slot,
     installation_id,
@@ -596,13 +598,22 @@ exports.initiateTransaction = async (req, res) => {
            AND transaction_type = $2
            AND is_active = TRUE
            AND business_sim_role = $4
+           AND COALESCE(bundle_category, '') = COALESCE($5, '')
+           AND COALESCE(recipient_mode, '') = COALESCE($6, '')
            AND (
              (company_id = $3 AND owner_user_id IS NULL)
              OR
              (company_id IS NULL AND owner_user_id IS NULL)
            )
          LIMIT 1`,
-          [provider, transaction_type, companyId, businessSimRole],
+          [
+            provider,
+            transaction_type,
+            companyId,
+            businessSimRole,
+            bundle_category || null,
+            recipient_mode || null,
+          ],
         ),
       ]);
 

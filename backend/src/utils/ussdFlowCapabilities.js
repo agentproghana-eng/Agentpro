@@ -136,7 +136,9 @@ async function getInitiationCapability(
   transactionType,
   queryFn = query,
   businessSimRole = 'agent',
-  companyId = null
+  companyId = null,
+  bundleCategory = null,
+  recipientMode = null
 ) {
   if (accountMode !== 'business' && accountMode !== 'personal') {
     throw new TypeError(
@@ -188,6 +190,10 @@ async function getInitiationCapability(
            AND f.transaction_type::text = $3
            AND f.owner_user_id IS NULL
            AND f.is_active = TRUE
+           AND COALESCE(f.bundle_category, '') =
+               COALESCE($6, '')
+           AND COALESCE(f.recipient_mode, '') =
+               COALESCE($7, '')
            AND (
              (
                $2 = 'personal'
@@ -211,6 +217,8 @@ async function getInitiationCapability(
       transactionType,
       normalizedBusinessSimRole,
       accountMode === 'business' ? companyId : null,
+      String(bundleCategory || '').trim() || null,
+      String(recipientMode || '').trim() || null,
     ]
   );
 
