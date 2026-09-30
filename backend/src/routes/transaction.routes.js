@@ -127,6 +127,10 @@ const finiteNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const isTelecelProviderPricedDataBundle = (payload) =>
+  payload?.provider === "telecel" &&
+  payload?.transaction_type === "data_bundle";
+
 // POST /api/v1/transactions — Initiate a transaction
 router.post(
   "/",
@@ -265,6 +269,20 @@ router.post(
         throw new Error(
           "Amount must be zero or omitted for this transaction type",
         );
+      }
+
+      // Telecel Data Bundle is provider-priced: the customer chooses the
+      // package inside Telecel's USSD menu, so initiation may not yet know
+      // the amount. Preserve compatibility with callers that do supply one.
+      if (
+        isTelecelProviderPricedDataBundle(req.body) &&
+        (
+          value === undefined ||
+          value === null ||
+          (typeof value === "string" && value.trim().length === 0)
+        )
+      ) {
+        return true;
       }
 
       const amount = finiteNumber(value);
