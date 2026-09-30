@@ -396,16 +396,13 @@ describe('Business transaction initiation validation', () => {
   );
 
   test(
-    'Telecel Data Bundle rejects an invalid supplied amount',
+    'Telecel Data Bundle accepts provider-priced amount zero',
     async () => {
-      await expectFieldRejected(
-        {
-          provider: 'telecel',
-          transaction_type: 'data_bundle',
-          amount: 0,
-        },
-        'amount',
-      );
+      await expectAccepted({
+        provider: 'telecel',
+        transaction_type: 'data_bundle',
+        amount: 0,
+      });
     },
   );
 

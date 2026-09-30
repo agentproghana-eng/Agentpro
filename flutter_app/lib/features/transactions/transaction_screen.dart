@@ -243,7 +243,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
       'provider': _selectedProvider,
       'transaction_type': _transactionType,
       'sim_role': businessSimRole,
-      'amount': _usesServerDrivenForm
+      'amount': _serverDrivenFormOwnsField('amount')
           ? serverDrivenRequestFields['amount']
           : _effectiveAmount,
       'customer_phone':
