@@ -159,3 +159,13 @@ describe(
     );
   },
 );
+
+describe("Telecel Merchant outgoing readiness diagnostics", () => {
+  test("logs only the readiness error code at the controller boundary", () => {
+    expect(controller).toContain(
+      'logger.warn("telecel_merchant_outgoing_readiness_blocked", {',
+    );
+    expect(controller).toContain("code: readinessCode");
+    expect(controller).toContain("code: readinessCode,");
+  });
+});

@@ -543,11 +543,17 @@ exports.initiateTransaction = async (req, res) => {
         );
       } catch (error) {
         if (error?.statusCode === 422) {
+          const readinessCode =
+            error.code ||
+            "MERCHANT_WORKING_BALANCE_INITIALIZATION_REQUIRED";
+
+          logger.warn("telecel_merchant_outgoing_readiness_blocked", {
+            code: readinessCode,
+          });
+
           return res.status(422).json({
             success: false,
-            code:
-              error.code ||
-              "MERCHANT_WORKING_BALANCE_INITIALIZATION_REQUIRED",
+            code: readinessCode,
             message: error.message,
           });
         }
