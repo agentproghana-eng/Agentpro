@@ -109,6 +109,99 @@ describe(
     );
 
     test(
+      "allows provider-priced data with zero amount when Working Account is known",
+      async () => {
+        const client = {
+          query: jest.fn().mockResolvedValue({
+            rows: [knownAccount("50.00")],
+          }),
+        };
+
+        const result =
+          await requireTelecelMerchantOutgoingReadiness(
+            client,
+            args({
+              amount: 0,
+              allowProviderPricedAmount: true,
+            }),
+          );
+
+        expect(result.workingAccountBalance).toBe(50);
+      },
+    );
+
+    test(
+      "provider-priced data still requires an initialized Working Account",
+      async () => {
+        const client = {
+          query: jest.fn().mockResolvedValue({
+            rows: [],
+          }),
+        };
+
+        await expect(
+          requireTelecelMerchantOutgoingReadiness(
+            client,
+            args({
+              amount: 0,
+              allowProviderPricedAmount: true,
+            }),
+          ),
+        ).rejects.toMatchObject({
+          statusCode: 422,
+          code:
+            "MERCHANT_WORKING_BALANCE_INITIALIZATION_REQUIRED",
+        });
+      },
+    );
+
+    test(
+      "provider-priced data with a positive amount still checks sufficiency",
+      async () => {
+        const client = {
+          query: jest.fn().mockResolvedValue({
+            rows: [knownAccount("5.00")],
+          }),
+        };
+
+        await expect(
+          requireTelecelMerchantOutgoingReadiness(
+            client,
+            args({
+              amount: "10.00",
+              allowProviderPricedAmount: true,
+            }),
+          ),
+        ).rejects.toMatchObject({
+          statusCode: 422,
+          code:
+            "INSUFFICIENT_MERCHANT_WORKING_BALANCE",
+        });
+      },
+    );
+
+    test(
+      "zero amount remains blocked without provider-priced authorization",
+      async () => {
+        const client = {
+          query: jest.fn(),
+        };
+
+        await expect(
+          requireTelecelMerchantOutgoingReadiness(
+            client,
+            args({ amount: 0 }),
+          ),
+        ).rejects.toMatchObject({
+          statusCode: 422,
+          code: "INVALID_TRANSACTION_AMOUNT",
+        });
+
+        expect(client.query).not.toHaveBeenCalled();
+      },
+    );
+
+    test(
       "blocks insufficient Working Account",
       async () => {
         const client = {
