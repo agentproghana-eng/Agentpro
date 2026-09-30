@@ -67,6 +67,50 @@ void main() {
     );
   });
 
+  test(
+    'recipient mode is included in transaction initiation payload',
+    () {
+      const requestBuilder =
+          'Map<String, dynamic> _buildTransactionRequestFields';
+
+      final start = screen.indexOf(requestBuilder);
+      expect(start, greaterThanOrEqualTo(0));
+
+      final end = screen.indexOf(
+        'bool get _isTelecelMerchantBankTransfer',
+        start,
+      );
+      expect(end, greaterThan(start));
+
+      final requestSection = screen.substring(start, end);
+
+      expect(
+        requestSection,
+        contains(
+          "if (_effectiveRecipientMode != null)",
+        ),
+      );
+      expect(
+        requestSection,
+        contains(
+          "'recipient_mode': _effectiveRecipientMode",
+        ),
+      );
+      expect(
+        requestSection,
+        contains(
+          "if (_initialBundleCategory != null)",
+        ),
+      );
+      expect(
+        requestSection,
+        contains(
+          "'bundle_category': _initialBundleCategory",
+        ),
+      );
+    },
+  );
+
   test('obsolete fixed Agent bundle catalogue is removed', () {
     expect(screen, isNot(contains('AgentTelecelBundleOption')));
     expect(screen, isNot(contains('kAgentTelecelBundles')));
