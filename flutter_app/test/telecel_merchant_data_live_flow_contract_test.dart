@@ -111,6 +111,66 @@ void main() {
     },
   );
 
+  test(
+    'Merchant Data exposes only the live-confirmed category level',
+    () {
+      expect(screen, contains("labelText: 'Data Category'"));
+      expect(screen, contains("value: '1'"));
+      expect(screen, contains("Text('2Moorch No Expiry')"));
+      expect(screen, contains("value: '2'"));
+      expect(screen, contains("Text('Daily / Bossu')"));
+      expect(screen, contains("value: '3'"));
+      expect(screen, contains("Text('Weekly')"));
+      expect(screen, contains("value: '4'"));
+      expect(screen, contains("Text('Monthly / Jumbo')"));
+      expect(screen, contains("value: '5'"));
+      expect(screen, contains("Text('Night King')"));
+
+      expect(
+        screen,
+        contains("'Select a data category'"),
+      );
+
+      // Go Back is a provider navigation action, not a
+      // purchasable AgentPro category.
+      expect(
+        screen,
+        isNot(contains("Text('Go Back')")),
+      );
+    },
+  );
+
+  test(
+    'Merchant Data category feeds existing selection pipeline',
+    () {
+      final start = screen.indexOf(
+        'List<String> get _telecelMerchantSelectionsInOrder',
+      );
+      expect(start, greaterThanOrEqualTo(0));
+
+      final end = screen.indexOf(
+        'bool get _isMtnCashInOutWorkspace',
+        start,
+      );
+      expect(end, greaterThan(start));
+
+      final selectionSection = screen.substring(start, end);
+
+      expect(
+        selectionSection,
+        contains('if (_isTelecelMerchantData)'),
+      );
+      expect(
+        selectionSection,
+        contains('_telecelMerchantDataCategorySelection'),
+      );
+      expect(
+        selectionSection,
+        contains('<String>[category]'),
+      );
+    },
+  );
+
   test('obsolete fixed Agent bundle catalogue is removed', () {
     expect(screen, isNot(contains('AgentTelecelBundleOption')));
     expect(screen, isNot(contains('kAgentTelecelBundles')));
