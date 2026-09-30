@@ -25,7 +25,7 @@ void main() {
   test('Merchant Till Number accepts alphanumeric identifiers', () {
     expect(
       screen,
-      contains("RegExp(r'^[A-Za-z0-9]+\\\$')"),
+      contains(r"RegExp(r'^[A-Za-z0-9]+$')"),
     );
     expect(
       screen,
