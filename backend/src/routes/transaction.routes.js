@@ -294,6 +294,8 @@ router.post(
         (
           value === undefined ||
           value === null ||
+          value === 0 ||
+          value === "0" ||
           (typeof value === "string" && value.trim().length === 0)
         )
       ) {
