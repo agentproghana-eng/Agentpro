@@ -117,6 +117,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // Telecel Merchant Data uses exact Self / Other flow variants.
   // Telecel owns the changing live bundle catalogue.
   String _telecelMerchantDataRecipientMode = 'self';
+  String? _telecelMerchantDataCategorySelection;
 
   // The MTN Agent Cash In/Out tile is a UI workspace only. Never send
   // a combined workspace transaction type to the backend:
@@ -297,6 +298,13 @@ class _TransactionScreenState extends State<TransactionScreen> {
       _isTelecelMerchantBankTransfer;
 
   List<String> get _telecelMerchantSelectionsInOrder {
+    if (_isTelecelMerchantData) {
+      final category = _telecelMerchantDataCategorySelection;
+      return category == null
+          ? const <String>[]
+          : <String>[category];
+    }
+
     if (_isTelecelMerchantSendMoneyWorkspace &&
         _telecelMerchantSendMoneyMode == 'other_network') {
       final selection = _telecelMerchantNetworkSelection;
@@ -2399,6 +2407,52 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             }
                           });
                           _scheduleFlowPreload();
+                        },
+                ),
+                const SizedBox(height: 14),
+                DropdownButtonFormField<String>(
+                  initialValue:
+                      _telecelMerchantDataCategorySelection,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Data Category',
+                    prefixIcon: Icon(Icons.category_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: '1',
+                      child: Text('2Moorch No Expiry'),
+                    ),
+                    DropdownMenuItem(
+                      value: '2',
+                      child: Text('Daily / Bossu'),
+                    ),
+                    DropdownMenuItem(
+                      value: '3',
+                      child: Text('Weekly'),
+                    ),
+                    DropdownMenuItem(
+                      value: '4',
+                      child: Text('Monthly / Jumbo'),
+                    ),
+                    DropdownMenuItem(
+                      value: '5',
+                      child: Text('Night King'),
+                    ),
+                  ],
+                  validator: (value) =>
+                      value == null
+                          ? 'Select a data category'
+                          : null,
+                  onChanged: _loading
+                      ? null
+                      : (category) {
+                          if (category == null) return;
+                          setState(() {
+                            _telecelMerchantDataCategorySelection =
+                                category;
+                          });
                         },
                 ),
                 const SizedBox(height: 14),
