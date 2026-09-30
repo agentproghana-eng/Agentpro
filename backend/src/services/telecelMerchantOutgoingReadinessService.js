@@ -32,6 +32,7 @@ async function requireTelecelMerchantOutgoingReadiness(
   {
     agentId,
     amount,
+    allowProviderPricedAmount = false,
     simIccid,
     installationId,
     simSubscriptionId,
@@ -40,7 +41,15 @@ async function requireTelecelMerchantOutgoingReadiness(
 ) {
   const normalizedAmount = Number(amount);
 
-  if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+  const hasProviderPricedAmount =
+    allowProviderPricedAmount &&
+    Number.isFinite(normalizedAmount) &&
+    normalizedAmount === 0;
+
+  if (
+    !hasProviderPricedAmount &&
+    (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0)
+  ) {
     throw accountingError(
       "Transaction amount must be greater than zero",
       "INVALID_TRANSACTION_AMOUNT",
@@ -144,7 +153,10 @@ async function requireTelecelMerchantOutgoingReadiness(
     );
   }
 
-  if (Number(account.current_balance) < normalizedAmount) {
+  if (
+    !hasProviderPricedAmount &&
+    Number(account.current_balance) < normalizedAmount
+  ) {
     throw accountingError(
       "Insufficient Telecel Merchant Working Account balance",
       "INSUFFICIENT_MERCHANT_WORKING_BALANCE",

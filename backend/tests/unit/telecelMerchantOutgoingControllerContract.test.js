@@ -136,3 +136,26 @@ describe(
     );
   },
 );
+
+describe(
+  "Telecel Merchant provider-priced Data readiness",
+  () => {
+    test(
+      "provider-priced amount exception is scoped to exact Telecel Merchant Data",
+      () => {
+        expect(controller).toContain(
+          "allowProviderPricedAmount:",
+        );
+        expect(controller).toContain(
+          'businessSimRole === "merchant"',
+        );
+        expect(controller).toContain(
+          'provider === "telecel"',
+        );
+        expect(controller).toContain(
+          'transaction_type === "data_bundle"',
+        );
+      },
+    );
+  },
+);

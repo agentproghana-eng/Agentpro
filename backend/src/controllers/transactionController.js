@@ -531,6 +531,10 @@ exports.initiateTransaction = async (req, res) => {
           requireTelecelMerchantOutgoingReadiness(client, {
             agentId,
             amount,
+            allowProviderPricedAmount:
+              businessSimRole === "merchant" &&
+              provider === "telecel" &&
+              transaction_type === "data_bundle",
             simIccid: sim_iccid,
             installationId: installation_id,
             simSubscriptionId: sim_subscription_id,
