@@ -226,8 +226,23 @@ String? validateUssdFlowDraftSteps(
     final step = steps[i];
 
     final rawMatchers = step['match_all'];
+    final action = step['action']?.toString() ?? '';
+    final actionValue = step['action_value']?.toString().trim() ?? '';
 
-    if (rawMatchers is! List || rawMatchers.isEmpty) {
+    // Telecel's live Merchant Data catalogue is provider-owned and may
+    // change independently of AgentPro. This exact handoff is deliberately
+    // matcher-free because Android becomes read-only while the user
+    // navigates the provider menu until the PIN prompt appears.
+    //
+    // Keep every sending action and every other matcher-free shape
+    // fail-closed.
+    final isReadOnlyProviderCatalogueHandoff =
+        action == 'await_user_selection' &&
+        actionValue == 'until_pin';
+
+    if (rawMatchers is! List ||
+        (rawMatchers.isEmpty &&
+            !isReadOnlyProviderCatalogueHandoff)) {
       return 'Step ${i + 1}: screen match text cannot be empty.';
     }
 
@@ -239,13 +254,9 @@ String? validateUssdFlowDraftSteps(
       return 'Step ${i + 1}: every screen match entry must contain text.';
     }
 
-    final action = step['action']?.toString() ?? '';
-
     if (!kValidUssdFlowActions.contains(action)) {
       return 'Step ${i + 1}: "$action" is not a valid action.';
     }
-
-    final actionValue = step['action_value']?.toString().trim() ?? '';
 
     if (action == 'auto_confirm_once' &&
         !RegExp(r'^[0-9]$').hasMatch(actionValue)) {

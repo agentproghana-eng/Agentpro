@@ -100,6 +100,81 @@ void main() {
       );
     });
 
+    test(
+      'allows exact read-only provider catalogue handoff without matcher',
+      () {
+        final result = validateUssdFlowDraftSteps([
+          step(
+            'await_user_selection',
+            matchAll: const [],
+            value: 'until_pin',
+          ),
+          step('pin_prompt'),
+        ]);
+
+        expect(result, isNull);
+      },
+    );
+
+    test(
+      'rejects arbitrary matcher-free await-user-selection',
+      () {
+        final missingValue = validateUssdFlowDraftSteps([
+          step(
+            'await_user_selection',
+            matchAll: const [],
+          ),
+          step('pin_prompt'),
+        ]);
+
+        final wrongValue = validateUssdFlowDraftSteps([
+          step(
+            'await_user_selection',
+            matchAll: const [],
+            value: 'anything_else',
+          ),
+          step('pin_prompt'),
+        ]);
+
+        expect(
+          missingValue,
+          contains('screen match text cannot be empty'),
+        );
+        expect(
+          wrongValue,
+          contains('screen match text cannot be empty'),
+        );
+      },
+    );
+
+    test(
+      'keeps matcher-free sending actions fail-closed',
+      () {
+        for (final action in [
+          'send_digit',
+          'send_customer_phone',
+          'send_amount',
+          'send_operator_id',
+          'send_selection',
+        ]) {
+          final result = validateUssdFlowDraftSteps([
+            step(
+              action,
+              matchAll: const [],
+              value: action == 'send_digit' ? '1' : null,
+            ),
+            step('pin_prompt'),
+          ]);
+
+          expect(
+            result,
+            contains('screen match text cannot be empty'),
+            reason: action,
+          );
+        }
+      },
+    );
+
     test('rejects missing Send Digit value', () {
       final result = validateUssdFlowDraftSteps([
         step('send_digit'),
