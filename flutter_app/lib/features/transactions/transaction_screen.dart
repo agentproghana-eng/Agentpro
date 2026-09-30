@@ -243,6 +243,10 @@ class _TransactionScreenState extends State<TransactionScreen> {
       'provider': _selectedProvider,
       'transaction_type': _transactionType,
       'sim_role': businessSimRole,
+      if (_initialBundleCategory != null)
+        'bundle_category': _initialBundleCategory,
+      if (_effectiveRecipientMode != null)
+        'recipient_mode': _effectiveRecipientMode,
       'amount': _serverDrivenFormOwnsField('amount')
           ? serverDrivenRequestFields['amount']
           : _effectiveAmount,
