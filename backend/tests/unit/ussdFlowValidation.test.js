@@ -220,5 +220,76 @@ describe('USSD Flow validation', () => {
       'only auto_confirm_once may run after PIN entry'
     );
   });
+});
 
+describe('provider-owned catalogue handoff', () => {
+  test('allows matcher-free read-only handoff until PIN', () => {
+    const steps = [
+      {
+        match_all: ['buy data'],
+        action: 'send_digit',
+        action_value: '2',
+      },
+      {
+        match_all: [],
+        action: 'await_user_selection',
+        action_value: 'until_pin',
+      },
+      {
+        match_all: ['enter pin', 'to confirm'],
+        action: 'pin_prompt',
+        action_value: null,
+      },
+    ];
+
+    expect(validateFlowSteps(steps)).toBeNull();
+  });
+
+  test.each([
+    ['send_digit', '1'],
+    ['send_amount', null],
+    ['send_customer_phone', null],
+    ['send_operator_id', null],
+    ['send_selection', null],
+    ['pin_prompt', null],
+  ])(
+    'keeps empty matcher fail-closed for %s',
+    (action, actionValue) => {
+      const steps = [
+        {
+          match_all: [],
+          action,
+          action_value: actionValue,
+        },
+        {
+          match_all: ['enter pin', 'to confirm'],
+          action: 'pin_prompt',
+          action_value: null,
+        },
+      ];
+
+      expect(validateFlowSteps(steps)).toContain(
+        'match_all cannot be empty',
+      );
+    },
+  );
+
+  test('does not allow arbitrary matcher-free await_user_selection', () => {
+    const steps = [
+      {
+        match_all: [],
+        action: 'await_user_selection',
+        action_value: 'anything_else',
+      },
+      {
+        match_all: ['enter pin', 'to confirm'],
+        action: 'pin_prompt',
+        action_value: null,
+      },
+    ];
+
+    expect(validateFlowSteps(steps)).toContain(
+      'match_all cannot be empty',
+    );
+  });
 });

@@ -54,7 +54,14 @@ function validateFlowSteps(steps, options = {}) {
       return `Step ${i + 1}: step must be an object.`;
     }
 
-    if (!Array.isArray(step.match_all) || step.match_all.length === 0) {
+    const isReadOnlyProviderHandoff =
+      step.action === 'await_user_selection' &&
+      step.action_value === 'until_pin';
+
+    if (
+      !Array.isArray(step.match_all) ||
+      (step.match_all.length === 0 && !isReadOnlyProviderHandoff)
+    ) {
       return (
         `Step ${i + 1}: match_all cannot be empty — ` +
         'a step with no match text can never fire safely.'
