@@ -653,3 +653,67 @@ Color? quickActionColorFromHex(String? hex) {
 
   return null;
 }
+
+/// Normalizes Telecel Merchant dashboard presentation without changing the
+/// canonical backend transaction identities used by the Send Money workspace.
+///
+/// The provider exposes same-network and cross-network as separate executable
+/// capabilities, but Merchant presents them as one Send Money workspace.
+/// Existing saved layouts may contain either legacy capability, both of them,
+/// or the newer grouped `send_money` identity.
+List<QuickActionPreference> normalizeTelecelMerchantQuickActionPreferences({
+  required List<QuickActionPreference> preferences,
+}) {
+  const legacySendMoneyTypes = <String>{
+    'send_money_same_network',
+    'send_money_cross_network',
+  };
+
+  final hasGroupedSendMoney =
+      preferences.any((item) => item.actionKey == 'send_money');
+
+  final sendMoneyCandidates = preferences
+      .where(
+        (item) =>
+            item.actionKey == 'send_money' ||
+            legacySendMoneyTypes.contains(item.actionKey),
+      )
+      .toList()
+    ..sort((a, b) => a.position.compareTo(b.position));
+
+  if (sendMoneyCandidates.isEmpty) {
+    return List<QuickActionPreference>.from(preferences);
+  }
+
+  final source = hasGroupedSendMoney
+      ? sendMoneyCandidates.firstWhere(
+          (item) => item.actionKey == 'send_money',
+        )
+      : sendMoneyCandidates.first;
+
+  final firstPosition = sendMoneyCandidates
+      .map((item) => item.position)
+      .reduce((a, b) => a < b ? a : b);
+
+  final grouped = QuickActionPreference(
+    actionKey: 'send_money',
+    position: firstPosition,
+    isVisible: source.isVisible,
+    customName: source.customName,
+    iconKey: source.iconKey,
+    iconBackgroundColorHex: source.iconBackgroundColorHex,
+    iconColorHex: source.iconColorHex,
+    bundleCategory: source.bundleCategory,
+    recipientMode: source.recipientMode,
+  );
+
+  final normalized = <QuickActionPreference>[
+    for (final item in preferences)
+      if (item.actionKey != 'send_money' &&
+          !legacySendMoneyTypes.contains(item.actionKey))
+        item,
+    grouped,
+  ]..sort((a, b) => a.position.compareTo(b.position));
+
+  return normalized;
+}
