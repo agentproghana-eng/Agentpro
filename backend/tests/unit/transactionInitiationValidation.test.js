@@ -375,6 +375,49 @@ describe('Business transaction initiation validation', () => {
   );
 
   test(
+    'Telecel Merchant Airtime Self needs no customer phone',
+    async () => {
+      await expectAccepted({
+        provider: 'telecel',
+        transaction_type: 'airtime',
+        sim_role: 'merchant',
+        recipient_mode: 'self',
+        amount: 10,
+      });
+    },
+  );
+
+  test(
+    'Telecel Merchant Airtime Other requires customer phone',
+    async () => {
+      await expectFieldRejected(
+        {
+          provider: 'telecel',
+          transaction_type: 'airtime',
+          sim_role: 'merchant',
+          recipient_mode: 'other',
+          amount: 10,
+        },
+        'customer_phone',
+      );
+    },
+  );
+
+  test(
+    'Telecel Merchant Airtime Other accepts customer phone',
+    async () => {
+      await expectAccepted({
+        provider: 'telecel',
+        transaction_type: 'airtime',
+        sim_role: 'merchant',
+        recipient_mode: 'other',
+        customer_phone: '0200000000',
+        amount: 10,
+      });
+    },
+  );
+
+  test(
     'Telecel Data Bundle accepts provider-priced initiation without amount',
     async () => {
       await expectAccepted({

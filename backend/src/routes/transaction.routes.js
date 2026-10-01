@@ -108,6 +108,16 @@ const requiresCustomerPhone = (payload) => {
     return false;
   }
 
+  // Telecel Merchant Airtime has two live recipient variants:
+  // Self/My Phone has no customer-phone step; Other Phone does.
+  if (
+    type === "airtime" &&
+    provider === "telecel" &&
+    payload?.sim_role === "merchant"
+  ) {
+    return payload?.recipient_mode !== "self";
+  }
+
   // Telecel Merchant cash_out uses customer_phone as an opaque external
   // Agent Till identifier. It remains required by the transaction form and
   // flow, but it must never be interpreted as an AgentPro Agent wallet.
