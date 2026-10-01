@@ -98,6 +98,13 @@ const isTelecelMerchantBankOutgoing = (payload) =>
   payload?.sim_role === "merchant" &&
   payload?.transaction_type === "send_money_to_bank";
 
+const isTelecelMerchantECashTransfer = (payload) =>
+  payload?.provider === "telecel" &&
+  payload?.sim_role === "merchant" &&
+  ["float_to_working", "working_to_float"].includes(
+    payload?.transaction_type,
+  );
+
 const requiresCustomerPhone = (payload) => {
   const type = payload?.transaction_type;
   const provider = payload?.provider;
@@ -275,6 +282,16 @@ router.post(
 
     body("amount").custom((value, { req }) => {
       const type = req.body.transaction_type;
+
+      if (isTelecelMerchantECashTransfer(req.body)) {
+        const parsedAmount = finiteNumber(value);
+
+        if (parsedAmount !== null && parsedAmount < 1) {
+          throw new Error(
+            "Minimum Telecel Merchant E-Cash transfer amount is GHS 1.00",
+          );
+        }
+      }
 
       if (NO_AMOUNT_BUSINESS_TYPES.has(type)) {
         if (

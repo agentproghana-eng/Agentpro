@@ -464,6 +464,51 @@ describe('Business transaction initiation validation', () => {
     },
   );
 
+
+  test.each([
+    'working_to_float',
+    'float_to_working',
+  ])(
+    'Telecel Merchant %s rejects amount below GHS 1',
+    async (transactionType) => {
+      await expectFieldRejected(
+        {
+          provider: 'telecel',
+          transaction_type: transactionType,
+          sim_role: 'merchant',
+          amount: 0.5,
+        },
+        'amount',
+      );
+    },
+  );
+
+  test.each([
+    'working_to_float',
+    'float_to_working',
+  ])(
+    'Telecel Merchant %s accepts exactly GHS 1',
+    async (transactionType) => {
+      await expectAccepted({
+        provider: 'telecel',
+        transaction_type: transactionType,
+        sim_role: 'merchant',
+        amount: 1,
+      });
+    },
+  );
+
+  test(
+    'Telecel non-Merchant internal transfer does not inherit Merchant minimum',
+    async () => {
+      await expectAccepted({
+        provider: 'telecel',
+        transaction_type: 'float_to_working',
+        amount: 0.5,
+      });
+    },
+  );
+
   test.each([
     'business_deposit',
     'business_withdrawal',

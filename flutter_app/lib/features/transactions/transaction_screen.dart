@@ -333,6 +333,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
       widget.telecelMerchantECashWorkspace &&
       _selectedProvider == 'telecel';
 
+  bool get _requiresTelecelMerchantECashMinimum =>
+      _isTelecelMerchantECashWorkspace &&
+      (_transactionType == 'float_to_working' ||
+          _transactionType == 'working_to_float');
+
   // Retained only when manual Cash Out initiation ended ambiguously.
   // The fingerprint prevents reuse if amount/customer/provider/SIM changes.
   String? _pendingManualCashOutOperationId;
@@ -2588,6 +2593,15 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
                     if (n == null || n <= 0) {
                       return 'Enter a valid amount';
+                    }
+
+                    if (_requiresTelecelMerchantECashMinimum &&
+                        (double.tryParse(
+                                  value.replaceAll(',', ''),
+                                ) ??
+                                0) <
+                            1.00) {
+                      return 'Minimum transfer amount is GH₵1.00';
                     }
 
                     return null;
