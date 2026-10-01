@@ -532,6 +532,26 @@ jobs:
           storeFile=agentpro-release.jks
           EOF
 
+      - name: Inject Android developer verification asset
+        working-directory: flutter_app
+        env:
+          ADI_REGISTRATION_TOKEN: ${{ secrets.ANDROID_DEVELOPER_VERIFICATION_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          test -n "$ADI_REGISTRATION_TOKEN"
+
+          ASSET_DIR="android/app/src/main/assets"
+          ASSET_FILE="$ASSET_DIR/adi-registration.properties"
+
+          mkdir -p "$ASSET_DIR"
+
+          printf '%s' "$ADI_REGISTRATION_TOKEN" > "$ASSET_FILE"
+
+          test -s "$ASSET_FILE"
+
+          echo "ADI_REGISTRATION_ASSET_CREATED=PASS"
+
       - name: Build release APK
         working-directory: flutter_app
         run: |
