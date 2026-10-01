@@ -201,7 +201,13 @@ class DashboardQuickActionsSection extends StatelessWidget {
       // EVD and Merchant now consume their own server-trusted role catalog.
       // Never inherit Agent actions across SIM roles.
       if ((role == 'evd' || role == 'merchant') && fallback.isNotEmpty) {
-        return fallback.where((item) => item.isVisible).take(9).toList();
+        final roleFallback = role == 'merchant' && provider == 'telecel'
+            ? normalizeTelecelMerchantQuickActionPreferences(
+                preferences: fallback,
+              )
+            : fallback;
+
+        return roleFallback.where((item) => item.isVisible).take(9).toList();
       }
 
       // Merchant must never inherit Agent actions. Telecel Merchant,
@@ -279,6 +285,12 @@ class DashboardQuickActionsSection extends StatelessWidget {
     if (role == 'agent') {
       return normalizeBusinessQuickActionPreferences(
         provider: provider,
+        preferences: presentationOrdered,
+      ).where((item) => item.isVisible).take(9).toList();
+    }
+
+    if (role == 'merchant' && provider == 'telecel') {
+      return normalizeTelecelMerchantQuickActionPreferences(
         preferences: presentationOrdered,
       ).where((item) => item.isVisible).take(9).toList();
     }
