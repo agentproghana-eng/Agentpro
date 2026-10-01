@@ -2483,7 +2483,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
                         ].contains(_transactionType)
                           ? 'Enter agent short code'
                           : '024XXXXXXX',
-                  keyboardType: TextInputType.phone,
+                  keyboardType: _isTelecelMerchantWithdrawal
+                      ? TextInputType.text
+                      : TextInputType.phone,
                   prefixIcon: _isTelecelMerchantWithdrawal
                       ? Icons.storefront_outlined
                       : Icons.phone_outlined,
@@ -2513,8 +2515,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     }
 
                     if (isTelecelTillNumber &&
-                        !RegExp(r'^\d+$').hasMatch(value)) {
-                      return 'Enter a valid till number';
+                        !RegExp(r'^[A-Za-z0-9]+$').hasMatch(value)) {
+                      return 'Enter a valid alphanumeric till number';
                     }
 
                     return null;

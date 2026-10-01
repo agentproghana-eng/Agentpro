@@ -224,7 +224,7 @@ router.post(
     body("customer_phone").custom(
       requireNonBlankStringWhen(
         requiresCustomerPhone,
-        "Phone number is required for this transaction type",
+        "Customer phone or till number is required for this transaction type",
       ),
     ),
     body("recipient_phone").custom(
