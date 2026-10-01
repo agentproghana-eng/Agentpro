@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:agentpro/features/ussd_settings/quick_action_preference.dart';
+import 'package:agent_pro_ghana/features/ussd_settings/quick_action_preference.dart';
 
 void main() {
   group('Telecel Merchant Send Money dashboard grouping', () {
