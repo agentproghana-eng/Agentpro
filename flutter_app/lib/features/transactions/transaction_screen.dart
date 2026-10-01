@@ -2596,11 +2596,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     }
 
                     if (_requiresTelecelMerchantECashMinimum &&
-                        (double.tryParse(
-                                  value.replaceAll(',', ''),
-                                ) ??
-                                0) <
-                            1.00) {
+                        n < 1.00) {
                       return 'Minimum transfer amount is GH₵1.00';
                     }
 

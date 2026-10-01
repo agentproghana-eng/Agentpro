@@ -18,7 +18,17 @@ void main() {
       source,
       contains("Minimum transfer amount is GH₵1.00"),
     );
-    expect(source, contains('<\n                            1.00'));
+    expect(
+      source,
+      contains(
+        '_requiresTelecelMerchantECashMinimum &&\n'
+        '                        n < 1.00',
+      ),
+    );
+    expect(
+      source,
+      isNot(contains("value.replaceAll(',', '')")),
+    );
   });
 
   test('minimum is scoped to the Merchant E-Cash workspace', () {
