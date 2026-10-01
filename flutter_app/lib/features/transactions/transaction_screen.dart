@@ -156,7 +156,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
     if (definition == null ||
         !definition.hasServerDrivenFormSchema ||
         widget.mtnCashInOutWorkspace ||
-        widget.telecelMerchantECashWorkspace) {
+        widget.telecelMerchantECashWorkspace ||
+        _isTelecelMerchantSendMoneyWorkspace) {
       return false;
     }
 
