@@ -36,17 +36,26 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <!-- Storage (for receipts and reports) -->
+    <!-- Legacy storage access is limited to older Android versions for
+         receipts/reports. On Android 13+, Marketplace ad photos are selected
+         through the system photo picker rather than broad media-library access. -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="29" />
 
-    <!-- NOTE: CAMERA permission intentionally omitted. image_picker is listed
-         as a dependency for a future feature (ad photos, profile pictures)
-         but is not yet used anywhere in the app. Add CAMERA back only when
-         that feature is actually built — Play Store review flags apps that
-         request dangerous permissions with no corresponding in-app feature. -->
+    <!-- Prevent transitive dependencies from merging broad Android 13+ media
+         permissions into the release manifest. AgentPro only needs user-selected
+         media (for example Marketplace ad photos), so the system picker is used. -->
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_IMAGES"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_VIDEO"
+        tools:node="remove" />
+
+    <!-- CAMERA is intentionally omitted. Marketplace currently selects existing
+         images from the system photo picker; it does not capture new photos. -->
 
     <!-- ── Package Visibility (Android 11+ / API 30+) ──
          Without this, launchUrl() for mailto: intents can silently fail
