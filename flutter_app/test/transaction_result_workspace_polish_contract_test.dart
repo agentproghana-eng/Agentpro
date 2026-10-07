@@ -52,7 +52,7 @@ void main() {
       expect(
         form,
         contains(
-          '? _recipientPhoneCtrl.text.trim()',
+          'return _recipientPhoneCtrl.text.trim();',
         ),
       );
     });
