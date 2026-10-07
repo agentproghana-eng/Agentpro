@@ -52,16 +52,16 @@ void main() {
   );
 
   test(
-    'Settings exposes the four Quick Action profiles',
+    'USSD Automation exposes the four Quick Action profiles',
     () {
       final source = File(
-        'lib/features/settings/settings_screen.dart',
+        'lib/features/ussd_settings/ussd_settings_screen.dart',
       ).readAsStringSync();
 
-      expect(source, contains('Agent Quick Actions'));
-      expect(source, contains('EVD Quick Actions'));
-      expect(source, contains('Merchant Quick Actions'));
-      expect(source, contains('Subscriber Quick Actions'));
+      expect(source, contains("title: const Text('Agent')"));
+      expect(source, contains("title: const Text('EVD')"));
+      expect(source, contains("title: const Text('Merchant')"));
+      expect(source, contains("title: const Text('Subscriber')"));
     },
   );
 }

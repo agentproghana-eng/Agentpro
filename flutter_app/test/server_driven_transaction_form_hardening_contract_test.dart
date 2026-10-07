@@ -99,7 +99,7 @@ void main() {
     expect(
       screen,
       contains(
-        "if (!_formKey.currentState!.validate()) return;",
+        "if (_formKey.currentState?.validate() != true) return;",
       ),
     );
 

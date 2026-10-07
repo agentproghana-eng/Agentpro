@@ -16,7 +16,7 @@ void main() {
       expect(
         form,
         contains(
-          "_isMtnCashInOutWorkspace || ['send_money'].contains(_transactionType)",
+          "if (_isMtnCashInOutWorkspace) ...[",
         ),
       );
 

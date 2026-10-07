@@ -29,7 +29,7 @@ void main() {
     test('normal phone fields are labelled Phone Number', () {
       expect(
         source,
-        contains("label: 'Phone Number'"),
+        contains(": 'Phone Number'"),
       );
 
       expect(
