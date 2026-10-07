@@ -257,6 +257,30 @@ class AppRouter {
             );
           },
         ),
+        // MTN Agent Pay To is a UI workspace. It preserves the certified
+        // pay_to_agent and merchant_payment identities underneath.
+        GoRoute(
+          path: '/transactions/mtn-pay-to',
+          builder: (_, state) {
+            final simSlotStr = state.uri.queryParameters['sim_slot'];
+            final simIccid = state.uri.queryParameters['sim_iccid'];
+            final simSubscriptionIdStr =
+                state.uri.queryParameters['sim_subscription_id'];
+
+            return TransactionScreen(
+              transactionType: 'pay_to_agent',
+              initialProvider: 'mtn',
+              initialSimSlot:
+                  simSlotStr != null ? int.tryParse(simSlotStr) : null,
+              initialSimIccid: simIccid,
+              initialSimSubscriptionId: simSubscriptionIdStr != null
+                  ? int.tryParse(simSubscriptionIdStr)
+                  : null,
+              mtnPayToWorkspace: true,
+            );
+          },
+        ),
+
         // Telecel Merchant Transfer E-Cash is a UI workspace. It keeps the
         // verified canonical transaction identities underneath:
         // float_to_working and working_to_float.
@@ -302,6 +326,8 @@ class AppRouter {
                 state.uri.queryParameters['sim_subscription_id'];
             final bundleCategory = state.uri.queryParameters['bundle_category'];
             final recipientMode = state.uri.queryParameters['recipient_mode'];
+            final autoStart =
+                state.uri.queryParameters['auto_start'] == '1';
 
             final routeExtra = state.extra;
             final catalogDefinition =
@@ -325,6 +351,7 @@ class AppRouter {
                   : null,
               initialBundleCategory: bundleCategory,
               initialRecipientMode: recipientMode,
+              autoStart: autoStart,
             );
           },
         ),
@@ -340,6 +367,8 @@ class AppRouter {
                 state.uri.queryParameters['sim_subscription_id'];
             final bundleCategory = state.uri.queryParameters['bundle_category'];
             final recipientMode = state.uri.queryParameters['recipient_mode'];
+            final autoStart =
+                state.uri.queryParameters['auto_start'] == '1';
 
             return PersonalTransactionScreen(
               transactionType: type,
@@ -351,6 +380,7 @@ class AppRouter {
                   : null,
               initialBundleCategory: bundleCategory,
               initialRecipientMode: recipientMode,
+              autoStart: autoStart,
             );
           },
         ),

@@ -831,6 +831,35 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
       return;
     }
 
+    final definition =
+        _quickActionDefinition(preference.actionKey);
+
+    final bundleCategory =
+        (preference.bundleCategory ?? '').trim();
+    final recipientMode =
+        (preference.recipientMode ?? '').trim();
+
+    final variants = definition?.variants ??
+        const <QuickActionCatalogVariant>[];
+
+    final requiresBundleChoice = variants.any(
+      (variant) => (variant.bundleCategory ?? '').trim().isNotEmpty,
+    );
+
+    final requiresRecipientChoice = variants.any(
+      (variant) => (variant.recipientMode ?? '').trim().isNotEmpty,
+    );
+
+    final variantResolved =
+        (!requiresBundleChoice || bundleCategory.isNotEmpty) &&
+        (!requiresRecipientChoice || recipientMode.isNotEmpty);
+
+    final directStart =
+        definition != null &&
+        definition.hasServerDrivenFormSchema &&
+        definition.formFields.isEmpty &&
+        variantResolved;
+
     final query = <String, String>{
       'type': preference.actionKey,
       'provider': _provider,
@@ -841,6 +870,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
         'bundle_category': preference.bundleCategory!.trim(),
       if ((preference.recipientMode ?? '').trim().isNotEmpty)
         'recipient_mode': preference.recipientMode!.trim(),
+      if (directStart) 'auto_start': '1',
     };
     final uri = Uri(path: '/personal-transactions/new', queryParameters: query);
     context.push(uri.toString());

@@ -611,13 +611,6 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Business Hub'),
-        actions: [
-          IconButton(
-            tooltip: 'Business Hub menu',
-            onPressed: () => context.push('/marketplace/more'),
-            icon: const Icon(Icons.more_vert),
-          ),
-        ],
       ),
       body: Column(
         children: [

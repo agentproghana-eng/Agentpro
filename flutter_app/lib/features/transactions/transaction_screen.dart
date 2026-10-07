@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'zero_input_flow_preflight.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
@@ -46,6 +47,12 @@ class TransactionScreen extends StatefulWidget {
   /// send_money and cash_out.
   final bool mtnCashInOutWorkspace;
 
+  /// MTN Agent-only workspace that presents Pay to Agent and
+  /// Pay to Merchant on one form. The canonical backend identities remain
+  /// pay_to_agent and merchant_payment.
+  final bool mtnPayToWorkspace;
+  final bool autoStart;
+
   /// Telecel Merchant-only workspace for moving E-Cash between the
   /// Merchant Account and Working Account. The backend continues to receive
   /// the canonical float_to_working / working_to_float transaction types.
@@ -62,6 +69,8 @@ class TransactionScreen extends StatefulWidget {
     this.initialRecipientMode,
     this.catalogDefinition,
     this.mtnCashInOutWorkspace = false,
+    this.mtnPayToWorkspace = false,
+    this.autoStart = false,
     this.telecelMerchantECashWorkspace = false,
   });
 
@@ -124,6 +133,10 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // Cash In remains send_money and Cash Out remains cash_out.
   String _mtnCashInOutOperation = 'send_money';
 
+  // MTN Agent Pay To is a presentation workspace only.
+  // The backend always receives one of the certified identities below.
+  String _mtnPayToOperation = 'pay_to_agent';
+
   // Historical names are retained as canonical backend identities:
   // float_to_working = Merchant Account -> Working Account
   // working_to_float = Working Account -> Merchant Account
@@ -132,6 +145,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
   String get _transactionType {
     if (widget.mtnCashInOutWorkspace) {
       return _mtnCashInOutOperation;
+    }
+    if (widget.mtnPayToWorkspace) {
+      return _mtnPayToOperation;
     }
     if (widget.telecelMerchantECashWorkspace) {
       return _telecelMerchantECashOperation;
@@ -156,6 +172,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
     if (definition == null ||
         !definition.hasServerDrivenFormSchema ||
         widget.mtnCashInOutWorkspace ||
+        widget.mtnPayToWorkspace ||
         widget.telecelMerchantECashWorkspace ||
         _isTelecelMerchantSendMoneyWorkspace) {
       return false;
@@ -205,9 +222,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
       return _serverDrivenSubmission.customerPhone;
     }
 
-    return _isMtnCashInOutWorkspace
-        ? _recipientPhoneCtrl.text.trim()
-        : _customerPhoneCtrl.text.trim();
+    if (_isMtnCashInOutWorkspace ||
+        (_isMtnPayToWorkspace && _transactionType == 'pay_to_agent')) {
+      return _recipientPhoneCtrl.text.trim();
+    }
+
+    return _customerPhoneCtrl.text.trim();
   }
 
   String get _effectiveRecipientPhone => _usesServerDrivenForm
@@ -224,9 +244,17 @@ class _TransactionScreenState extends State<TransactionScreen> {
       ? _serverDrivenSubmission.reference
       : _referenceCtrl.text.trim();
 
-  String get _effectiveMerchantId => _usesServerDrivenForm
-      ? _serverDrivenSubmission.merchantId
-      : _merchantIdCtrl.text.trim();
+  String get _effectiveMerchantId {
+    if (_usesServerDrivenForm) {
+      return _serverDrivenSubmission.merchantId;
+    }
+
+    if (_isMtnPayToWorkspace && _transactionType == 'merchant_payment') {
+      return _recipientPhoneCtrl.text.trim();
+    }
+
+    return _merchantIdCtrl.text.trim();
+  }
 
   String get _effectiveOperatorId => _usesServerDrivenForm
       ? _serverDrivenSubmission.operatorId
@@ -330,6 +358,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
   bool get _isMtnCashInOutWorkspace =>
       widget.mtnCashInOutWorkspace && _selectedProvider == 'mtn';
 
+  bool get _isMtnPayToWorkspace =>
+      widget.mtnPayToWorkspace && _selectedProvider == 'mtn';
+
   bool get _isTelecelMerchantECashWorkspace =>
       widget.telecelMerchantECashWorkspace &&
       _selectedProvider == 'telecel';
@@ -346,6 +377,55 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
   Timer? _flowPreloadDebounce;
   final Set<String> _flowPreloadAttempts = {};
+  bool _autoStartAttempted = false;
+  bool _autoStartInProgress = false;
+  bool _autoStartPreflightApproved = false;
+  bool _autoStartFallbackToForm = false;
+
+  Future<bool> _verifyZeroInputAutoStart() async {
+    final selectedSim = _selectedSim;
+    if (!mounted ||
+        !_simDetectionComplete ||
+        selectedSim == null ||
+        _initialSimIdentityUnavailable) {
+      return false;
+    }
+
+    try {
+      final role =
+          await SimRoleAssignmentService.businessRoleForSlot(
+        selectedSim.slot,
+        refreshFromServer: true,
+        allowLegacyAgentFallback: false,
+        simIccid: selectedSim.iccid,
+        simSubscriptionId: selectedSim.subscriptionId,
+        provider: selectedSim.network,
+      );
+
+      if (!mounted) return false;
+
+      final approved = await ZeroInputFlowPreflight.verify(
+        provider: _selectedProvider,
+        transactionType: _transactionType,
+        isPersonal: false,
+        businessSimRole: role,
+        bundleCategory: _initialBundleCategory,
+        recipientMode: _effectiveRecipientMode,
+      );
+
+      if (!mounted || !approved) return false;
+
+      final currentSim = _selectedSim;
+      return currentSim != null &&
+          currentSim.slot == selectedSim.slot &&
+          currentSim.iccid == selectedSim.iccid &&
+          currentSim.subscriptionId ==
+              selectedSim.subscriptionId;
+    } catch (_) {
+      return false;
+    }
+  }
+
 
   @override
   void initState() {
@@ -417,6 +497,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
     if (_isMtnCashInOutWorkspace) {
       return 'Cash In/Out';
     }
+    if (_isMtnPayToWorkspace) {
+      return 'Pay To';
+    }
     if (_isTelecelMerchantECashWorkspace) {
       return 'Transfer E-Cash';
     }
@@ -450,7 +533,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
       };
 
   bool get _needsRecipient =>
-      _isMtnCashInOutWorkspace || ['send_money'].contains(_transactionType) ||
+      _isMtnCashInOutWorkspace ||
+      _isMtnPayToWorkspace ||
+      ['send_money'].contains(_transactionType) ||
       _isTelecelMerchantSendMoneyWorkspace;
   // Pay to Agent and Pay to Merchant (MTN's "Pay To" menu, both
   // branches) - both confirmed via live device mapping to need a
@@ -461,7 +546,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // Bill Payment form. MTN-only for both.
   bool get _needsReference =>
       ['pay_to_agent', 'merchant_payment'].contains(_transactionType);
-  bool get _needsMerchantId => _transactionType == 'merchant_payment';
+  bool get _needsMerchantId =>
+      !_isMtnPayToWorkspace && _transactionType == 'merchant_payment';
 
   bool get _isTelecelDataBundle =>
       _transactionType == 'data_bundle' && _selectedProvider == 'telecel';
@@ -517,6 +603,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
   bool get _needsCustomer =>
       !_isMtnCashInOutWorkspace &&
+      !_isMtnPayToWorkspace &&
       (!_isTelecelDataBundle || _isTelecelMerchantDataOther) &&
       !_isTelecelAirtimeSelf &&
       ![
@@ -711,6 +798,45 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
       if (providerChanged) {
         _scheduleFlowPreload();
+      }
+
+      if (false &&
+          widget.autoStart &&
+          !_autoStartAttempted &&
+          _simDetectionComplete &&
+          _selectedSim != null) {
+        setState(() {
+          _autoStartAttempted = true;
+          _autoStartInProgress = true;
+        });
+
+        try {
+          final approved = await _verifyZeroInputAutoStart();
+
+          if (!mounted) return;
+
+          if (!approved) {
+            setState(() {
+              _autoStartPreflightApproved = false;
+              _autoStartFallbackToForm = true;
+            });
+            return;
+          }
+
+          setState(() {
+            _autoStartPreflightApproved = true;
+          });
+
+          await _proceed();
+        } finally {
+          if (mounted) {
+            setState(() {
+              _autoStartInProgress = false;
+              _autoStartPreflightApproved = false;
+              _autoStartFallbackToForm = true;
+            });
+          }
+        }
       }
     } on SimPermissionException {
       if (!mounted) return;
@@ -932,7 +1058,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
   }
 
   Future<void> _proceed() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (widget.autoStart && _autoStartPreflightApproved) {
+      if (!_simDetectionComplete || _selectedSim == null) return;
+    } else {
+      if (_formKey.currentState?.validate() != true) return;
+    }
 
     final amountForWarning = _effectiveAmount;
 
@@ -1556,6 +1686,52 @@ class _TransactionScreenState extends State<TransactionScreen> {
     }
   }
 
+  Widget _buildAutoStartStatus() {
+    final detecting = !_simDetectionComplete;
+    final processing = _loading || _autoStartInProgress;
+
+    if (detecting || processing) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    final message = _autoStartAttempted
+        ? 'The transaction attempt has ended. Check its result before starting another transaction.'
+        : _simPermissionDenied
+            ? 'SIM access is required to start this transaction.'
+            : _initialSimIdentityUnavailable
+                ? 'The selected SIM is no longer available.'
+                : 'No compatible SIM is available for this transaction.';
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.sim_card_alert_outlined, size: 44),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: _autoStartAttempted ? null : () => _loadSimMap(),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry SIM Detection'),
+            ),
+            TextButton(
+              onPressed: () => context.pop(),
+              child: const Text('Return'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1571,7 +1747,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
           const SizedBox(width: 4),
         ],
       ),
-      body: Column(
+      body: false && widget.autoStart && !_autoStartFallbackToForm
+          ? _buildAutoStartStatus()
+          : Column(
         children: [
           Expanded(
             child: Form(
@@ -2099,68 +2277,6 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 ],
               ],
 
-              if (_isMtnCashInOutWorkspace) ...[
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ChoiceChip(
-                        selected: _mtnCashInOutOperation == 'send_money',
-                        label: const SizedBox(
-                          width: double.infinity,
-                          child: Text(
-                            'CASH IN',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                        onSelected: _loading
-                            ? null
-                            : (selected) {
-                                if (!selected) return;
-                                setState(() {
-                                  _mtnCashInOutOperation = 'send_money';
-                                  _agentServiceFeeEnabled = false;
-                                  _feeManuallyOverridden = false;
-                                  _feeCtrl.text = '0.00';
-                                });
-                              },
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ChoiceChip(
-                        selected: _mtnCashInOutOperation == 'cash_out',
-                        label: const SizedBox(
-                          width: double.infinity,
-                          child: Text(
-                            'CASH OUT',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                        onSelected: _loading
-                            ? null
-                            : (selected) {
-                                if (!selected) return;
-                                setState(() {
-                                  _mtnCashInOutOperation = 'cash_out';
-                                  _agentServiceFeeEnabled = false;
-                                  _feeManuallyOverridden = false;
-                                  _feeCtrl.text = '0.00';
-                                });
-                              },
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-              ],
-
               if (_isTelecelMerchantECashWorkspace) ...[
                 const SizedBox(height: 8),
                 Row(
@@ -2536,12 +2652,25 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 AppTextField(
                   transactionEmphasis: true,
                   controller: _recipientPhoneCtrl,
-                  label: 'Phone Number',
-                  hint: '024XXXXXXX',
-                  keyboardType: TextInputType.phone,
-                  prefixIcon: Icons.phone_outlined,
+                  label: _isMtnPayToWorkspace
+                      ? 'Mobile Number / Merchant ID'
+                      : 'Phone Number',
+                  hint: _isMtnPayToWorkspace
+                      ? 'Enter mobile number or merchant ID'
+                      : '024XXXXXXX',
+                  keyboardType: _isMtnPayToWorkspace
+                      ? TextInputType.text
+                      : TextInputType.phone,
+                  prefixIcon: _isMtnPayToWorkspace
+                      ? Icons.badge_outlined
+                      : Icons.phone_outlined,
                   validator: (v) {
                     final value = (v ?? '').trim();
+
+                    if (_isMtnPayToWorkspace &&
+                        _transactionType == 'merchant_payment') {
+                      return value.isEmpty ? 'Merchant ID is required' : null;
+                    }
 
                     if (value.isEmpty) {
                       return 'Phone number is required';
@@ -2701,6 +2830,83 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 const SizedBox(height: 14),
               ],
 
+              if (_isMtnCashInOutWorkspace) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppButton(
+                        label: 'Cash In',
+                        onPressed: () {
+                          setState(() {
+                            _mtnCashInOutOperation = 'send_money';
+                          });
+                          _proceed();
+                        },
+                        isLoading: _loading &&
+                            _mtnCashInOutOperation == 'send_money',
+                        icon: Icons.arrow_downward,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: AppButton(
+                        label: 'Cash Out',
+                        onPressed: () {
+                          setState(() {
+                            _mtnCashInOutOperation = 'cash_out';
+                            _agentServiceFeeEnabled = false;
+                            _feeManuallyOverridden = false;
+                            _feeCtrl.text = '0.00';
+                          });
+                          _proceed();
+                        },
+                        isLoading:
+                            _loading && _mtnCashInOutOperation == 'cash_out',
+                        icon: Icons.arrow_upward,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+              ],
+
+              if (_isMtnPayToWorkspace) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppButton(
+                        label: 'Pay to Agent',
+                        onPressed: () {
+                          setState(() {
+                            _mtnPayToOperation = 'pay_to_agent';
+                          });
+                          _proceed();
+                        },
+                        isLoading:
+                            _loading && _mtnPayToOperation == 'pay_to_agent',
+                        icon: Icons.person_outline,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: AppButton(
+                        label: 'Pay to Merchant',
+                        onPressed: () {
+                          setState(() {
+                            _mtnPayToOperation = 'merchant_payment';
+                          });
+                          _proceed();
+                        },
+                        isLoading: _loading &&
+                            _mtnPayToOperation == 'merchant_payment',
+                        icon: Icons.storefront_outlined,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+              ],
+
               // Security/info notice - content depends on whether this is
               // a real USSD dial (PIN entered on the network's own screen)
               // or a manual Telecel/AT Cash Out record (no dial, no PIN,
@@ -2752,20 +2958,21 @@ class _TransactionScreenState extends State<TransactionScreen> {
         ),
       ),
           ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
-              child: AppButton(
-            label: _isManualCashOut
-                ? 'Record Cash Out'
-                : 'Proceed to ${_needsAmount ? 'Confirm' : 'Execute'}',
-            onPressed: _proceed,
-            isLoading: _loading,
-            icon: Icons.arrow_forward,
+          if (!_isMtnCashInOutWorkspace && !_isMtnPayToWorkspace)
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+                child: AppButton(
+                  label: _isManualCashOut
+                      ? 'Record Cash Out'
+                      : 'Proceed to ${_needsAmount ? 'Confirm' : 'Execute'}',
+                  onPressed: _proceed,
+                  isLoading: _loading,
+                  icon: Icons.arrow_forward,
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

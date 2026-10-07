@@ -596,6 +596,11 @@ class DashboardQuickActionsSection extends StatelessWidget {
       final isMtnAgentCashWorkspace =
           provider == 'mtn' && role == 'agent' && type == 'send_money';
 
+      final isMtnAgentPayToWorkspace =
+          provider == 'mtn' &&
+          role == 'agent' &&
+          (type == 'pay_to_agent' || type == 'merchant_payment');
+
       final isTelecelMerchantSendMoney =
           provider == 'telecel' && role == 'merchant' && type == 'send_money';
       final isTelecelMerchantECash =
@@ -649,6 +654,32 @@ class DashboardQuickActionsSection extends StatelessWidget {
 
       final recipientMode = (preference.recipientMode ?? '').trim();
 
+      final variants = definition?.variants ??
+          const <QuickActionCatalogVariant>[];
+
+      final requiresBundleChoice = variants.any(
+        (variant) => (variant.bundleCategory ?? '').trim().isNotEmpty,
+      );
+
+      final requiresRecipientChoice = variants.any(
+        (variant) => (variant.recipientMode ?? '').trim().isNotEmpty,
+      );
+
+      final variantResolved =
+          (!requiresBundleChoice || bundleCategory.isNotEmpty) &&
+          (!requiresRecipientChoice || recipientMode.isNotEmpty);
+
+      final directStart =
+          definition != null &&
+          definition.hasServerDrivenFormSchema &&
+          definition.formFields.isEmpty &&
+          variantResolved &&
+          !isMtnAgentCashWorkspace &&
+          !isMtnAgentPayToWorkspace &&
+          !isTelecelMerchantECash &&
+          !isTelecelMerchantSendMoney &&
+          !isTelecelMerchantBankTransfer;
+
       tiles.add(
         _buildTile(
           context: context,
@@ -676,9 +707,15 @@ class DashboardQuickActionsSection extends StatelessWidget {
                 ? '/personal-transactions/new'
                 : isMtnAgentCashWorkspace
                     ? '/transactions/mtn-cash-in-out'
-                    : isTelecelMerchantECash
-                        ? '/transactions/telecel-merchant-ecash'
-                        : '/transactions';
+                    : isMtnAgentPayToWorkspace
+                        ? '/transactions/mtn-pay-to'
+                        : isTelecelMerchantECash
+                            ? '/transactions/telecel-merchant-ecash'
+                            : '/transactions';
+
+            if (directStart) {
+              query['auto_start'] = '1';
+            }
 
             context.push(
               Uri(
