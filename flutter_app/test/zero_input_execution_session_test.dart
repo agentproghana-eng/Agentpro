@@ -36,6 +36,43 @@ void main() {
       resultDefinitive: true, reportPersisted: true);
   });
 
+  test('unreported definitive outcome keeps the lease held', () {
+    bool begin() => ZeroInputExecutionSession.tryBegin(
+      transactionType: 'check_momo_balance',
+      quickActionRequested: true,
+      preflightApproved: true,
+      simIdentityVerified: true,
+      backendAuthorizationReady: true,
+    );
+    expect(begin(), isTrue);
+    ZeroInputExecutionSession.settleDefinitiveResult(
+      resultDefinitive: true, reportPersisted: false);
+    expect(ZeroInputExecutionSession.isActive, isTrue);
+    expect(begin(), isFalse);
+    ZeroInputExecutionSession.settleDefinitiveResult(
+      resultDefinitive: true, reportPersisted: true);
+    expect(ZeroInputExecutionSession.isActive, isFalse);
+  });
+
+  test('reported pending confirmation cannot release the lease', () {
+    bool begin() => ZeroInputExecutionSession.tryBegin(
+      transactionType: 'check_airtime_balance',
+      quickActionRequested: true,
+      preflightApproved: true,
+      simIdentityVerified: true,
+      backendAuthorizationReady: true,
+    );
+    expect(begin(), isTrue);
+    ZeroInputExecutionSession.settleDefinitiveResult(
+      resultDefinitive: false, reportPersisted: true);
+    expect(begin(), isFalse);
+    ZeroInputExecutionSession.settleDefinitiveResult(
+      resultDefinitive: true, reportPersisted: true);
+    expect(begin(), isTrue);
+    ZeroInputExecutionSession.settleDefinitiveResult(
+      resultDefinitive: true, reportPersisted: true);
+  });
+
   test('rejects money movement even with all signals', () {
     expect(ZeroInputExecutionSession.tryBegin(
       transactionType: 'send_money',
