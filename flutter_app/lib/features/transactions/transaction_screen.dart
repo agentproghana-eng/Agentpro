@@ -82,6 +82,7 @@ class TransactionScreen extends StatefulWidget {
 
 class _TransactionScreenState extends State<TransactionScreen> {
   bool _zeroInputSubmissionInFlight = false;
+  bool _zeroInputBackendInitiationStarted = false;
 
   OfflineQueueIdentity? get _offlineIdentity {
     final state = context.read<AuthBloc>().state;
@@ -1083,10 +1084,16 @@ class _TransactionScreenState extends State<TransactionScreen> {
         ? ZeroInputExecutionSession.reserveForInitiation()
         : null;
     if (zeroInput && reservationToken == null) return;
+    if (zeroInput) _zeroInputBackendInitiationStarted = false;
     if (zeroInput) _zeroInputSubmissionInFlight = true;
     try {
       await _proceedInternal(reservationToken: reservationToken);
     } finally {
+      if (zeroInput && !_zeroInputBackendInitiationStarted) {
+        ZeroInputExecutionSession.abandonBeforeBackendInitiation(
+          reservationToken,
+        );
+      }
       if (zeroInput) _zeroInputSubmissionInFlight = false;
     }
   }
@@ -1425,6 +1432,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
     // form screen. TransactionProgressScreen prepares permission and
     // SIM information in parallel, then waits for this Future before
     // it is allowed to dial.
+    if (reservationToken != null) {
+      _zeroInputBackendInitiationStarted = true;
+    }
     final transactionFuture = _initiateOnlineTransaction(
       requestFields: requestFields,
       provider: _selectedProvider,

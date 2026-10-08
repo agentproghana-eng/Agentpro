@@ -244,6 +244,7 @@ class PersonalTransactionScreen extends StatefulWidget {
 class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   String? _activeZeroInputReservationToken;
   bool _zeroInputSubmissionInFlight = false;
+  bool _zeroInputBackendInitiationStarted = false;
 
   final _formKey = GlobalKey<FormState>();
   final _amountCtrl = TextEditingController();
@@ -1215,6 +1216,9 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           'cached_flow': cachedFlow,
         };
       } else {
+        if (_activeZeroInputReservationToken != null) {
+          _zeroInputBackendInitiationStarted = true;
+        }
         final response = await ApiClient.instance.post(
           '/personal-transactions',
           data: requestFields,
@@ -1290,10 +1294,16 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         : null;
     if (zeroInput && reservationToken == null) return;
     if (zeroInput) _activeZeroInputReservationToken = reservationToken;
+    if (zeroInput) _zeroInputBackendInitiationStarted = false;
     if (zeroInput) _zeroInputSubmissionInFlight = true;
     try {
       await _submitInternal(reservationToken: reservationToken);
     } finally {
+      if (zeroInput && !_zeroInputBackendInitiationStarted) {
+        ZeroInputExecutionSession.abandonBeforeBackendInitiation(
+          reservationToken,
+        );
+      }
       if (zeroInput) _zeroInputSubmissionInFlight = false;
       if (zeroInput) _activeZeroInputReservationToken = null;
     }

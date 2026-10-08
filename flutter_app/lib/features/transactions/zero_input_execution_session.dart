@@ -25,6 +25,14 @@ class ZeroInputExecutionSession {
     return token;
   }
 
+  /// Release only a matching lease before backend initiation begins.
+  /// Do not call for an attempted request or an uncertain provider result.
+  static void abandonBeforeBackendInitiation(String? token) {
+    if (!ownsReservation(token)) return;
+    _reservationOwner = null;
+    _gate.release();
+  }
+
   static bool ownsReservation(String? token) =>
       token != null && _gate.isBusy && _reservationOwner == token;
 
