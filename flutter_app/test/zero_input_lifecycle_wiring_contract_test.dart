@@ -9,7 +9,7 @@ void main() {
       'personal_transaction_screen.dart',
     ]) {
       final source = File('lib/features/transactions/$name').readAsStringSync();
-      expect(source, contains('ZeroInputExecutionSession.isActive'));
+      expect(source, contains('ZeroInputExecutionSession.ownsReservation(reservationToken)'));
     }
   });
 
