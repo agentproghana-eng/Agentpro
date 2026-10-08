@@ -14,63 +14,98 @@ void main() {
   });
 
   test('blocks overlap and uncertain settlement', () {
+    final token = ZeroInputExecutionSession.reserveForInitiation();
+    expect(token, isNotNull);
+
     bool begin() => ZeroInputExecutionSession.tryBegin(
       transactionType: 'balance_enquiry',
       quickActionRequested: true,
       preflightApproved: true,
       simIdentityVerified: true,
       backendAuthorizationReady: true,
+      reservationToken: token,
     );
+
     expect(begin(), isTrue);
-    expect(begin(), isFalse);
+    expect(ZeroInputExecutionSession.reserveForInitiation(), isNull);
+
     ZeroInputExecutionSession.settleDefinitiveResult(
-      resultDefinitive: false, reportPersisted: true);
-    expect(begin(), isFalse);
+      resultDefinitive: false,
+      reportPersisted: true,
+      reservationToken: token,
+    );
+    expect(ZeroInputExecutionSession.isActive, isTrue);
+
     ZeroInputExecutionSession.settleDefinitiveResult(
-      resultDefinitive: true, reportPersisted: false);
-    expect(begin(), isFalse);
+      resultDefinitive: true,
+      reportPersisted: false,
+      reservationToken: token,
+    );
+    expect(ZeroInputExecutionSession.isActive, isTrue);
+
     ZeroInputExecutionSession.settleDefinitiveResult(
-      resultDefinitive: true, reportPersisted: true);
-    expect(begin(), isTrue);
-    ZeroInputExecutionSession.settleDefinitiveResult(
-      resultDefinitive: true, reportPersisted: true);
+      resultDefinitive: true,
+      reportPersisted: true,
+      reservationToken: token,
+    );
+    expect(ZeroInputExecutionSession.isActive, isFalse);
   });
 
   test('unreported definitive outcome keeps the lease held', () {
-    bool begin() => ZeroInputExecutionSession.tryBegin(
+    final token = ZeroInputExecutionSession.reserveForInitiation();
+    expect(token, isNotNull);
+
+    expect(ZeroInputExecutionSession.tryBegin(
       transactionType: 'check_momo_balance',
       quickActionRequested: true,
       preflightApproved: true,
       simIdentityVerified: true,
       backendAuthorizationReady: true,
+      reservationToken: token,
+    ), isTrue);
+
+    ZeroInputExecutionSession.settleDefinitiveResult(
+      resultDefinitive: true,
+      reportPersisted: false,
+      reservationToken: token,
     );
-    expect(begin(), isTrue);
-    ZeroInputExecutionSession.settleDefinitiveResult(
-      resultDefinitive: true, reportPersisted: false);
     expect(ZeroInputExecutionSession.isActive, isTrue);
-    expect(begin(), isFalse);
+    expect(ZeroInputExecutionSession.reserveForInitiation(), isNull);
+
     ZeroInputExecutionSession.settleDefinitiveResult(
-      resultDefinitive: true, reportPersisted: true);
+      resultDefinitive: true,
+      reportPersisted: true,
+      reservationToken: token,
+    );
     expect(ZeroInputExecutionSession.isActive, isFalse);
   });
 
   test('reported pending confirmation cannot release the lease', () {
-    bool begin() => ZeroInputExecutionSession.tryBegin(
+    final token = ZeroInputExecutionSession.reserveForInitiation();
+    expect(token, isNotNull);
+
+    expect(ZeroInputExecutionSession.tryBegin(
       transactionType: 'check_airtime_balance',
       quickActionRequested: true,
       preflightApproved: true,
       simIdentityVerified: true,
       backendAuthorizationReady: true,
+      reservationToken: token,
+    ), isTrue);
+
+    ZeroInputExecutionSession.settleDefinitiveResult(
+      resultDefinitive: false,
+      reportPersisted: true,
+      reservationToken: token,
     );
-    expect(begin(), isTrue);
+    expect(ZeroInputExecutionSession.isActive, isTrue);
+
     ZeroInputExecutionSession.settleDefinitiveResult(
-      resultDefinitive: false, reportPersisted: true);
-    expect(begin(), isFalse);
-    ZeroInputExecutionSession.settleDefinitiveResult(
-      resultDefinitive: true, reportPersisted: true);
-    expect(begin(), isTrue);
-    ZeroInputExecutionSession.settleDefinitiveResult(
-      resultDefinitive: true, reportPersisted: true);
+      resultDefinitive: true,
+      reportPersisted: true,
+      reservationToken: token,
+    );
+    expect(ZeroInputExecutionSession.isActive, isFalse);
   });
 
   test('rejects money movement even with all signals', () {
