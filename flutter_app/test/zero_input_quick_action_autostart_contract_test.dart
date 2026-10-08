@@ -126,6 +126,65 @@ void main() {
       );
     });
 
+    test('business auto-start rejects required transaction inputs', () {
+      final start = businessTransaction.indexOf(
+        'Future<bool> _verifyZeroInputAutoStart()',
+      );
+      final end = businessTransaction.indexOf(
+        'void initState()',
+        start,
+      );
+
+      expect(start, greaterThanOrEqualTo(0));
+
+      final guard = end > start
+          ? businessTransaction.substring(start, end)
+          : businessTransaction.substring(start);
+
+      for (final requirement in [
+        '_usesServerDrivenForm',
+        '_needsAmount',
+        '_needsCustomer',
+        '_needsRecipient',
+        '_needsReference',
+        '_needsMerchantId',
+        '_needsTelecelMerchantReference',
+        '_needsTelecelMerchantAccountNumber',
+        '_isManualCashOut',
+      ]) {
+        expect(guard, contains(requirement));
+      }
+
+      expect(guard, contains('return false;'));
+
+      final inputGuardEnd = guard.indexOf(
+        'final selectedSim = _selectedSim;',
+      );
+      final preflightStart = guard.indexOf(
+        'await ZeroInputFlowPreflight.verify(',
+      );
+
+      expect(inputGuardEnd, greaterThan(0));
+      expect(preflightStart, greaterThan(inputGuardEnd));
+
+      for (final requirement in [
+        '_usesServerDrivenForm',
+        '_needsAmount',
+        '_needsCustomer',
+        '_needsRecipient',
+        '_needsReference',
+        '_needsMerchantId',
+        '_needsTelecelMerchantReference',
+        '_needsTelecelMerchantAccountNumber',
+        '_isManualCashOut',
+      ]) {
+        expect(
+          guard.indexOf(requirement),
+          lessThan(inputGuardEnd),
+        );
+      }
+    });
+
     test('auto-start waits for exact business SIM resolution', () {
       expect(
         businessTransaction,

@@ -383,6 +383,19 @@ class _TransactionScreenState extends State<TransactionScreen> {
   bool _autoStartFallbackToForm = false;
 
   Future<bool> _verifyZeroInputAutoStart() async {
+    // Zero-input execution must never bypass a required transaction form.
+    if (_usesServerDrivenForm ||
+        _needsAmount ||
+        _needsCustomer ||
+        _needsRecipient ||
+        _needsReference ||
+        _needsMerchantId ||
+        _needsTelecelMerchantReference ||
+        _needsTelecelMerchantAccountNumber ||
+        _isManualCashOut) {
+      return false;
+    }
+
     final selectedSim = _selectedSim;
     if (!mounted ||
         !_simDetectionComplete ||
