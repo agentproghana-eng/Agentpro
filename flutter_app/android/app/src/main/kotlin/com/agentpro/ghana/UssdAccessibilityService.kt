@@ -908,6 +908,17 @@ class UssdAccessibilityService : AccessibilityService() {
 
             return
         }
+
+        // Other providers use the same read-only post-PIN inactivity
+        // heartbeat. Ignore repeated identical screens and PIN prompts.
+        // This never writes to the provider UI or changes the outcome.
+        if (!isPinPromptScreen(screenText)) {
+            val screenHash = hashUssdScreen(screenText)
+            if (screenHash != lastPostPinProviderActivityScreenHash) {
+                lastPostPinProviderActivityScreenHash = screenHash
+                listener?.onPostPinProviderActivity()
+            }
+        }
     }
 
     // Data-driven step matching for any provider/transaction_type not

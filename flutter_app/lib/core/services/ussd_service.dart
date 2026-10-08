@@ -644,16 +644,12 @@ class UssdAccessibilityEngine {
         break;
 
       case 'onPostPinProviderActivity':
-        // Telecel can legitimately remain on provider-owned confirmation
-        // screens after PIN. Each observed screen proves the USSD session is
-        // still alive, so restart the inactivity window without changing the
-        // transaction outcome or performing any Accessibility write.
-        if (
-            _pinPromptReached &&
-            _activeProvider == 'telecel' &&
+        // Shared Business/Personal provider-owned post-PIN observation.
+        // Native emits this only for distinct screens beyond the PIN prompt.
+        // Do not infer success, enter PIN, or submit any provider input.
+        if (_pinPromptReached &&
             _resultCompleter != null &&
-            !_resultCompleter!.isCompleted
-        ) {
+            !_resultCompleter!.isCompleted) {
           _armPostPinInactivityTimeout();
         }
         break;
