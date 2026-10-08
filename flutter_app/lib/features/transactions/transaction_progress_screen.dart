@@ -18,6 +18,7 @@ import '../../core/services/storage_service.dart';
 import '../ussd_flows/ussd_flow_runtime_policy.dart';
 import '../ussd_flows/ussd_flow_draft_validation.dart';
 import 'transaction_reference_display.dart';
+import 'zero_input_direct_execution_policy.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/auth/auth_bloc.dart';
 
@@ -2029,6 +2030,12 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     }
   }
 
+  bool get _isVerifiedZeroInputQuickAction =>
+      widget.data['zero_input_quick_action'] == true &&
+      ZeroInputDirectExecutionPolicy.supportedTypes.contains(
+        widget.data['transaction_type']?.toString() ?? '',
+      );
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -2041,7 +2048,19 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
           ),
           automaticallyImplyLeading: _completed,
         ),
-        body: _completed ? _buildResult() : _buildProgress(),
+        // Keep the existing authenticated execution route and reporting.
+        // Only the intermediate timeline is suppressed for preflight-approved
+        // zero-input balance Quick Actions. The provider owns the USSD UI.
+        body: _completed
+            ? _buildResult()
+            : _isVerifiedZeroInputQuickAction
+                ? Center(
+                    child: Semantics(
+                      label: 'Waiting for network balance response',
+                      child: const CircularProgressIndicator(),
+                    ),
+                  )
+                : _buildProgress(),
       ),
     );
   }

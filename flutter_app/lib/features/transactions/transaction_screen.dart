@@ -1408,6 +1408,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
       '/transactions/progress',
       extra: {
         'transaction_future': transactionFuture,
+        'zero_input_quick_action': widget.autoStart && _autoStartPreflightApproved && ZeroInputDirectExecutionPolicy.supportedTypes.contains(_transactionType),
         'provider': _selectedProvider,
         'transaction_type': _transactionType,
         'mtn_cash_in_out_workspace': _isMtnCashInOutWorkspace,
