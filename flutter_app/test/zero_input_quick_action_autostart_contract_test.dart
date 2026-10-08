@@ -126,6 +126,37 @@ void main() {
       );
     });
 
+    test('personal preflight exceptions fail closed', () {
+      final start = personalTransaction.indexOf(
+        'Future<bool> _verifyZeroInputAutoStart()',
+      );
+      final end = personalTransaction.indexOf(
+        '// Retained while this screen',
+        start,
+      );
+
+      expect(start, greaterThanOrEqualTo(0));
+      expect(end, greaterThan(start));
+
+      final method = personalTransaction.substring(start, end);
+
+      expect(method, contains('try {'));
+      expect(
+        method,
+        contains('await ZeroInputFlowPreflight.verify('),
+      );
+      expect(method, contains('} catch (_) {'));
+      expect(method, contains('return false;'));
+
+      final preflight = method.indexOf(
+        'await ZeroInputFlowPreflight.verify(',
+      );
+      final catchBlock = method.indexOf('} catch (_) {');
+
+      expect(preflight, greaterThan(method.indexOf('try {')));
+      expect(catchBlock, greaterThan(preflight));
+    });
+
     test('business auto-start rejects required transaction inputs', () {
       final start = businessTransaction.indexOf(
         'Future<bool> _verifyZeroInputAutoStart()',

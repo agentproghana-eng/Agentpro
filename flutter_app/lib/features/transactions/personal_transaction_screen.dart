@@ -268,20 +268,26 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       return false;
     }
 
-    final approved = await ZeroInputFlowPreflight.verify(
-      provider: widget.provider,
-      transactionType: _effectiveTransactionType,
-      isPersonal: true,
-    );
+    try {
+      final approved = await ZeroInputFlowPreflight.verify(
+        provider: widget.provider,
+        transactionType: _effectiveTransactionType,
+        isPersonal: true,
+      );
 
-    if (!mounted || !approved) return false;
+      if (!mounted || !approved) return false;
 
-    final currentSim = _selectedSim;
-    return currentSim != null &&
-        currentSim.slot == selectedSim.slot &&
-        currentSim.iccid == selectedSim.iccid &&
-        currentSim.subscriptionId ==
-            selectedSim.subscriptionId;
+      final currentSim = _selectedSim;
+      return currentSim != null &&
+          currentSim.slot == selectedSim.slot &&
+          currentSim.iccid == selectedSim.iccid &&
+          currentSim.subscriptionId ==
+              selectedSim.subscriptionId;
+    } catch (_) {
+      // Network, authorization, or malformed-flow failures
+      // must never authorize automatic execution.
+      return false;
+    }
   }
 
 
