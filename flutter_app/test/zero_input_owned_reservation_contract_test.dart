@@ -22,7 +22,13 @@ void main() {
       "reservationToken: widget.data['zero_input_reservation_token'] as String?"
           .allMatches(progress)
           .length,
-      2,
+      1,
+    );
+    expect(
+      progress,
+      contains(
+        "final token = widget.data['zero_input_reservation_token'] as String?",
+      ),
     );
   });
 }
