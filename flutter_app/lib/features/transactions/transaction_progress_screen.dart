@@ -2009,7 +2009,22 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             result.outcome == USSDStatus.failed ||
             result.outcome == USSDStatus.cancelled;
         final token = widget.data['zero_input_reservation_token'] as String?;
+        // Only a matching, definitive backend acknowledgement may release
+        // the durable reservation. Ambiguous responses retain the lock.
+        final completionBody = res.data;
+        final completionData = completionBody is Map
+            ? completionBody['data']
+            : null;
+        final backendCompletionVerified =
+            completionBody is Map &&
+            completionBody['success'] == true &&
+            completionData is Map &&
+            completionData['id']?.toString() == transactionId &&
+            completionData['status']?.toString() == statusString &&
+            ZeroInputExecutionSession.ownsReservation(token);
+
         if (definitive &&
+            backendCompletionVerified &&
             await ZeroInputExecutionSession.clearDurableReservation(token)) {
           ZeroInputExecutionSession.settleDefinitiveResult(
             resultDefinitive: true,
