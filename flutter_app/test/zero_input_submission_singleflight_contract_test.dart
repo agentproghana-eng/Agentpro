@@ -12,7 +12,7 @@ void main() {
           .readAsStringSync();
       expect(source, contains('bool _zeroInputSubmissionInFlight = false;'));
       expect(source, contains('if (zeroInput && _zeroInputSubmissionInFlight) return;'));
-      expect(source, contains('await ${entry.value}Internal();'));
+      expect(source, contains('await ${entry.value}Internal(reservationToken: reservationToken);'));
       expect(source, contains('if (zeroInput) _zeroInputSubmissionInFlight = false;'));
     }
   });

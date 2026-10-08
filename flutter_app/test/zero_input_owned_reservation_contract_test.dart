@@ -9,6 +9,11 @@ void main() {
       expect(source, contains("'zero_input_reservation_token':"));
     }
     final progress = File('lib/features/transactions/transaction_progress_screen.dart').readAsStringSync();
-    expect(RegExp("reservationToken: widget.data\['zero_input_reservation_token'\]").allMatches(progress).length, 2);
+    expect(
+      "reservationToken: widget.data['zero_input_reservation_token'] as String?"
+          .allMatches(progress)
+          .length,
+      2,
+    );
   });
 }
