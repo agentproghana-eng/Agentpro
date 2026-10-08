@@ -10,7 +10,7 @@ void main() {
       final source = File('lib/features/transactions/$filename').readAsStringSync();
       expect(source, contains('await ZeroInputRecoveryStatus.inspect()'));
       expect(source, contains('A previous balance enquiry may still be unresolved.'));
-      expect(source, contains('needs verification before another attempt.'));
+      expect(source, contains("'verification before another attempt. Contact support.'"));
     });
   }
 }
