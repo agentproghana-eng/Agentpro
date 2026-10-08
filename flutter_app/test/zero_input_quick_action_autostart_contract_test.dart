@@ -233,7 +233,7 @@ void main() {
       final loadIndex =
           businessTransaction.indexOf('Future<void> _loadSimMap()');
       final autoIndex = businessTransaction.indexOf(
-        'if (false &&',
+        'if (ZeroInputDirectExecutionPolicy.supportedTypes.contains(_transactionType) &&',
         loadIndex,
       );
 
@@ -258,7 +258,7 @@ void main() {
       final loadIndex =
           personalTransaction.indexOf('Future<void> _loadSimIdentity()');
       final autoIndex = personalTransaction.indexOf(
-        'if (false &&',
+        'if (ZeroInputDirectExecutionPolicy.supportedTypes.contains(_effectiveTransactionType) &&',
         loadIndex,
       );
 
@@ -326,11 +326,11 @@ void main() {
     test('auto-start hides unnecessary transaction forms', () {
       expect(
         businessTransaction,
-        contains('body: false && widget.autoStart'),
+        contains('body: ZeroInputDirectExecutionPolicy.supportedTypes.contains('),
       );
       expect(
         personalTransaction,
-        contains('body: false && widget.autoStart'),
+        contains('body: ZeroInputDirectExecutionPolicy.supportedTypes.contains('),
       );
       expect(
         businessTransaction,
