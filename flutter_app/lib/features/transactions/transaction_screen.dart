@@ -1,4 +1,5 @@
 import 'zero_input_execution_session.dart';
+import 'zero_input_recovery_status.dart';
 import 'zero_input_direct_execution_policy.dart';
 import 'dart:async';
 
@@ -1088,6 +1089,20 @@ class _TransactionScreenState extends State<TransactionScreen> {
         !await ZeroInputExecutionSession.persistBeforeInitiation(reservationToken)) {
       // Durable state may exist from a prior run: do not initiate.
       ZeroInputExecutionSession.abandonBeforeBackendInitiation(reservationToken);
+      // A previous attempt may survive app restart. Inspect without dialing
+      // or releasing the durable lock, and explain the blocked action.
+      final recoveryStatus = await ZeroInputRecoveryStatus.inspect();
+      if (mounted) {
+        final message = recoveryStatus ==
+                'server_definitive_needs_report_verification'
+            ? 'Previous balance enquiry has a recorded result, but needs '
+              'verification before another attempt. Contact support.'
+            : 'A previous balance enquiry may still be unresolved. '
+              'Check transaction history or contact support before retrying.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message), duration: const Duration(seconds: 8)),
+        );
+      }
       return;
     }
     if (zeroInput) _zeroInputBackendInitiationStarted = false;
