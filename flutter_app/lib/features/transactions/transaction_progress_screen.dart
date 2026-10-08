@@ -1989,13 +1989,18 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       );
 
       if (_isVerifiedZeroInputQuickAction) {
-        ZeroInputExecutionSession.settleDefinitiveResult(
-          resultDefinitive: result.outcome == USSDStatus.success ||
-              result.outcome == USSDStatus.failed ||
-              result.outcome == USSDStatus.cancelled,
-          reportPersisted: true,
-          reservationToken: widget.data['zero_input_reservation_token'] as String?,
-        );
+        final definitive = result.outcome == USSDStatus.success ||
+            result.outcome == USSDStatus.failed ||
+            result.outcome == USSDStatus.cancelled;
+        final token = widget.data['zero_input_reservation_token'] as String?;
+        if (definitive &&
+            await ZeroInputExecutionSession.clearDurableReservation(token)) {
+          ZeroInputExecutionSession.settleDefinitiveResult(
+            resultDefinitive: true,
+            reportPersisted: true,
+            reservationToken: token,
+          );
+        }
       }
 
       if (mounted) {

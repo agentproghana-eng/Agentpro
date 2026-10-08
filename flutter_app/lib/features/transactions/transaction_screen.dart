@@ -1084,13 +1084,19 @@ class _TransactionScreenState extends State<TransactionScreen> {
         ? ZeroInputExecutionSession.reserveForInitiation()
         : null;
     if (zeroInput && reservationToken == null) return;
+    if (zeroInput &&
+        !await ZeroInputExecutionSession.persistBeforeInitiation(reservationToken)) {
+      // Durable state may exist from a prior run: do not initiate.
+      ZeroInputExecutionSession.abandonBeforeBackendInitiation(reservationToken);
+      return;
+    }
     if (zeroInput) _zeroInputBackendInitiationStarted = false;
     if (zeroInput) _zeroInputSubmissionInFlight = true;
     try {
       await _proceedInternal(reservationToken: reservationToken);
     } finally {
       if (zeroInput && !_zeroInputBackendInitiationStarted) {
-        ZeroInputExecutionSession.abandonBeforeBackendInitiation(
+        await ZeroInputExecutionSession.abandonDurableBeforeBackendInitiation(
           reservationToken,
         );
       }

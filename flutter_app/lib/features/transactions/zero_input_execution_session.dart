@@ -1,3 +1,5 @@
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
 import 'zero_input_execution_gate.dart';
 import 'zero_input_direct_execution_policy.dart';
 
@@ -12,6 +14,44 @@ class ZeroInputExecutionSession {
   static final ZeroInputExecutionGate _gate = ZeroInputExecutionGate();
 
   static bool get isActive => _gate.isBusy;
+
+  static const _storage = FlutterSecureStorage();
+  static const _unresolvedKey = 'zero_input_unresolved_v1';
+
+  /// Persist before backend initiation; existing or unreadable state blocks.
+  static Future<bool> persistBeforeInitiation(String? token) async {
+    if (!ownsReservation(token)) return false;
+    try {
+      if (await _storage.read(key: _unresolvedKey) != null) return false;
+      await _storage.write(key: _unresolvedKey, value: token!);
+      return ownsReservation(token);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<bool> clearDurableReservation(String? token) async {
+    if (!ownsReservation(token)) return false;
+    try {
+      if (await _storage.read(key: _unresolvedKey) != token) return false;
+      await _storage.delete(key: _unresolvedKey);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<void> abandonDurableBeforeBackendInitiation(String? token) async {
+    if (!ownsReservation(token)) return;
+    try {
+      final existing = await _storage.read(key: _unresolvedKey);
+      if (existing != null && existing != token) return;
+      if (existing == token) await _storage.delete(key: _unresolvedKey);
+      abandonBeforeBackendInitiation(token);
+    } catch (_) {
+      // Storage uncertain: retain the process lease.
+    }
+  }
 
   static int _nextReservation = 0;
   static String? _reservationOwner;
