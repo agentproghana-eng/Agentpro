@@ -19,6 +19,7 @@ import '../ussd_flows/ussd_flow_runtime_policy.dart';
 import '../ussd_flows/ussd_flow_draft_validation.dart';
 import 'transaction_reference_display.dart';
 import 'zero_input_direct_execution_policy.dart';
+import 'zero_input_execution_session.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/auth/auth_bloc.dart';
 
@@ -515,6 +516,28 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     if (transactionType == null || transactionType.isEmpty) {
       _showStartupFailure('The transaction type is unavailable.');
       return;
+    }
+
+    // A zero-input balance attempt may hold one process-wide provider session.
+    // This is a local overlap guard, NOT backend authorization or durable
+    // restart recovery. Acquire only after server initiation, device readiness,
+    // and Business SIM role verification have succeeded.
+    if (_isVerifiedZeroInputQuickAction) {
+      final acquired = ZeroInputExecutionSession.tryBegin(
+        transactionType: transactionType,
+        quickActionRequested: true,
+        preflightApproved: widget.data['zero_input_preflight_approved'] == true,
+        simIdentityVerified: devicePreparation.isReady &&
+            devicePreparation.simSlot != null,
+        backendAuthorizationReady: !transactionId.startsWith('local_'),
+      );
+      if (!acquired) {
+        _showStartupFailure(
+          'Another balance enquiry may still be in progress or awaiting '
+          'confirmation. Check the previous result before trying again.',
+        );
+        return;
+      }
     }
 
     // Centrally managed Global Personal automation is available to both
@@ -1963,6 +1986,15 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
             'flow_health': flowHealth,
         },
       );
+
+      if (_isVerifiedZeroInputQuickAction) {
+        ZeroInputExecutionSession.settleDefinitiveResult(
+          resultDefinitive: result.outcome == USSDStatus.success ||
+              result.outcome == USSDStatus.failed ||
+              result.outcome == USSDStatus.cancelled,
+          reportPersisted: true,
+        );
+      }
 
       if (mounted) {
         setState(() {

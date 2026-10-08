@@ -1234,6 +1234,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         extra: {
           'is_personal': true,
           'zero_input_quick_action': widget.autoStart && _autoStartPreflightApproved && ZeroInputDirectExecutionPolicy.supportedTypes.contains(_effectiveTransactionType),
+          'zero_input_preflight_approved': widget.autoStart && _autoStartPreflightApproved,
           'transaction': transaction,
           'provider': widget.provider,
           'transaction_type': transactionType,
