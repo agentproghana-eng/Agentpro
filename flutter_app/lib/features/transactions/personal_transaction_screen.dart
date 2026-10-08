@@ -1305,7 +1305,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     if (widget.autoStart &&
         _autoStartPreflightApproved &&
         ZeroInputDirectExecutionPolicy.supportedTypes.contains(_effectiveTransactionType) &&
-        ZeroInputExecutionSession.isActive) {
+        !ZeroInputExecutionSession.ownsReservation(reservationToken)) {
       return;
     }
 

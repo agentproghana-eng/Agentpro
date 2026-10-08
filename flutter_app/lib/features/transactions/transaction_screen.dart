@@ -1097,7 +1097,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
     if (widget.autoStart &&
         _autoStartPreflightApproved &&
         ZeroInputDirectExecutionPolicy.supportedTypes.contains(_transactionType) &&
-        ZeroInputExecutionSession.isActive) {
+        !ZeroInputExecutionSession.ownsReservation(reservationToken)) {
       return;
     }
 
