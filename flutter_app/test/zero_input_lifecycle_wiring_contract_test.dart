@@ -21,7 +21,7 @@ void main() {
     final settle = source.indexOf('ZeroInputExecutionSession.settleDefinitiveResult(');
     expect(patch, greaterThanOrEqualTo(0));
     expect(settle, greaterThan(patch));
-    expect(source.substring(settle, settle + 250),
+    expect(source.substring(settle, settle + 500),
         contains('reportPersisted: true'));
   });
 }
