@@ -1,3 +1,4 @@
+import 'zero_input_direct_execution_policy.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -813,7 +814,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         _scheduleFlowPreload();
       }
 
-      if (false &&
+      if (ZeroInputDirectExecutionPolicy.supportedTypes.contains(_transactionType) &&
           widget.autoStart &&
           !_autoStartAttempted &&
           _simDetectionComplete &&
@@ -1760,7 +1761,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
           const SizedBox(width: 4),
         ],
       ),
-      body: false && widget.autoStart && !_autoStartFallbackToForm
+      body: ZeroInputDirectExecutionPolicy.supportedTypes.contains(_transactionType) && widget.autoStart && !_autoStartFallbackToForm
           ? _buildAutoStartStatus()
           : Column(
         children: [

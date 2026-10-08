@@ -1,3 +1,4 @@
+import 'zero_input_direct_execution_policy.dart';
 // personal_transaction_screen.dart
 import 'dart:collection';
 import 'dart:convert';
@@ -826,7 +827,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         }
       });
 
-      if (false &&
+      if (ZeroInputDirectExecutionPolicy.supportedTypes.contains(_effectiveTransactionType) &&
           widget.autoStart &&
           !_autoStartAttempted &&
           _simDetectionComplete &&
@@ -1534,7 +1535,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
 
     return Scaffold(
       appBar: AppBar(title: Text(appBarLabel)),
-      body: false && widget.autoStart && !_autoStartFallbackToForm
+      body: ZeroInputDirectExecutionPolicy.supportedTypes.contains(_effectiveTransactionType) && widget.autoStart && !_autoStartFallbackToForm
           ? _buildAutoStartStatus()
           : Padding(
         padding: const EdgeInsets.all(20),
