@@ -16,7 +16,7 @@ void main() {
       expect(
         form,
         contains(
-          "_isMtnCashInOutWorkspace || ['send_money'].contains(_transactionType)",
+          "if (_isMtnCashInOutWorkspace) ...[",
         ),
       );
 
@@ -45,14 +45,14 @@ void main() {
       expect(
         form,
         contains(
-          'return _isMtnCashInOutWorkspace',
+          'String get _effectiveCustomerPhone',
         ),
       );
 
       expect(
         form,
         contains(
-          '? _recipientPhoneCtrl.text.trim()',
+          'return _recipientPhoneCtrl.text.trim();',
         ),
       );
     });

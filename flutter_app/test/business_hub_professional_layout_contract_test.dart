@@ -16,8 +16,8 @@ void main() {
     ).readAsStringSync();
   });
 
-  test('Business Hub app bar keeps only the vertical menu action', () {
-    expect(source, contains('Icons.more_vert'));
+  test('Business Hub app bar has no overflow menu', () {
+    expect(source, isNot(contains('Icons.more_vert')));
     expect(source, isNot(contains('Icons.more_horiz')));
     expect(source, isNot(contains("tooltip: 'Saved Ads'")));
     expect(source, isNot(contains("'My Ads'")));

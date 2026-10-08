@@ -142,7 +142,7 @@ void main() {
         contains('resizeToAvoidBottomInset: true'),
       );
 
-      expect(transaction, contains('body: Column('));
+      expect(transaction, contains(': Column('));
       expect(transaction, contains('SingleChildScrollView('));
 
       expect(

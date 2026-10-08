@@ -332,6 +332,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ],
           ),
+          if (!widget.isPersonal && user['company_id'] != null) ...[
+            const SizedBox(height: 20),
+            const _SettingsSectionHeader(title: 'Money & Operations'),
+            _SettingsGroupCard(
+              children: [
+                _SettingsTile(
+                  icon: Icons.dashboard_customize_outlined,
+                  title: 'Agent Hub',
+                  subtitle:
+                      'Transactions, reports, float and shift reconciliation',
+                  onTap: () => context.push('/agents-hub'),
+                ),
+                const _SettingsDivider(),
+                _SettingsTile(
+                  icon: Icons.storefront_outlined,
+                  title: 'Business Hub',
+                  subtitle:
+                      'Manage advertisements, reviews, enquiries and marketplace activity',
+                  onTap: () => context.push('/marketplace/more'),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 20),
           const _SettingsSectionHeader(title: 'Transaction Safety'),
           _SettingsGroupCard(
@@ -342,44 +365,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: _highAmountWarningSubtitle,
                 onTap: _openHighAmountWarning,
               ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          const _SettingsSectionHeader(title: 'Quick Actions'),
-          _SettingsGroupCard(
-            children: [
-              if (user['company_id'] != null) ...[
-                _SettingsTile(
-                  icon: Icons.grid_view_rounded,
-                  title: 'Agent Quick Actions',
-                  subtitle: 'Customize Agent SIM dashboard shortcuts',
-                  onTap: () => context.push('/agent-quick-actions'),
-                ),
-                const _SettingsDivider(),
-                _SettingsTile(
-                  icon: Icons.confirmation_number_outlined,
-                  title: 'EVD Quick Actions',
-                  subtitle: 'Customize EVD SIM dashboard shortcuts',
-                  onTap: () => context.push('/evd-quick-actions'),
-                ),
-                const _SettingsDivider(),
-                _SettingsTile(
-                  icon: Icons.point_of_sale_outlined,
-                  title: 'Merchant Quick Actions',
-                  subtitle: 'Customize Merchant SIM dashboard shortcuts',
-                  onTap: () => context.push('/merchant-quick-actions'),
-                ),
-              ],
-              if (user['company_id'] != null &&
-                  user['personal_subscription_plan'] != null)
-                const _SettingsDivider(),
-              if (user['personal_subscription_plan'] != null)
-                _SettingsTile(
-                  icon: Icons.person_outline_rounded,
-                  title: 'Subscriber Quick Actions',
-                  subtitle: 'Customize your Subscriber dashboard shortcuts',
-                  onTap: () => context.push('/personal-quick-actions'),
-                ),
             ],
           ),
           if (role != 'superuser') ...[

@@ -1,3 +1,4 @@
+import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -297,12 +298,8 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
     return _sectionCard(
       context: context,
       icon: Icons.shield_outlined,
-      title: 'Telecel protected credentials',
-      description:
-          'Telecel Agent SIMs use an Agent Shortcode; Merchant SIMs '
-          'use an Organisation Shortcode. Protected credentials stay '
-          'masked after saving. Phone authentication is required before '
-          'setting or replacing them.',
+      title: 'Telecel',
+      description: 'Protected credentials for Telecel Agent and Merchant SIMs.',
       child: _loadingTelecelCredentialStatus
           ? const Padding(
               padding: EdgeInsets.all(18),
@@ -375,6 +372,69 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => UssdFlowListScreen(isPersonal: widget.isPersonal),
+      ),
+    );
+  }
+
+  void _openQuickActionCustomisation(String route) {
+    context.push(route);
+  }
+
+  Widget _quickActionCustomisationCard(
+    BuildContext context,
+    Map<String, dynamic> user,
+  ) {
+    final hasBusiness = user['company_id'] != null;
+    final hasPersonal =
+        widget.isPersonal || user['personal_subscription_plan'] != null;
+
+    return _sectionCard(
+      context: context,
+      icon: Icons.grid_view_rounded,
+      title: 'Quick Action Customisation',
+      description: 'Choose the shortcuts shown on your dashboard.',
+      child: Column(
+        children: [
+          if (hasBusiness) ...[
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.support_agent_outlined),
+              title: const Text('Agent'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () =>
+                  _openQuickActionCustomisation('/agent-quick-actions'),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.confirmation_number_outlined),
+              title: const Text('EVD'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () =>
+                  _openQuickActionCustomisation('/evd-quick-actions'),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.point_of_sale_outlined),
+              title: const Text('Merchant'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () =>
+                  _openQuickActionCustomisation('/merchant-quick-actions'),
+            ),
+          ],
+          if (hasBusiness && hasPersonal)
+            const Divider(height: 1),
+          if (hasPersonal)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.person_outline_rounded),
+              title: const Text('Subscriber'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () =>
+                  _openQuickActionCustomisation('/personal-quick-actions'),
+            ),
+        ],
       ),
     );
   }
@@ -527,47 +587,23 @@ class _UssdSettingsScreenState extends State<UssdSettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppTheme.primaryColor.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(
-                  Icons.security_rounded,
-                  size: 20,
-                  color: AppTheme.primaryColor,
-                ),
-                const SizedBox(width: 9),
-                Expanded(
-                  child: Text(
-                    'AgentPro now uses one automation model: '
-                    'Direct USSD String or Interactive Flow. '
-                    'The old custom dial-pattern override has been removed '
-                    'from the app.',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      height: 1.35,
-                      color: context.appSecondaryText,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
           if (canManageAutomations) ...[
             _createAutomationCard(context),
             const SizedBox(height: 12),
             _manageAutomationsCard(context),
           ] else
             _managedByOwnerCard(context),
+          const SizedBox(height: 12),
+          _quickActionCustomisationCard(context, user),
           if (!widget.isPersonal) ...[
             const SizedBox(height: 12),
-            _telecelProtectedCredentialsCard(context),
+            _sectionCard(
+              context: context,
+              icon: Icons.shield_outlined,
+              title: 'Protected Credentials',
+              description: 'Manage credentials used by supported USSD flows.',
+              child: _telecelProtectedCredentialsCard(context),
+            ),
           ],
           const SizedBox(height: 20),
         ],

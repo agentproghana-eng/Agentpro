@@ -9,8 +9,8 @@ void main() {
 
   test('Cash In Out keeps direct operation selector', () {
     expect(source, isNot(contains("'Choose transaction'")));
-    expect(source, contains("'CASH IN'"));
-    expect(source, contains("'CASH OUT'"));
+    expect(source, contains("label: 'Cash In'"));
+    expect(source, contains("label: 'Cash Out'"));
   });
 
   test('transaction workspace resizes for Android keyboard', () {
@@ -21,7 +21,7 @@ void main() {
   });
 
   test('primary action is part of resized body rather than bottom bar', () {
-    final body = source.indexOf('body: Column(');
+    final body = source.indexOf(': Column(');
     final expanded = source.indexOf('Expanded(', body);
     final form = source.indexOf('child: Form(', expanded);
     final scroll = source.indexOf('SingleChildScrollView(', form);
@@ -36,6 +36,9 @@ void main() {
     expect(form, greaterThan(expanded));
     expect(scroll, greaterThan(form));
     expect(proceed, greaterThan(scroll));
+    expect(source, contains('if (!_isMtnCashInOutWorkspace && !_isMtnPayToWorkspace)'));
+    expect(source, contains("label: 'Cash In'"));
+    expect(source, contains("label: 'Cash Out'"));
 
     expect(
       source,

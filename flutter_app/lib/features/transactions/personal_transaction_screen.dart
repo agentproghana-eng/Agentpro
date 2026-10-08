@@ -4,6 +4,7 @@ import 'dart:convert';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
+import 'zero_input_flow_preflight.dart';
 import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
@@ -219,6 +220,7 @@ class PersonalTransactionScreen extends StatefulWidget {
   final int? simSubscriptionId;
   final String? initialBundleCategory;
   final String? initialRecipientMode;
+  final bool autoStart;
 
   const PersonalTransactionScreen({
     super.key,
@@ -229,6 +231,7 @@ class PersonalTransactionScreen extends StatefulWidget {
     this.simSubscriptionId,
     this.initialBundleCategory,
     this.initialRecipientMode,
+    this.autoStart = false,
   });
 
   @override
@@ -245,6 +248,42 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   final _accountNumberCtrl = TextEditingController();
   final _flexiAmountCtrl = TextEditingController();
   bool _loading = false;
+  bool _autoStartAttempted = false;
+  bool _autoStartInProgress = false;
+  bool _autoStartPreflightApproved = false;
+  bool _autoStartFallbackToForm = false;
+
+  Future<bool> _verifyZeroInputAutoStart() async {
+    final selectedSim = _selectedSim;
+    if (!mounted ||
+        !_simDetectionComplete ||
+        selectedSim == null ||
+        _initialSimIdentityUnavailable ||
+        _isMtnMashup ||
+        _isDataBundle ||
+        _needsAmount ||
+        _needsPhone ||
+        _needsReference ||
+        _needsTillNumber) {
+      return false;
+    }
+
+    final approved = await ZeroInputFlowPreflight.verify(
+      provider: widget.provider,
+      transactionType: _effectiveTransactionType,
+      isPersonal: true,
+    );
+
+    if (!mounted || !approved) return false;
+
+    final currentSim = _selectedSim;
+    return currentSim != null &&
+        currentSim.slot == selectedSim.slot &&
+        currentSim.iccid == selectedSim.iccid &&
+        currentSim.subscriptionId ==
+            selectedSim.subscriptionId;
+  }
+
 
   // Retained while this screen is handling the same financial attempt.
   // A retry with identical request data reuses the same UUID; changing
@@ -780,6 +819,45 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           _initialSimIdentityUnavailable = false;
         }
       });
+
+      if (false &&
+          widget.autoStart &&
+          !_autoStartAttempted &&
+          _simDetectionComplete &&
+          _selectedSim != null) {
+        setState(() {
+          _autoStartAttempted = true;
+          _autoStartInProgress = true;
+        });
+
+        try {
+          final approved = await _verifyZeroInputAutoStart();
+
+          if (!mounted) return;
+
+          if (!approved) {
+            setState(() {
+              _autoStartPreflightApproved = false;
+              _autoStartFallbackToForm = true;
+            });
+            return;
+          }
+
+          setState(() {
+            _autoStartPreflightApproved = true;
+          });
+
+          await _submit();
+        } finally {
+          if (mounted) {
+            setState(() {
+              _autoStartInProgress = false;
+              _autoStartPreflightApproved = false;
+              _autoStartFallbackToForm = true;
+            });
+          }
+        }
+      }
     } on SimPermissionException {
       if (!mounted) return;
 
@@ -1199,7 +1277,11 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       return;
     }
 
-    if (!_formKey.currentState!.validate()) return;
+    if (widget.autoStart && _autoStartPreflightApproved) {
+      if (!_simDetectionComplete || _selectedSim == null) return;
+    } else {
+      if (_formKey.currentState?.validate() != true) return;
+    }
 
     if (_needsAmount) {
       final amount =
@@ -1386,6 +1468,52 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     }
   }
 
+  Widget _buildAutoStartStatus() {
+    final detecting = !_simDetectionComplete;
+    final processing = _loading || _autoStartInProgress;
+
+    if (detecting || processing) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    final message = _autoStartAttempted
+        ? 'The transaction attempt has ended. Check its result before starting another transaction.'
+        : _simPermissionDenied
+            ? 'SIM access is required to start this transaction.'
+            : _initialSimIdentityUnavailable
+                ? 'The selected SIM is no longer available.'
+                : 'No compatible SIM is available for this transaction.';
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.sim_card_alert_outlined, size: 44),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: _autoStartAttempted ? null : () => _loadSimIdentity(),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry SIM Detection'),
+            ),
+            TextButton(
+              onPressed: () => context.pop(),
+              child: const Text('Return'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final label = _isTelecelM4mQuickAction
@@ -1400,7 +1528,9 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
 
     return Scaffold(
       appBar: AppBar(title: Text(appBarLabel)),
-      body: Padding(
+      body: false && widget.autoStart && !_autoStartFallbackToForm
+          ? _buildAutoStartStatus()
+          : Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [

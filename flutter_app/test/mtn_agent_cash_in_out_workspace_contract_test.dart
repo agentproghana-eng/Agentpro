@@ -42,13 +42,20 @@ void main() {
       );
     });
 
-    test('workspace exposes Cash In and Cash Out choices', () {
-      expect(transaction, contains("'CASH IN'"));
-      expect(transaction, contains("'CASH OUT'"));
+    test('workspace uses Cash In and Cash Out as form actions', () {
+      expect(transaction, contains("label: 'Cash In'"));
+      expect(transaction, contains("label: 'Cash Out'"));
+      expect(transaction, contains('mtnCashInOutWorkspace'));
+
       expect(
         transaction,
-        contains('mtnCashInOutWorkspace'),
+        contains(
+          'if (!_isMtnCashInOutWorkspace && !_isMtnPayToWorkspace)',
+        ),
       );
+
+      expect(transaction, isNot(contains("'CASH IN'")));
+      expect(transaction, isNot(contains("'CASH OUT'")));
     });
 
     test('MTN Agent dashboard supports combined and individual cash actions', () {
