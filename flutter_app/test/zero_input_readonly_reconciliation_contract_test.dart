@@ -5,8 +5,8 @@ void main() {
   test('read-only reconciliation cannot release or redial', () {
     final source = File('lib/features/transactions/zero_input_recovery_status.dart').readAsStringSync();
     expect(source, contains('ZeroInputExecutionSession.readUnresolvedIdentity()'));
-    expect(source, contains("'/personal-transactions/$id'"));
-    expect(source, contains("'/transactions/$id'"));
+    expect(source, contains("'/personal-transactions/\$id'"));
+    expect(source, contains("'/transactions/\$id'"));
     expect(source, isNot(contains('clearDurableReservation(')));
     expect(source, isNot(contains('settleDefinitiveResult(')));
     expect(source, isNot(contains('USSDEngine(')));
