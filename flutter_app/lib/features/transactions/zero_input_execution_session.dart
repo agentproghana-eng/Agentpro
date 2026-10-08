@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'zero_input_execution_gate.dart';
@@ -17,6 +19,7 @@ class ZeroInputExecutionSession {
 
   static const _storage = FlutterSecureStorage();
   static const _unresolvedKey = 'zero_input_unresolved_v1';
+  static const _identityKey = 'zero_input_recovery_identity_v1';
 
   /// Persist before backend initiation; existing or unreadable state blocks.
   static Future<bool> persistBeforeInitiation(String? token) async {
@@ -30,10 +33,40 @@ class ZeroInputExecutionSession {
     }
   }
 
+  /// Persist a non-sensitive server lookup identity before allowing USSD.
+  /// The existing unresolved token remains the authoritative lock.
+  static Future<bool> recordBackendIdentity({
+    required String? token,
+    required String transactionId,
+    required String transactionType,
+    required bool isPersonal,
+  }) async {
+    if (!ownsReservation(token) || transactionId.isEmpty ||
+        transactionId.startsWith('local_')) return false;
+    try {
+      if (await _storage.read(key: _unresolvedKey) != token) return false;
+      await _storage.write(
+        key: _identityKey,
+        value: jsonEncode(<String, dynamic>{
+          'reservation_token': token,
+          'transaction_id': transactionId,
+          'transaction_type': transactionType,
+          'account_mode': isPersonal ? 'personal' : 'business',
+        }),
+      );
+      return await _storage.read(key: _identityKey) != null &&
+          await _storage.read(key: _unresolvedKey) == token;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<bool> clearDurableReservation(String? token) async {
     if (!ownsReservation(token)) return false;
     try {
       if (await _storage.read(key: _unresolvedKey) != token) return false;
+      // If identity cleanup fails, keep the authoritative lock intact.
+      await _storage.delete(key: _identityKey);
       await _storage.delete(key: _unresolvedKey);
       return true;
     } catch (_) {
@@ -46,7 +79,10 @@ class ZeroInputExecutionSession {
     try {
       final existing = await _storage.read(key: _unresolvedKey);
       if (existing != null && existing != token) return;
-      if (existing == token) await _storage.delete(key: _unresolvedKey);
+      if (existing == token) {
+        await _storage.delete(key: _identityKey);
+        await _storage.delete(key: _unresolvedKey);
+      }
       abandonBeforeBackendInitiation(token);
     } catch (_) {
       // Storage uncertain: retain the process lease.

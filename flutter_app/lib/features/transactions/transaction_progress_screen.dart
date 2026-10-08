@@ -541,6 +541,22 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       }
     }
 
+    // No provider dial until the server transaction can be located after a
+    // crash or restart. A storage failure must retain the unresolved lock.
+    if (_isVerifiedZeroInputQuickAction &&
+        !await ZeroInputExecutionSession.recordBackendIdentity(
+          token: widget.data['zero_input_reservation_token'] as String?,
+          transactionId: transactionId,
+          transactionType: transactionType,
+          isPersonal: widget.isPersonal,
+        )) {
+      _showStartupFailure(
+        'AgentPro could not securely save this balance enquiry for recovery. '
+        'No USSD was started. Contact support if it remains blocked.',
+      );
+      return;
+    }
+
     // Centrally managed Global Personal automation is available to both
     // Free and Paid Personal accounts. Paid status only controls whether
     // this account may use its own Personal Flow Builder override.
