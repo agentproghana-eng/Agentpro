@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -116,14 +117,22 @@ class ZeroInputExecutionSession {
     }
   }
 
-  static int _nextReservation = 0;
   static String? _reservationOwner;
+
+  static String _newReservationToken() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    final suffix = bytes
+        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+        .join();
+    return 'zero_input_$suffix';
+  }
 
   /// Reserve synchronously before initiating a backend transaction.
   /// A reservation does not grant permission to dial.
   static String? reserveForInitiation() {
     if (!_gate.tryAcquire()) return null;
-    final token = 'zero_input_${++_nextReservation}';
+    final token = _newReservationToken();
     _reservationOwner = token;
     return token;
   }
@@ -152,11 +161,7 @@ class ZeroInputExecutionSession {
         .contains(transactionType)) return false;
     if (!quickActionRequested || !preflightApproved ||
         !simIdentityVerified || !backendAuthorizationReady) return false;
-    if (reservationToken != null) {
-      if (!ownsReservation(reservationToken)) return false;
-    } else if (!_gate.tryAcquire()) {
-      return false;
-    }
+    if (!ownsReservation(reservationToken)) return false;
     return ZeroInputDirectExecutionPolicy.mayUseDirectRoute(
       transactionType: transactionType,
       quickActionRequested: quickActionRequested,
