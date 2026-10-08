@@ -1,3 +1,4 @@
+import 'zero_input_execution_session.dart';
 import 'zero_input_direct_execution_policy.dart';
 import 'dart:async';
 
@@ -1072,6 +1073,16 @@ class _TransactionScreenState extends State<TransactionScreen> {
   }
 
   Future<void> _proceed() async {
+    // Reject a repeat tap before starting another backend transaction.
+    // This supplements (does not replace) the execution-time lease.
+    if (widget.autoStart &&
+        _autoStartPreflightApproved &&
+        ZeroInputDirectExecutionPolicy.supportedTypes.contains(_transactionType) &&
+        ZeroInputExecutionSession.isActive) {
+      return;
+    }
+
+
     if (widget.autoStart && _autoStartPreflightApproved) {
       if (!_simDetectionComplete || _selectedSim == null) return;
     } else {

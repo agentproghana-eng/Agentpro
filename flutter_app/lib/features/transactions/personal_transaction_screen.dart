@@ -1,3 +1,4 @@
+import 'zero_input_execution_session.dart';
 import 'zero_input_direct_execution_policy.dart';
 // personal_transaction_screen.dart
 import 'dart:collection';
@@ -1276,6 +1277,16 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   }
 
   Future<void> _submit() async {
+    // Reject a repeat tap before starting another backend transaction.
+    // This supplements (does not replace) the execution-time lease.
+    if (widget.autoStart &&
+        _autoStartPreflightApproved &&
+        ZeroInputDirectExecutionPolicy.supportedTypes.contains(_effectiveTransactionType) &&
+        ZeroInputExecutionSession.isActive) {
+      return;
+    }
+
+
     if (_isMtnMashup) {
       await _submitMtnMashup();
       return;
