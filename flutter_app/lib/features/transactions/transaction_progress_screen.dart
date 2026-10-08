@@ -530,6 +530,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
         simIdentityVerified: devicePreparation.isReady &&
             devicePreparation.simSlot != null,
         backendAuthorizationReady: !transactionId.startsWith('local_'),
+        reservationToken: widget.data['zero_input_reservation_token'] as String?,
       );
       if (!acquired) {
         _showStartupFailure(
@@ -1993,6 +1994,7 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
               result.outcome == USSDStatus.failed ||
               result.outcome == USSDStatus.cancelled,
           reportPersisted: true,
+          reservationToken: widget.data['zero_input_reservation_token'] as String?,
         );
       }
 

@@ -1079,15 +1079,19 @@ class _TransactionScreenState extends State<TransactionScreen> {
         _autoStartPreflightApproved &&
         ZeroInputDirectExecutionPolicy.supportedTypes.contains(_transactionType);
     if (zeroInput && _zeroInputSubmissionInFlight) return;
+    final reservationToken = zeroInput
+        ? ZeroInputExecutionSession.reserveForInitiation()
+        : null;
+    if (zeroInput && reservationToken == null) return;
     if (zeroInput) _zeroInputSubmissionInFlight = true;
     try {
-      await _proceedInternal();
+      await _proceedInternal(reservationToken: reservationToken);
     } finally {
       if (zeroInput) _zeroInputSubmissionInFlight = false;
     }
   }
 
-  Future<void> _proceedInternal() async {
+  Future<void> _proceedInternal({String? reservationToken}) async {
     // Reject a repeat tap before starting another backend transaction.
     // This supplements (does not replace) the execution-time lease.
     if (widget.autoStart &&
@@ -1436,6 +1440,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'transaction_future': transactionFuture,
         'zero_input_quick_action': widget.autoStart && _autoStartPreflightApproved && ZeroInputDirectExecutionPolicy.supportedTypes.contains(_transactionType),
         'zero_input_preflight_approved': widget.autoStart && _autoStartPreflightApproved,
+        'zero_input_reservation_token': reservationToken,
         'provider': _selectedProvider,
         'transaction_type': _transactionType,
         'mtn_cash_in_out_workspace': _isMtnCashInOutWorkspace,

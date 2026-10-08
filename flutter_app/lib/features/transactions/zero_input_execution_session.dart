@@ -13,18 +13,39 @@ class ZeroInputExecutionSession {
 
   static bool get isActive => _gate.isBusy;
 
+  static int _nextReservation = 0;
+  static String? _reservationOwner;
+
+  /// Reserve synchronously before initiating a backend transaction.
+  /// A reservation does not grant permission to dial.
+  static String? reserveForInitiation() {
+    if (!_gate.tryAcquire()) return null;
+    final token = 'zero_input_${++_nextReservation}';
+    _reservationOwner = token;
+    return token;
+  }
+
+  static bool ownsReservation(String? token) =>
+      token != null && _gate.isBusy && _reservationOwner == token;
+
+
   static bool tryBegin({
     required String transactionType,
     required bool quickActionRequested,
     required bool preflightApproved,
     required bool simIdentityVerified,
     required bool backendAuthorizationReady,
+    String? reservationToken,
   }) {
     if (!ZeroInputDirectExecutionPolicy.supportedTypes
         .contains(transactionType)) return false;
     if (!quickActionRequested || !preflightApproved ||
         !simIdentityVerified || !backendAuthorizationReady) return false;
-    if (!_gate.tryAcquire()) return false;
+    if (reservationToken != null) {
+      if (!ownsReservation(reservationToken)) return false;
+    } else if (!_gate.tryAcquire()) {
+      return false;
+    }
     return ZeroInputDirectExecutionPolicy.mayUseDirectRoute(
       transactionType: transactionType,
       quickActionRequested: quickActionRequested,
@@ -39,7 +60,11 @@ class ZeroInputExecutionSession {
   static void settleDefinitiveResult({
     required bool resultDefinitive,
     required bool reportPersisted,
+    String? reservationToken,
   }) {
-    if (resultDefinitive && reportPersisted) _gate.release();
+    if (!resultDefinitive || !reportPersisted) return;
+    if (_reservationOwner != null && !ownsReservation(reservationToken)) return;
+    _reservationOwner = null;
+    _gate.release();
   }
 }

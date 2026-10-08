@@ -242,6 +242,7 @@ class PersonalTransactionScreen extends StatefulWidget {
 }
 
 class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
+  String? _activeZeroInputReservationToken;
   bool _zeroInputSubmissionInFlight = false;
 
   final _formKey = GlobalKey<FormState>();
@@ -1238,6 +1239,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           'is_personal': true,
           'zero_input_quick_action': widget.autoStart && _autoStartPreflightApproved && ZeroInputDirectExecutionPolicy.supportedTypes.contains(_effectiveTransactionType),
           'zero_input_preflight_approved': widget.autoStart && _autoStartPreflightApproved,
+          'zero_input_reservation_token': _activeZeroInputReservationToken,
           'transaction': transaction,
           'provider': widget.provider,
           'transaction_type': transactionType,
@@ -1283,15 +1285,21 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         _autoStartPreflightApproved &&
         ZeroInputDirectExecutionPolicy.supportedTypes.contains(_effectiveTransactionType);
     if (zeroInput && _zeroInputSubmissionInFlight) return;
+    final reservationToken = zeroInput
+        ? ZeroInputExecutionSession.reserveForInitiation()
+        : null;
+    if (zeroInput && reservationToken == null) return;
+    if (zeroInput) _activeZeroInputReservationToken = reservationToken;
     if (zeroInput) _zeroInputSubmissionInFlight = true;
     try {
-      await _submitInternal();
+      await _submitInternal(reservationToken: reservationToken);
     } finally {
       if (zeroInput) _zeroInputSubmissionInFlight = false;
+      if (zeroInput) _activeZeroInputReservationToken = null;
     }
   }
 
-  Future<void> _submitInternal() async {
+  Future<void> _submitInternal({String? reservationToken}) async {
     // Reject a repeat tap before starting another backend transaction.
     // This supplements (does not replace) the execution-time lease.
     if (widget.autoStart &&

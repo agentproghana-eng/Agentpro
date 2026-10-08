@@ -1,0 +1,14 @@
+import 'dart:io';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  test('reservation token is forwarded to progress and settlement', () {
+    for (final name in ['transaction_screen.dart', 'personal_transaction_screen.dart']) {
+      final source = File('lib/features/transactions/$name').readAsStringSync();
+      expect(source, contains('ZeroInputExecutionSession.reserveForInitiation()'));
+      expect(source, contains("'zero_input_reservation_token':"));
+    }
+    final progress = File('lib/features/transactions/transaction_progress_screen.dart').readAsStringSync();
+    expect(RegExp("reservationToken: widget.data\['zero_input_reservation_token'\]").allMatches(progress).length, 2);
+  });
+}
