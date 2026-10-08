@@ -81,6 +81,8 @@ class TransactionScreen extends StatefulWidget {
 }
 
 class _TransactionScreenState extends State<TransactionScreen> {
+  bool _zeroInputSubmissionInFlight = false;
+
   OfflineQueueIdentity? get _offlineIdentity {
     final state = context.read<AuthBloc>().state;
     return state is AuthAuthenticated
@@ -1073,6 +1075,19 @@ class _TransactionScreenState extends State<TransactionScreen> {
   }
 
   Future<void> _proceed() async {
+    final zeroInput = widget.autoStart &&
+        _autoStartPreflightApproved &&
+        ZeroInputDirectExecutionPolicy.supportedTypes.contains(_transactionType);
+    if (zeroInput && _zeroInputSubmissionInFlight) return;
+    if (zeroInput) _zeroInputSubmissionInFlight = true;
+    try {
+      await _proceedInternal();
+    } finally {
+      if (zeroInput) _zeroInputSubmissionInFlight = false;
+    }
+  }
+
+  Future<void> _proceedInternal() async {
     // Reject a repeat tap before starting another backend transaction.
     // This supplements (does not replace) the execution-time lease.
     if (widget.autoStart &&

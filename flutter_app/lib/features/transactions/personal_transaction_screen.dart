@@ -242,6 +242,8 @@ class PersonalTransactionScreen extends StatefulWidget {
 }
 
 class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
+  bool _zeroInputSubmissionInFlight = false;
+
   final _formKey = GlobalKey<FormState>();
   final _amountCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
@@ -1277,6 +1279,19 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   }
 
   Future<void> _submit() async {
+    final zeroInput = widget.autoStart &&
+        _autoStartPreflightApproved &&
+        ZeroInputDirectExecutionPolicy.supportedTypes.contains(_effectiveTransactionType);
+    if (zeroInput && _zeroInputSubmissionInFlight) return;
+    if (zeroInput) _zeroInputSubmissionInFlight = true;
+    try {
+      await _submitInternal();
+    } finally {
+      if (zeroInput) _zeroInputSubmissionInFlight = false;
+    }
+  }
+
+  Future<void> _submitInternal() async {
     // Reject a repeat tap before starting another backend transaction.
     // This supplements (does not replace) the execution-time lease.
     if (widget.autoStart &&
