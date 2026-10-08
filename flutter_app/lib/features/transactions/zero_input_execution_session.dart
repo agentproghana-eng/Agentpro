@@ -132,9 +132,15 @@ class ZeroInputExecutionSession {
   /// A reservation does not grant permission to dial.
   static String? reserveForInitiation() {
     if (!_gate.tryAcquire()) return null;
-    final token = _newReservationToken();
-    _reservationOwner = token;
-    return token;
+    try {
+      final token = _newReservationToken();
+      _reservationOwner = token;
+      return token;
+    } catch (_) {
+      _reservationOwner = null;
+      _gate.release();
+      return null;
+    }
   }
 
   /// Release only a matching lease before backend initiation begins.
@@ -179,7 +185,7 @@ class ZeroInputExecutionSession {
     String? reservationToken,
   }) {
     if (!resultDefinitive || !reportPersisted) return;
-    if (_reservationOwner != null && !ownsReservation(reservationToken)) return;
+    if (!ownsReservation(reservationToken)) return;
     _reservationOwner = null;
     _gate.release();
   }
