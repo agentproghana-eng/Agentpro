@@ -61,6 +61,33 @@ class ZeroInputExecutionSession {
     }
   }
 
+  /// Read a matching durable recovery identity without changing either lock.
+  /// Null means absent, incomplete, inconsistent, or unreadable state.
+  static Future<Map<String, String>?> readUnresolvedIdentity() async {
+    try {
+      final token = await _storage.read(key: _unresolvedKey);
+      if (token == null || token.isEmpty) return null;
+      final encoded = await _storage.read(key: _identityKey);
+      if (encoded == null) return null;
+      final decoded = jsonDecode(encoded);
+      if (decoded is! Map) return null;
+      final owner = decoded['reservation_token'];
+      final id = decoded['transaction_id'];
+      final type = decoded['transaction_type'];
+      final mode = decoded['account_mode'];
+      if (owner != token || id is! String || id.isEmpty ||
+          id.startsWith('local_') || type is! String || type.isEmpty ||
+          (mode != 'personal' && mode != 'business')) return null;
+      return <String, String>{
+        'transaction_id': id,
+        'transaction_type': type,
+        'account_mode': mode as String,
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<bool> clearDurableReservation(String? token) async {
     if (!ownsReservation(token)) return false;
     try {
