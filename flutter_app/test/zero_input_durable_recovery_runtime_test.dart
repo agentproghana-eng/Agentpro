@@ -111,4 +111,121 @@ void main() {
       ZeroInputExecutionSession.abandonBeforeBackendInitiation(token);
     }
   });
+
+  test('storage failure blocks initiation', () async {
+    FlutterSecureStorage.setMockInitialValues({
+      'zero_input_unresolved_v1': 'existing-lock',
+    });
+
+    final token = ZeroInputExecutionSession.reserveForInitiation();
+    expect(token, isNotNull);
+
+    try {
+      expect(
+        await ZeroInputExecutionSession.persistBeforeInitiation(token),
+        isFalse,
+      );
+
+      expect(
+        await ZeroInputExecutionSession.recordOperationCheckpoint(
+          token: token,
+          operationId: operationId,
+          transactionType: 'balance_enquiry',
+          isPersonal: false,
+        ),
+        isFalse,
+      );
+    } finally {
+      ZeroInputExecutionSession.abandonBeforeBackendInitiation(token);
+    }
+  });
+
+  test('unreadable recovery identity fails closed', () async {
+    FlutterSecureStorage.setMockInitialValues({
+      'zero_input_unresolved_v1': 'previous-lock',
+      'zero_input_recovery_identity_v1': 'invalid-json',
+    });
+
+    expect(
+      await ZeroInputExecutionSession.readUnresolvedIdentity(),
+      isNull,
+    );
+
+    final token = ZeroInputExecutionSession.reserveForInitiation();
+    expect(token, isNotNull);
+
+    try {
+      expect(
+        await ZeroInputExecutionSession.persistBeforeInitiation(token),
+        isFalse,
+      );
+    } finally {
+      ZeroInputExecutionSession.abandonBeforeBackendInitiation(token);
+    }
+  });
+
+  test('persisted operation survives loss of process lease', () async {
+    final token = ZeroInputExecutionSession.reserveForInitiation();
+    expect(token, isNotNull);
+
+    expect(
+      await ZeroInputExecutionSession.persistBeforeInitiation(token),
+      isTrue,
+    );
+
+    expect(
+      await ZeroInputExecutionSession.recordOperationCheckpoint(
+        token: token,
+        operationId: operationId,
+        transactionType: 'balance_enquiry',
+        isPersonal: false,
+      ),
+      isTrue,
+    );
+
+    // Simulate loss of the in-memory lease, not an Android process restart.
+    ZeroInputExecutionSession.abandonBeforeBackendInitiation(token);
+
+    final identity =
+        await ZeroInputExecutionSession.readUnresolvedIdentity();
+
+    expect(identity, isNotNull);
+    expect(identity!['client_operation_id'], operationId);
+
+    final nextToken = ZeroInputExecutionSession.reserveForInitiation();
+    expect(nextToken, isNotNull);
+
+    try {
+      expect(
+        await ZeroInputExecutionSession.persistBeforeInitiation(nextToken),
+        isFalse,
+      );
+    } finally {
+      ZeroInputExecutionSession.abandonBeforeBackendInitiation(nextToken);
+    }
+  });
+
+  test('missing recovery identity does not bypass durable lock', () async {
+    FlutterSecureStorage.setMockInitialValues({
+      'zero_input_unresolved_v1': 'orphaned-lock',
+    });
+
+    expect(
+      await ZeroInputExecutionSession.readUnresolvedIdentity(),
+      isNull,
+    );
+
+    final token = ZeroInputExecutionSession.reserveForInitiation();
+    expect(token, isNotNull);
+
+    try {
+      expect(
+        await ZeroInputExecutionSession.persistBeforeInitiation(token),
+        isFalse,
+      );
+    } finally {
+      ZeroInputExecutionSession.abandonBeforeBackendInitiation(token);
+    }
+  });
+
 }
