@@ -92,8 +92,13 @@ void main() {
       expect(block, contains('style: style(14)'));
       expect(block, isNot(contains('icon:')));
       expect(block, isNot(contains('AppButton(')));
+      expect(block, contains("'balance_enquiry'"));
+      expect(block, contains("'cash_in_commission'"));
+      expect(block, contains("'commission_balance'"));
       expect(
-        RegExp(r'onPressed: null').allMatches(block).length,
+        RegExp(r'_openMtnAgentCashEnquiry\(')
+            .allMatches(block)
+            .length,
         3,
       );
       expect(
