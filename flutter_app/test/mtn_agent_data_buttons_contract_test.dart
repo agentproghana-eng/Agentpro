@@ -46,7 +46,7 @@ void main() {
   test('Other workspaces retain the original primary action', () {
     expect(
       source,
-      contains('!_isMtnAgentDataWorkspace)'),
+      contains('!_isMtnAgentDataWorkspace &&\n              !_isMtnAgentAirtimeWorkspace)'),
     );
     expect(
       source,
