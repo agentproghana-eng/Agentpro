@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:agent_pro_ghana/features/transactions/zero_input_execution_session.dart';
@@ -9,6 +10,75 @@ void main() {
 
   setUp(() {
     FlutterSecureStorage.setMockInitialValues({});
+  });
+
+
+  const secureStorageChannel =
+      MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
+
+  Future<void> expectStorageExceptionBlocksInitiation(
+    String failingMethod,
+  ) async {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+
+    FlutterSecureStorage.setMockInitialValues({});
+
+    var injectedFailures = 0;
+
+    messenger.setMockMethodCallHandler(
+      secureStorageChannel,
+      (call) async {
+        if (call.method == failingMethod) {
+          injectedFailures++;
+          throw PlatformException(
+            code: 'SIMULATED_STORAGE_FAILURE',
+            message: 'Injected $failingMethod failure',
+          );
+        }
+        return null;
+      },
+    );
+
+    final token = ZeroInputExecutionSession.reserveForInitiation();
+    expect(token, isNotNull);
+
+    try {
+      expect(
+        await ZeroInputExecutionSession.persistBeforeInitiation(token),
+        isFalse,
+      );
+
+      expect(
+        injectedFailures,
+        greaterThan(0),
+        reason: 'Secure-storage exception must actually be injected',
+      );
+
+      expect(
+        ZeroInputExecutionSession.ownsReservation(token),
+        isTrue,
+      );
+
+      expect(
+        ZeroInputExecutionSession.reserveForInitiation(),
+        isNull,
+      );
+    } finally {
+      messenger.setMockMethodCallHandler(
+        secureStorageChannel,
+        null,
+      );
+      ZeroInputExecutionSession.abandonBeforeBackendInitiation(token);
+    }
+  }
+
+  test('storage read exception blocks initiation', () async {
+    await expectStorageExceptionBlocksInitiation('read');
+  });
+
+  test('storage write exception blocks initiation', () async {
+    await expectStorageExceptionBlocksInitiation('write');
   });
 
   test('checkpoint survives readback and prevents a duplicate', () async {
