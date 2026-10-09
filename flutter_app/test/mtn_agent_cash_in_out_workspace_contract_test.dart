@@ -27,7 +27,7 @@ void main() {
       expect(
         transaction,
         contains(
-          "_mtnCashInOutOperation = 'cash_out';",
+          RegExp(r"_mtnCashInOutOperation\s*=\s*'cash_out';"),
         ),
       );
 
@@ -82,8 +82,8 @@ void main() {
       expect(block, contains('maximumSize: const Size(double.infinity, 44)'));
       expect(block, contains('backgroundColor: AppTheme.primaryColor'));
       expect(block, contains('width: 170'));
-      expect(block, contains('fontSize: 13'));
-      expect(block, contains('fontSize: 14'));
+      expect(block, contains('style: style(13)'));
+      expect(block, contains('style: style(14)'));
       expect(block, isNot(contains('icon:')));
       expect(block, isNot(contains('AppButton(')));
       expect(

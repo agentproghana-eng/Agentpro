@@ -9,8 +9,8 @@ void main() {
 
   test('Cash In Out keeps direct operation selector', () {
     expect(source, isNot(contains("'Choose transaction'")));
-    expect(source, contains("label: 'Cash In'"));
-    expect(source, contains("label: 'Cash Out'"));
+    expect(source, contains("child: const Text('Cash In')"));
+    expect(source, contains("child: const Text('Cash Out')"));
   });
 
   test('transaction workspace resizes for Android keyboard', () {
@@ -37,8 +37,8 @@ void main() {
     expect(scroll, greaterThan(form));
     expect(proceed, greaterThan(scroll));
     expect(source, contains('if (!_isMtnCashInOutWorkspace &&\n              !_isMtnPayToWorkspace &&\n              !_isMtnAgentDataWorkspace &&\n              !_isMtnAgentAirtimeWorkspace)'));
-    expect(source, contains("label: 'Cash In'"));
-    expect(source, contains("label: 'Cash Out'"));
+    expect(source, contains("child: const Text('Cash In')"));
+    expect(source, contains("child: const Text('Cash Out')"));
 
     expect(
       source,
