@@ -36,8 +36,12 @@ void main() {
     expect(section, contains("label: 'Buy Airtime'"));
     expect(section, contains('onPressed: _loading ? null : _proceed'));
     expect(section, contains('isLoading: _loading'));
-    expect(section, contains("label: 'Airtime Balance'"));
-    expect(section, contains('onPressed: null'));
+    expect(section, contains("label: 'Balance'"));
+    expect(
+      section,
+      contains("_showPendingBalanceConfiguration("),
+    );
+    expect(section, contains("'Airtime Balance'"));
   });
 
   test('Airtime replaces the default Proceed action', () {

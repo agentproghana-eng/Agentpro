@@ -1095,6 +1095,17 @@ class _TransactionScreenState extends State<TransactionScreen> {
     }
   }
 
+  void _showPendingBalanceConfiguration(String balanceType) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '$balanceType configuration is coming soon.',
+        ),
+      ),
+    );
+  }
+
   Future<void> _proceed() async {
     final zeroInput = widget.autoStart &&
         _autoStartPreflightApproved &&
@@ -3081,8 +3092,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: AppButton(
-                        label: 'Airtime Balance',
-                        onPressed: null,
+                        label: 'Balance',
+                        onPressed: _loading
+                            ? null
+                            : () => _showPendingBalanceConfiguration(
+                                  'Airtime Balance',
+                                ),
                         icon: Icons.account_balance_wallet_outlined,
                       ),
                     ),
@@ -3124,7 +3139,37 @@ class _TransactionScreenState extends State<TransactionScreen> {
                   ],
                 ),
                 const SizedBox(height: 14),
-              ],              // Security/info notice - content depends on whether this is
+              ],
+
+              if (_isMtnAgentDataWorkspace) ...[
+                Row(
+                                  children: [
+                                    Expanded(
+                                      child: AppButton(
+                                        label: 'Buy Data',
+                                        onPressed: _loading ? null : _proceed,
+                                        isLoading: _loading,
+                                        icon: Icons.shopping_cart_outlined,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: AppButton(
+                                        label: 'Balance',
+                                        onPressed: _loading
+                                            ? null
+                                            : () => _showPendingBalanceConfiguration(
+                                                  'Data Balance',
+                                                ),
+                                        icon: Icons.account_balance_wallet_outlined,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                const SizedBox(height: 14),
+              ],
+
+              // Security/info notice - content depends on whether this is
               // a real USSD dial (PIN entered on the network's own screen)
               // or a manual Telecel/AT Cash Out record (no dial, no PIN,
               // ever - showing the PIN notice here would be actively wrong).
@@ -3175,33 +3220,6 @@ class _TransactionScreenState extends State<TransactionScreen> {
         ),
       ),
           ),
-          if (_isMtnAgentDataWorkspace)
-            SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: AppButton(
-                        label: 'Buy Data',
-                        onPressed: _loading ? null : _proceed,
-                        isLoading: _loading,
-                        icon: Icons.shopping_cart_outlined,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: AppButton(
-                        label: 'Balance',
-                        onPressed: null,
-                        icon: Icons.account_balance_wallet_outlined,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
           if (!_isMtnCashInOutWorkspace &&
               !_isMtnPayToWorkspace &&
               !_isMtnAgentDataWorkspace &&

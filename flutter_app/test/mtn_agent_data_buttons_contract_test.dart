@@ -24,13 +24,12 @@ void main() {
 
   test('Data purchase retains existing transaction execution', () {
     final start = source.indexOf(
-      'if (_isMtnAgentDataWorkspace)\n'
-      '            SafeArea(',
+      'if (_isMtnAgentDataWorkspace) ...[',
     );
     expect(start, greaterThanOrEqualTo(0));
 
     final end = source.indexOf(
-      'if (!_isMtnCashInOutWorkspace &&',
+      '// Security/info notice',
       start,
     );
     expect(end, greaterThan(start));
@@ -40,7 +39,11 @@ void main() {
     expect(section, contains("label: 'Buy Data'"));
     expect(section, contains('onPressed: _loading ? null : _proceed'));
     expect(section, contains("label: 'Balance'"));
-    expect(section, contains('onPressed: null'));
+    expect(
+      section,
+      contains("_showPendingBalanceConfiguration("),
+    );
+    expect(section, contains("'Data Balance'"));
   });
 
   test('Other workspaces retain the original primary action', () {
