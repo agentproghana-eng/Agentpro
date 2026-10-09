@@ -200,7 +200,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
         widget.mtnCashInOutWorkspace ||
         widget.mtnPayToWorkspace ||
         widget.telecelMerchantECashWorkspace ||
-        _isTelecelMerchantSendMoneyWorkspace) {
+        _isTelecelMerchantSendMoneyWorkspace ||
+        _isMtnAgentAirtimeWorkspace ||
+        _isMtnAgentDataWorkspace) {
       return false;
     }
 
