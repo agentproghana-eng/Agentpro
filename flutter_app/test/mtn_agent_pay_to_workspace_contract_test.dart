@@ -40,7 +40,7 @@ void main() {
       expect(
         transaction,
         contains(
-          'if (!_isMtnCashInOutWorkspace && !_isMtnPayToWorkspace)',
+          'if (!_isMtnCashInOutWorkspace &&\n              !_isMtnPayToWorkspace &&\n              !_isMtnAgentDataWorkspace)',
         ),
       );
     });

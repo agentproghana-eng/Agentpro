@@ -36,7 +36,7 @@ void main() {
     expect(form, greaterThan(expanded));
     expect(scroll, greaterThan(form));
     expect(proceed, greaterThan(scroll));
-    expect(source, contains('if (!_isMtnCashInOutWorkspace && !_isMtnPayToWorkspace)'));
+    expect(source, contains('if (!_isMtnCashInOutWorkspace &&\n              !_isMtnPayToWorkspace &&\n              !_isMtnAgentDataWorkspace)'));
     expect(source, contains("label: 'Cash In'"));
     expect(source, contains("label: 'Cash Out'"));
 
