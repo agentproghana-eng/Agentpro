@@ -201,6 +201,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         widget.mtnPayToWorkspace ||
         widget.telecelMerchantECashWorkspace ||
         _isTelecelMerchantSendMoneyWorkspace ||
+        _isStandaloneMtnAgentCash ||
         _isMtnAgentAirtimeWorkspace ||
         _isMtnAgentDataWorkspace) {
       return false;
@@ -395,6 +396,15 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
   // MTN Agent Data Bundle presentation only.
   // No new backend transaction identity or USSD flow is introduced.
+  // Standalone MTN Agent Cash In and Cash Out presentation.
+  // The combined Cash In/Out workspace is handled separately.
+  bool get _isStandaloneMtnAgentCash =>
+      _selectedProvider == 'mtn' &&
+      _selectedBusinessSimRole == 'agent' &&
+      !widget.mtnCashInOutWorkspace &&
+      (_transactionType == 'send_money' ||
+          _transactionType == 'cash_out');
+
   bool get _isMtnAgentDataWorkspace =>
       _selectedProvider == 'mtn' &&
       _transactionType == 'data_bundle' &&
@@ -1142,6 +1152,35 @@ class _TransactionScreenState extends State<TransactionScreen> {
     if (action == 'cancelled') {
       context.go('/agent');
     }
+  }
+
+  void _openMtnAgentCashEnquiry(String transactionType) {
+    if (_loading || !_isMtnCashInOutWorkspace) return;
+
+    final sim = _selectedSim;
+    if (!_simDetectionComplete || sim == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Select your MTN Agent SIM first.'),
+        ),
+      );
+      return;
+    }
+
+    final query = <String, String>{
+      'type': transactionType,
+      'provider': 'mtn',
+      'sim_slot': sim.slot.toString(),
+      if (sim.iccid.isNotEmpty) 'sim_iccid': sim.iccid,
+      'sim_subscription_id': sim.subscriptionId.toString(),
+    };
+
+    context.push(
+      Uri(
+        path: '/transactions',
+        queryParameters: query,
+      ).toString(),
+    );
   }
 
   void _showPendingBalanceConfiguration(String balanceType) {
@@ -3152,7 +3191,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             width: 170,
                             child: ElevatedButton(
                               style: style(14),
-                              onPressed: null,
+                              onPressed: _loading
+                                  ? null
+                                  : () => _openMtnAgentCashEnquiry(
+                                        'balance_enquiry',
+                                      ),
                               child: const Text('Balance'),
                             ),
                           ),
@@ -3163,7 +3206,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             Expanded(
                               child: ElevatedButton(
                                 style: style(13),
-                                onPressed: null,
+                                onPressed: _loading
+                                    ? null
+                                    : () => _openMtnAgentCashEnquiry(
+                                          'cash_in_commission',
+                                        ),
                                 child: const FittedBox(
                                   fit: BoxFit.scaleDown,
                                   child: Text('Cash In Commission'),
@@ -3174,7 +3221,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             Expanded(
                               child: ElevatedButton(
                                 style: style(13),
-                                onPressed: null,
+                                onPressed: _loading
+                                    ? null
+                                    : () => _openMtnAgentCashEnquiry(
+                                          'commission_balance',
+                                        ),
                                 child: const FittedBox(
                                   fit: BoxFit.scaleDown,
                                   child: Text('Cash Out Commission'),
@@ -3188,6 +3239,17 @@ class _TransactionScreenState extends State<TransactionScreen> {
                   },
                 ),
                 const SizedBox(height: 10),
+              ],
+
+              if (_isStandaloneMtnAgentCash) ...[
+                AppButton(
+                  label: _transactionType == 'send_money'
+                      ? 'Cash In'
+                      : 'Cash Out',
+                  onPressed: _loading ? null : _proceed,
+                  isLoading: _loading,
+                ),
+                const SizedBox(height: 14),
               ],
 
               if (_isMtnAgentAirtimeWorkspace) ...[
@@ -3335,7 +3397,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
           if (!_isMtnCashInOutWorkspace &&
               !_isMtnPayToWorkspace &&
               !_isMtnAgentDataWorkspace &&
-              !_isMtnAgentAirtimeWorkspace)
+              !_isMtnAgentAirtimeWorkspace &&
+              !_isStandaloneMtnAgentCash)
             SafeArea(
               top: false,
               child: Padding(

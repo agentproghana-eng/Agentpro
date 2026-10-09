@@ -305,10 +305,30 @@ class DashboardQuickActionsSection extends StatelessWidget {
     String type,
     String role,
   ) {
-    return _catalogForRole(role)?.definitionFor(
-      provider,
-      type,
-    );
+    final catalog = _catalogForRole(role);
+    final definition = catalog?.definitionFor(provider, type);
+
+    if (definition != null) return definition;
+
+    // MTN Agent standalone Cash In is a UI-only Quick Action.
+    // Execution uses the existing send_money transaction.
+    if (provider == 'mtn' && role == 'agent' && type == 'cash_in') {
+      final cashWorkspace = catalog?.definitionFor(
+        provider,
+        'send_money',
+      );
+
+      if (cashWorkspace != null) {
+        return const QuickActionCatalogDefinition(
+          provider: 'mtn',
+          type: 'cash_in',
+          displayLabel: 'Cash In',
+          quickActionGroup: 'Cash Services',
+        );
+      }
+    }
+
+    return null;
   }
 
   @override
@@ -595,6 +615,8 @@ class DashboardQuickActionsSection extends StatelessWidget {
       // customization is authoritative, so do not suppress either tile.
       final isMtnAgentCashWorkspace =
           provider == 'mtn' && role == 'agent' && type == 'send_money';
+      final isMtnAgentStandaloneCashIn =
+          provider == 'mtn' && role == 'agent' && type == 'cash_in';
 
       final isMtnAgentPayToWorkspace =
           provider == 'mtn' &&
@@ -632,7 +654,9 @@ class DashboardQuickActionsSection extends StatelessWidget {
         catalogLabel: definition?.displayLabel,
       );
 
-      final label = isMtnAgentCashWorkspace
+      final label = isMtnAgentStandaloneCashIn
+          ? 'Cash In'
+          : isMtnAgentCashWorkspace
           ? 'Cash In/Out'
           : isTelecelMerchantSendMoney
               ? 'Send Money'
@@ -676,6 +700,7 @@ class DashboardQuickActionsSection extends StatelessWidget {
           definition.formFields.isEmpty &&
           variantResolved &&
           !isMtnAgentCashWorkspace &&
+          !isMtnAgentStandaloneCashIn &&
           !isMtnAgentPayToWorkspace &&
           !isTelecelMerchantECash &&
           !isTelecelMerchantSendMoney &&
