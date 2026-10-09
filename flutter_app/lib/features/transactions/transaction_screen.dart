@@ -375,6 +375,13 @@ class _TransactionScreenState extends State<TransactionScreen> {
       _selectedBusinessSimRole == 'agent';
 
 
+  // MTN Agent Airtime presentation only.
+  // Preserve the existing airtime transaction and USSD execution.
+  bool get _isMtnAgentAirtimeWorkspace =>
+      _selectedProvider == 'mtn' &&
+      _transactionType == 'airtime' &&
+      _selectedBusinessSimRole == 'agent';
+
   bool get _isTelecelMerchantECashWorkspace =>
       widget.telecelMerchantECashWorkspace &&
       _selectedProvider == 'telecel';
@@ -2974,6 +2981,30 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 const SizedBox(height: 14),
               ],
 
+              if (_isMtnAgentAirtimeWorkspace) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppButton(
+                        label: 'Buy Airtime',
+                        onPressed: _loading ? null : _proceed,
+                        isLoading: _loading,
+                        icon: Icons.phone_android_outlined,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: AppButton(
+                        label: 'Airtime Balance',
+                        onPressed: null,
+                        icon: Icons.account_balance_wallet_outlined,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+              ],
+
               if (_isMtnPayToWorkspace) ...[
                 Row(
                   children: [
@@ -3091,7 +3122,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
             ),
           if (!_isMtnCashInOutWorkspace &&
               !_isMtnPayToWorkspace &&
-              !_isMtnAgentDataWorkspace)
+              !_isMtnAgentDataWorkspace &&
+              !_isMtnAgentAirtimeWorkspace)
             SafeArea(
               top: false,
               child: Padding(
