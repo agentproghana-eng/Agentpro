@@ -326,7 +326,15 @@ void main() {
     test('auto-start hides unnecessary transaction forms', () {
       expect(
         businessTransaction,
-        contains('body: ZeroInputDirectExecutionPolicy.supportedTypes.contains('),
+        contains('body: _isMtnPurchaseScreen && !_mtnPurchaseRoleReady'),
+      );
+      expect(
+        businessTransaction,
+        contains('ZeroInputDirectExecutionPolicy.supportedTypes.contains(_transactionType)'),
+      );
+      expect(
+        businessTransaction,
+        contains('? _buildAutoStartStatus()'),
       );
       expect(
         personalTransaction,
