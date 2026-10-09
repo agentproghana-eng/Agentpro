@@ -1488,3 +1488,46 @@ exports.getTransaction = async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to fetch transaction' });
   }
 };
+
+
+exports.getRecoveryByOperation = async (req, res) => {
+  const operationId = req.params.operation_id;
+  const uuidPattern =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  if (!uuidPattern.test(operationId || '')) {
+    return res.status(422).json({
+      success: false,
+      message: 'Invalid operation ID',
+    });
+  }
+
+  try {
+    const result = await query(
+      `SELECT id, transaction_type, status
+       FROM personal_transactions
+       WHERE client_operation_id = $1
+         AND user_id = $2
+       LIMIT 1`,
+      [operationId, req.user.id]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({
+        success: false,
+        message: 'Transaction not found',
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: result.rows[0],
+    });
+  } catch (error) {
+    logger.error('Personal recovery lookup failed:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Recovery lookup unavailable',
+    });
+  }
+};

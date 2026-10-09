@@ -1060,6 +1060,16 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       final isOffline = connectivity.isEmpty ||
           connectivity.every((result) => result == ConnectivityResult.none);
 
+      // Zero-input execution requires a durable backend identity.
+      // Never execute a local-only transaction through this path.
+      if (isOffline && _activeZeroInputReservationToken != null) {
+        _showPersonalStartFailure(
+          'Automatic balance enquiry requires an internet connection. '
+          'Connect to the internet and try again.',
+        );
+        return null;
+      }
+
       final transactionDisabled =
           await FeatureFlagService.isTransactionDisabled(
         provider: widget.provider,
@@ -1218,6 +1228,19 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         };
       } else {
         if (_activeZeroInputReservationToken != null) {
+          final saved =
+              await ZeroInputExecutionSession.recordOperationCheckpoint(
+            token: _activeZeroInputReservationToken,
+            operationId: requestFields['client_operation_id']?.toString() ?? '',
+            transactionType: transactionType,
+            isPersonal: true,
+          );
+          if (!saved) {
+            _showPersonalStartFailure(
+              'Unable to securely prepare this balance enquiry.',
+            );
+            return null;
+          }
           _zeroInputBackendInitiationStarted = true;
         }
         final response = await ApiClient.instance.post(

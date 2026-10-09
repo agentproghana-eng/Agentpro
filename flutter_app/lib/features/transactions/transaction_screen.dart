@@ -1454,6 +1454,24 @@ class _TransactionScreenState extends State<TransactionScreen> {
     // SIM information in parallel, then waits for this Future before
     // it is allowed to dial.
     if (reservationToken != null) {
+      final saved = await ZeroInputExecutionSession.recordOperationCheckpoint(
+        token: reservationToken,
+        operationId: clientOperationId,
+        transactionType: _transactionType,
+        isPersonal: false,
+      );
+      if (!saved) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Unable to securely prepare this balance enquiry.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
       _zeroInputBackendInitiationStarted = true;
     }
     final transactionFuture = _initiateOnlineTransaction(

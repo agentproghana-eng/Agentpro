@@ -34,53 +34,160 @@ class ZeroInputExecutionSession {
     }
   }
 
+
+  /// Save the operation identity before sending the backend POST.
+  /// This does not authorize USSD or release the unresolved lock.
+  static Future<bool> recordOperationCheckpoint({
+    required String? token,
+    required String operationId,
+    required String transactionType,
+    required bool isPersonal,
+  }) async {
+    final uuid = RegExp(
+      r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-'
+      r'[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+      caseSensitive: false,
+    );
+
+    if (!ownsReservation(token) ||
+        !uuid.hasMatch(operationId) ||
+        transactionType.isEmpty) {
+      return false;
+    }
+
+    try {
+      if (await _storage.read(key: _unresolvedKey) != token) {
+        return false;
+      }
+
+      if (await _storage.read(key: _identityKey) != null) {
+        return false;
+      }
+
+      final encoded = jsonEncode(<String, dynamic>{
+        'reservation_token': token,
+        'client_operation_id': operationId,
+        'transaction_type': transactionType,
+        'account_mode': isPersonal ? 'personal' : 'business',
+      });
+
+      await _storage.write(key: _identityKey, value: encoded);
+
+      return await _storage.read(key: _identityKey) == encoded &&
+          await _storage.read(key: _unresolvedKey) == token &&
+          ownsReservation(token);
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Persist a non-sensitive server lookup identity before allowing USSD.
   /// The existing unresolved token remains the authoritative lock.
+
+  /// Preserve the pre-POST operation UUID when the backend ID arrives.
   static Future<bool> recordBackendIdentity({
     required String? token,
     required String transactionId,
     required String transactionType,
     required bool isPersonal,
   }) async {
-    if (!ownsReservation(token) || transactionId.isEmpty ||
-        transactionId.startsWith('local_')) return false;
+    if (!ownsReservation(token) ||
+        transactionId.isEmpty ||
+        transactionId.startsWith('local_')) {
+      return false;
+    }
+
     try {
-      if (await _storage.read(key: _unresolvedKey) != token) return false;
-      await _storage.write(
-        key: _identityKey,
-        value: jsonEncode(<String, dynamic>{
-          'reservation_token': token,
-          'transaction_id': transactionId,
-          'transaction_type': transactionType,
-          'account_mode': isPersonal ? 'personal' : 'business',
-        }),
-      );
-      return await _storage.read(key: _identityKey) != null &&
-          await _storage.read(key: _unresolvedKey) == token;
+      if (await _storage.read(key: _unresolvedKey) != token) {
+        return false;
+      }
+
+      final existing = await _storage.read(key: _identityKey);
+      String? operationId;
+
+      if (existing != null) {
+        final decoded = jsonDecode(existing);
+
+        if (decoded is! Map ||
+            decoded['reservation_token'] != token ||
+            decoded['transaction_type'] != transactionType ||
+            decoded['account_mode'] !=
+                (isPersonal ? 'personal' : 'business')) {
+          return false;
+        }
+
+        final previousId = decoded['transaction_id'];
+        if (previousId is String &&
+            previousId.isNotEmpty &&
+            previousId != transactionId) {
+          return false;
+        }
+
+        operationId = decoded['client_operation_id'] as String?;
+      }
+
+      final encoded = jsonEncode(<String, dynamic>{
+        'reservation_token': token,
+        if (operationId != null) 'client_operation_id': operationId,
+        'transaction_id': transactionId,
+        'transaction_type': transactionType,
+        'account_mode': isPersonal ? 'personal' : 'business',
+      });
+
+      await _storage.write(key: _identityKey, value: encoded);
+
+      return await _storage.read(key: _identityKey) == encoded &&
+          await _storage.read(key: _unresolvedKey) == token &&
+          ownsReservation(token);
     } catch (_) {
       return false;
     }
   }
 
-  /// Read a matching durable recovery identity without changing either lock.
-  /// Null means absent, incomplete, inconsistent, or unreadable state.
+  /// Read-only identity supporting both recovery stages.
   static Future<Map<String, String>?> readUnresolvedIdentity() async {
     try {
       final token = await _storage.read(key: _unresolvedKey);
       if (token == null || token.isEmpty) return null;
+
       final encoded = await _storage.read(key: _identityKey);
       if (encoded == null) return null;
+
       final decoded = jsonDecode(encoded);
-      if (decoded is! Map) return null;
-      final owner = decoded['reservation_token'];
+      if (decoded is! Map ||
+          decoded['reservation_token'] != token) {
+        return null;
+      }
+
       final id = decoded['transaction_id'];
+      final operationId = decoded['client_operation_id'];
       final type = decoded['transaction_type'];
       final mode = decoded['account_mode'];
-      if (owner != token || id is! String || id.isEmpty ||
-          id.startsWith('local_') || type is! String || type.isEmpty ||
-          (mode != 'personal' && mode != 'business')) return null;
+
+      if (type is! String ||
+          type.isEmpty ||
+          (mode != 'personal' && mode != 'business')) {
+        return null;
+      }
+
+      final hasId = id is String &&
+          id.isNotEmpty &&
+          !id.startsWith('local_');
+
+      final uuid = RegExp(
+        r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-'
+        r'[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+        caseSensitive: false,
+      );
+
+      final hasOperation =
+          operationId is String && uuid.hasMatch(operationId);
+
+      if (!hasId && !hasOperation) return null;
+
       return <String, String>{
-        'transaction_id': id,
+        if (hasId) 'transaction_id': id,
+        if (hasOperation) 'client_operation_id': operationId,
         'transaction_type': type,
         'account_mode': mode as String,
       };

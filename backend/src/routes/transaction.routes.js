@@ -465,6 +465,13 @@ router.get(
   transactionController.listTransactions,
 );
 
+
+router.get(
+  "/recovery/by-operation/:operation_id",
+  authorize("agent", "business_owner", "manager"),
+  transactionController.getRecoveryByOperation,
+);
+
 // GET /api/v1/transactions/:transaction_id — Get single transaction
 router.get(
   "/:transaction_id",
