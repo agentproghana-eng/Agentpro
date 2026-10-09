@@ -5,6 +5,8 @@
 class ZeroInputDirectExecutionPolicy {
   static const supportedTypes = <String>{
     'balance_enquiry',
+    'cash_in_commission',
+    'commission_balance',
     'check_momo_balance',
     'check_airtime_balance',
   };

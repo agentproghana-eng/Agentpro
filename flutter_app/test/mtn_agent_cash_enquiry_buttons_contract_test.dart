@@ -10,6 +10,7 @@ void main() {
 
     expect(source, contains('void _openMtnAgentCashEnquiry('));
     expect(source, contains("path: '/transactions'"));
+    expect(source, contains("'auto_start': '1'"));
     expect(source, contains("'sim_slot': sim.slot.toString()"));
     expect(source, contains("'sim_subscription_id': sim.subscriptionId.toString()"));
 

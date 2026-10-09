@@ -5,6 +5,8 @@
 class ZeroInputFlowEligibility {
   static const Set<String> _supportedZeroInputTypes = {
     'balance_enquiry',
+    'cash_in_commission',
+    'commission_balance',
     'check_momo_balance',
     'check_airtime_balance',
   };

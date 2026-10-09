@@ -1169,6 +1169,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
     final query = <String, String>{
       'type': transactionType,
+      'auto_start': '1',
       'provider': 'mtn',
       'sim_slot': sim.slot.toString(),
       if (sim.iccid.isNotEmpty) 'sim_iccid': sim.iccid,

@@ -134,6 +134,31 @@ void main() {
     );
   });
 
+  test('accepts MTN Agent commission enquiries but not separate cash-out commission', () {
+    for (final type in ['cash_in_commission', 'commission_balance']) {
+      final value = flow()..['transaction_type'] = type;
+      expect(
+        ZeroInputFlowEligibility.isEligible(
+          value,
+          provider: 'mtn',
+          transactionType: type,
+          businessSimRole: 'agent',
+        ),
+        isTrue,
+      );
+    }
+    final unsupported = flow()..['transaction_type'] = 'cash_out_commission';
+    expect(
+      ZeroInputFlowEligibility.isEligible(
+        unsupported,
+        provider: 'mtn',
+        transactionType: 'cash_out_commission',
+        businessSimRole: 'agent',
+      ),
+      isFalse,
+    );
+  });
+
   test('rejects unsupported transaction types', () {
     final value = flow()
       ..['transaction_type'] = 'send_money';
