@@ -50,7 +50,7 @@ void main() {
       expect(
         transaction,
         contains(
-          'if (!_isMtnCashInOutWorkspace &&\n              !_isMtnPayToWorkspace &&\n              !_isMtnAgentDataWorkspace &&\n              !_isMtnAgentAirtimeWorkspace)',
+          'if (!_isMtnCashInOutWorkspace &&\n              !_isMtnPayToWorkspace &&\n              !_isMtnAgentDataWorkspace &&\n              !_isMtnAgentAirtimeWorkspace &&\n              !_isStandaloneMtnAgentCash)',
         ),
       );
 
@@ -66,7 +66,13 @@ void main() {
         'if (_isMtnAgentAirtimeWorkspace) ...[',
         start,
       );
-      final block = transaction.substring(start, end);
+      final block = transaction.substring(
+        start,
+        transaction.indexOf(
+          'if (_isStandaloneMtnAgentCash) ...[',
+          start,
+        ),
+      );
 
       for (final label in [
         'Cash In',

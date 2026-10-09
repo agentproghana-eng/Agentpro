@@ -36,7 +36,7 @@ void main() {
     expect(form, greaterThan(expanded));
     expect(scroll, greaterThan(form));
     expect(proceed, greaterThan(scroll));
-    expect(source, contains('if (!_isMtnCashInOutWorkspace &&\n              !_isMtnPayToWorkspace &&\n              !_isMtnAgentDataWorkspace &&\n              !_isMtnAgentAirtimeWorkspace)'));
+    expect(source, contains('if (!_isMtnCashInOutWorkspace &&\n              !_isMtnPayToWorkspace &&\n              !_isMtnAgentDataWorkspace &&\n              !_isMtnAgentAirtimeWorkspace &&\n              !_isStandaloneMtnAgentCash)'));
     expect(source, contains("child: const Text('Cash In')"));
     expect(source, contains("child: const Text('Cash Out')"));
 

@@ -50,7 +50,7 @@ void main() {
       contains(
         '!_isMtnPayToWorkspace &&\n'
         '              !_isMtnAgentDataWorkspace &&\n'
-        '              !_isMtnAgentAirtimeWorkspace)',
+        '              !_isMtnAgentAirtimeWorkspace &&\n              !_isStandaloneMtnAgentCash)',
       ),
     );
   });
