@@ -647,8 +647,9 @@ class DashboardQuickActionsSection extends StatelessWidget {
       final icon = quickActionIconFromKey(
             preference.iconKey,
           ) ??
-          definition?.icon ??
-          quickActionCatalogIcon(type);
+          (isMtnAgentCashWorkspace
+              ? Icons.swap_horiz_rounded
+              : definition?.icon ?? quickActionCatalogIcon(type));
 
       final bundleCategory = (preference.bundleCategory ?? '').trim();
 

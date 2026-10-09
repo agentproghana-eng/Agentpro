@@ -361,6 +361,10 @@ class _TransactionScreenState extends State<TransactionScreen> {
     return const <String>[];
   }
 
+  bool get _compactMtnAgentForm =>
+      _selectedProvider == 'mtn' &&
+      _selectedBusinessSimRole == 'agent';
+
   bool get _isMtnCashInOutWorkspace =>
       widget.mtnCashInOutWorkspace && _selectedProvider == 'mtn';
 
@@ -2599,6 +2603,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                   _needsMerchantId) ...[
                 AppTextField(
                   transactionEmphasis: true,
+                  compactTransactionField: _compactMtnAgentForm,
                   controller: _merchantIdCtrl,
                   label: 'Merchant ID',
                   prefixIcon: Icons.storefront_outlined,
@@ -2699,6 +2704,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                   !_serverDrivenFormOwnsField('customer_phone')) ...[
                 AppTextField(
                   transactionEmphasis: true,
+                  compactTransactionField: _compactMtnAgentForm,
                   controller: _customerPhoneCtrl,
                   label: _isTelecelMerchantWithdrawal
                       ? 'Till Number'
@@ -2762,6 +2768,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                   _needsRecipient) ...[
                 AppTextField(
                   transactionEmphasis: true,
+                  compactTransactionField: _compactMtnAgentForm,
                   controller: _recipientPhoneCtrl,
                   label: _isMtnPayToWorkspace
                       ? 'Mobile Number / Merchant ID'
@@ -2811,6 +2818,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     ),
                   ],
                   decoration: InputDecoration(
+                    contentPadding: _compactMtnAgentForm
+                        ? const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          )
+                        : null,
                     labelText: 'Amount (GH₵)',
                     hintText: '0.00',
                     prefixIcon: const Icon(Icons.monetization_on_outlined),
@@ -2821,8 +2834,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     filled: true,
                     fillColor: context.appSurface,
                   ),
-                  style: const TextStyle(
-                    fontSize: 30,
+                  style: TextStyle(
+                    fontSize: _compactMtnAgentForm ? 21 : 30,
                     fontWeight: FontWeight.bold,
                   ),
                   validator: (v) {
@@ -2884,6 +2897,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     ),
                   ],
                   decoration: InputDecoration(
+                    contentPadding: _compactMtnAgentForm
+                        ? const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          )
+                        : null,
                     labelText: 'Agent Service Fee (GH₵)',
                     hintText: '0.00',
                     prefixIcon: const Icon(Icons.receipt_long_outlined),
@@ -3077,7 +3096,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                   children: [
                     Expanded(
                       child: AppButton(
-                        label: 'Pay to Agent',
+                        label: 'Agent',
                         onPressed: () {
                           setState(() {
                             _mtnPayToOperation = 'pay_to_agent';
@@ -3086,13 +3105,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
                         },
                         isLoading:
                             _loading && _mtnPayToOperation == 'pay_to_agent',
-                        icon: Icons.person_outline,
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: AppButton(
-                        label: 'Pay to Merchant',
+                        label: 'Merchant',
                         onPressed: () {
                           setState(() {
                             _mtnPayToOperation = 'merchant_payment';
@@ -3101,15 +3119,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
                         },
                         isLoading: _loading &&
                             _mtnPayToOperation == 'merchant_payment',
-                        icon: Icons.storefront_outlined,
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 14),
-              ],
-
-              // Security/info notice - content depends on whether this is
+              ],              // Security/info notice - content depends on whether this is
               // a real USSD dial (PIN entered on the network's own screen)
               // or a manual Telecel/AT Cash Out record (no dial, no PIN,
               // ever - showing the PIN notice here would be actively wrong).

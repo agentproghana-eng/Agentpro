@@ -16,10 +16,47 @@ void main() {
   ).readAsStringSync();
 
   group('transaction form value typography', () {
-    test('transaction emphasis keeps phone values at 30px by default', () {
+    test('transaction emphasis preserves 30px for non-compact fields', () {
       expect(
         widgets,
-        contains('fontSize: transactionValueFontSize ?? 30'),
+        contains('compactTransactionField ? 21 : 30'),
+      );
+    });
+
+    test('non-compact transaction fields retain 30px values', () {
+      expect(
+        widgets,
+        contains('(compactTransactionField ? 21 : 30)'),
+      );
+      expect(
+        widgets,
+        contains('this.compactTransactionField = false'),
+      );
+    });
+
+    test('compact transaction styling is opt-in', () {
+      expect(
+        widgets,
+        contains('this.compactTransactionField = false'),
+      );
+      expect(
+        widgets,
+        contains('compactTransactionField ? 21 : 30'),
+      );
+    });
+
+    test('compact business styling is restricted to MTN Agent', () {
+      expect(
+        business,
+        contains("bool get _compactMtnAgentForm =>"),
+      );
+      expect(
+        business,
+        contains("_selectedProvider == 'mtn' &&"),
+      );
+      expect(
+        business,
+        contains("_selectedBusinessSimRole == 'agent';"),
       );
     });
 
@@ -35,7 +72,7 @@ void main() {
       );
     });
 
-    test('business phone keeps normal 30px transaction emphasis', () {
+    test('business phone uses MTN Agent-only compact styling', () {
       final phoneStart =
           business.indexOf('controller: _customerPhoneCtrl');
 
@@ -47,10 +84,14 @@ void main() {
       );
 
       expect(before, contains('transactionEmphasis: true'));
+      expect(
+        before,
+        contains('compactTransactionField: _compactMtnAgentForm'),
+      );
       expect(before, isNot(contains('transactionValueFontSize:')));
     });
 
-    test('business amount is 30px bold', () {
+    test('business amount is 21px for MTN Agent, 30px otherwise', () {
       final amountStart =
           business.indexOf('controller: _amountCtrl');
 
@@ -66,9 +107,15 @@ void main() {
         amountEnd,
       );
 
-      expect(block, contains('fontSize: 30'));
+      expect(
+        block,
+        contains('fontSize: _compactMtnAgentForm ? 21 : 30'),
+      );
       expect(block, contains('fontWeight: FontWeight.bold'));
-      expect(block, isNot(contains('fontSize: 20')));
+      expect(
+        block,
+        contains('contentPadding: _compactMtnAgentForm'),
+      );
     });
 
     test('business reference entered value is 20px', () {
