@@ -111,6 +111,13 @@ class _OwnerMoreTab extends StatelessWidget {
             subtitle:
                 'Transactions, reports, float and shift reconciliation',
           ),
+          MoreTile(
+            Icons.storefront_outlined,
+            'Business Hub',
+            () => context.push('/marketplace/more'),
+            subtitle:
+                'Manage advertisements, reviews, enquiries and marketplace activity',
+          ),
           const MoreGroupLabel(
             'Tools & Automation',
           ),
