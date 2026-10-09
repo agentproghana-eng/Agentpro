@@ -1,4 +1,4 @@
-import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage_platform_interface/flutter_secure_storage_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:agent_pro_ghana/features/transactions/zero_input_execution_session.dart';
@@ -13,31 +13,16 @@ void main() {
   });
 
 
-  const secureStorageChannel =
-      MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
 
   Future<void> expectStorageExceptionBlocksInitiation(
     String failingMethod,
   ) async {
-    final messenger =
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-
-    FlutterSecureStorage.setMockInitialValues({});
-
     var injectedFailures = 0;
 
-    messenger.setMockMethodCallHandler(
-      secureStorageChannel,
-      (call) async {
-        if (call.method == failingMethod) {
-          injectedFailures++;
-          throw PlatformException(
-            code: 'SIMULATED_STORAGE_FAILURE',
-            message: 'Injected $failingMethod failure',
-          );
-        }
-        return null;
-      },
+    FlutterSecureStoragePlatform.instance =
+        _FailingSecureStoragePlatform(
+      failingMethod: failingMethod,
+      onFailure: () => injectedFailures++,
     );
 
     final token = ZeroInputExecutionSession.reserveForInitiation();
@@ -52,24 +37,14 @@ void main() {
       expect(
         injectedFailures,
         greaterThan(0),
-        reason: 'Secure-storage exception must actually be injected',
+        reason: 'The storage exception must actually occur',
       );
 
-      expect(
-        ZeroInputExecutionSession.ownsReservation(token),
-        isTrue,
-      );
-
-      expect(
-        ZeroInputExecutionSession.reserveForInitiation(),
-        isNull,
-      );
+      expect(ZeroInputExecutionSession.ownsReservation(token), isTrue);
+      expect(ZeroInputExecutionSession.reserveForInitiation(), isNull);
     } finally {
-      messenger.setMockMethodCallHandler(
-        secureStorageChannel,
-        null,
-      );
       ZeroInputExecutionSession.abandonBeforeBackendInitiation(token);
+      FlutterSecureStorage.setMockInitialValues({});
     }
   }
 
@@ -298,4 +273,38 @@ void main() {
     }
   });
 
+}
+
+class _FailingSecureStoragePlatform extends FlutterSecureStoragePlatform {
+  _FailingSecureStoragePlatform({
+    required this.failingMethod,
+    required this.onFailure,
+  });
+
+  final String failingMethod;
+  final void Function() onFailure;
+
+  @override
+  Future<String?> read({
+    required String key,
+    required Map<String, String> options,
+  }) async {
+    if (failingMethod == 'read') {
+      onFailure();
+      throw StateError('Injected secure-storage read failure');
+    }
+    return null;
+  }
+
+  @override
+  Future<void> write({
+    required String key,
+    required String value,
+    required Map<String, String> options,
+  }) async {
+    if (failingMethod == 'write') {
+      onFailure();
+      throw StateError('Injected secure-storage write failure');
+    }
+  }
 }
