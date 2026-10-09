@@ -44,6 +44,9 @@ jest.mock(
     listTransactionsCursor: jest.fn(
       (_req, res) => res.status(204).end(),
     ),
+    getRecoveryByOperation: jest.fn(
+      (_req, res) => res.status(204).end(),
+    ),
     getTransaction: jest.fn(
       (_req, res) => res.status(204).end(),
     ),
