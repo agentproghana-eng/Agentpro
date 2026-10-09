@@ -2941,44 +2941,111 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 const SizedBox(height: 14),
               ],
 
+              // MTN Agent Cash In/Out: compact, text-only actions.
+              // Unverified enquiry and commission flows stay disabled.
               if (_isMtnCashInOutWorkspace) ...[
-                Row(
-                  children: [
-                    Expanded(
-                      child: AppButton(
-                        label: 'Cash In',
-                        onPressed: () {
-                          setState(() {
-                            _mtnCashInOutOperation = 'send_money';
-                          });
-                          _proceed();
-                        },
-                        isLoading: _loading &&
-                            _mtnCashInOutOperation == 'send_money',
-                        icon: Icons.arrow_downward,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: AppButton(
-                        label: 'Cash Out',
-                        onPressed: () {
-                          setState(() {
-                            _mtnCashInOutOperation = 'cash_out';
-                            _agentServiceFeeEnabled = false;
-                            _feeManuallyOverridden = false;
-                            _feeCtrl.text = '0.00';
-                          });
-                          _proceed();
-                        },
-                        isLoading:
-                            _loading && _mtnCashInOutOperation == 'cash_out',
-                        icon: Icons.arrow_upward,
-                      ),
-                    ),
-                  ],
+                Builder(
+                  builder: (context) {
+                    ButtonStyle style(double fontSize) =>
+                        ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryColor,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(0, 44),
+                          maximumSize: const Size(double.infinity, 44),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                          ),
+                          textStyle: TextStyle(
+                            fontSize: fontSize,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(9),
+                          ),
+                        );
+
+                    return Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton(
+                                style: style(14),
+                                onPressed: _loading
+                                    ? null
+                                    : () {
+                                        setState(() {
+                                          _mtnCashInOutOperation =
+                                              'send_money';
+                                        });
+                                        _proceed();
+                                      },
+                                child: const Text('Cash In'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: ElevatedButton(
+                                style: style(14),
+                                onPressed: _loading
+                                    ? null
+                                    : () {
+                                        setState(() {
+                                          _mtnCashInOutOperation =
+                                              'cash_out';
+                                          _agentServiceFeeEnabled = false;
+                                          _feeManuallyOverridden = false;
+                                          _feeCtrl.text = '0.00';
+                                        });
+                                        _proceed();
+                                      },
+                                child: const Text('Cash Out'),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Center(
+                          child: SizedBox(
+                            width: 170,
+                            child: ElevatedButton(
+                              style: style(14),
+                              onPressed: null,
+                              child: const Text('Balance'),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton(
+                                style: style(13),
+                                onPressed: null,
+                                child: const FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text('Cash In Commission'),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: ElevatedButton(
+                                style: style(13),
+                                onPressed: null,
+                                child: const FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text('Cash Out Commission'),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    );
+                  },
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 10),
               ],
 
               if (_isMtnAgentAirtimeWorkspace) ...[

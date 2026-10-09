@@ -43,8 +43,8 @@ void main() {
     });
 
     test('workspace uses Cash In and Cash Out as form actions', () {
-      expect(transaction, contains("label: 'Cash In'"));
-      expect(transaction, contains("label: 'Cash Out'"));
+      expect(transaction, contains("child: const Text('Cash In')"));
+      expect(transaction, contains("child: const Text('Cash Out')"));
       expect(transaction, contains('mtnCashInOutWorkspace'));
 
       expect(
@@ -56,6 +56,48 @@ void main() {
 
       expect(transaction, isNot(contains("'CASH IN'")));
       expect(transaction, isNot(contains("'CASH OUT'")));
+    });
+
+    test('cash workspace uses compact icon-free five-button layout', () {
+      final start = transaction.indexOf(
+        '// MTN Agent Cash In/Out: compact, text-only actions.',
+      );
+      final end = transaction.indexOf(
+        'if (_isMtnAgentAirtimeWorkspace) ...[',
+        start,
+      );
+      final block = transaction.substring(start, end);
+
+      for (final label in [
+        'Cash In',
+        'Cash Out',
+        'Balance',
+        'Cash In Commission',
+        'Cash Out Commission',
+      ]) {
+        expect(block, contains("Text('$label')"));
+      }
+
+      expect(block, contains('minimumSize: const Size(0, 44)'));
+      expect(block, contains('maximumSize: const Size(double.infinity, 44)'));
+      expect(block, contains('backgroundColor: AppTheme.primaryColor'));
+      expect(block, contains('width: 170'));
+      expect(block, contains('fontSize: 13'));
+      expect(block, contains('fontSize: 14'));
+      expect(block, isNot(contains('icon:')));
+      expect(block, isNot(contains('AppButton(')));
+      expect(
+        RegExp(r'onPressed: null').allMatches(block).length,
+        3,
+      );
+      expect(
+        RegExp(r'_proceed\(\);').allMatches(block).length,
+        2,
+      );
+      expect(block, contains("'send_money'"));
+      expect(block, contains("'cash_out'"));
+      expect(block, contains('_agentServiceFeeEnabled = false;'));
+      expect(block, contains("_feeCtrl.text = '0.00';"));
     });
 
     test('MTN Agent dashboard supports combined and individual cash actions', () {
