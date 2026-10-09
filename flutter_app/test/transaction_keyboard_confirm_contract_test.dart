@@ -58,8 +58,19 @@ void main() {
     );
   });
 
-  test('transaction Phone and Amount emphasis remains 30px', () {
-    expect(source, contains('fontSize: 30'));
+  test('transaction amount preserves compact and default typography', () {
+    expect(
+      source,
+      contains('fontSize: _compactMtnAgentForm ? 21 : 30'),
+    );
+    expect(
+      source,
+      contains("_selectedProvider == 'mtn' &&"),
+    );
+    expect(
+      source,
+      contains("_selectedBusinessSimRole == 'agent';"),
+    );
   });
 
   test('service fee toggle remains directly before primary action', () {

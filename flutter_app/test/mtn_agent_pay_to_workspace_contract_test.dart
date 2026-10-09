@@ -33,9 +33,9 @@ void main() {
       );
     });
 
-    test('uses Pay to Agent and Pay to Merchant as form actions', () {
-      expect(transaction, contains("label: 'Pay to Agent'"));
-      expect(transaction, contains("label: 'Pay to Merchant'"));
+    test('uses Agent and Merchant as form actions', () {
+      expect(transaction, contains("label: 'Agent'"));
+      expect(transaction, contains("label: 'Merchant'"));
 
       expect(
         transaction,
