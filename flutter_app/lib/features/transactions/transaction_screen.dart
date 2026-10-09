@@ -834,8 +834,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
         }
       });
 
-      if (providerChanged) {
-        _scheduleFlowPreload();
+      // Resolve the selected SIM's authoritative business role after
+      // SIM detection completes, even when the provider is unchanged.
+      // This also refreshes role-specific transaction presentation.
+      if (_selectedSim != null) {
+        _scheduleFlowPreload(immediate: true);
       }
 
       if (ZeroInputDirectExecutionPolicy.supportedTypes.contains(_transactionType) &&
