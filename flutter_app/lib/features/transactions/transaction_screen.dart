@@ -367,6 +367,14 @@ class _TransactionScreenState extends State<TransactionScreen> {
   bool get _isMtnPayToWorkspace =>
       widget.mtnPayToWorkspace && _selectedProvider == 'mtn';
 
+  // MTN Agent Data Bundle presentation only.
+  // No new backend transaction identity or USSD flow is introduced.
+  bool get _isMtnAgentDataWorkspace =>
+      _selectedProvider == 'mtn' &&
+      _transactionType == 'data_bundle' &&
+      _selectedBusinessSimRole == 'agent';
+
+
   bool get _isTelecelMerchantECashWorkspace =>
       widget.telecelMerchantECashWorkspace &&
       _selectedProvider == 'telecel';
@@ -3054,7 +3062,36 @@ class _TransactionScreenState extends State<TransactionScreen> {
         ),
       ),
           ),
-          if (!_isMtnCashInOutWorkspace && !_isMtnPayToWorkspace)
+          if (_isMtnAgentDataWorkspace)
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: AppButton(
+                        label: 'Buy Data',
+                        onPressed: _loading ? null : _proceed,
+                        isLoading: _loading,
+                        icon: Icons.shopping_cart_outlined,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: AppButton(
+                        label: 'Balance',
+                        onPressed: null,
+                        icon: Icons.account_balance_wallet_outlined,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (!_isMtnCashInOutWorkspace &&
+              !_isMtnPayToWorkspace &&
+              !_isMtnAgentDataWorkspace)
             SafeArea(
               top: false,
               child: Padding(
