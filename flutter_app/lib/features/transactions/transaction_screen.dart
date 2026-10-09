@@ -128,6 +128,26 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // cash_out stays the legacy manual flow, while a Telecel Merchant cash_out
   // is the automated Agent Till withdrawal.
   String? _selectedBusinessSimRole;
+  String? _verifiedBusinessRoleSimKey;
+  String? _businessRoleResolutionError;
+  int _businessRoleRequestGeneration = 0;
+
+  String? get _currentBusinessRoleSimKey {
+    final sim = _selectedSim;
+    if (sim == null) return null;
+    return '${sim.network}:${sim.slot}:${sim.iccid}:${sim.subscriptionId}';
+  }
+
+  bool get _isMtnPurchaseScreen =>
+      _selectedProvider == 'mtn' &&
+      (_transactionType == 'airtime' ||
+          _transactionType == 'data_bundle');
+
+  bool get _mtnPurchaseRoleReady =>
+      _simDetectionComplete &&
+      _selectedSim != null &&
+      _verifiedBusinessRoleSimKey == _currentBusinessRoleSimKey &&
+      _selectedBusinessSimRole != null;
 
   // Telecel Merchant Data uses exact Self / Other flow variants.
   // Telecel owns the changing live bundle catalogue.
@@ -923,6 +943,15 @@ class _TransactionScreenState extends State<TransactionScreen> {
       return;
     }
 
+    final selectedSimKey = _currentBusinessRoleSimKey;
+    final requestGeneration = ++_businessRoleRequestGeneration;
+
+    if (_isMtnPurchaseScreen && mounted) {
+      setState(() {
+        _businessRoleResolutionError = null;
+      });
+    }
+
     String businessSimRole;
 
     try {
@@ -934,15 +963,28 @@ class _TransactionScreenState extends State<TransactionScreen> {
         simSubscriptionId: selectedSim.subscriptionId,
         provider: selectedSim.network,
       );
-    } on StateError {
+    } on StateError catch (error) {
+      if (!mounted ||
+          requestGeneration != _businessRoleRequestGeneration ||
+          _currentBusinessRoleSimKey != selectedSimKey) return;
+
+      setState(() {
+        _selectedBusinessSimRole = null;
+        _verifiedBusinessRoleSimKey = null;
+        _businessRoleResolutionError = error.message.toString();
+      });
       return;
     }
 
-    if (mounted && _selectedBusinessSimRole != businessSimRole) {
-      setState(() {
-        _selectedBusinessSimRole = businessSimRole;
-      });
-    }
+    if (!mounted ||
+        requestGeneration != _businessRoleRequestGeneration ||
+        _currentBusinessRoleSimKey != selectedSimKey) return;
+
+    setState(() {
+      _selectedBusinessSimRole = businessSimRole;
+      _verifiedBusinessRoleSimKey = selectedSimKey;
+      _businessRoleResolutionError = null;
+    });
 
     final provider = _selectedProvider;
     final transactionType = _transactionType;
@@ -1026,6 +1068,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
     setState(() {
       _selectedProvider = provider;
       _selectedBusinessSimRole = null;
+      _verifiedBusinessRoleSimKey = null;
+      _businessRoleResolutionError = null;
 
       final providerSims = _simCards
           .where((sim) => sim.network == provider)
@@ -1876,7 +1920,50 @@ class _TransactionScreenState extends State<TransactionScreen> {
           const SizedBox(width: 4),
         ],
       ),
-      body: ZeroInputDirectExecutionPolicy.supportedTypes.contains(_transactionType) && widget.autoStart && !_autoStartFallbackToForm
+      body: _isMtnPurchaseScreen && !_mtnPurchaseRoleReady
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (!_simDetectionComplete ||
+                        (_selectedSim != null &&
+                            _businessRoleResolutionError == null))
+                      const CircularProgressIndicator()
+                    else
+                      const Icon(
+                        Icons.sim_card_alert_outlined,
+                        size: 36,
+                      ),
+                    const SizedBox(height: 16),
+                    Text(
+                      !_simDetectionComplete
+                          ? 'Detecting SIM…'
+                          : _selectedSim == null
+                              ? 'The selected MTN SIM is unavailable.'
+                              : _businessRoleResolutionError ??
+                                  (_selectedBusinessSimRole == 'agent'
+                                      ? 'Verifying selected SIM…'
+                                      : 'This transaction requires a verified Agent SIM. Check Settings > SIM Purpose.'),
+                      textAlign: TextAlign.center,
+                    ),
+                    if (_simDetectionComplete &&
+                        _selectedSim != null &&
+                        _businessRoleResolutionError != null) ...[
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: () =>
+                            _scheduleFlowPreload(immediate: true),
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Retry Verification'),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            )
+          : ZeroInputDirectExecutionPolicy.supportedTypes.contains(_transactionType) && widget.autoStart && !_autoStartFallbackToForm
           ? _buildAutoStartStatus()
           : Column(
         children: [
@@ -2001,7 +2088,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             setState(() {
                               _selectedSimSlot = sim.slot;
                               _initialSimIdentityUnavailable = false;
+                              _selectedBusinessSimRole = null;
+                              _verifiedBusinessRoleSimKey = null;
+                              _businessRoleResolutionError = null;
                             });
+                            _scheduleFlowPreload(immediate: true);
                           },
                           selectedColor: color.withValues(alpha: 0.16),
                           avatar: Icon(
@@ -2075,7 +2166,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             setState(() {
                               _selectedSimSlot = sim.slot;
                               _initialSimIdentityUnavailable = false;
+                              _selectedBusinessSimRole = null;
+                              _verifiedBusinessRoleSimKey = null;
+                              _businessRoleResolutionError = null;
                             });
+                            _scheduleFlowPreload(immediate: true);
                           },
                           selectedColor: color.withValues(alpha: 0.16),
                           avatar: Icon(
@@ -2202,7 +2297,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             setState(() {
                               _selectedSimSlot = sim.slot;
                               _initialSimIdentityUnavailable = false;
+                              _selectedBusinessSimRole = null;
+                              _verifiedBusinessRoleSimKey = null;
+                              _businessRoleResolutionError = null;
                             });
+                            _scheduleFlowPreload(immediate: true);
                           },
                           selectedColor: color.withValues(alpha: 0.16),
                           avatar: Icon(
@@ -2280,7 +2379,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             setState(() {
                               _selectedSimSlot = sim.slot;
                               _initialSimIdentityUnavailable = false;
+                              _selectedBusinessSimRole = null;
+                              _verifiedBusinessRoleSimKey = null;
+                              _businessRoleResolutionError = null;
                             });
+                            _scheduleFlowPreload(immediate: true);
                           },
                           selectedColor: color.withValues(alpha: 0.16),
                           avatar: Icon(
@@ -2386,7 +2489,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             setState(() {
                               _selectedSimSlot = sim.slot;
                               _initialSimIdentityUnavailable = false;
+                              _selectedBusinessSimRole = null;
+                              _verifiedBusinessRoleSimKey = null;
+                              _businessRoleResolutionError = null;
                             });
+                            _scheduleFlowPreload(immediate: true);
                           },
                           selectedColor: color.withValues(alpha: 0.16),
                           avatar: Icon(
