@@ -285,6 +285,10 @@ class _FailingSecureStoragePlatform extends FlutterSecureStoragePlatform {
   final void Function() onFailure;
 
   @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      super.noSuchMethod(invocation);
+
+  @override
   Future<String?> read({
     required String key,
     required Map<String, String> options,
