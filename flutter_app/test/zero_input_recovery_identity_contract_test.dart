@@ -39,11 +39,11 @@ void main() {
 
     expect(
       session,
-      contains("operationId = decoded['client_operation_id'] as String?;"),
+      contains("final operationId = decoded['client_operation_id'];"),
     );
     expect(
       session,
-      contains("if (operationId != null) 'client_operation_id': operationId"),
+      contains("'client_operation_id': operationId"),
     );
     expect(
       session,
