@@ -1023,9 +1023,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
       // This also refreshes role-specific transaction presentation.
       if (_selectedSim != null) {
         _scheduleFlowPreload(immediate: true);
-        if (_isMtnCashInOutWorkspace) {
-          unawaited(_prewarmEnquiryPreflight());
-        }
+      }
+
+      // Warm the Balance/Commission preflight so those taps start instantly.
+      if (_isMtnCashInOutWorkspace && _selectedSim != null) {
+        unawaited(_prewarmEnquiryPreflight());
       }
 
       if (ZeroInputDirectExecutionPolicy.supportedTypes.contains(_transactionType) &&
