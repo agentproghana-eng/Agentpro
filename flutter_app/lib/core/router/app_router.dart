@@ -13,6 +13,7 @@ import '../../features/dashboard/agent_dashboard.dart';
 import '../../features/dashboard/manager_dashboard.dart';
 import '../../features/dashboard/owner_dashboard.dart';
 import '../../features/transactions/transaction_screen.dart';
+import '../../features/transactions/zero_input_direct_execution_policy.dart';
 import '../../features/transactions/transaction_progress_screen.dart';
 import '../../features/transactions/transaction_detail_screen.dart';
 import '../../features/transactions/transaction_history_screen.dart';
@@ -307,7 +308,7 @@ class AppRouter {
         ),
         GoRoute(
           path: '/transactions',
-          builder: (_, state) {
+          pageBuilder: (_, state) {
             final provider = state.uri.queryParameters['provider'];
             final type = canonicalBusinessTransactionType(
               state.uri.queryParameters['type'],
@@ -318,7 +319,10 @@ class AppRouter {
             // initiate money movement. Send a bare route to history instead
             // of silently defaulting to the retired legacy Cash In flow.
             if (type == null) {
-              return const TransactionHistoryScreen();
+              return MaterialPage<void>(
+                key: state.pageKey,
+                child: const TransactionHistoryScreen(),
+              );
             }
             final simSlotStr = state.uri.queryParameters['sim_slot'];
             final simIccid = state.uri.queryParameters['sim_iccid'];
@@ -339,7 +343,7 @@ class AppRouter {
                     ? routeExtra
                     : null;
 
-            return TransactionScreen(
+            final screen = TransactionScreen(
               transactionType: type,
               initialProvider: provider,
               catalogDefinition: catalogDefinition,
@@ -353,6 +357,24 @@ class AppRouter {
               initialRecipientMode: recipientMode,
               autoStart: autoStart,
             );
+
+            // A zero-input quick action (Balance, Cash In Commission,
+            // Commission Balance) starts dialing by itself. Keep the screen
+            // it came from visible until the progress screen opens, instead
+            // of showing an empty transaction screen in between.
+            if (autoStart &&
+                ZeroInputDirectExecutionPolicy.supportedTypes.contains(type)) {
+              return CustomTransitionPage<void>(
+                key: state.pageKey,
+                opaque: false,
+                transitionDuration: Duration.zero,
+                reverseTransitionDuration: Duration.zero,
+                child: screen,
+                transitionsBuilder: (_, __, ___, child) => child,
+              );
+            }
+
+            return MaterialPage<void>(key: state.pageKey, child: screen);
           },
         ),
         GoRoute(

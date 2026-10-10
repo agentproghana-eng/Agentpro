@@ -9,6 +9,7 @@ import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/dashboard_empty_state.dart';
 import '../../ussd_settings/quick_action_catalog.dart';
 import '../../ussd_settings/quick_action_preference.dart';
+import '../../transactions/zero_input_direct_execution_policy.dart';
 
 class DashboardQuickActionsSection extends StatelessWidget {
   const DashboardQuickActionsSection({
@@ -694,10 +695,18 @@ class DashboardQuickActionsSection extends StatelessWidget {
           (!requiresBundleChoice || bundleCategory.isNotEmpty) &&
           (!requiresRecipientChoice || recipientMode.isNotEmpty);
 
+      // Balance and Commission enquiries need no input, so they start
+      // dialing as soon as the tile is tapped instead of waiting on a
+      // "Proceed to Execute" screen. The transaction screen still verifies the
+      // SIM, role and flow first, and shows its form if that check fails.
+      final isAgentZeroInputEnquiry = role == 'agent' &&
+          ZeroInputDirectExecutionPolicy.supportedTypes.contains(type);
+
       final directStart =
-          definition != null &&
-          definition.hasServerDrivenFormSchema &&
-          definition.formFields.isEmpty &&
+          ((definition != null &&
+                      definition.hasServerDrivenFormSchema &&
+                      definition.formFields.isEmpty) ||
+                  isAgentZeroInputEnquiry) &&
           variantResolved &&
           !isMtnAgentCashWorkspace &&
           !isMtnAgentStandaloneCashIn &&

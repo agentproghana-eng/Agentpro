@@ -18,7 +18,19 @@ class ZeroInputExecutionSession {
 
   static bool get isActive => _gate.isBusy;
 
-  static const _storage = FlutterSecureStorage();
+  // Must use exactly the same options as StorageService. On Android the
+  // plugin migrates every entry out of the plain store into the encrypted one
+  // whenever an encrypted-options call runs, so a reservation written through
+  // a differently configured instance disappears after the next unrelated
+  // StorageService call and the checkpoint then sees it as missing.
+  static const _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(
+      encryptedSharedPreferences: true,
+      keyCipherAlgorithm:
+          KeyCipherAlgorithm.RSA_ECB_OAEPwithSHA_256andMGF1Padding,
+      storageCipherAlgorithm: StorageCipherAlgorithm.AES_GCM_NoPadding,
+    ),
+  );
   static const _unresolvedKey = 'zero_input_unresolved_v1';
   static const _identityKey = 'zero_input_recovery_identity_v1';
 
@@ -63,6 +75,48 @@ class ZeroInputExecutionSession {
     }
   }
 
+  static const _storageUnifiedKey = 'zero_input_storage_unified_v1';
+
+  /// One-time cleanup after the reservation moved to the app's encrypted
+  /// storage. Earlier builds wrote the reservation through a differently
+  /// configured instance, and failed attempts left a token behind that the
+  /// plugin later migrated into the encrypted store, where it now blocks every
+  /// enquiry as "unresolved".
+  ///
+  /// A reservation WITHOUT an operation identity never reached the backend,
+  /// because the identity is saved before any request is sent, so it is safe to
+  /// drop once. Any reservation that has an identity is left untouched and
+  /// keeps blocking until it is verified. After the first run this does
+  /// nothing, so normal behaviour stays strict.
+  static Future<void> clearPreUnificationOrphanOnce() async {
+    if (_gate.isBusy) return;
+    try {
+      if (await _storage.read(key: _storageUnifiedKey) != null) return;
+      final unresolved = await _storage.read(key: _unresolvedKey);
+      final identity = await _storage.read(key: _identityKey);
+      if (unresolved != null && identity == null) {
+        await _storage.delete(key: _unresolvedKey);
+        // Still present: stay fail-closed and try again next time.
+        if (await _storage.read(key: _unresolvedKey) != null) return;
+      }
+      await _storage.write(key: _storageUnifiedKey, value: 'done');
+    } catch (_) {
+      // Storage uncertain: change nothing; the strict checks still apply.
+    }
+  }
+
+  /// Read the reservation token, re-reading briefly when the platform storage
+  /// returns nothing right after a verified write. Read-only: it never writes
+  /// or recreates the token, so a genuinely missing reservation still fails.
+  static Future<String?> _readUnresolvedTokenSettled() async {
+    var value = await _storage.read(key: _unresolvedKey);
+    for (var attempt = 0; value == null && attempt < 2; attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      value = await _storage.read(key: _unresolvedKey);
+    }
+    return value;
+  }
+
   /// Save the operation identity before sending the backend POST.
   /// This does not authorize USSD or release the unresolved lock.
   /// Record the operation UUID before any backend POST. Only a matching
@@ -88,8 +142,13 @@ class ZeroInputExecutionSession {
     }
 
     try {
-      if (await _storage.read(key: _unresolvedKey) != token) {
-        _lastPreparationFailureCode = 'unresolved_token_mismatch';
+      final stored = await _readUnresolvedTokenSettled();
+      if (stored != token) {
+        // Distinguish a missing value (a storage read that returned nothing)
+        // from a different value (another writer replaced it).
+        _lastPreparationFailureCode = stored == null
+            ? 'unresolved_token_missing'
+            : 'unresolved_token_mismatch';
         return false;
       }
       if (await _storage.read(key: _identityKey) != null) {

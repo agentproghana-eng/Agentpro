@@ -85,6 +85,30 @@ class _TransactionScreenState extends State<TransactionScreen> {
   bool _zeroInputSubmissionInFlight = false;
   bool _zeroInputBackendInitiationStarted = false;
 
+  // Synchronous re-entrancy gate for every submission path. `_loading` is
+  // only set after several awaits inside _proceedInternal (role refresh,
+  // device identity, ...), so a second tap in that window used to start a
+  // second submission with its own clientOperationId. The gate is taken
+  // before the first await and released in `finally`, and also released
+  // just before the progress result is handled so Retry Now can re-enter.
+  //
+  // The owner token lets a finishing call release only its own hold, so an
+  // outer `finally` can never clobber a gate that a newer call has taken.
+  Object? _submissionGateOwner;
+
+  bool get _submissionGateHeld => _submissionGateOwner != null;
+
+  // True while any submission or enquiry preflight is running. Workspace
+  // button handlers check this before they mutate the selected operation,
+  // because their captured onPressed closures can be stale until the next
+  // rebuild.
+  bool get _submissionInFlight =>
+      _loading || _submissionGateHeld || _workspaceEnquiryBusy;
+
+  void _releaseSubmissionGate() {
+    _submissionGateOwner = null;
+  }
+
   OfflineQueueIdentity? get _offlineIdentity {
     final state = context.read<AuthBloc>().state;
     return state is AuthAuthenticated
@@ -143,6 +167,23 @@ class _TransactionScreenState extends State<TransactionScreen> {
       (_transactionType == 'airtime' ||
           _transactionType == 'data_bundle');
 
+  // The standalone MTN Cash In / Cash Out screens present themselves once the
+  // SIM role is known. Until then, show the same short loading state as the
+  // airtime and data screens instead of a generic form with a Proceed bar
+  // that is replaced a moment later.
+  bool get _awaitingStandaloneMtnCashRole =>
+      _selectedProvider == 'mtn' &&
+      !widget.mtnCashInOutWorkspace &&
+      !widget.mtnPayToWorkspace &&
+      !widget.telecelMerchantECashWorkspace &&
+      (_transactionType == 'send_money' || _transactionType == 'cash_out') &&
+      // Only while the role is still being resolved. A verified non-agent
+      // SIM or a resolution error falls through to the normal form.
+      (!_simDetectionComplete ||
+          (_selectedSim != null &&
+              _selectedBusinessSimRole == null &&
+              _businessRoleResolutionError == null));
+
   bool get _mtnPurchaseRoleReady =>
       _simDetectionComplete &&
       _selectedSim != null &&
@@ -162,6 +203,93 @@ class _TransactionScreenState extends State<TransactionScreen> {
   bool _workspaceEnquiryBusy = false;
   bool _workspaceEnquiryRetryRequested = false;
   String? _workspaceEnquirySimKey;
+
+  // Short-lived record of server-verified Balance/Commission preflights, so a
+  // tap does not wait on two network round trips. Entries are keyed by SIM,
+  // enquiry type and flow selectors, and expire quickly so a disabled flow or
+  // a changed SIM role is still picked up by a fresh live check.
+  static const Duration _enquiryPreflightTtl = Duration(seconds: 60);
+  static const List<String> _enquiryPreflightTypes = <String>[
+    'balance_enquiry',
+    'cash_in_commission',
+    'commission_balance',
+  ];
+  final Map<String, DateTime> _enquiryPreflightVerifiedAt =
+      <String, DateTime>{};
+
+  String? _enquiryPreflightKey(String type) {
+    final simKey = _currentBusinessRoleSimKey;
+    if (simKey == null) return null;
+    return '$simKey|$type|${_initialBundleCategory ?? ''}|'
+        '${_effectiveRecipientMode ?? ''}';
+  }
+
+  bool _hasFreshEnquiryPreflight(String type) {
+    final key = _enquiryPreflightKey(type);
+    final verifiedAt = key == null ? null : _enquiryPreflightVerifiedAt[key];
+    return verifiedAt != null &&
+        DateTime.now().difference(verifiedAt) < _enquiryPreflightTtl;
+  }
+
+  void _recordEnquiryPreflight(String type) {
+    final key = _enquiryPreflightKey(type);
+    if (key != null) _enquiryPreflightVerifiedAt[key] = DateTime.now();
+  }
+
+  /// Verifies the three MTN Agent enquiry flows in the background as soon as
+  /// the SIM is known. A failure only means the tap falls back to the live
+  /// check; it never authorizes execution.
+  Future<void> _prewarmEnquiryPreflight() async {
+    final sim = _selectedSim;
+    final simKey = _currentBusinessRoleSimKey;
+    if (!_isMtnCashInOutWorkspace ||
+        !_simDetectionComplete ||
+        sim == null ||
+        simKey == null ||
+        _initialSimIdentityUnavailable) {
+      return;
+    }
+
+    try {
+      final role = await SimRoleAssignmentService.businessRoleForSlot(
+        sim.slot,
+        refreshFromServer: true,
+        allowLegacyAgentFallback: false,
+        simIccid: sim.iccid,
+        simSubscriptionId: sim.subscriptionId,
+        provider: sim.network,
+      );
+      if (!mounted || role != 'agent' || _currentBusinessRoleSimKey != simKey) {
+        return;
+      }
+
+      final keyedTypes = <String, String>{};
+      for (final type in _enquiryPreflightTypes) {
+        final key = _enquiryPreflightKey(type);
+        if (key != null) keyedTypes[type] = key;
+      }
+
+      await Future.wait(
+        keyedTypes.entries.map((entry) async {
+          final approved = await ZeroInputFlowPreflight.verify(
+            provider: _selectedProvider,
+            transactionType: entry.key,
+            isPersonal: false,
+            businessSimRole: role,
+            bundleCategory: _initialBundleCategory,
+            recipientMode: _effectiveRecipientMode,
+          );
+          if (mounted &&
+              approved &&
+              _currentBusinessRoleSimKey == simKey) {
+            _enquiryPreflightVerifiedAt[entry.value] = DateTime.now();
+          }
+        }),
+      );
+    } catch (_) {
+      // Best effort only: the tap performs the live check instead.
+    }
+  }
 
   bool get _workspaceEnquirySimStillSelected =>
       !_workspaceZeroInput ||
@@ -491,6 +619,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
       return false;
     }
 
+    // A recent server-verified approval for this exact SIM and enquiry lets
+    // the tap start dialing immediately instead of waiting on the network.
+    if (_workspaceZeroInput && _hasFreshEnquiryPreflight(_transactionType)) {
+      return _workspaceEnquirySimStillSelected;
+    }
+
     try {
       final role =
           await SimRoleAssignmentService.businessRoleForSlot(
@@ -516,6 +650,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
       if (!mounted || !approved || (_workspaceZeroInput && role != 'agent')) {
         return false;
       }
+
+      if (_workspaceZeroInput) _recordEnquiryPreflight(_transactionType);
 
       final currentSim = _selectedSim;
       return _workspaceEnquirySimStillSelected &&
@@ -634,6 +770,17 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'at_money' => 'AT Money',
         _ => _selectedProvider,
       };
+
+  // While a Balance/Commission enquiry runs, the active transaction type
+  // changes so the enquiry needs no form input. That must not change what the
+  // agent sees: keep showing the Cash In/Out form exactly as before the tap.
+  bool get _keepWorkspaceFormVisible =>
+      _isMtnCashInOutWorkspace && _workspaceEnquiryBusy;
+  bool get _showsRecipientField =>
+      _needsRecipient || _keepWorkspaceFormVisible;
+  bool get _showsAgentServiceFee =>
+      _isAgentServiceFeeFlow ||
+      (_keepWorkspaceFormVisible && _mtnCashInOutOperation == 'send_money');
 
   bool get _needsRecipient =>
       (_isMtnCashInOutWorkspace && !_workspaceZeroInput) ||
@@ -904,6 +1051,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
       // This also refreshes role-specific transaction presentation.
       if (_selectedSim != null) {
         _scheduleFlowPreload(immediate: true);
+      }
+
+      // Warm the Balance/Commission preflight so those taps start instantly.
+      if (_isMtnCashInOutWorkspace && _selectedSim != null) {
+        unawaited(_prewarmEnquiryPreflight());
       }
 
       if (ZeroInputDirectExecutionPolicy.supportedTypes.contains(_transactionType) &&
@@ -1199,6 +1351,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
     };
     if (!permitted.contains(transactionType) ||
         _loading ||
+        _submissionGateHeld ||
         _workspaceEnquiryBusy ||
         _zeroInputSubmissionInFlight ||
         !_isMtnCashInOutWorkspace) {
@@ -1266,8 +1419,40 @@ class _TransactionScreenState extends State<TransactionScreen> {
   }
 
   Future<void> _proceed() async {
+    // A second tap while a submission is still preparing must be ignored.
+    if (_submissionGateHeld) return;
+
+    // While a Balance/Commission enquiry is in its preflight, only that
+    // enquiry's own call (which sets _autoStartPreflightApproved) may run.
+    // Otherwise a Cash In/Out tap would execute the active enquiry type
+    // through the unreserved, non-zero-input path.
+    if (_workspaceEnquiryBusy && !_autoStartPreflightApproved) return;
+
+    final gateOwner = Object();
+    _submissionGateOwner = gateOwner;
+    try {
+      await _proceedGated();
+    } finally {
+      if (identical(_submissionGateOwner, gateOwner)) {
+        _releaseSubmissionGate();
+
+        // This call still owns the gate, so nothing newer is running and a
+        // leftover `_loading` is a leak from an early exit or exception.
+        // Without this, the in-flight guards above would keep every
+        // workspace button disabled until the screen is reopened.
+        if (_loading && mounted) {
+          setState(() => _loading = false);
+        }
+      }
+    }
+  }
+
+  Future<void> _proceedGated() async {
     final zeroInput = _authorizedZeroInput;
     if (zeroInput && _zeroInputSubmissionInFlight) return;
+    if (zeroInput) {
+      await ZeroInputExecutionSession.clearPreUnificationOrphanOnce();
+    }
     final reservationToken = zeroInput
         ? ZeroInputExecutionSession.reserveForInitiation()
         : null;
@@ -1676,7 +1861,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
       );
       if (mounted) setState(() => _loading = false);
 
-    await _handleProgressAction(progressAction);
+      // Release before handling the result: Retry Now re-enters _proceed.
+      _releaseSubmissionGate();
+      await _handleProgressAction(progressAction);
       return;
     }
 
@@ -1781,6 +1968,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
       setState(() => _loading = false);
     }
 
+    // Release before handling the result: Retry Now re-enters _proceed.
+    _releaseSubmissionGate();
     await _handleProgressAction(progressAction);
   }
 
@@ -2091,8 +2280,24 @@ class _TransactionScreenState extends State<TransactionScreen> {
     );
   }
 
+  // A zero-input quick action that starts by itself shows nothing of its own
+  // while it prepares: the screen it came from stays visible until the
+  // progress screen opens. Problems and the form fallback still show.
+  bool get _autoStartRunsSilently =>
+      widget.autoStart &&
+      !_autoStartFallbackToForm &&
+      ZeroInputDirectExecutionPolicy.supportedTypes.contains(_transactionType) &&
+      (!_simDetectionComplete || _loading || _autoStartInProgress);
+
   @override
   Widget build(BuildContext context) {
+    if (_autoStartRunsSilently) {
+      return const Scaffold(
+        backgroundColor: Colors.transparent,
+        body: AbsorbPointer(child: SizedBox.expand()),
+      );
+    }
+
     return Scaffold(
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
@@ -2106,7 +2311,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
           const SizedBox(width: 4),
         ],
       ),
-      body: _isMtnPurchaseScreen && !_mtnPurchaseRoleReady
+      body: _isMtnPurchaseScreen && !_mtnPurchaseRoleReady ||
+              _awaitingStandaloneMtnCashRole
           ? Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -2129,7 +2335,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
                           : _selectedSim == null
                               ? 'The selected MTN SIM is unavailable.'
                               : _businessRoleResolutionError ??
-                                  (_selectedBusinessSimRole == 'agent'
+                                  (_selectedBusinessSimRole == null ||
+                                          _selectedBusinessSimRole == 'agent'
                                       ? 'Verifying selected SIM…'
                                       : 'This transaction requires a verified Agent SIM. Check Settings > SIM Purpose.'),
                       textAlign: TextAlign.center,
@@ -3077,7 +3284,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
               ],
 
               if (!_usesServerDrivenForm &&
-                  _needsRecipient) ...[
+                  _showsRecipientField) ...[
                 AppTextField(
                   transactionEmphasis: true,
                   compactTransactionField: _compactMtnAgentForm,
@@ -3117,7 +3324,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
               ],
 
               // 2. AMOUNT
-              if (!_usesServerDrivenForm &&
+              if (_keepWorkspaceFormVisible ||
+                  !_usesServerDrivenForm &&
                   _needsAmount) ...[
                 TextFormField(
                   controller: _amountCtrl,
@@ -3196,7 +3404,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
               // Enabled:
               //   starts at 1% of the transaction amount but the agent can
               //   manually replace the calculated figure.
-              if (_isAgentServiceFeeFlow) ...[
+              if (_showsAgentServiceFee) ...[
                 TextFormField(
                   controller: _feeCtrl,
                   enabled: _agentServiceFeeEnabled && !_loading,
@@ -3302,9 +3510,13 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             Expanded(
                               child: ElevatedButton(
                                 style: style(14),
-                                onPressed: _loading || _workspaceEnquiryBusy
+                                onPressed: _loading && !_workspaceEnquiryBusy
                                     ? null
                                     : () {
+                                        // onPressed can be stale until the
+                                        // next rebuild; re-check before
+                                        // changing the operation.
+                                        if (_submissionInFlight) return;
                                         setState(() {
                                           _mtnCashInOutOperation =
                                               'send_money';
@@ -3318,9 +3530,10 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             Expanded(
                               child: ElevatedButton(
                                 style: style(14),
-                                onPressed: _loading || _workspaceEnquiryBusy
+                                onPressed: _loading && !_workspaceEnquiryBusy
                                     ? null
                                     : () {
+                                        if (_submissionInFlight) return;
                                         setState(() {
                                           _mtnCashInOutOperation =
                                               'cash_out';
@@ -3341,7 +3554,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             width: 170,
                             child: ElevatedButton(
                               style: style(14),
-                              onPressed: _loading || _workspaceEnquiryBusy
+                              onPressed: _loading && !_workspaceEnquiryBusy
                                   ? null
                                   : () => _openMtnAgentCashEnquiry(
                                         'balance_enquiry',
@@ -3356,7 +3569,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             Expanded(
                               child: ElevatedButton(
                                 style: style(13),
-                                onPressed: _loading || _workspaceEnquiryBusy
+                                onPressed: _loading && !_workspaceEnquiryBusy
                                     ? null
                                     : () => _openMtnAgentCashEnquiry(
                                           'cash_in_commission',
@@ -3371,7 +3584,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             Expanded(
                               child: ElevatedButton(
                                 style: style(13),
-                                onPressed: _loading || _workspaceEnquiryBusy
+                                onPressed: _loading && !_workspaceEnquiryBusy
                                     ? null
                                     : () => _openMtnAgentCashEnquiry(
                                           'commission_balance',
@@ -3437,6 +3650,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
                       child: AppButton(
                         label: 'Agent',
                         onPressed: () {
+                          // Pay To buttons stay tappable while loading, so
+                          // the operation must not change mid-submission.
+                          if (_submissionInFlight) return;
                           setState(() {
                             _mtnPayToOperation = 'pay_to_agent';
                           });
@@ -3451,6 +3667,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                       child: AppButton(
                         label: 'Merchant',
                         onPressed: () {
+                          if (_submissionInFlight) return;
                           setState(() {
                             _mtnPayToOperation = 'merchant_payment';
                           });
