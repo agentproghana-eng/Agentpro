@@ -273,6 +273,172 @@ void main() {
     }
   });
 
+  test('orphaned identity blocks initiation without overwriting it', () async {
+    const orphan = 'older-recovery-record';
+    FlutterSecureStorage.setMockInitialValues({
+      'zero_input_recovery_identity_v1': orphan,
+    });
+    final token = ZeroInputExecutionSession.reserveForInitiation();
+    expect(token, isNotNull);
+    try {
+      expect(
+        await ZeroInputExecutionSession.persistBeforeInitiation(token),
+        isFalse,
+      );
+      expect(
+        ZeroInputExecutionSession.lastPreparationFailureCode,
+        'orphaned_recovery_identity',
+      );
+      const storage = FlutterSecureStorage();
+      expect(await storage.read(key: 'zero_input_recovery_identity_v1'), orphan);
+      expect(await storage.read(key: 'zero_input_unresolved_v1'), isNull);
+    } finally {
+      ZeroInputExecutionSession.abandonBeforeBackendInitiation(token);
+    }
+  });
+
+  test('foreign checkpoint cannot be erased by failed local preparation', () async {
+    final token = ZeroInputExecutionSession.reserveForInitiation();
+    expect(token, isNotNull);
+    try {
+      expect(
+        await ZeroInputExecutionSession.persistBeforeInitiation(token),
+        isTrue,
+      );
+      const storage = FlutterSecureStorage();
+      const foreign = '{"reservation_token":"foreign-lease"}';
+      await storage.write(key: 'zero_input_recovery_identity_v1', value: foreign);
+      expect(
+        await ZeroInputExecutionSession.recordOperationCheckpoint(
+          token: token,
+          operationId: operationId,
+          transactionType: 'balance_enquiry',
+          isPersonal: false,
+        ),
+        isFalse,
+      );
+      expect(
+        ZeroInputExecutionSession.lastPreparationFailureCode,
+        'existing_recovery_identity',
+      );
+      await ZeroInputExecutionSession.abandonDurableBeforeBackendInitiation(token);
+      expect(await storage.read(key: 'zero_input_recovery_identity_v1'), foreign);
+      expect(await storage.read(key: 'zero_input_unresolved_v1'), token);
+      expect(ZeroInputExecutionSession.ownsReservation(token), isTrue);
+    } finally {
+      // Test teardown only; simulated foreign identity is never deleted.
+      ZeroInputExecutionSession.abandonBeforeBackendInitiation(token);
+    }
+  });
+
+  test('owned pre-backend checkpoint abort cleans both durable keys', () async {
+    final token = ZeroInputExecutionSession.reserveForInitiation();
+    expect(token, isNotNull);
+    expect(await ZeroInputExecutionSession.persistBeforeInitiation(token), isTrue);
+    expect(
+      await ZeroInputExecutionSession.recordOperationCheckpoint(
+        token: token,
+        operationId: operationId,
+        transactionType: 'cash_in_commission',
+        isPersonal: false,
+      ),
+      isTrue,
+    );
+    await ZeroInputExecutionSession.abandonDurableBeforeBackendInitiation(token);
+    const storage = FlutterSecureStorage();
+    expect(await storage.read(key: 'zero_input_unresolved_v1'), isNull);
+    expect(await storage.read(key: 'zero_input_recovery_identity_v1'), isNull);
+    expect(ZeroInputExecutionSession.isActive, isFalse);
+  });
+
+  test('invalid operation UUID fails with privacy-safe reason', () async {
+    final token = ZeroInputExecutionSession.reserveForInitiation();
+    expect(token, isNotNull);
+    try {
+      expect(await ZeroInputExecutionSession.persistBeforeInitiation(token), isTrue);
+      expect(
+        await ZeroInputExecutionSession.recordOperationCheckpoint(
+          token: token,
+          operationId: 'not-a-uuid',
+          transactionType: 'commission_balance',
+          isPersonal: false,
+        ),
+        isFalse,
+      );
+      expect(
+        ZeroInputExecutionSession.lastPreparationFailureCode,
+        'invalid_operation_id',
+      );
+    } finally {
+      await ZeroInputExecutionSession.abandonDurableBeforeBackendInitiation(token);
+    }
+  });
+
+  test('backend identity cannot bypass a missing UUID checkpoint', () async {
+    final token = ZeroInputExecutionSession.reserveForInitiation();
+    expect(token, isNotNull);
+    try {
+      expect(await ZeroInputExecutionSession.persistBeforeInitiation(token), isTrue);
+      expect(
+        await ZeroInputExecutionSession.recordBackendIdentity(
+          token: token,
+          transactionId: 'server-id-123',
+          transactionType: 'balance_enquiry',
+          isPersonal: false,
+        ),
+        isFalse,
+      );
+      const storage = FlutterSecureStorage();
+      expect(await storage.read(key: 'zero_input_recovery_identity_v1'), isNull);
+      expect(await storage.read(key: 'zero_input_unresolved_v1'), token);
+    } finally {
+      await ZeroInputExecutionSession.abandonDurableBeforeBackendInitiation(token);
+    }
+  });
+
+  test('verified settlement clears owned checkpoint and releases the gate', () async {
+    final token = ZeroInputExecutionSession.reserveForInitiation();
+    expect(token, isNotNull);
+    expect(await ZeroInputExecutionSession.persistBeforeInitiation(token), isTrue);
+    expect(
+      await ZeroInputExecutionSession.recordOperationCheckpoint(
+        token: token,
+        operationId: operationId,
+        transactionType: 'commission_balance',
+        isPersonal: false,
+      ),
+      isTrue,
+    );
+    expect(await ZeroInputExecutionSession.clearDurableReservation(token), isTrue);
+    ZeroInputExecutionSession.settleDefinitiveResult(
+      resultDefinitive: true,
+      reportPersisted: true,
+      reservationToken: token,
+    );
+    const storage = FlutterSecureStorage();
+    expect(await storage.read(key: 'zero_input_unresolved_v1'), isNull);
+    expect(await storage.read(key: 'zero_input_recovery_identity_v1'), isNull);
+    expect(ZeroInputExecutionSession.isActive, isFalse);
+  });
+
+  test('unresolved durable lock is never cleared by another lease', () async {
+    FlutterSecureStorage.setMockInitialValues({
+      'zero_input_unresolved_v1': 'previous-lease',
+    });
+    final token = ZeroInputExecutionSession.reserveForInitiation();
+    expect(token, isNotNull);
+    try {
+      expect(await ZeroInputExecutionSession.persistBeforeInitiation(token), isFalse);
+      expect(ZeroInputExecutionSession.lastPreparationFailureCode,
+          'unresolved_execution');
+      const storage = FlutterSecureStorage();
+      expect(await storage.read(key: 'zero_input_unresolved_v1'),
+          'previous-lease');
+    } finally {
+      ZeroInputExecutionSession.abandonBeforeBackendInitiation(token);
+    }
+  });
+
 }
 
 class _FailingSecureStoragePlatform extends FlutterSecureStoragePlatform {

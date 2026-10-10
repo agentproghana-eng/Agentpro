@@ -1284,19 +1284,36 @@ class _TransactionScreenState extends State<TransactionScreen> {
     if (zeroInput &&
         !await ZeroInputExecutionSession.persistBeforeInitiation(reservationToken)) {
       // Durable state may exist from a prior run: do not initiate.
-      ZeroInputExecutionSession.abandonBeforeBackendInitiation(reservationToken);
+      // A failed write may have persisted our token before readback failed;
+      // clear only our own verified pre-POST state, never a prior identity.
+      final failureCode =
+          ZeroInputExecutionSession.lastPreparationFailureCode ?? 'unavailable';
+      if (failureCode == 'reservation_readback_mismatch' ||
+          failureCode == 'secure_storage_error') {
+        await ZeroInputExecutionSession.abandonDurableBeforeBackendInitiation(
+          reservationToken,
+        );
+      } else {
+        ZeroInputExecutionSession.abandonBeforeBackendInitiation(reservationToken);
+      }
       // A previous attempt may survive app restart. Inspect without dialing
       // or releasing the durable lock, and explain the blocked action.
       final recoveryStatus = await ZeroInputRecoveryStatus.inspect();
       if (mounted) {
-        final message = recoveryStatus ==
+        final message = failureCode == 'orphaned_recovery_identity'
+            ? 'An earlier enquiry recovery record needs verification. '
+              'No new enquiry was started. Contact support.'
+            : recoveryStatus ==
                 'server_definitive_needs_report_verification'
-            ? 'Previous balance enquiry has a recorded result, but needs '
-              'verification before another attempt. Contact support.'
-            : 'A previous balance enquiry may still be unresolved. '
-              'Check transaction history or contact support before retrying.';
+                ? 'Previous balance enquiry has a recorded result, but needs '
+                  'verification before another attempt. Contact support.'
+                : 'A previous balance enquiry may still be unresolved. '
+                  'Check transaction history or contact support before retrying.';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message), duration: const Duration(seconds: 8)),
+          SnackBar(
+            content: Text('$message (ZI: $failureCode)'),
+            duration: const Duration(seconds: 8),
+          ),
         );
       }
       return;
@@ -1310,6 +1327,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
         await ZeroInputExecutionSession.abandonDurableBeforeBackendInitiation(
           reservationToken,
         );
+      }
+      // Prevent early preparation failures from leaving the entire
+      // five-button workspace permanently disabled (_loading=true).
+      if (zeroInput && !_zeroInputBackendInitiationStarted && mounted) {
+        setState(() => _loading = false);
       }
       if (zeroInput) _zeroInputSubmissionInFlight = false;
     }
@@ -1688,11 +1710,14 @@ class _TransactionScreenState extends State<TransactionScreen> {
         isPersonal: false,
       );
       if (!saved) {
+        final failureCode =
+            ZeroInputExecutionSession.lastPreparationFailureCode ?? 'unavailable';
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Text(
-                'Unable to securely prepare this balance enquiry.',
+                'Unable to securely prepare this balance enquiry. '
+                'No enquiry was started. (ZI: $failureCode)',
               ),
             ),
           );

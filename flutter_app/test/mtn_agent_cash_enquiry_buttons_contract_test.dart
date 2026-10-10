@@ -2,6 +2,18 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('failed zero-input preparation restores the workspace loading guard', () {
+    final source = File('lib/features/transactions/transaction_screen.dart')
+        .readAsStringSync();
+    final begin = source.indexOf('Future<void> _proceed() async {');
+    final end = source.indexOf('Future<void> _proceedInternal(', begin);
+    final block = source.substring(begin, end);
+    expect(block, contains(
+      'if (zeroInput && !_zeroInputBackendInitiationStarted && mounted)'));
+    expect(block, contains('setState(() => _loading = false);'));
+    expect(block, contains('abandonDurableBeforeBackendInitiation('));
+  });
+
   test('MTN enquiries execute in workspace without a second transaction form', () {
     final source = File('lib/features/transactions/transaction_screen.dart')
         .readAsStringSync();
