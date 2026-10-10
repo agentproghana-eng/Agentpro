@@ -1,6 +1,14 @@
 import '../../core/api/api_client.dart';
 import 'zero_input_flow_eligibility.dart';
 
+/// Short-lived record of server-approved enquiry flows, shared between the
+/// Home screen (which verifies ahead of the tap) and the transaction screen.
+/// It only skips a repeat flow lookup. Every transaction is still validated
+/// by the backend when it is initiated, so this never authorizes execution.
+class ZeroInputPreflightApprovals {
+  static final Map<String, DateTime> verifiedAt = <String, DateTime>{};
+}
+
 /// Resolves the active flow afresh before allowing zero-input auto-start.
 /// A failed or incomplete response never authorizes execution.
 class ZeroInputFlowPreflight {

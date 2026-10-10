@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../core/services/sim_card_service.dart';
 import '../../core/services/sim_role_assignment_service.dart';
+import '../transactions/zero_input_flow_preflight.dart';
 import '../../core/services/dashboard_refresh_service.dart';
 import '../../core/services/app_cache_service.dart';
 import '../../core/services/storage_service.dart';
@@ -383,6 +384,42 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
     ]);
   }
 
+  /// Verifies the zero-input enquiry flows for the agent MTN SIM before any
+  /// tile is tapped, so Check Balance and the commission tiles start dialing
+  /// without a lookup. Best effort: a miss only means the tap checks live.
+  Future<void> _prewarmAgentEnquiryApprovals(
+    List<SimCard> sims,
+    Map<int, String> roles,
+  ) async {
+    const types = <String>[
+      'balance_enquiry',
+      'cash_in_commission',
+      'commission_balance',
+    ];
+
+    for (final sim in sims) {
+      if (sim.network != 'mtn' || roles[sim.slot] != 'agent') continue;
+
+      final simKey =
+          '${sim.network}:${sim.slot}:${sim.iccid}:${sim.subscriptionId}';
+
+      await Future.wait(types.map((type) async {
+        try {
+          final approved = await ZeroInputFlowPreflight.verify(
+            provider: 'mtn',
+            transactionType: type,
+            isPersonal: false,
+            businessSimRole: 'agent',
+          );
+          if (approved) {
+            ZeroInputPreflightApprovals.verifiedAt['$simKey|$type||'] =
+                DateTime.now();
+          }
+        } catch (_) {}
+      }));
+    }
+  }
+
   Future<void> _refreshSimPurposesFromServer(
     List<SimCard> sims,
   ) async {
@@ -399,6 +436,8 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
         _simPurposes = refreshedRoles;
         _simPurposesResolved = true;
       });
+
+      unawaited(_prewarmAgentEnquiryApprovals(sims, refreshedRoles));
     } catch (_) {
       // A failed background refresh must never erase a previously
       // identity-bound local role. Offline Home stays usable.

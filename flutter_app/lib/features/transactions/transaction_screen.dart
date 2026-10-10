@@ -208,14 +208,14 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // tap does not wait on two network round trips. Entries are keyed by SIM,
   // enquiry type and flow selectors, and expire quickly so a disabled flow or
   // a changed SIM role is still picked up by a fresh live check.
-  static const Duration _enquiryPreflightTtl = Duration(seconds: 60);
+  static const Duration _enquiryPreflightTtl = Duration(minutes: 3);
   static const List<String> _enquiryPreflightTypes = <String>[
     'balance_enquiry',
     'cash_in_commission',
     'commission_balance',
   ];
   final Map<String, DateTime> _enquiryPreflightVerifiedAt =
-      <String, DateTime>{};
+      ZeroInputPreflightApprovals.verifiedAt;
 
   String? _enquiryPreflightKey(String type) {
     final simKey = _currentBusinessRoleSimKey;
@@ -626,15 +626,22 @@ class _TransactionScreenState extends State<TransactionScreen> {
     }
 
     try {
-      final role =
+      // The screen has usually resolved this SIM's role already. Reuse it
+      // rather than waiting on the network again; the backend re-verifies
+      // the role when the transaction is initiated.
+      final knownRole =
+          _verifiedBusinessRoleSimKey == _currentBusinessRoleSimKey
+              ? _selectedBusinessSimRole
+              : null;
+      final role = knownRole ??
           await SimRoleAssignmentService.businessRoleForSlot(
-        selectedSim.slot,
-        refreshFromServer: true,
-        allowLegacyAgentFallback: false,
-        simIccid: selectedSim.iccid,
-        simSubscriptionId: selectedSim.subscriptionId,
-        provider: selectedSim.network,
-      );
+            selectedSim.slot,
+            refreshFromServer: true,
+            allowLegacyAgentFallback: false,
+            simIccid: selectedSim.iccid,
+            simSubscriptionId: selectedSim.subscriptionId,
+            provider: selectedSim.network,
+          );
 
       if (!mounted) return false;
 
@@ -1147,6 +1154,33 @@ class _TransactionScreenState extends State<TransactionScreen> {
       setState(() {
         _businessRoleResolutionError = null;
       });
+    }
+
+    // Show the screen from the trusted, identity-bound local assignment right
+    // away. The server confirmation below stays authoritative: it replaces
+    // this role, or withdraws it with an error, as soon as it answers, and the
+    // backend verifies the role again when a transaction is initiated.
+    if (_verifiedBusinessRoleSimKey != selectedSimKey) {
+      final localRole = await SimRoleAssignmentService.cachedRoleForSlot(
+        selectedSim.slot,
+        simIccid: selectedSim.iccid,
+        simSubscriptionId: selectedSim.subscriptionId,
+        provider: selectedSim.network,
+      );
+
+      if (!mounted ||
+          requestGeneration != _businessRoleRequestGeneration ||
+          _currentBusinessRoleSimKey != selectedSimKey) return;
+
+      if (localRole == 'agent' ||
+          localRole == 'evd' ||
+          localRole == 'merchant') {
+        setState(() {
+          _selectedBusinessSimRole = localRole;
+          _verifiedBusinessRoleSimKey = selectedSimKey;
+          _businessRoleResolutionError = null;
+        });
+      }
     }
 
     String businessSimRole;
