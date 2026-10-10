@@ -181,7 +181,7 @@ void main() {
         transaction,
         contains(
           "if (widget.mtnCashInOutWorkspace) {\n"
-          "      return _mtnCashInOutOperation;\n"
+          "      return _activeMtnCashEnquiry ?? _mtnCashInOutOperation;\n"
           "    }",
         ),
       );
@@ -206,7 +206,7 @@ void main() {
       expect(
         transaction,
         contains(
-          "'fee': _isAgentServiceFeeFlow && _agentServiceFeeEnabled",
+          "'fee': !_workspaceZeroInput && _isAgentServiceFeeFlow && _agentServiceFeeEnabled",
         ),
       );
     });

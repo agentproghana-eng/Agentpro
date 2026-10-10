@@ -75,7 +75,7 @@ void main() {
 
       expect(
         workspace,
-        contains("if (action == 'success')"),
+        contains("if (action == 'success' && !_workspaceZeroInput)"),
       );
 
       expect(
