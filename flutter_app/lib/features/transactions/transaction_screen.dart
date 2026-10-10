@@ -1169,7 +1169,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
       );
 
       if (!mounted ||
-          requestGeneration != _businessRoleRequestGeneration ||
+          _businessRoleRequestGeneration != requestGeneration ||
           _currentBusinessRoleSimKey != selectedSimKey) return;
 
       if (localRole == 'agent' ||
