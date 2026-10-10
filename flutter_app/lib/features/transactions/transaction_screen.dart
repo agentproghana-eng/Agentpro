@@ -761,7 +761,6 @@ class _TransactionScreenState extends State<TransactionScreen> {
       _isMtnCashInOutWorkspace && _workspaceEnquiryBusy;
   bool get _showsRecipientField =>
       _needsRecipient || _keepWorkspaceFormVisible;
-  bool get _showsAmountField => _needsAmount || _keepWorkspaceFormVisible;
   bool get _showsAgentServiceFee =>
       _isAgentServiceFeeFlow ||
       (_keepWorkspaceFormVisible && _mtnCashInOutOperation == 'send_money');
@@ -3290,8 +3289,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
               ],
 
               // 2. AMOUNT
-              if (!_usesServerDrivenForm &&
-                  _showsAmountField) ...[
+              if (_keepWorkspaceFormVisible ||
+                  !_usesServerDrivenForm &&
+                  _needsAmount) ...[
                 TextFormField(
                   controller: _amountCtrl,
                   keyboardType: const TextInputType.numberWithOptions(

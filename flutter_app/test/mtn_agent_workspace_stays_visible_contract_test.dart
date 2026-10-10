@@ -10,7 +10,7 @@ void main() {
     expect(source, contains('bool get _keepWorkspaceFormVisible =>'));
     expect(source, contains('_isMtnCashInOutWorkspace && _workspaceEnquiryBusy;'));
     expect(source, contains('_showsRecipientField) ...['));
-    expect(source, contains('_showsAmountField) ...['));
+    expect(source, contains('_keepWorkspaceFormVisible ||\n                  !_usesServerDrivenForm &&\n                  _needsAmount) ...['));
     expect(source, contains('if (_showsAgentServiceFee) ...['));
   });
 
