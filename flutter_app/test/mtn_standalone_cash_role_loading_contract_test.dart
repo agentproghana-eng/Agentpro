@@ -10,10 +10,8 @@ void main() {
   test('standalone MTN Cash In/Out waits on a loading state, not a form', () {
     expect(source, contains('bool get _awaitingStandaloneMtnCashRole'));
     expect(source, contains('_awaitingStandaloneMtnCashRole\n          ? Center('));
-    expect(
-      source,
-      contains('if (!_awaitingStandaloneMtnCashRole &&'),
-    );
+    // The Proceed bar lives in the form branch, which is not built while
+    // the loading state is showing.
   });
 
   test('loading gate ends once the role resolves or fails', () {

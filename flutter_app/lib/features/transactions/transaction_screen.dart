@@ -3760,8 +3760,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         ),
       ),
           ),
-          if (!_awaitingStandaloneMtnCashRole &&
-              !_isMtnCashInOutWorkspace &&
+          if (!_isMtnCashInOutWorkspace &&
               !_isMtnPayToWorkspace &&
               !_isMtnAgentDataWorkspace &&
               !_isMtnAgentAirtimeWorkspace &&
