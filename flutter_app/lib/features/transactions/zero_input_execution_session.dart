@@ -18,7 +18,19 @@ class ZeroInputExecutionSession {
 
   static bool get isActive => _gate.isBusy;
 
-  static const _storage = FlutterSecureStorage();
+  // Must use exactly the same options as StorageService. On Android the
+  // plugin migrates every entry out of the plain store into the encrypted one
+  // whenever an encrypted-options call runs, so a reservation written through
+  // a differently configured instance disappears after the next unrelated
+  // StorageService call and the checkpoint then sees it as missing.
+  static const _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(
+      encryptedSharedPreferences: true,
+      keyCipherAlgorithm:
+          KeyCipherAlgorithm.RSA_ECB_OAEPwithSHA_256andMGF1Padding,
+      storageCipherAlgorithm: StorageCipherAlgorithm.AES_GCM_NoPadding,
+    ),
+  );
   static const _unresolvedKey = 'zero_input_unresolved_v1';
   static const _identityKey = 'zero_input_recovery_identity_v1';
 
