@@ -27,7 +27,7 @@ void main() {
       expect(
         transaction,
         contains(
-          "_mtnCashInOutOperation = 'cash_out';",
+          RegExp(r"_mtnCashInOutOperation\s*=\s*'cash_out';"),
         ),
       );
 
@@ -43,19 +43,72 @@ void main() {
     });
 
     test('workspace uses Cash In and Cash Out as form actions', () {
-      expect(transaction, contains("label: 'Cash In'"));
-      expect(transaction, contains("label: 'Cash Out'"));
+      expect(transaction, contains("child: const Text('Cash In')"));
+      expect(transaction, contains("child: const Text('Cash Out')"));
       expect(transaction, contains('mtnCashInOutWorkspace'));
 
       expect(
         transaction,
         contains(
-          'if (!_isMtnCashInOutWorkspace && !_isMtnPayToWorkspace)',
+          'if (!_isMtnCashInOutWorkspace &&\n              !_isMtnPayToWorkspace &&\n              !_isMtnAgentDataWorkspace &&\n              !_isMtnAgentAirtimeWorkspace &&\n              !_isStandaloneMtnAgentCash)',
         ),
       );
 
       expect(transaction, isNot(contains("'CASH IN'")));
       expect(transaction, isNot(contains("'CASH OUT'")));
+    });
+
+    test('cash workspace uses compact icon-free five-button layout', () {
+      final start = transaction.indexOf(
+        '// MTN Agent Cash In/Out: compact, text-only actions.',
+      );
+      final end = transaction.indexOf(
+        'if (_isMtnAgentAirtimeWorkspace) ...[',
+        start,
+      );
+      final block = transaction.substring(
+        start,
+        transaction.indexOf(
+          'if (_isStandaloneMtnAgentCash) ...[',
+          start,
+        ),
+      );
+
+      for (final label in [
+        'Cash In',
+        'Cash Out',
+        'Balance',
+        'Cash In Commission',
+        'Cash Out Commission',
+      ]) {
+        expect(block, contains("Text('$label')"));
+      }
+
+      expect(block, contains('minimumSize: const Size(0, 44)'));
+      expect(block, contains('maximumSize: const Size(double.infinity, 44)'));
+      expect(block, contains('backgroundColor: AppTheme.primaryColor'));
+      expect(block, contains('width: 170'));
+      expect(block, contains('style: style(13)'));
+      expect(block, contains('style: style(14)'));
+      expect(block, isNot(contains('icon:')));
+      expect(block, isNot(contains('AppButton(')));
+      expect(block, contains("'balance_enquiry'"));
+      expect(block, contains("'cash_in_commission'"));
+      expect(block, contains("'commission_balance'"));
+      expect(
+        RegExp(r'_openMtnAgentCashEnquiry\(')
+            .allMatches(block)
+            .length,
+        3,
+      );
+      expect(
+        RegExp(r'_proceed\(\);').allMatches(block).length,
+        2,
+      );
+      expect(block, contains("'send_money'"));
+      expect(block, contains("'cash_out'"));
+      expect(block, contains('_agentServiceFeeEnabled = false;'));
+      expect(block, contains("_feeCtrl.text = '0.00';"));
     });
 
     test('MTN Agent dashboard supports combined and individual cash actions', () {
@@ -128,7 +181,7 @@ void main() {
         transaction,
         contains(
           "if (widget.mtnCashInOutWorkspace) {\n"
-          "      return _mtnCashInOutOperation;\n"
+          "      return _activeMtnCashEnquiry ?? _mtnCashInOutOperation;\n"
           "    }",
         ),
       );
@@ -153,7 +206,7 @@ void main() {
       expect(
         transaction,
         contains(
-          "'fee': _isAgentServiceFeeFlow && _agentServiceFeeEnabled",
+          "'fee': !_workspaceZeroInput && _isAgentServiceFeeFlow && _agentServiceFeeEnabled",
         ),
       );
     });

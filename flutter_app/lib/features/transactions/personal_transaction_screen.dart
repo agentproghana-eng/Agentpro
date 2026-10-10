@@ -1,3 +1,6 @@
+import 'zero_input_execution_session.dart';
+import 'zero_input_recovery_status.dart';
+import 'zero_input_direct_execution_policy.dart';
 // personal_transaction_screen.dart
 import 'dart:collection';
 import 'dart:convert';
@@ -240,6 +243,10 @@ class PersonalTransactionScreen extends StatefulWidget {
 }
 
 class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
+  String? _activeZeroInputReservationToken;
+  bool _zeroInputSubmissionInFlight = false;
+  bool _zeroInputBackendInitiationStarted = false;
+
   final _formKey = GlobalKey<FormState>();
   final _amountCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
@@ -826,7 +833,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         }
       });
 
-      if (false &&
+      if (ZeroInputDirectExecutionPolicy.supportedTypes.contains(_effectiveTransactionType) &&
           widget.autoStart &&
           !_autoStartAttempted &&
           _simDetectionComplete &&
@@ -1053,6 +1060,16 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       final isOffline = connectivity.isEmpty ||
           connectivity.every((result) => result == ConnectivityResult.none);
 
+      // Zero-input execution requires a durable backend identity.
+      // Never execute a local-only transaction through this path.
+      if (isOffline && _activeZeroInputReservationToken != null) {
+        _showPersonalStartFailure(
+          'Automatic balance enquiry requires an internet connection. '
+          'Connect to the internet and try again.',
+        );
+        return null;
+      }
+
       final transactionDisabled =
           await FeatureFlagService.isTransactionDisabled(
         provider: widget.provider,
@@ -1210,6 +1227,22 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           'cached_flow': cachedFlow,
         };
       } else {
+        if (_activeZeroInputReservationToken != null) {
+          final saved =
+              await ZeroInputExecutionSession.recordOperationCheckpoint(
+            token: _activeZeroInputReservationToken,
+            operationId: requestFields['client_operation_id']?.toString() ?? '',
+            transactionType: transactionType,
+            isPersonal: true,
+          );
+          if (!saved) {
+            _showPersonalStartFailure(
+              'Unable to securely prepare this balance enquiry.',
+            );
+            return null;
+          }
+          _zeroInputBackendInitiationStarted = true;
+        }
         final response = await ApiClient.instance.post(
           '/personal-transactions',
           data: requestFields,
@@ -1232,6 +1265,9 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         '/personal-transactions/progress',
         extra: {
           'is_personal': true,
+          'zero_input_quick_action': widget.autoStart && _autoStartPreflightApproved && ZeroInputDirectExecutionPolicy.supportedTypes.contains(_effectiveTransactionType),
+          'zero_input_preflight_approved': widget.autoStart && _autoStartPreflightApproved,
+          'zero_input_reservation_token': _activeZeroInputReservationToken,
           'transaction': transaction,
           'provider': widget.provider,
           'transaction_type': transactionType,
@@ -1273,6 +1309,61 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
   }
 
   Future<void> _submit() async {
+    final zeroInput = widget.autoStart &&
+        _autoStartPreflightApproved &&
+        ZeroInputDirectExecutionPolicy.supportedTypes.contains(_effectiveTransactionType);
+    if (zeroInput && _zeroInputSubmissionInFlight) return;
+    final reservationToken = zeroInput
+        ? ZeroInputExecutionSession.reserveForInitiation()
+        : null;
+    if (zeroInput && reservationToken == null) return;
+    if (zeroInput) _activeZeroInputReservationToken = reservationToken;
+    if (zeroInput &&
+        !await ZeroInputExecutionSession.persistBeforeInitiation(reservationToken)) {
+      // Durable state may exist from a prior run: do not initiate.
+      ZeroInputExecutionSession.abandonBeforeBackendInitiation(reservationToken);
+      // A previous attempt may survive app restart. Inspect without dialing
+      // or releasing the durable lock, and explain the blocked action.
+      final recoveryStatus = await ZeroInputRecoveryStatus.inspect();
+      if (mounted) {
+        final message = recoveryStatus ==
+                'server_definitive_needs_report_verification'
+            ? 'Previous balance enquiry has a recorded result, but needs '
+              'verification before another attempt. Contact support.'
+            : 'A previous balance enquiry may still be unresolved. '
+              'Check transaction history or contact support before retrying.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message), duration: const Duration(seconds: 8)),
+        );
+      }
+      return;
+    }
+    if (zeroInput) _zeroInputBackendInitiationStarted = false;
+    if (zeroInput) _zeroInputSubmissionInFlight = true;
+    try {
+      await _submitInternal(reservationToken: reservationToken);
+    } finally {
+      if (zeroInput && !_zeroInputBackendInitiationStarted) {
+        await ZeroInputExecutionSession.abandonDurableBeforeBackendInitiation(
+          reservationToken,
+        );
+      }
+      if (zeroInput) _zeroInputSubmissionInFlight = false;
+      if (zeroInput) _activeZeroInputReservationToken = null;
+    }
+  }
+
+  Future<void> _submitInternal({String? reservationToken}) async {
+    // Reject a repeat tap before starting another backend transaction.
+    // This supplements (does not replace) the execution-time lease.
+    if (widget.autoStart &&
+        _autoStartPreflightApproved &&
+        ZeroInputDirectExecutionPolicy.supportedTypes.contains(_effectiveTransactionType) &&
+        !ZeroInputExecutionSession.ownsReservation(reservationToken)) {
+      return;
+    }
+
+
     if (_isMtnMashup) {
       await _submitMtnMashup();
       return;
@@ -1534,7 +1625,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
 
     return Scaffold(
       appBar: AppBar(title: Text(appBarLabel)),
-      body: false && widget.autoStart && !_autoStartFallbackToForm
+      body: ZeroInputDirectExecutionPolicy.supportedTypes.contains(_effectiveTransactionType) && widget.autoStart && !_autoStartFallbackToForm
           ? _buildAutoStartStatus()
           : Padding(
         padding: const EdgeInsets.all(20),

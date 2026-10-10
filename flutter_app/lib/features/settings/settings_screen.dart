@@ -332,29 +332,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ],
           ),
-          if (!widget.isPersonal && user['company_id'] != null) ...[
-            const SizedBox(height: 20),
-            const _SettingsSectionHeader(title: 'Money & Operations'),
-            _SettingsGroupCard(
-              children: [
-                _SettingsTile(
-                  icon: Icons.dashboard_customize_outlined,
-                  title: 'Agent Hub',
-                  subtitle:
-                      'Transactions, reports, float and shift reconciliation',
-                  onTap: () => context.push('/agents-hub'),
-                ),
-                const _SettingsDivider(),
-                _SettingsTile(
-                  icon: Icons.storefront_outlined,
-                  title: 'Business Hub',
-                  subtitle:
-                      'Manage advertisements, reviews, enquiries and marketplace activity',
-                  onTap: () => context.push('/marketplace/more'),
-                ),
-              ],
-            ),
-          ],
           const SizedBox(height: 20),
           const _SettingsSectionHeader(title: 'Transaction Safety'),
           _SettingsGroupCard(

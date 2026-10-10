@@ -195,6 +195,26 @@ class _QuickActionCustomizationScreenState
     }
 
     for (final definition in _availableDefinitions) {
+      // Standalone MTN Agent Cash In reuses the existing send_money
+      // transaction. Keep the combined Cash In/Out action selectable.
+      if (_isAgentRole &&
+          _provider == 'mtn' &&
+          definition.type == 'send_money' &&
+          !_availableDefinitions.any(
+            (item) => item.type == 'cash_in',
+          )) {
+        choices.add(
+          _QuickActionChoice(
+            definition: QuickActionCatalogDefinition(
+              provider: 'mtn',
+              type: 'cash_in',
+              displayLabel: 'Cash In',
+              quickActionGroup: definition.quickActionGroup,
+            ),
+          ),
+        );
+      }
+
       choices.add(_QuickActionChoice(definition: definition));
 
       for (final variant in definition.variants) {
@@ -243,7 +263,28 @@ class _QuickActionCustomizationScreenState
       );
     }
 
-    return _catalog?.definitionFor(_provider, type);
+    final definition = _catalog?.definitionFor(_provider, type);
+    if (definition != null) return definition;
+
+    // Standalone MTN Agent Cash In is a presentation-only action.
+    // It reuses the existing send_money transaction capability.
+    if (_isAgentRole && _provider == 'mtn' && type == 'cash_in') {
+      final cashWorkspace = _catalog?.definitionFor(
+        _provider,
+        'send_money',
+      );
+
+      if (cashWorkspace != null) {
+        return QuickActionCatalogDefinition(
+          provider: 'mtn',
+          type: 'cash_in',
+          displayLabel: 'Cash In',
+          quickActionGroup: cashWorkspace.quickActionGroup,
+        );
+      }
+    }
+
+    return null;
   }
 
   List<QuickActionPreference> _defaultPreferencesFor(String provider) {

@@ -80,7 +80,7 @@ void main() {
     test('shared request builder submits zero while disabled', () {
       expect(
         RegExp(
-          r"'fee': _isAgentServiceFeeFlow && _agentServiceFeeEnabled",
+          r"'fee': !_workspaceZeroInput && _isAgentServiceFeeFlow && _agentServiceFeeEnabled",
         ).allMatches(source).length,
         1,
       );

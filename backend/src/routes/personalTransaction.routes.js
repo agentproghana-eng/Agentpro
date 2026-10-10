@@ -486,6 +486,12 @@ router.get(
   personalTransactionController.listTransactionsCursor
 );
 
+
+router.get(
+  '/recovery/by-operation/:operation_id',
+  personalTransactionController.getRecoveryByOperation
+);
+
 // GET /api/v1/personal-transactions/:transaction_id
 router.get('/:transaction_id', personalTransactionController.getTransaction);
 

@@ -63,7 +63,7 @@ void main() {
         contains(
           "if (_isMtnCashInOutWorkspace ||\n"
           "        _isTelecelMerchantECashWorkspace) {\n"
-          "      if (action == 'success') {\n"
+          "      if (action == 'success' && !_workspaceZeroInput) {\n"
           "        _clearTransactionInputsAfterSuccess();",
         ),
       );

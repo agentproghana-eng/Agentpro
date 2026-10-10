@@ -33,14 +33,14 @@ void main() {
       );
     });
 
-    test('uses Pay to Agent and Pay to Merchant as form actions', () {
-      expect(transaction, contains("label: 'Pay to Agent'"));
-      expect(transaction, contains("label: 'Pay to Merchant'"));
+    test('uses Agent and Merchant as form actions', () {
+      expect(transaction, contains("label: 'Agent'"));
+      expect(transaction, contains("label: 'Merchant'"));
 
       expect(
         transaction,
         contains(
-          'if (!_isMtnCashInOutWorkspace && !_isMtnPayToWorkspace)',
+          'if (!_isMtnCashInOutWorkspace &&\n              !_isMtnPayToWorkspace &&\n              !_isMtnAgentDataWorkspace &&\n              !_isMtnAgentAirtimeWorkspace &&\n              !_isStandaloneMtnAgentCash)',
         ),
       );
     });

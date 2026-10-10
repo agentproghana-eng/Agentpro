@@ -406,52 +406,10 @@ List<QuickActionPreference> normalizeBusinessQuickActionPreferences({
     return cleaned;
   }
 
-  final legacyCashInIndex = cleaned.indexWhere(
-    (item) => item.actionKey == 'cash_in',
-  );
-
-  if (legacyCashInIndex < 0) {
-    return cleaned;
-  }
-
-  final normalized = <QuickActionPreference>[];
-
-  for (var index = 0; index < cleaned.length; index++) {
-    final preference = cleaned[index];
-
-    if (index == legacyCashInIndex) {
-      // MTN Agent Cash In is internally the send_money transaction.
-      //
-      // Preserve the old Cash In tile's position/icon/colour/visibility,
-      // but use the canonical transaction type. If its saved name was
-      // merely an old system label, let the semantic label resolver
-      // provide the current "Cash In" wording.
-      final oldName = preference.customName?.trim().toLowerCase();
-
-      normalized.add(
-        preference.copyWith(
-          actionKey: 'send_money',
-          clearCustomName: oldName == 'send money' || oldName == 'cash in',
-        ),
-      );
-
-      continue;
-    }
-
-    // The canonical send_money action now occupies the old Cash In
-    // position, so its former duplicate position is removed.
-    if (preference.actionKey == 'send_money') {
-      continue;
-    }
-
-    normalized.add(preference);
-  }
-
-  return normalized
-      .asMap()
-      .entries
-      .map((entry) => entry.value.copyWith(position: entry.key))
-      .toList();
+  // Keep standalone Cash In and combined Cash In/Out as separate
+  // MTN Agent Quick Actions. The router maps standalone cash_in
+  // to the existing send_money transaction at execution time.
+  return cleaned;
 }
 
 class QuickActionIconOption {

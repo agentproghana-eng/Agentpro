@@ -3144,3 +3144,104 @@ it('does not post Commission Transfer balances while outcome is pending confirma
     );
   });
 });
+
+
+describe('Recovery lookup execution', () => {
+  const recoveryId =
+    '9a38a665-7b23-4bc4-9338-b8f50bca7d03';
+
+  const request = (id = recoveryId) => ({
+    user: { id: 'agent-1' },
+    params: { operation_id: id },
+  });
+
+  test('returns the existing owned transaction', async () => {
+    const row = {
+      id: 'recovered-tx',
+      transaction_type: 'balance_enquiry',
+      status: 'initiated',
+    };
+
+    mockQuery.mockResolvedValueOnce({ rows: [row] });
+
+    const res = makeRes();
+    await transactionController.getRecoveryByOperation(
+      request(),
+      res
+    );
+
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+
+    const [sql, params] = mockQuery.mock.calls[0];
+    expect(sql).toContain('FROM transactions');
+    expect(sql).toContain('client_operation_id = $1');
+    expect(sql).toContain(
+      'agent_id = $2'
+    );
+    expect(params).toEqual([recoveryId, 'agent-1']);
+
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: row,
+    });
+  });
+
+  test('rejects malformed UUID without querying', async () => {
+    const res = makeRes();
+
+    await transactionController.getRecoveryByOperation(
+      request('invalid-operation'),
+      res
+    );
+
+    expect(res.status).toHaveBeenCalledWith(422);
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  test('returns 404 when no owned transaction exists', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    const res = makeRes();
+    await transactionController.getRecoveryByOperation(
+      request(),
+      res
+    );
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+  });
+
+  test('returns 500 on database failure', async () => {
+    mockQuery.mockRejectedValueOnce(
+      new Error('Database unavailable')
+    );
+
+    const res = makeRes();
+    await transactionController.getRecoveryByOperation(
+      request(),
+      res
+    );
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+  });
+
+  test('uses the authenticated user for ownership', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    const res = makeRes();
+    const req = request();
+    req.user.id = 'different-user';
+
+    await transactionController.getRecoveryByOperation(
+      req,
+      res
+    );
+
+    expect(mockQuery.mock.calls[0][1]).toEqual([
+      recoveryId,
+      'different-user',
+    ]);
+    expect(res.status).toHaveBeenCalledWith(404);
+  });
+});

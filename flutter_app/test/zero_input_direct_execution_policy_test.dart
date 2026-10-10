@@ -18,7 +18,7 @@ void main() {
   );
 
   test('allows only eligible zero-input balance quick actions', () {
-    for (final type in ['balance_enquiry', 'check_momo_balance', 'check_airtime_balance']) {
+    for (final type in ['balance_enquiry', 'cash_in_commission', 'commission_balance', 'check_momo_balance', 'check_airtime_balance']) {
       expect(allowed(type), isTrue);
     }
     for (final type in ['send_money', 'cash_out', 'airtime', 'data_bundle', 'withdrawal']) {

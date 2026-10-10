@@ -1,3 +1,6 @@
+import 'zero_input_execution_session.dart';
+import 'zero_input_recovery_status.dart';
+import 'zero_input_direct_execution_policy.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -79,6 +82,9 @@ class TransactionScreen extends StatefulWidget {
 }
 
 class _TransactionScreenState extends State<TransactionScreen> {
+  bool _zeroInputSubmissionInFlight = false;
+  bool _zeroInputBackendInitiationStarted = false;
+
   OfflineQueueIdentity? get _offlineIdentity {
     final state = context.read<AuthBloc>().state;
     return state is AuthAuthenticated
@@ -122,6 +128,26 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // cash_out stays the legacy manual flow, while a Telecel Merchant cash_out
   // is the automated Agent Till withdrawal.
   String? _selectedBusinessSimRole;
+  String? _verifiedBusinessRoleSimKey;
+  String? _businessRoleResolutionError;
+  int _businessRoleRequestGeneration = 0;
+
+  String? get _currentBusinessRoleSimKey {
+    final sim = _selectedSim;
+    if (sim == null) return null;
+    return '${sim.network}:${sim.slot}:${sim.iccid}:${sim.subscriptionId}';
+  }
+
+  bool get _isMtnPurchaseScreen =>
+      _selectedProvider == 'mtn' &&
+      (_transactionType == 'airtime' ||
+          _transactionType == 'data_bundle');
+
+  bool get _mtnPurchaseRoleReady =>
+      _simDetectionComplete &&
+      _selectedSim != null &&
+      _verifiedBusinessRoleSimKey == _currentBusinessRoleSimKey &&
+      _selectedBusinessSimRole != null;
 
   // Telecel Merchant Data uses exact Self / Other flow variants.
   // Telecel owns the changing live bundle catalogue.
@@ -132,6 +158,25 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // a combined workspace transaction type to the backend:
   // Cash In remains send_money and Cash Out remains cash_out.
   String _mtnCashInOutOperation = 'send_money';
+  String? _activeMtnCashEnquiry;
+  bool _workspaceEnquiryBusy = false;
+  bool _workspaceEnquiryRetryRequested = false;
+  String? _workspaceEnquirySimKey;
+
+  bool get _workspaceEnquirySimStillSelected =>
+      !_workspaceZeroInput ||
+      (_workspaceEnquirySimKey != null &&
+          _workspaceEnquirySimKey == _currentBusinessRoleSimKey);
+
+  bool get _workspaceZeroInput =>
+      _isMtnCashInOutWorkspace &&
+      _workspaceEnquiryBusy &&
+      _activeMtnCashEnquiry != null;
+
+  bool get _authorizedZeroInput =>
+      (widget.autoStart || _workspaceZeroInput) &&
+      _autoStartPreflightApproved &&
+      ZeroInputDirectExecutionPolicy.supportedTypes.contains(_transactionType);
 
   // MTN Agent Pay To is a presentation workspace only.
   // The backend always receives one of the certified identities below.
@@ -144,7 +189,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
   String get _transactionType {
     if (widget.mtnCashInOutWorkspace) {
-      return _mtnCashInOutOperation;
+      return _activeMtnCashEnquiry ?? _mtnCashInOutOperation;
     }
     if (widget.mtnPayToWorkspace) {
       return _mtnPayToOperation;
@@ -174,7 +219,10 @@ class _TransactionScreenState extends State<TransactionScreen> {
         widget.mtnCashInOutWorkspace ||
         widget.mtnPayToWorkspace ||
         widget.telecelMerchantECashWorkspace ||
-        _isTelecelMerchantSendMoneyWorkspace) {
+        _isTelecelMerchantSendMoneyWorkspace ||
+        _isStandaloneMtnAgentCash ||
+        _isMtnAgentAirtimeWorkspace ||
+        _isMtnAgentDataWorkspace) {
       return false;
     }
 
@@ -199,7 +247,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
             : const <String, String>{},
       );
 
-  String get _effectiveAmountText => _usesServerDrivenForm
+  String get _effectiveAmountText => _workspaceZeroInput
+      ? ''
+      : _usesServerDrivenForm
       ? _serverDrivenSubmission.amountText
       : _amountCtrl.text.trim();
 
@@ -222,6 +272,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
       return _serverDrivenSubmission.customerPhone;
     }
 
+    if (_workspaceZeroInput) return '';
     if (_isMtnCashInOutWorkspace ||
         (_isMtnPayToWorkspace && _transactionType == 'pay_to_agent')) {
       return _recipientPhoneCtrl.text.trim();
@@ -230,21 +281,28 @@ class _TransactionScreenState extends State<TransactionScreen> {
     return _customerPhoneCtrl.text.trim();
   }
 
-  String get _effectiveRecipientPhone => _usesServerDrivenForm
+  String get _effectiveRecipientPhone => _workspaceZeroInput
+      ? ''
+      : _usesServerDrivenForm
       ? _serverDrivenSubmission.recipientPhone
       : _recipientPhoneCtrl.text.trim();
 
-  String get _effectiveAccountNumber => _usesServerDrivenForm
+  String get _effectiveAccountNumber => _workspaceZeroInput
+      ? ''
+      : _usesServerDrivenForm
       ? _serverDrivenSubmission.accountNumber
       : _needsTelecelMerchantAccountNumber
           ? _accountNumberCtrl.text.trim()
           : '';
 
-  String get _effectiveReference => _usesServerDrivenForm
+  String get _effectiveReference => _workspaceZeroInput
+      ? ''
+      : _usesServerDrivenForm
       ? _serverDrivenSubmission.reference
       : _referenceCtrl.text.trim();
 
   String get _effectiveMerchantId {
+    if (_workspaceZeroInput) return '';
     if (_usesServerDrivenForm) {
       return _serverDrivenSubmission.merchantId;
     }
@@ -277,11 +335,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'bundle_category': _initialBundleCategory,
       if (_effectiveRecipientMode != null)
         'recipient_mode': _effectiveRecipientMode,
-      'amount': _serverDrivenFormOwnsField('amount')
+      'amount': _workspaceZeroInput ? 0 : _serverDrivenFormOwnsField('amount')
           ? serverDrivenRequestFields['amount']
           : _effectiveAmount,
       'customer_phone':
-          _serverDrivenFormOwnsField('customer_phone')
+          _workspaceZeroInput ? '' : _serverDrivenFormOwnsField('customer_phone')
               ? serverDrivenRequestFields['customer_phone']
               : _effectiveCustomerPhone,
       'customer_name': '',
@@ -300,7 +358,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
           : _effectiveMerchantId,
       if (_effectiveOperatorId.isNotEmpty)
         'operator_id': _effectiveOperatorId,
-      'fee': _isAgentServiceFeeFlow && _agentServiceFeeEnabled
+      'fee': !_workspaceZeroInput && _isAgentServiceFeeFlow && _agentServiceFeeEnabled
           ? (double.tryParse(
                   _feeCtrl.text.replaceAll(',', ''),
                 ) ??
@@ -355,11 +413,39 @@ class _TransactionScreenState extends State<TransactionScreen> {
     return const <String>[];
   }
 
+  bool get _compactMtnAgentForm =>
+      _selectedProvider == 'mtn' &&
+      _selectedBusinessSimRole == 'agent';
+
   bool get _isMtnCashInOutWorkspace =>
       widget.mtnCashInOutWorkspace && _selectedProvider == 'mtn';
 
   bool get _isMtnPayToWorkspace =>
       widget.mtnPayToWorkspace && _selectedProvider == 'mtn';
+
+  // MTN Agent Data Bundle presentation only.
+  // No new backend transaction identity or USSD flow is introduced.
+  // Standalone MTN Agent Cash In and Cash Out presentation.
+  // The combined Cash In/Out workspace is handled separately.
+  bool get _isStandaloneMtnAgentCash =>
+      _selectedProvider == 'mtn' &&
+      _selectedBusinessSimRole == 'agent' &&
+      !widget.mtnCashInOutWorkspace &&
+      (_transactionType == 'send_money' ||
+          _transactionType == 'cash_out');
+
+  bool get _isMtnAgentDataWorkspace =>
+      _selectedProvider == 'mtn' &&
+      _transactionType == 'data_bundle' &&
+      _selectedBusinessSimRole == 'agent';
+
+
+  // MTN Agent Airtime presentation only.
+  // Preserve the existing airtime transaction and USSD execution.
+  bool get _isMtnAgentAirtimeWorkspace =>
+      _selectedProvider == 'mtn' &&
+      _transactionType == 'airtime' &&
+      _selectedBusinessSimRole == 'agent';
 
   bool get _isTelecelMerchantECashWorkspace =>
       widget.telecelMerchantECashWorkspace &&
@@ -400,7 +486,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
     if (!mounted ||
         !_simDetectionComplete ||
         selectedSim == null ||
-        _initialSimIdentityUnavailable) {
+        _initialSimIdentityUnavailable ||
+        !_workspaceEnquirySimStillSelected) {
       return false;
     }
 
@@ -426,10 +513,13 @@ class _TransactionScreenState extends State<TransactionScreen> {
         recipientMode: _effectiveRecipientMode,
       );
 
-      if (!mounted || !approved) return false;
+      if (!mounted || !approved || (_workspaceZeroInput && role != 'agent')) {
+        return false;
+      }
 
       final currentSim = _selectedSim;
-      return currentSim != null &&
+      return _workspaceEnquirySimStillSelected &&
+          currentSim != null &&
           currentSim.slot == selectedSim.slot &&
           currentSim.iccid == selectedSim.iccid &&
           currentSim.subscriptionId ==
@@ -546,7 +636,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
       };
 
   bool get _needsRecipient =>
-      _isMtnCashInOutWorkspace ||
+      (_isMtnCashInOutWorkspace && !_workspaceZeroInput) ||
       _isMtnPayToWorkspace ||
       ['send_money'].contains(_transactionType) ||
       _isTelecelMerchantSendMoneyWorkspace;
@@ -809,11 +899,14 @@ class _TransactionScreenState extends State<TransactionScreen> {
         }
       });
 
-      if (providerChanged) {
-        _scheduleFlowPreload();
+      // Resolve the selected SIM's authoritative business role after
+      // SIM detection completes, even when the provider is unchanged.
+      // This also refreshes role-specific transaction presentation.
+      if (_selectedSim != null) {
+        _scheduleFlowPreload(immediate: true);
       }
 
-      if (false &&
+      if (ZeroInputDirectExecutionPolicy.supportedTypes.contains(_transactionType) &&
           widget.autoStart &&
           !_autoStartAttempted &&
           _simDetectionComplete &&
@@ -895,6 +988,15 @@ class _TransactionScreenState extends State<TransactionScreen> {
       return;
     }
 
+    final selectedSimKey = _currentBusinessRoleSimKey;
+    final requestGeneration = ++_businessRoleRequestGeneration;
+
+    if (_isMtnPurchaseScreen && mounted) {
+      setState(() {
+        _businessRoleResolutionError = null;
+      });
+    }
+
     String businessSimRole;
 
     try {
@@ -906,15 +1008,28 @@ class _TransactionScreenState extends State<TransactionScreen> {
         simSubscriptionId: selectedSim.subscriptionId,
         provider: selectedSim.network,
       );
-    } on StateError {
+    } on StateError catch (error) {
+      if (!mounted ||
+          requestGeneration != _businessRoleRequestGeneration ||
+          _currentBusinessRoleSimKey != selectedSimKey) return;
+
+      setState(() {
+        _selectedBusinessSimRole = null;
+        _verifiedBusinessRoleSimKey = null;
+        _businessRoleResolutionError = error.message.toString();
+      });
       return;
     }
 
-    if (mounted && _selectedBusinessSimRole != businessSimRole) {
-      setState(() {
-        _selectedBusinessSimRole = businessSimRole;
-      });
-    }
+    if (!mounted ||
+        requestGeneration != _businessRoleRequestGeneration ||
+        _currentBusinessRoleSimKey != selectedSimKey) return;
+
+    setState(() {
+      _selectedBusinessSimRole = businessSimRole;
+      _verifiedBusinessRoleSimKey = selectedSimKey;
+      _businessRoleResolutionError = null;
+    });
 
     final provider = _selectedProvider;
     final transactionType = _transactionType;
@@ -998,6 +1113,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
     setState(() {
       _selectedProvider = provider;
       _selectedBusinessSimRole = null;
+      _verifiedBusinessRoleSimKey = null;
+      _businessRoleResolutionError = null;
 
       final providerSims = _simCards
           .where((sim) => sim.network == provider)
@@ -1037,6 +1154,10 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
     // Retry Now deliberately repeats the current transaction immediately.
     if (action == 'retry_now') {
+      if (_workspaceZeroInput) {
+        _workspaceEnquiryRetryRequested = true;
+        return;
+      }
       await _proceed();
       return;
     }
@@ -1049,7 +1170,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
     // return to the workspace without clearing what the user entered.
     if (_isMtnCashInOutWorkspace ||
         _isTelecelMerchantECashWorkspace) {
-      if (action == 'success') {
+      if (action == 'success' && !_workspaceZeroInput) {
         _clearTransactionInputsAfterSuccess();
       }
       return;
@@ -1070,8 +1191,162 @@ class _TransactionScreenState extends State<TransactionScreen> {
     }
   }
 
+  Future<void> _openMtnAgentCashEnquiry(String transactionType) async {
+    const permitted = <String>{
+      'balance_enquiry',
+      'cash_in_commission',
+      'commission_balance',
+    };
+    if (!permitted.contains(transactionType) ||
+        _loading ||
+        _workspaceEnquiryBusy ||
+        _zeroInputSubmissionInFlight ||
+        !_isMtnCashInOutWorkspace) {
+      return;
+    }
+
+    final sim = _selectedSim;
+    if (!_simDetectionComplete ||
+        sim == null ||
+        _initialSimIdentityUnavailable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select your MTN Agent SIM first.')),
+      );
+      return;
+    }
+
+    // Synchronous guard covers the entire preflight/progress/retry cycle.
+    _workspaceEnquiryBusy = true;
+    _activeMtnCashEnquiry = transactionType;
+    _workspaceEnquirySimKey = _currentBusinessRoleSimKey;
+    try {
+      do {
+        _workspaceEnquiryRetryRequested = false;
+        final approved = await _verifyZeroInputAutoStart();
+        if (!mounted) return;
+        if (!approved) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Enquiry unavailable: verify your Agent SIM and network flow in Settings.',
+              ),
+            ),
+          );
+          return;
+        }
+
+        _autoStartPreflightApproved = true;
+        try {
+          await _proceed();
+        } finally {
+          _autoStartPreflightApproved = false;
+        }
+      } while (mounted && _workspaceEnquiryRetryRequested);
+    } finally {
+      // Restore the cash workspace, but do not release an unresolved durable
+      // reservation. Only the verified backend completion can settle it.
+      _autoStartPreflightApproved = false;
+      _workspaceEnquiryRetryRequested = false;
+      _workspaceEnquirySimKey = null;
+      _activeMtnCashEnquiry = null;
+      _workspaceEnquiryBusy = false;
+      if (mounted) setState(() {});
+    }
+  }
+
+  void _showPendingBalanceConfiguration(String balanceType) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '$balanceType configuration is coming soon.',
+        ),
+      ),
+    );
+  }
+
   Future<void> _proceed() async {
-    if (widget.autoStart && _autoStartPreflightApproved) {
+    final zeroInput = _authorizedZeroInput;
+    if (zeroInput && _zeroInputSubmissionInFlight) return;
+    final reservationToken = zeroInput
+        ? ZeroInputExecutionSession.reserveForInitiation()
+        : null;
+    if (zeroInput && reservationToken == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(
+            'Another enquiry may still be unresolved. Check transaction history or contact support.',
+          )),
+        );
+      }
+      return;
+    }
+    if (zeroInput &&
+        !await ZeroInputExecutionSession.persistBeforeInitiation(reservationToken)) {
+      // Durable state may exist from a prior run: do not initiate.
+      // A failed write may have persisted our token before readback failed;
+      // clear only our own verified pre-POST state, never a prior identity.
+      final failureCode =
+          ZeroInputExecutionSession.lastPreparationFailureCode ?? 'unavailable';
+      if (failureCode == 'reservation_readback_mismatch' ||
+          failureCode == 'secure_storage_error') {
+        await ZeroInputExecutionSession.abandonDurableBeforeBackendInitiation(
+          reservationToken,
+        );
+      } else {
+        ZeroInputExecutionSession.abandonBeforeBackendInitiation(reservationToken);
+      }
+      // A previous attempt may survive app restart. Inspect without dialing
+      // or releasing the durable lock, and explain the blocked action.
+      final recoveryStatus = await ZeroInputRecoveryStatus.inspect();
+      if (mounted) {
+        final message = failureCode == 'orphaned_recovery_identity'
+            ? 'An earlier enquiry recovery record needs verification. '
+              'No new enquiry was started. Contact support.'
+            : recoveryStatus ==
+                'server_definitive_needs_report_verification'
+                ? 'Previous balance enquiry has a recorded result, but needs '
+                  'verification before another attempt. Contact support.'
+                : 'A previous balance enquiry may still be unresolved. '
+                  'Check transaction history or contact support before retrying.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$message (ZI: $failureCode)'),
+            duration: const Duration(seconds: 8),
+          ),
+        );
+      }
+      return;
+    }
+    if (zeroInput) _zeroInputBackendInitiationStarted = false;
+    if (zeroInput) _zeroInputSubmissionInFlight = true;
+    try {
+      await _proceedInternal(reservationToken: reservationToken);
+    } finally {
+      if (zeroInput && !_zeroInputBackendInitiationStarted) {
+        await ZeroInputExecutionSession.abandonDurableBeforeBackendInitiation(
+          reservationToken,
+        );
+      }
+      // Prevent early preparation failures from leaving the entire
+      // five-button workspace permanently disabled (_loading=true).
+      if (zeroInput && !_zeroInputBackendInitiationStarted && mounted) {
+        setState(() => _loading = false);
+      }
+      if (zeroInput) _zeroInputSubmissionInFlight = false;
+    }
+  }
+
+  Future<void> _proceedInternal({String? reservationToken}) async {
+    // Reject a repeat tap before starting another backend transaction.
+    // This supplements (does not replace) the execution-time lease.
+    if (_authorizedZeroInput &&
+        !ZeroInputExecutionSession.ownsReservation(reservationToken)) {
+      return;
+    }
+
+
+    if (_authorizedZeroInput) {
       if (!_simDetectionComplete || _selectedSim == null) return;
     } else {
       if (_formKey.currentState?.validate() != true) return;
@@ -1136,6 +1411,16 @@ class _TransactionScreenState extends State<TransactionScreen> {
     }
 
     if (!mounted) return;
+
+    if (_workspaceZeroInput &&
+        (businessSimRole != 'agent' || !_workspaceEnquirySimStillSelected)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(
+          'The verified MTN Agent SIM changed. Please retry the enquiry.',
+        )),
+      );
+      return;
+    }
 
     if (_selectedBusinessSimRole != businessSimRole) {
       setState(() {
@@ -1239,6 +1524,17 @@ class _TransactionScreenState extends State<TransactionScreen> {
     final isOffline = connectivity.every(
       (result) => result == ConnectivityResult.none,
     );
+    if (_authorizedZeroInput && isOffline) {
+      if (mounted) {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(
+            'A verified internet connection is required to start this enquiry.',
+          )),
+        );
+      }
+      return;
+    }
 
     final transactionDisabled = await FeatureFlagService.isTransactionDisabled(
       provider: _selectedProvider,
@@ -1390,10 +1686,57 @@ class _TransactionScreenState extends State<TransactionScreen> {
       clientOperationId: clientOperationId,
     );
 
+    if (_workspaceZeroInput && !_workspaceEnquirySimStillSelected) {
+      if (mounted) {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(
+            'The selected SIM changed. Enquiry cancelled before initiation.',
+          )),
+        );
+      }
+      return;
+    }
+
     // Start backend validation/creation now, but do not wait on this
     // form screen. TransactionProgressScreen prepares permission and
     // SIM information in parallel, then waits for this Future before
     // it is allowed to dial.
+    if (reservationToken != null) {
+      final saved = await ZeroInputExecutionSession.recordOperationCheckpoint(
+        token: reservationToken,
+        operationId: clientOperationId,
+        transactionType: _transactionType,
+        isPersonal: false,
+      );
+      if (!saved) {
+        final failureCode =
+            ZeroInputExecutionSession.lastPreparationFailureCode ?? 'unavailable';
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Unable to securely prepare this balance enquiry. '
+                'No enquiry was started. (ZI: $failureCode)',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+      if (_workspaceZeroInput && !_workspaceEnquirySimStillSelected) {
+        if (mounted) {
+          setState(() => _loading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text(
+              'The selected SIM changed. Enquiry was not initiated.',
+            )),
+          );
+        }
+        return;
+      }
+      _zeroInputBackendInitiationStarted = true;
+    }
     final transactionFuture = _initiateOnlineTransaction(
       requestFields: requestFields,
       provider: _selectedProvider,
@@ -1407,6 +1750,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
       '/transactions/progress',
       extra: {
         'transaction_future': transactionFuture,
+        'zero_input_quick_action': _authorizedZeroInput,
+        'zero_input_preflight_approved': _authorizedZeroInput,
+        'zero_input_reservation_token': reservationToken,
         'provider': _selectedProvider,
         'transaction_type': _transactionType,
         'mtn_cash_in_out_workspace': _isMtnCashInOutWorkspace,
@@ -1760,7 +2106,50 @@ class _TransactionScreenState extends State<TransactionScreen> {
           const SizedBox(width: 4),
         ],
       ),
-      body: false && widget.autoStart && !_autoStartFallbackToForm
+      body: _isMtnPurchaseScreen && !_mtnPurchaseRoleReady
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (!_simDetectionComplete ||
+                        (_selectedSim != null &&
+                            _businessRoleResolutionError == null))
+                      const CircularProgressIndicator()
+                    else
+                      const Icon(
+                        Icons.sim_card_alert_outlined,
+                        size: 36,
+                      ),
+                    const SizedBox(height: 16),
+                    Text(
+                      !_simDetectionComplete
+                          ? 'Detecting SIM…'
+                          : _selectedSim == null
+                              ? 'The selected MTN SIM is unavailable.'
+                              : _businessRoleResolutionError ??
+                                  (_selectedBusinessSimRole == 'agent'
+                                      ? 'Verifying selected SIM…'
+                                      : 'This transaction requires a verified Agent SIM. Check Settings > SIM Purpose.'),
+                      textAlign: TextAlign.center,
+                    ),
+                    if (_simDetectionComplete &&
+                        _selectedSim != null &&
+                        _businessRoleResolutionError != null) ...[
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: () =>
+                            _scheduleFlowPreload(immediate: true),
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Retry Verification'),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            )
+          : ZeroInputDirectExecutionPolicy.supportedTypes.contains(_transactionType) && widget.autoStart && !_autoStartFallbackToForm
           ? _buildAutoStartStatus()
           : Column(
         children: [
@@ -1882,10 +2271,15 @@ class _TransactionScreenState extends State<TransactionScreen> {
                         return ChoiceChip(
                           selected: false,
                           onSelected: (_) {
+                            if (_workspaceEnquiryBusy) return;
                             setState(() {
                               _selectedSimSlot = sim.slot;
                               _initialSimIdentityUnavailable = false;
+                              _selectedBusinessSimRole = null;
+                              _verifiedBusinessRoleSimKey = null;
+                              _businessRoleResolutionError = null;
                             });
+                            _scheduleFlowPreload(immediate: true);
                           },
                           selectedColor: color.withValues(alpha: 0.16),
                           avatar: Icon(
@@ -1956,10 +2350,15 @@ class _TransactionScreenState extends State<TransactionScreen> {
                         return ChoiceChip(
                           selected: selected,
                           onSelected: (_) {
+                            if (_workspaceEnquiryBusy) return;
                             setState(() {
                               _selectedSimSlot = sim.slot;
                               _initialSimIdentityUnavailable = false;
+                              _selectedBusinessSimRole = null;
+                              _verifiedBusinessRoleSimKey = null;
+                              _businessRoleResolutionError = null;
                             });
+                            _scheduleFlowPreload(immediate: true);
                           },
                           selectedColor: color.withValues(alpha: 0.16),
                           avatar: Icon(
@@ -2083,10 +2482,15 @@ class _TransactionScreenState extends State<TransactionScreen> {
                         return ChoiceChip(
                           selected: false,
                           onSelected: (_) {
+                            if (_workspaceEnquiryBusy) return;
                             setState(() {
                               _selectedSimSlot = sim.slot;
                               _initialSimIdentityUnavailable = false;
+                              _selectedBusinessSimRole = null;
+                              _verifiedBusinessRoleSimKey = null;
+                              _businessRoleResolutionError = null;
                             });
+                            _scheduleFlowPreload(immediate: true);
                           },
                           selectedColor: color.withValues(alpha: 0.16),
                           avatar: Icon(
@@ -2161,10 +2565,15 @@ class _TransactionScreenState extends State<TransactionScreen> {
                         return ChoiceChip(
                           selected: selected,
                           onSelected: (_) {
+                            if (_workspaceEnquiryBusy) return;
                             setState(() {
                               _selectedSimSlot = sim.slot;
                               _initialSimIdentityUnavailable = false;
+                              _selectedBusinessSimRole = null;
+                              _verifiedBusinessRoleSimKey = null;
+                              _businessRoleResolutionError = null;
                             });
+                            _scheduleFlowPreload(immediate: true);
                           },
                           selectedColor: color.withValues(alpha: 0.16),
                           avatar: Icon(
@@ -2267,10 +2676,15 @@ class _TransactionScreenState extends State<TransactionScreen> {
                         return ChoiceChip(
                           selected: selected,
                           onSelected: (_) {
+                            if (_workspaceEnquiryBusy) return;
                             setState(() {
                               _selectedSimSlot = sim.slot;
                               _initialSimIdentityUnavailable = false;
+                              _selectedBusinessSimRole = null;
+                              _verifiedBusinessRoleSimKey = null;
+                              _businessRoleResolutionError = null;
                             });
+                            _scheduleFlowPreload(immediate: true);
                           },
                           selectedColor: color.withValues(alpha: 0.16),
                           avatar: Icon(
@@ -2501,6 +2915,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                   _needsMerchantId) ...[
                 AppTextField(
                   transactionEmphasis: true,
+                  compactTransactionField: _compactMtnAgentForm,
                   controller: _merchantIdCtrl,
                   label: 'Merchant ID',
                   prefixIcon: Icons.storefront_outlined,
@@ -2601,6 +3016,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                   !_serverDrivenFormOwnsField('customer_phone')) ...[
                 AppTextField(
                   transactionEmphasis: true,
+                  compactTransactionField: _compactMtnAgentForm,
                   controller: _customerPhoneCtrl,
                   label: _isTelecelMerchantWithdrawal
                       ? 'Till Number'
@@ -2664,6 +3080,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                   _needsRecipient) ...[
                 AppTextField(
                   transactionEmphasis: true,
+                  compactTransactionField: _compactMtnAgentForm,
                   controller: _recipientPhoneCtrl,
                   label: _isMtnPayToWorkspace
                       ? 'Mobile Number / Merchant ID'
@@ -2713,6 +3130,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     ),
                   ],
                   decoration: InputDecoration(
+                    contentPadding: _compactMtnAgentForm
+                        ? const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          )
+                        : null,
                     labelText: 'Amount (GH₵)',
                     hintText: '0.00',
                     prefixIcon: const Icon(Icons.monetization_on_outlined),
@@ -2723,8 +3146,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     filled: true,
                     fillColor: context.appSurface,
                   ),
-                  style: const TextStyle(
-                    fontSize: 30,
+                  style: TextStyle(
+                    fontSize: _compactMtnAgentForm ? 21 : 30,
                     fontWeight: FontWeight.bold,
                   ),
                   validator: (v) {
@@ -2786,6 +3209,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     ),
                   ],
                   decoration: InputDecoration(
+                    contentPadding: _compactMtnAgentForm
+                        ? const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          )
+                        : null,
                     labelText: 'Agent Service Fee (GH₵)',
                     hintText: '0.00',
                     prefixIcon: const Icon(Icons.receipt_long_outlined),
@@ -2843,39 +3272,157 @@ class _TransactionScreenState extends State<TransactionScreen> {
                 const SizedBox(height: 14),
               ],
 
+              // MTN Agent Cash In/Out: compact, text-only actions.
+              // Unverified enquiry and commission flows stay disabled.
               if (_isMtnCashInOutWorkspace) ...[
+                Builder(
+                  builder: (context) {
+                    ButtonStyle style(double fontSize) =>
+                        ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryColor,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(0, 44),
+                          maximumSize: const Size(double.infinity, 44),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                          ),
+                          textStyle: TextStyle(
+                            fontSize: fontSize,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(9),
+                          ),
+                        );
+
+                    return Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton(
+                                style: style(14),
+                                onPressed: _loading || _workspaceEnquiryBusy
+                                    ? null
+                                    : () {
+                                        setState(() {
+                                          _mtnCashInOutOperation =
+                                              'send_money';
+                                        });
+                                        _proceed();
+                                      },
+                                child: const Text('Cash In'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: ElevatedButton(
+                                style: style(14),
+                                onPressed: _loading || _workspaceEnquiryBusy
+                                    ? null
+                                    : () {
+                                        setState(() {
+                                          _mtnCashInOutOperation =
+                                              'cash_out';
+                                          _agentServiceFeeEnabled = false;
+                                          _feeManuallyOverridden = false;
+                                          _feeCtrl.text = '0.00';
+                                        });
+                                        _proceed();
+                                      },
+                                child: const Text('Cash Out'),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Center(
+                          child: SizedBox(
+                            width: 170,
+                            child: ElevatedButton(
+                              style: style(14),
+                              onPressed: _loading || _workspaceEnquiryBusy
+                                  ? null
+                                  : () => _openMtnAgentCashEnquiry(
+                                        'balance_enquiry',
+                                      ),
+                              child: const Text('Balance'),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton(
+                                style: style(13),
+                                onPressed: _loading || _workspaceEnquiryBusy
+                                    ? null
+                                    : () => _openMtnAgentCashEnquiry(
+                                          'cash_in_commission',
+                                        ),
+                                child: const FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text('Cash In Commission'),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: ElevatedButton(
+                                style: style(13),
+                                onPressed: _loading || _workspaceEnquiryBusy
+                                    ? null
+                                    : () => _openMtnAgentCashEnquiry(
+                                          'commission_balance',
+                                        ),
+                                child: const FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text('Cash Out Commission'),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 10),
+              ],
+
+              if (_isStandaloneMtnAgentCash) ...[
+                AppButton(
+                  label: _transactionType == 'send_money'
+                      ? 'Cash In'
+                      : 'Cash Out',
+                  onPressed: _loading ? null : _proceed,
+                  isLoading: _loading,
+                ),
+                const SizedBox(height: 14),
+              ],
+
+              if (_isMtnAgentAirtimeWorkspace) ...[
                 Row(
                   children: [
                     Expanded(
                       child: AppButton(
-                        label: 'Cash In',
-                        onPressed: () {
-                          setState(() {
-                            _mtnCashInOutOperation = 'send_money';
-                          });
-                          _proceed();
-                        },
-                        isLoading: _loading &&
-                            _mtnCashInOutOperation == 'send_money',
-                        icon: Icons.arrow_downward,
+                        label: 'Buy Airtime',
+                        onPressed: _loading ? null : _proceed,
+                        isLoading: _loading,
+                        icon: Icons.phone_android_outlined,
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: AppButton(
-                        label: 'Cash Out',
-                        onPressed: () {
-                          setState(() {
-                            _mtnCashInOutOperation = 'cash_out';
-                            _agentServiceFeeEnabled = false;
-                            _feeManuallyOverridden = false;
-                            _feeCtrl.text = '0.00';
-                          });
-                          _proceed();
-                        },
-                        isLoading:
-                            _loading && _mtnCashInOutOperation == 'cash_out',
-                        icon: Icons.arrow_upward,
+                        label: 'Balance',
+                        onPressed: _loading
+                            ? null
+                            : () => _showPendingBalanceConfiguration(
+                                  'Airtime Balance',
+                                ),
+                        icon: Icons.account_balance_wallet_outlined,
                       ),
                     ),
                   ],
@@ -2888,7 +3435,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                   children: [
                     Expanded(
                       child: AppButton(
-                        label: 'Pay to Agent',
+                        label: 'Agent',
                         onPressed: () {
                           setState(() {
                             _mtnPayToOperation = 'pay_to_agent';
@@ -2897,13 +3444,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
                         },
                         isLoading:
                             _loading && _mtnPayToOperation == 'pay_to_agent',
-                        icon: Icons.person_outline,
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: AppButton(
-                        label: 'Pay to Merchant',
+                        label: 'Merchant',
                         onPressed: () {
                           setState(() {
                             _mtnPayToOperation = 'merchant_payment';
@@ -2912,11 +3458,38 @@ class _TransactionScreenState extends State<TransactionScreen> {
                         },
                         isLoading: _loading &&
                             _mtnPayToOperation == 'merchant_payment',
-                        icon: Icons.storefront_outlined,
                       ),
                     ),
                   ],
                 ),
+                const SizedBox(height: 14),
+              ],
+
+              if (_isMtnAgentDataWorkspace) ...[
+                Row(
+                                  children: [
+                                    Expanded(
+                                      child: AppButton(
+                                        label: 'Buy Data',
+                                        onPressed: _loading ? null : _proceed,
+                                        isLoading: _loading,
+                                        icon: Icons.shopping_cart_outlined,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: AppButton(
+                                        label: 'Balance',
+                                        onPressed: _loading
+                                            ? null
+                                            : () => _showPendingBalanceConfiguration(
+                                                  'Data Balance',
+                                                ),
+                                        icon: Icons.account_balance_wallet_outlined,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                 const SizedBox(height: 14),
               ],
 
@@ -2971,7 +3544,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
         ),
       ),
           ),
-          if (!_isMtnCashInOutWorkspace && !_isMtnPayToWorkspace)
+          if (!_isMtnCashInOutWorkspace &&
+              !_isMtnPayToWorkspace &&
+              !_isMtnAgentDataWorkspace &&
+              !_isMtnAgentAirtimeWorkspace &&
+              !_isStandaloneMtnAgentCash)
             SafeArea(
               top: false,
               child: Padding(

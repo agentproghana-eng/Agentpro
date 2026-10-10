@@ -9,8 +9,8 @@ void main() {
 
   test('Cash In Out keeps direct operation selector', () {
     expect(source, isNot(contains("'Choose transaction'")));
-    expect(source, contains("label: 'Cash In'"));
-    expect(source, contains("label: 'Cash Out'"));
+    expect(source, contains("child: const Text('Cash In')"));
+    expect(source, contains("child: const Text('Cash Out')"));
   });
 
   test('transaction workspace resizes for Android keyboard', () {
@@ -36,9 +36,9 @@ void main() {
     expect(form, greaterThan(expanded));
     expect(scroll, greaterThan(form));
     expect(proceed, greaterThan(scroll));
-    expect(source, contains('if (!_isMtnCashInOutWorkspace && !_isMtnPayToWorkspace)'));
-    expect(source, contains("label: 'Cash In'"));
-    expect(source, contains("label: 'Cash Out'"));
+    expect(source, contains('if (!_isMtnCashInOutWorkspace &&\n              !_isMtnPayToWorkspace &&\n              !_isMtnAgentDataWorkspace &&\n              !_isMtnAgentAirtimeWorkspace &&\n              !_isStandaloneMtnAgentCash)'));
+    expect(source, contains("child: const Text('Cash In')"));
+    expect(source, contains("child: const Text('Cash Out')"));
 
     expect(
       source,
@@ -58,8 +58,19 @@ void main() {
     );
   });
 
-  test('transaction Phone and Amount emphasis remains 30px', () {
-    expect(source, contains('fontSize: 30'));
+  test('transaction amount preserves compact and default typography', () {
+    expect(
+      source,
+      contains('fontSize: _compactMtnAgentForm ? 21 : 30'),
+    );
+    expect(
+      source,
+      contains("_selectedProvider == 'mtn' &&"),
+    );
+    expect(
+      source,
+      contains("_selectedBusinessSimRole == 'agent';"),
+    );
   });
 
   test('service fee toggle remains directly before primary action', () {

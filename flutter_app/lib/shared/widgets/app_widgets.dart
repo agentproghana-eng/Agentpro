@@ -101,6 +101,7 @@ class AppTextField extends StatelessWidget {
   /// Opt-in only so login, registration, marketplace and other forms keep
   /// their existing typography and density.
   final bool transactionEmphasis;
+  final bool compactTransactionField;
 
   const AppTextField({
     super.key,
@@ -120,13 +121,15 @@ class AppTextField extends StatelessWidget {
     this.transactionLabelFontSize,
     this.transactionValueFontSize,
     this.transactionEmphasis = false,
+    this.compactTransactionField = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final fieldStyle = transactionEmphasis
         ? TextStyle(
-            fontSize: transactionValueFontSize ?? 30,
+            fontSize: transactionValueFontSize ??
+                (compactTransactionField ? 21 : 30),
             fontWeight: FontWeight.bold,
           )
         : null;
@@ -161,10 +164,15 @@ class AppTextField extends StatelessWidget {
               )
             : null,
         contentPadding: transactionEmphasis
-            ? const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 20,
-              )
+            ? compactTransactionField
+                ? const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  )
+                : const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 20,
+                  )
             : null,
         prefixIcon: prefixIcon != null
             ? Icon(

@@ -84,7 +84,7 @@ void main() {
       );
     });
 
-    test('saved MTN layout keeps the old cash_in slot for send_money', () {
+    test('MTN layout preserves standalone Cash In and combined Cash In/Out', () {
       const saved = [
         QuickActionPreference(
           actionKey: 'cash_in',
@@ -109,13 +109,16 @@ void main() {
       expect(
         normalized.map((item) => item.actionKey).toList(),
         [
-          'send_money',
+          'cash_in',
           'airtime',
+          'send_money',
         ],
       );
 
       expect(normalized[0].position, 0);
       expect(normalized[0].iconKey, 'deposit');
+      expect(normalized[2].position, 2);
+
     });
   });
 }
