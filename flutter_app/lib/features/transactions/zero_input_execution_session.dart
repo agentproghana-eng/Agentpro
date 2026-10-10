@@ -63,6 +63,18 @@ class ZeroInputExecutionSession {
     }
   }
 
+  /// Read the reservation token, re-reading briefly when the platform storage
+  /// returns nothing right after a verified write. Read-only: it never writes
+  /// or recreates the token, so a genuinely missing reservation still fails.
+  static Future<String?> _readUnresolvedTokenSettled() async {
+    var value = await _storage.read(key: _unresolvedKey);
+    for (var attempt = 0; value == null && attempt < 2; attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      value = await _storage.read(key: _unresolvedKey);
+    }
+    return value;
+  }
+
   /// Save the operation identity before sending the backend POST.
   /// This does not authorize USSD or release the unresolved lock.
   /// Record the operation UUID before any backend POST. Only a matching
@@ -88,8 +100,13 @@ class ZeroInputExecutionSession {
     }
 
     try {
-      if (await _storage.read(key: _unresolvedKey) != token) {
-        _lastPreparationFailureCode = 'unresolved_token_mismatch';
+      final stored = await _readUnresolvedTokenSettled();
+      if (stored != token) {
+        // Distinguish a missing value (a storage read that returned nothing)
+        // from a different value (another writer replaced it).
+        _lastPreparationFailureCode = stored == null
+            ? 'unresolved_token_missing'
+            : 'unresolved_token_mismatch';
         return false;
       }
       if (await _storage.read(key: _identityKey) != null) {
