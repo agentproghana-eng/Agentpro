@@ -2263,8 +2263,24 @@ class _TransactionScreenState extends State<TransactionScreen> {
     );
   }
 
+  // A zero-input quick action that starts by itself shows nothing of its own
+  // while it prepares: the screen it came from stays visible until the
+  // progress screen opens. Problems and the form fallback still show.
+  bool get _autoStartRunsSilently =>
+      widget.autoStart &&
+      !_autoStartFallbackToForm &&
+      ZeroInputDirectExecutionPolicy.supportedTypes.contains(_transactionType) &&
+      (!_simDetectionComplete || _loading || _autoStartInProgress);
+
   @override
   Widget build(BuildContext context) {
+    if (_autoStartRunsSilently) {
+      return const Scaffold(
+        backgroundColor: Colors.transparent,
+        body: AbsorbPointer(child: SizedBox.expand()),
+      );
+    }
+
     return Scaffold(
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
