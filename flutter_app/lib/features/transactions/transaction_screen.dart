@@ -754,6 +754,18 @@ class _TransactionScreenState extends State<TransactionScreen> {
         _ => _selectedProvider,
       };
 
+  // While a Balance/Commission enquiry runs, the active transaction type
+  // changes so the enquiry needs no form input. That must not change what the
+  // agent sees: keep showing the Cash In/Out form exactly as before the tap.
+  bool get _keepWorkspaceFormVisible =>
+      _isMtnCashInOutWorkspace && _workspaceEnquiryBusy;
+  bool get _showsRecipientField =>
+      _needsRecipient || _keepWorkspaceFormVisible;
+  bool get _showsAmountField => _needsAmount || _keepWorkspaceFormVisible;
+  bool get _showsAgentServiceFee =>
+      _isAgentServiceFeeFlow ||
+      (_keepWorkspaceFormVisible && _mtnCashInOutOperation == 'send_money');
+
   bool get _needsRecipient =>
       (_isMtnCashInOutWorkspace && !_workspaceZeroInput) ||
       _isMtnPayToWorkspace ||
@@ -3238,7 +3250,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
               ],
 
               if (!_usesServerDrivenForm &&
-                  _needsRecipient) ...[
+                  _showsRecipientField) ...[
                 AppTextField(
                   transactionEmphasis: true,
                   compactTransactionField: _compactMtnAgentForm,
@@ -3279,7 +3291,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
               // 2. AMOUNT
               if (!_usesServerDrivenForm &&
-                  _needsAmount) ...[
+                  _showsAmountField) ...[
                 TextFormField(
                   controller: _amountCtrl,
                   keyboardType: const TextInputType.numberWithOptions(
@@ -3357,7 +3369,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
               // Enabled:
               //   starts at 1% of the transaction amount but the agent can
               //   manually replace the calculated figure.
-              if (_isAgentServiceFeeFlow) ...[
+              if (_showsAgentServiceFee) ...[
                 TextFormField(
                   controller: _feeCtrl,
                   enabled: _agentServiceFeeEnabled && !_loading,
@@ -3463,7 +3475,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             Expanded(
                               child: ElevatedButton(
                                 style: style(14),
-                                onPressed: _loading || _workspaceEnquiryBusy
+                                onPressed: _loading && !_workspaceEnquiryBusy
                                     ? null
                                     : () {
                                         // onPressed can be stale until the
@@ -3483,7 +3495,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             Expanded(
                               child: ElevatedButton(
                                 style: style(14),
-                                onPressed: _loading || _workspaceEnquiryBusy
+                                onPressed: _loading && !_workspaceEnquiryBusy
                                     ? null
                                     : () {
                                         if (_submissionInFlight) return;
@@ -3507,7 +3519,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             width: 170,
                             child: ElevatedButton(
                               style: style(14),
-                              onPressed: _loading || _workspaceEnquiryBusy
+                              onPressed: _loading && !_workspaceEnquiryBusy
                                   ? null
                                   : () => _openMtnAgentCashEnquiry(
                                         'balance_enquiry',
@@ -3522,7 +3534,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             Expanded(
                               child: ElevatedButton(
                                 style: style(13),
-                                onPressed: _loading || _workspaceEnquiryBusy
+                                onPressed: _loading && !_workspaceEnquiryBusy
                                     ? null
                                     : () => _openMtnAgentCashEnquiry(
                                           'cash_in_commission',
@@ -3537,7 +3549,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             Expanded(
                               child: ElevatedButton(
                                 style: style(13),
-                                onPressed: _loading || _workspaceEnquiryBusy
+                                onPressed: _loading && !_workspaceEnquiryBusy
                                     ? null
                                     : () => _openMtnAgentCashEnquiry(
                                           'commission_balance',
