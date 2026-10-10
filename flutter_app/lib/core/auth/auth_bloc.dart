@@ -229,7 +229,48 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       }
 
       if (statusCode == 403) {
-        emit(AuthError('Your account is pending approval.'));
+        emit(AuthError('Your account is pending approval or unavailable. Please contact support.'));
+        return;
+      }
+
+      if (statusCode == 400 || statusCode == 422) {
+        String message = 'Please check your login details and try again.';
+
+        if (statusCode == 422) {
+          final responseData = e.response?.data;
+          if (responseData is Map) {
+            final errors = responseData['errors'];
+            if (errors is List) {
+              for (final error in errors) {
+                if (error is! Map) continue;
+                if (error['field'] == 'email') {
+                  message = 'Enter a valid email address.';
+                  break;
+                }
+                if (error['field'] == 'password') {
+                  message = 'Password is required.';
+                  break;
+                }
+              }
+            }
+          }
+        }
+
+        emit(AuthError(message));
+        return;
+      }
+
+      if (statusCode == 423) {
+        emit(AuthError(
+          'Your account is temporarily locked. Please try again later.',
+        ));
+        return;
+      }
+
+      if (statusCode == 429) {
+        emit(AuthError(
+          'Too many login attempts. Please wait before trying again.',
+        ));
         return;
       }
 
