@@ -167,6 +167,23 @@ class _TransactionScreenState extends State<TransactionScreen> {
       (_transactionType == 'airtime' ||
           _transactionType == 'data_bundle');
 
+  // The standalone MTN Cash In / Cash Out screens present themselves once the
+  // SIM role is known. Until then, show the same short loading state as the
+  // airtime and data screens instead of a generic form with a Proceed bar
+  // that is replaced a moment later.
+  bool get _awaitingStandaloneMtnCashRole =>
+      _selectedProvider == 'mtn' &&
+      !widget.mtnCashInOutWorkspace &&
+      !widget.mtnPayToWorkspace &&
+      !widget.telecelMerchantECashWorkspace &&
+      (_transactionType == 'send_money' || _transactionType == 'cash_out') &&
+      // Only while the role is still being resolved. A verified non-agent
+      // SIM or a resolution error falls through to the normal form.
+      (!_simDetectionComplete ||
+          (_selectedSim != null &&
+              _selectedBusinessSimRole == null &&
+              _businessRoleResolutionError == null));
+
   bool get _mtnPurchaseRoleReady =>
       _simDetectionComplete &&
       _selectedSim != null &&
@@ -2294,7 +2311,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
           const SizedBox(width: 4),
         ],
       ),
-      body: _isMtnPurchaseScreen && !_mtnPurchaseRoleReady
+      body: _isMtnPurchaseScreen && !_mtnPurchaseRoleReady ||
+              _awaitingStandaloneMtnCashRole
           ? Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -3742,7 +3760,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
         ),
       ),
           ),
-          if (!_isMtnCashInOutWorkspace &&
+          if (!_awaitingStandaloneMtnCashRole &&
+              !_isMtnCashInOutWorkspace &&
               !_isMtnPayToWorkspace &&
               !_isMtnAgentDataWorkspace &&
               !_isMtnAgentAirtimeWorkspace &&
