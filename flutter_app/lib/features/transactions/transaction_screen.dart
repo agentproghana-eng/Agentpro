@@ -1422,6 +1422,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
   Future<void> _proceedGated() async {
     final zeroInput = _authorizedZeroInput;
     if (zeroInput && _zeroInputSubmissionInFlight) return;
+    if (zeroInput) {
+      await ZeroInputExecutionSession.clearPreUnificationOrphanOnce();
+    }
     final reservationToken = zeroInput
         ? ZeroInputExecutionSession.reserveForInitiation()
         : null;
