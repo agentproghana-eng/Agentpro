@@ -187,6 +187,93 @@ class _TransactionScreenState extends State<TransactionScreen> {
   bool _workspaceEnquiryRetryRequested = false;
   String? _workspaceEnquirySimKey;
 
+  // Short-lived record of server-verified Balance/Commission preflights, so a
+  // tap does not wait on two network round trips. Entries are keyed by SIM,
+  // enquiry type and flow selectors, and expire quickly so a disabled flow or
+  // a changed SIM role is still picked up by a fresh live check.
+  static const Duration _enquiryPreflightTtl = Duration(seconds: 60);
+  static const List<String> _enquiryPreflightTypes = <String>[
+    'balance_enquiry',
+    'cash_in_commission',
+    'commission_balance',
+  ];
+  final Map<String, DateTime> _enquiryPreflightVerifiedAt =
+      <String, DateTime>{};
+
+  String? _enquiryPreflightKey(String type) {
+    final simKey = _currentBusinessRoleSimKey;
+    if (simKey == null) return null;
+    return '$simKey|$type|${_initialBundleCategory ?? ''}|'
+        '${_effectiveRecipientMode ?? ''}';
+  }
+
+  bool _hasFreshEnquiryPreflight(String type) {
+    final key = _enquiryPreflightKey(type);
+    final verifiedAt = key == null ? null : _enquiryPreflightVerifiedAt[key];
+    return verifiedAt != null &&
+        DateTime.now().difference(verifiedAt) < _enquiryPreflightTtl;
+  }
+
+  void _recordEnquiryPreflight(String type) {
+    final key = _enquiryPreflightKey(type);
+    if (key != null) _enquiryPreflightVerifiedAt[key] = DateTime.now();
+  }
+
+  /// Verifies the three MTN Agent enquiry flows in the background as soon as
+  /// the SIM is known. A failure only means the tap falls back to the live
+  /// check; it never authorizes execution.
+  Future<void> _prewarmEnquiryPreflight() async {
+    final sim = _selectedSim;
+    final simKey = _currentBusinessRoleSimKey;
+    if (!_isMtnCashInOutWorkspace ||
+        !_simDetectionComplete ||
+        sim == null ||
+        simKey == null ||
+        _initialSimIdentityUnavailable) {
+      return;
+    }
+
+    try {
+      final role = await SimRoleAssignmentService.businessRoleForSlot(
+        sim.slot,
+        refreshFromServer: true,
+        allowLegacyAgentFallback: false,
+        simIccid: sim.iccid,
+        simSubscriptionId: sim.subscriptionId,
+        provider: sim.network,
+      );
+      if (!mounted || role != 'agent' || _currentBusinessRoleSimKey != simKey) {
+        return;
+      }
+
+      final keyedTypes = <String, String>{};
+      for (final type in _enquiryPreflightTypes) {
+        final key = _enquiryPreflightKey(type);
+        if (key != null) keyedTypes[type] = key;
+      }
+
+      await Future.wait(
+        keyedTypes.entries.map((entry) async {
+          final approved = await ZeroInputFlowPreflight.verify(
+            provider: _selectedProvider,
+            transactionType: entry.key,
+            isPersonal: false,
+            businessSimRole: role,
+            bundleCategory: _initialBundleCategory,
+            recipientMode: _effectiveRecipientMode,
+          );
+          if (mounted &&
+              approved &&
+              _currentBusinessRoleSimKey == simKey) {
+            _enquiryPreflightVerifiedAt[entry.value] = DateTime.now();
+          }
+        }),
+      );
+    } catch (_) {
+      // Best effort only: the tap performs the live check instead.
+    }
+  }
+
   bool get _workspaceEnquirySimStillSelected =>
       !_workspaceZeroInput ||
       (_workspaceEnquirySimKey != null &&
@@ -515,6 +602,12 @@ class _TransactionScreenState extends State<TransactionScreen> {
       return false;
     }
 
+    // A recent server-verified approval for this exact SIM and enquiry lets
+    // the tap start dialing immediately instead of waiting on the network.
+    if (_workspaceZeroInput && _hasFreshEnquiryPreflight(_transactionType)) {
+      return _workspaceEnquirySimStillSelected;
+    }
+
     try {
       final role =
           await SimRoleAssignmentService.businessRoleForSlot(
@@ -540,6 +633,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
       if (!mounted || !approved || (_workspaceZeroInput && role != 'agent')) {
         return false;
       }
+
+      if (_workspaceZeroInput) _recordEnquiryPreflight(_transactionType);
 
       final currentSim = _selectedSim;
       return _workspaceEnquirySimStillSelected &&
@@ -928,6 +1023,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
       // This also refreshes role-specific transaction presentation.
       if (_selectedSim != null) {
         _scheduleFlowPreload(immediate: true);
+        if (_isMtnCashInOutWorkspace) {
+          unawaited(_prewarmEnquiryPreflight());
+        }
       }
 
       if (ZeroInputDirectExecutionPolicy.supportedTypes.contains(_transactionType) &&
