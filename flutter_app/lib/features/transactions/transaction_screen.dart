@@ -2335,7 +2335,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
                           : _selectedSim == null
                               ? 'The selected MTN SIM is unavailable.'
                               : _businessRoleResolutionError ??
-                                  (_selectedBusinessSimRole == 'agent'
+                                  (_selectedBusinessSimRole == null ||
+                                          _selectedBusinessSimRole == 'agent'
                                       ? 'Verifying selected SIM…'
                                       : 'This transaction requires a verified Agent SIM. Check Settings > SIM Purpose.'),
                       textAlign: TextAlign.center,

@@ -123,9 +123,13 @@ class SimRoleAssignmentService {
 
   static Future<List<dynamic>?> _fetchServerPurposes() async {
     try {
-      final response = await ApiClient.instance.get(
-        '/user-sim-purposes',
-      );
+      // Bound the wait so a slow connection falls back to the trusted local
+      // assignment (same as offline) instead of holding the screen open.
+      final response = await ApiClient.instance
+          .get(
+            '/user-sim-purposes',
+          )
+          .timeout(const Duration(seconds: 4));
 
       final responseData = response.data;
       final data =
