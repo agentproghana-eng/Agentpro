@@ -85,6 +85,30 @@ class _TransactionScreenState extends State<TransactionScreen> {
   bool _zeroInputSubmissionInFlight = false;
   bool _zeroInputBackendInitiationStarted = false;
 
+  // Synchronous re-entrancy gate for every submission path. `_loading` is
+  // only set after several awaits inside _proceedInternal (role refresh,
+  // device identity, ...), so a second tap in that window used to start a
+  // second submission with its own clientOperationId. The gate is taken
+  // before the first await and released in `finally`, and also released
+  // just before the progress result is handled so Retry Now can re-enter.
+  //
+  // The owner token lets a finishing call release only its own hold, so an
+  // outer `finally` can never clobber a gate that a newer call has taken.
+  Object? _submissionGateOwner;
+
+  bool get _submissionGateHeld => _submissionGateOwner != null;
+
+  // True while any submission or enquiry preflight is running. Workspace
+  // button handlers check this before they mutate the selected operation,
+  // because their captured onPressed closures can be stale until the next
+  // rebuild.
+  bool get _submissionInFlight =>
+      _loading || _submissionGateHeld || _workspaceEnquiryBusy;
+
+  void _releaseSubmissionGate() {
+    _submissionGateOwner = null;
+  }
+
   OfflineQueueIdentity? get _offlineIdentity {
     final state = context.read<AuthBloc>().state;
     return state is AuthAuthenticated
@@ -1199,6 +1223,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
     };
     if (!permitted.contains(transactionType) ||
         _loading ||
+        _submissionGateHeld ||
         _workspaceEnquiryBusy ||
         _zeroInputSubmissionInFlight ||
         !_isMtnCashInOutWorkspace) {
@@ -1266,6 +1291,35 @@ class _TransactionScreenState extends State<TransactionScreen> {
   }
 
   Future<void> _proceed() async {
+    // A second tap while a submission is still preparing must be ignored.
+    if (_submissionGateHeld) return;
+
+    // While a Balance/Commission enquiry is in its preflight, only that
+    // enquiry's own call (which sets _autoStartPreflightApproved) may run.
+    // Otherwise a Cash In/Out tap would execute the active enquiry type
+    // through the unreserved, non-zero-input path.
+    if (_workspaceEnquiryBusy && !_autoStartPreflightApproved) return;
+
+    final gateOwner = Object();
+    _submissionGateOwner = gateOwner;
+    try {
+      await _proceedGated();
+    } finally {
+      if (identical(_submissionGateOwner, gateOwner)) {
+        _releaseSubmissionGate();
+
+        // This call still owns the gate, so nothing newer is running and a
+        // leftover `_loading` is a leak from an early exit or exception.
+        // Without this, the in-flight guards above would keep every
+        // workspace button disabled until the screen is reopened.
+        if (_loading && mounted) {
+          setState(() => _loading = false);
+        }
+      }
+    }
+  }
+
+  Future<void> _proceedGated() async {
     final zeroInput = _authorizedZeroInput;
     if (zeroInput && _zeroInputSubmissionInFlight) return;
     final reservationToken = zeroInput
@@ -1676,7 +1730,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
       );
       if (mounted) setState(() => _loading = false);
 
-    await _handleProgressAction(progressAction);
+      // Release before handling the result: Retry Now re-enters _proceed.
+      _releaseSubmissionGate();
+      await _handleProgressAction(progressAction);
       return;
     }
 
@@ -1781,6 +1837,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
       setState(() => _loading = false);
     }
 
+    // Release before handling the result: Retry Now re-enters _proceed.
+    _releaseSubmissionGate();
     await _handleProgressAction(progressAction);
   }
 
@@ -3305,6 +3363,10 @@ class _TransactionScreenState extends State<TransactionScreen> {
                                 onPressed: _loading || _workspaceEnquiryBusy
                                     ? null
                                     : () {
+                                        // onPressed can be stale until the
+                                        // next rebuild; re-check before
+                                        // changing the operation.
+                                        if (_submissionInFlight) return;
                                         setState(() {
                                           _mtnCashInOutOperation =
                                               'send_money';
@@ -3321,6 +3383,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                                 onPressed: _loading || _workspaceEnquiryBusy
                                     ? null
                                     : () {
+                                        if (_submissionInFlight) return;
                                         setState(() {
                                           _mtnCashInOutOperation =
                                               'cash_out';
@@ -3437,6 +3500,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
                       child: AppButton(
                         label: 'Agent',
                         onPressed: () {
+                          // Pay To buttons stay tappable while loading, so
+                          // the operation must not change mid-submission.
+                          if (_submissionInFlight) return;
                           setState(() {
                             _mtnPayToOperation = 'pay_to_agent';
                           });
@@ -3451,6 +3517,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                       child: AppButton(
                         label: 'Merchant',
                         onPressed: () {
+                          if (_submissionInFlight) return;
                           setState(() {
                             _mtnPayToOperation = 'merchant_payment';
                           });
