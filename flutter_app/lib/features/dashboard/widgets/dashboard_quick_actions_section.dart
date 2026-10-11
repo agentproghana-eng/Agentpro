@@ -746,11 +746,14 @@ class DashboardQuickActionsSection extends StatelessWidget {
         role,
       );
 
-      final defaultLabel = quickActionDisplayLabel(
-        provider: provider,
-        type: type,
-        catalogLabel: definition?.displayLabel,
-      );
+      final defaultLabel = (provider == 'mtn' && role == 'agent'
+              ? mtnAgentQuickActionLabel(type)
+              : null) ??
+          quickActionDisplayLabel(
+            provider: provider,
+            type: type,
+            catalogLabel: definition?.displayLabel,
+          );
 
       final label = isMtnAgentStandaloneCashIn
           ? 'Cash In'

@@ -217,6 +217,18 @@ class QuickActionCatalogDefinition {
     this.hasServerDrivenFormSchema = false,
   });
 
+  QuickActionCatalogDefinition withDisplayLabel(String label) {
+    return QuickActionCatalogDefinition(
+      provider: provider,
+      type: type,
+      displayLabel: label,
+      quickActionGroup: quickActionGroup,
+      variants: variants,
+      formFields: formFields,
+      hasServerDrivenFormSchema: hasServerDrivenFormSchema,
+    );
+  }
+
   factory QuickActionCatalogDefinition.fromJson(
     Map<String, dynamic> json,
   ) {
@@ -620,6 +632,20 @@ String quickActionDisplayLabel({
   }
 
   return genericLabel;
+}
+
+/// MTN Agent Quick Action names. They follow what the agent calls each
+/// action, not the internal transaction name: send_money is the combined
+/// Cash In/Out page, commission_balance is Cash Out Commission and
+/// commission_transfer is Transfer Commission. Reports and history keep
+/// their own wording.
+String? mtnAgentQuickActionLabel(String type) {
+  return switch (type.trim().toLowerCase()) {
+    'send_money' => 'Cash In/Out',
+    'commission_balance' => 'Cash Out Commission',
+    'commission_transfer' => 'Transfer Commission',
+    _ => null,
+  };
 }
 
 String quickActionProviderLabel(String value) {

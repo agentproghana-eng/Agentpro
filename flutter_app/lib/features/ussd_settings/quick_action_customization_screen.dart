@@ -114,9 +114,20 @@ class _QuickActionCustomizationScreenState
     return <String>{...?_catalog?.providers, ..._preferences.keys}.toList();
   }
 
+  QuickActionCatalogDefinition _agentNamed(
+    QuickActionCatalogDefinition definition,
+  ) {
+    if (!_isAgentRole || _provider != 'mtn') return definition;
+
+    final label = mtnAgentQuickActionLabel(definition.type);
+    return label == null ? definition : definition.withDisplayLabel(label);
+  }
+
   List<QuickActionCatalogDefinition> get _availableDefinitions =>
-      _catalog?.definitionsFor(_provider) ??
-      const <QuickActionCatalogDefinition>[];
+      (_catalog?.definitionsFor(_provider) ??
+              const <QuickActionCatalogDefinition>[])
+          .map(_agentNamed)
+          .toList();
 
   List<_QuickActionChoice> get _availableChoices {
     final choices = <_QuickActionChoice>[];
@@ -299,7 +310,7 @@ class _QuickActionCustomizationScreenState
     }
 
     final definition = _catalog?.definitionFor(_provider, type);
-    if (definition != null) return definition;
+    if (definition != null) return _agentNamed(definition);
 
     // Standalone MTN Agent Cash In is a presentation-only action.
     // It reuses the existing send_money transaction capability.
@@ -1406,7 +1417,7 @@ class _QuickActionCustomizationScreenState
                 ),
                 const SizedBox(height: 20),
                 const Text(
-                  'Selected Quick Actions — drag to reorder',
+                  'Selected Quick Actions — hold and drag onto another to swap',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                 ),
                 const SizedBox(height: 8),
