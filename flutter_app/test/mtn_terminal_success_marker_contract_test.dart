@@ -23,7 +23,10 @@ void main() {
   });
 
   test('terminal success is only trusted after the PIN prompt', () {
-    final start = service.indexOf('if (reachedPinPrompt) {');
+    // Start after the screen text is collected: an earlier, unrelated
+    // `if (reachedPinPrompt) {` precedes the real terminal-success check.
+    final from = service.indexOf('val screenText = collectText(root)');
+    final start = service.indexOf('if (reachedPinPrompt) {', from);
     final block = service.substring(start, start + 600);
 
     expect(block, contains('pendingTerminalSuccessMarkers'));
