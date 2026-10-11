@@ -344,10 +344,10 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // The backend always receives one of the certified identities below.
   String _mtnPayToOperation = 'pay_to_agent';
 
-  // The combined Pay To page shows its fields only after Agent or Merchant is
-  // chosen, so each choice shows the right identifier field. A standalone
+  // The combined Pay To page opens with Agent selected, so its fields are
+  // visible immediately; Merchant swaps the identifier field. A standalone
   // page has already made its choice.
-  bool _mtnPayToChosen = false;
+  bool _mtnPayToChosen = true;
 
   bool get _mtnPayToStandalone =>
       widget.mtnPayToOperation == 'pay_to_agent' ||
