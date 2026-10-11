@@ -98,7 +98,23 @@ class UssdAccessibilityService : AccessibilityService() {
             emptyList<String>()
 
         private val PROVIDER_TERMINAL_SUCCESS_MARKERS = mapOf(
-            "mtn" to emptyList<String>(),
+            // Live-confirmed MTN MoMo result:
+            // "GHS 20.00 sent to NAME 233XXXXXXXXX. Transaction Fee
+            // amount is GHS 0.38; Tax amount is GHS 0.00 Reference ..."
+            //
+            // Trusted only after the PIN boundary, like every terminal
+            // success marker. Use "sent to", not the fee sentence: the
+            // bank-transfer PIN screen ("Transfer to NAME ... Transaction
+            // Fee amount is ... Tax amount is ...") also shows the fee text
+            // and must never read as success.
+            //
+            // Live-confirmed MTN data/MashUp result ("MTN GH Message"):
+            // "Payment of 10.00 has been made successfully. Current
+            // Balance: GHS ..., Available Balance: GHS ...."
+            "mtn" to listOf(
+                "sent to",
+                "has been made successfully"
+            ),
             // Live-confirmed Telecel Cash result:
             // "... Confirmed. GHS... sent to ..."
             //
@@ -600,6 +616,7 @@ class UssdAccessibilityService : AccessibilityService() {
             )
 
             endSession()
+            dismissProviderResultDialog(root)
             UssdForegroundService.stop(this)
             return
         }
@@ -624,6 +641,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 )
 
                 endSession()
+                dismissProviderResultDialog(root)
                 UssdForegroundService.stop(this)
                 return
             }
@@ -657,6 +675,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 )
 
                 endSession()
+                dismissProviderResultDialog(root)
                 UssdForegroundService.stop(this)
                 return
             }
@@ -1347,6 +1366,33 @@ class UssdAccessibilityService : AccessibilityService() {
             if (found != null) return found
         }
         return null
+    }
+
+    // After a definite result (success or failure) the provider's own
+    // dialog can stay on screen, for example the "# for next" prompt or an
+    // "MTN GH Message" with OK. Close it so it does not sit open.
+    //
+    // Only ever presses OK or Cancel, never Send, and only after
+    // endSession(), so nothing further can be submitted to the provider and
+    // the click is not mistaken for a user cancellation.
+    private fun dismissProviderResultDialog(root: AccessibilityNodeInfo) {
+        if (isSessionActive) return
+        if (root.packageName?.toString() == packageName) return
+
+        for (label in listOf("ok", "cancel")) {
+            var node: AccessibilityNodeInfo? = findByText(root, label)
+            var hops = 0
+            while (node != null && !node.isClickable && hops < 3) {
+                node = node.parent
+                hops++
+            }
+            if (node != null && node.isClickable) {
+                if (node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                    Log.d(TAG, "Closed provider result dialog with $label")
+                    return
+                }
+            }
+        }
     }
 
     private fun findByText(node: AccessibilityNodeInfo, text: String): AccessibilityNodeInfo? {
