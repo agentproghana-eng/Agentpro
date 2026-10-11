@@ -56,8 +56,8 @@ void main() {
       );
     });
 
-    test('combined page shows its fields only after a choice', () {
-      expect(transaction, contains('bool _mtnPayToChosen = false;'));
+    test('combined page opens with Agent selected and fields visible', () {
+      expect(transaction, contains('bool _mtnPayToChosen = true;'));
       expect(transaction, contains('bool get _payToFieldsVisible'));
       expect(transaction, contains('_mtnPayToChosen = true;'));
     });
