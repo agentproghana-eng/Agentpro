@@ -7,6 +7,7 @@ import '../../core/api/api_client.dart';
 import '../../core/services/sim_card_service.dart';
 import '../../core/services/sim_role_assignment_service.dart';
 import '../transactions/zero_input_flow_preflight.dart';
+import '../../shared/models/sim_role.dart';
 import '../../core/services/dashboard_refresh_service.dart';
 import '../../core/services/app_cache_service.dart';
 import '../../core/services/storage_service.dart';
@@ -440,6 +441,93 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
     }
   }
 
+  bool _changingSimPurpose = false;
+
+  bool get _isPersonalOnlyCustomer {
+    final authState = context.read<AuthBloc>().state;
+    return authState is AuthAuthenticated &&
+        authState.user['role'] == 'customer';
+  }
+
+  /// Saves one SIM's purpose from the SIM bar. It uses the same server save
+  /// and local copy as Settings > SIM Purpose, and only changes this SIM.
+  Future<void> _changeSimPurpose(SimCard sim, SimRole role) async {
+    final value = switch (role) {
+      SimRole.agent => 'agent',
+      SimRole.subscriber => 'subscriber',
+      SimRole.evd => 'evd',
+      SimRole.merchant => 'merchant',
+    };
+
+    if (_changingSimPurpose ||
+        canonicalSimPurpose(_simPurposes[sim.slot]) == value) {
+      return;
+    }
+
+    _changingSimPurpose = true;
+    final messenger = ScaffoldMessenger.of(context);
+
+    try {
+      final installationId = await StorageService.getOrCreateInstallationId();
+
+      await ApiClient.instance.put(
+        '/user-sim-purposes',
+        data: {
+          'assignments': [
+            {
+              'sim_slot': sim.slot,
+              'sim_iccid': sim.iccid.isNotEmpty ? sim.iccid : null,
+              'installation_id': installationId,
+              'sim_subscription_id': sim.subscriptionId,
+              'provider': sim.network == 'unknown' ? null : sim.network,
+              'purpose': value,
+            },
+          ],
+        },
+      );
+
+      await SimRoleAssignmentService.cacheRoleForSlot(
+        slot: sim.slot,
+        role: value,
+        simIccid: sim.iccid,
+        simSubscriptionId: sim.subscriptionId,
+        provider: sim.network,
+      );
+
+      // Approvals checked under the old purpose must not outlive it.
+      final simKey =
+          '${sim.network}:${sim.slot}:${sim.iccid}:${sim.subscriptionId}|';
+      ZeroInputPreflightApprovals.verifiedAt
+          .removeWhere((key, _) => key.startsWith(simKey));
+
+      if (!mounted) return;
+
+      setState(() {
+        _simPurposes = {..._simPurposes, sim.slot: value};
+        _simPurposesResolved = true;
+      });
+
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            '${dashboardProviderLabel(sim.network)} SIM ${sim.slot + 1} '
+            'set to ${simRoleLabel(role).replaceAll(' SIM', '')}',
+          ),
+        ),
+      );
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not change the SIM purpose. Connect to the internet and try again.',
+          ),
+        ),
+      );
+    } finally {
+      _changingSimPurpose = false;
+    }
+  }
+
   Future<void> _refreshSimPurposesFromServer(
     List<SimCard> sims,
   ) async {
@@ -723,6 +811,9 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
 
               setState(() => _provider = provider);
             },
+            onPurposeSelected: _isPersonalOnlyCustomer || _changingSimPurpose
+                ? null
+                : _changeSimPurpose,
           ),
         ),
         Expanded(

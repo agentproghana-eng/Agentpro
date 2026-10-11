@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/services/sim_card_service.dart';
+import '../../../shared/models/sim_role.dart';
 import '../../../shared/theme/app_colors.dart';
 
 String dashboardProviderLabel(String provider) {
@@ -40,6 +42,7 @@ class DashboardProviderSelector extends StatelessWidget {
     required this.detectionComplete,
     required this.permissionDenied,
     required this.onProviderChanged,
+    this.onPurposeSelected,
   });
 
   final String selectedProvider;
@@ -48,6 +51,112 @@ class DashboardProviderSelector extends StatelessWidget {
   final bool detectionComplete;
   final bool permissionDenied;
   final ValueChanged<String> onProviderChanged;
+
+  /// Called when a purpose is chosen from the hold-to-change menu. When null
+  /// the menu is not offered.
+  final Future<void> Function(SimCard sim, SimRole role)? onPurposeSelected;
+
+  static String _roleTitle(SimRole role) => switch (role) {
+        SimRole.agent => 'Agent',
+        SimRole.subscriber => 'Subscriber',
+        SimRole.evd => 'EVD',
+        SimRole.merchant => 'Merchant',
+      };
+
+  static String _roleSubtitle(SimRole role) => switch (role) {
+        SimRole.agent => 'Mobile Money Agent',
+        SimRole.subscriber => 'Your normal transactions',
+        SimRole.evd => 'Voucher distribution',
+        SimRole.merchant => 'Collections and payments',
+      };
+
+  static IconData _roleIcon(SimRole role) => switch (role) {
+        SimRole.agent => Icons.storefront_outlined,
+        SimRole.subscriber => Icons.person_outline_rounded,
+        SimRole.evd => Icons.confirmation_number_outlined,
+        SimRole.merchant => Icons.point_of_sale_outlined,
+      };
+
+  Future<void> _showPurposeMenu(
+    BuildContext tabContext,
+    String provider,
+    SimCard sim,
+  ) async {
+    final onSelected = onPurposeSelected;
+    if (onSelected == null) return;
+
+    final box = tabContext.findRenderObject();
+    final overlay =
+        Overlay.of(tabContext).context.findRenderObject();
+    if (box is! RenderBox || overlay is! RenderBox) return;
+
+    HapticFeedback.selectionClick();
+
+    final origin = box.localToGlobal(
+      Offset(0, box.size.height + 4),
+      ancestor: overlay,
+    );
+    final position = RelativeRect.fromRect(
+      Rect.fromLTWH(origin.dx, origin.dy, box.size.width, 0),
+      Offset.zero & overlay.size,
+    );
+
+    final current = canonicalSimPurpose(simPurposes[sim.slot]);
+
+    final chosen = await showMenu<SimRole>(
+      context: tabContext,
+      position: position,
+      items: [
+        PopupMenuItem<SimRole>(
+          enabled: false,
+          height: 36,
+          child: Text(
+            '${dashboardProviderLabel(provider)} · '
+            'SIM ${sim.slot + 1} purpose',
+            style: TextStyle(
+              fontSize: 12,
+              color: tabContext.appSecondaryText,
+            ),
+          ),
+        ),
+        for (final role in supportedSimRolesForProvider(provider))
+          PopupMenuItem<SimRole>(
+            value: role,
+            child: Row(
+              children: [
+                Icon(_roleIcon(role), size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _roleTitle(role),
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                      Text(
+                        _roleSubtitle(role),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: tabContext.appSecondaryText,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (current == _roleTitle(role).toLowerCase())
+                  const Icon(Icons.check, size: 18),
+              ],
+            ),
+          ),
+      ],
+    );
+
+    if (chosen == null) return;
+
+    await onSelected(sim, chosen);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -168,6 +277,13 @@ class DashboardProviderSelector extends StatelessWidget {
             selected: selectedProvider == provider,
             color: dashboardProviderColor(provider),
             onTap: onProviderChanged,
+            onLongPress: sim == null || onPurposeSelected == null
+                ? null
+                : (tabContext) => _showPurposeMenu(
+                      tabContext,
+                      provider,
+                      sim,
+                    ),
           ),
         ),
       );
@@ -188,6 +304,7 @@ class _DashboardProviderTab extends StatelessWidget {
     required this.selected,
     required this.color,
     required this.onTap,
+    this.onLongPress,
   });
 
   final String label;
@@ -195,6 +312,7 @@ class _DashboardProviderTab extends StatelessWidget {
   final bool selected;
   final Color color;
   final ValueChanged<String> onTap;
+  final void Function(BuildContext tabContext)? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -208,6 +326,8 @@ class _DashboardProviderTab extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: selected ? null : () => onTap(value),
+        onLongPress:
+            onLongPress == null ? null : () => onLongPress!(context),
         borderRadius: BorderRadius.circular(9),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
