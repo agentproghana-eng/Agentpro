@@ -34,11 +34,15 @@ const Map<String, String> kPersonalTransactionLabels = {
   'check_momo_balance': 'Check MoMo Balance',
   'check_airtime_balance': 'Check Airtime & Data Balance',
   'withdraw_cash': 'Withdraw Cash',
+  'allow_cash_out': 'Allow Cash Out',
+  'my_approvals': 'My Approvals',
 };
 
 const List<String> kNoAmountPersonalTypes = [
   'check_momo_balance',
   'check_airtime_balance',
+  'allow_cash_out',
+  'my_approvals',
 ];
 
 class DataBundleOption {
@@ -363,6 +367,61 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     'Sinapi Aba Savings and Loans': ['4', '8'],
   };
 
+  // MTN lists every bank with a number, and that number is typed directly.
+  static const Map<String, String> _mtnBanks = {
+    'Stanchart': '1',
+    'Absa': '2',
+    'GCB': '3',
+    'Fidelity': '4',
+    'ADB': '5',
+    'UMB': '6',
+    'Republic': '7',
+    'Zenith': '8',
+    'Ecobank': '9',
+    'CAL': '10',
+    'Prudential': '11',
+    'Stanbic': '12',
+    'GT': '13',
+    'UBA': '14',
+    'Access': '15',
+    'CBG': '16',
+    'First National Bank': '17',
+    'NIB': '18',
+    'Bank of Africa': '19',
+    'FBN Bank': '20',
+    'OmniBSIC': '21',
+    'Services Integrity Savings & Loans': '22',
+    'ARB Apex Bank': '23',
+    'GHL': '24',
+    'Societe Generale Ghana': '25',
+    'Sinapi Aba Savings and Loans': '26',
+    'Opportunity International Savings and Loans': '27',
+    'Adehyeman Savings and Loans': '28',
+    'BSIC': '29',
+    'Bestpoint Savings and Loans': '30',
+    'Letshego Savings and Loans': '31',
+    'Adepaloan-Personal': '32',
+    'Bosea-Personal': '33',
+    'Qwikloan-Personal': '34',
+    'Opswallet-Personal': '35',
+    'Ahomka-Personal': '36',
+    '88016505': '37',
+    '88133072': '38',
+    '92606023': '39',
+    'Affinity': '40',
+    '93936701': '41',
+    '95254564': '42',
+    '118880027': '43',
+    'First Atlantic Bank': '44',
+    'Advans Ghana Savings and Loans': '45',
+  };
+
+  static List<String>? _mtnBankSelections(String bankName) {
+    final number = _mtnBanks[bankName];
+
+    return number == null ? null : <String>[number];
+  }
+
   String? _crossNetworkSelection;
   String? _sendMoneyMode;
   String? _selectedBankName;
@@ -393,20 +452,34 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
 
   bool get _isCrossNetwork => _isMtnCrossNetwork || _isTelecelCrossNetwork;
 
+  bool get _isMtnBankTransfer =>
+      widget.provider == 'mtn' &&
+      _effectiveTransactionType == 'send_money_to_bank';
+
   bool get _isTelecelBankTransfer =>
       widget.provider == 'telecel' &&
       _effectiveTransactionType == 'send_money_to_bank';
+
+  bool get _isBankTransfer => _isTelecelBankTransfer || _isMtnBankTransfer;
+
+  List<String> get _bankNames => _isMtnBankTransfer
+      ? _mtnBanks.keys.toList()
+      : _telecelBankSelections.keys.toList();
 
   Map<String, String> get _crossNetworkOptions => _isTelecelCrossNetwork
       ? _telecelCrossNetworkOptions
       : _mtnCrossNetworkOptions;
 
   List<String>? get _transactionSelectionsInOrder {
-    if (_isTelecelBankTransfer) {
+    if (_isBankTransfer) {
       final bankName = _selectedBankName;
 
       if (bankName == null) {
         return null;
+      }
+
+      if (_isMtnBankTransfer) {
+        return _mtnBankSelections(bankName);
       }
 
       final selections = _telecelBankSelections[bankName];
@@ -478,7 +551,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       return false;
     }
 
-    if (_isTelecelBankTransfer) {
+    if (_isBankTransfer) {
       return false;
     }
 
@@ -505,7 +578,8 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
               'send_money_same_network',
               'send_money_cross_network',
             ].contains(type)) ||
-        (widget.provider == 'telecel' && type == 'send_money_to_bank');
+        ((widget.provider == 'telecel' || widget.provider == 'mtn') &&
+            type == 'send_money_to_bank');
   }
 
   bool get _needsTillNumber => widget.transactionType == 'withdraw_cash';
@@ -1433,8 +1507,8 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     final baseRequestFields = <String, dynamic>{
       'provider': widget.provider,
       'transaction_type': transactionType,
-      if (_isTelecelBankTransfer && bankName != null) 'bank_name': bankName,
-      if (_isTelecelBankTransfer) 'account_number': accountNumber,
+      if (_isBankTransfer && bankName != null) 'bank_name': bankName,
+      if (_isBankTransfer) 'account_number': accountNumber,
       if (_isMtnAirtime && _recipientMode != null)
         'recipient_mode': _recipientMode,
       if (_needsAmount) 'amount': double.tryParse(_amountCtrl.text.trim()),
@@ -1824,7 +1898,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
             ),
             const SizedBox(height: 14),
           ],
-          if (_isTelecelBankTransfer) ...[
+          if (_isBankTransfer) ...[
             DropdownButtonFormField<String>(
               initialValue: _selectedBankName,
               decoration: const InputDecoration(
@@ -1832,7 +1906,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
                 prefixIcon: Icon(Icons.account_balance_outlined),
                 helperText: 'Choose the receiving bank',
               ),
-              items: _telecelBankSelections.keys
+              items: _bankNames
                   .map(
                     (bankName) => DropdownMenuItem<String>(
                       value: bankName,

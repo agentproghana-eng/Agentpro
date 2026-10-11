@@ -35,6 +35,8 @@ const personalInitiationCapabilityGuard =
 const NO_AMOUNT_PERSONAL_TYPES = new Set([
   'check_momo_balance',
   'check_airtime_balance',
+  'allow_cash_out',
+  'my_approvals',
 ]);
 
 const PERSONAL_SEND_MONEY_TYPES = new Set([
@@ -84,9 +86,72 @@ const TELECEL_PERSONAL_BANK_SELECTIONS = new Map([
   ['sinapi aba savings and loans', ['4', '8']],
 ]);
 
+// MTN bank transfer: the provider lists every bank with a number, and that
+// number is typed directly. Keys are lowercase bank names.
+const MTN_PERSONAL_BANKS = new Map([
+  ['stanchart', '1'],
+  ['absa', '2'],
+  ['gcb', '3'],
+  ['fidelity', '4'],
+  ['adb', '5'],
+  ['umb', '6'],
+  ['republic', '7'],
+  ['zenith', '8'],
+  ['ecobank', '9'],
+  ['cal', '10'],
+  ['prudential', '11'],
+  ['stanbic', '12'],
+  ['gt', '13'],
+  ['uba', '14'],
+  ['access', '15'],
+  ['cbg', '16'],
+  ['first national bank', '17'],
+  ['nib', '18'],
+  ['bank of africa', '19'],
+  ['fbn bank', '20'],
+  ['omnibsic', '21'],
+  ['services integrity savings & loans', '22'],
+  ['arb apex bank', '23'],
+  ['ghl', '24'],
+  ['societe generale ghana', '25'],
+  ['sinapi aba savings and loans', '26'],
+  ['opportunity international savings and loans', '27'],
+  ['adehyeman savings and loans', '28'],
+  ['bsic', '29'],
+  ['bestpoint savings and loans', '30'],
+  ['letshego savings and loans', '31'],
+  ['adepaloan-personal', '32'],
+  ['bosea-personal', '33'],
+  ['qwikloan-personal', '34'],
+  ['opswallet-personal', '35'],
+  ['ahomka-personal', '36'],
+  ['88016505', '37'],
+  ['88133072', '38'],
+  ['92606023', '39'],
+  ['affinity', '40'],
+  ['93936701', '41'],
+  ['95254564', '42'],
+  ['118880027', '43'],
+  ['first atlantic bank', '44'],
+  ['advans ghana savings and loans', '45'],
+]);
+
+const mtnBankSelections = (bankName) => {
+  const number = MTN_PERSONAL_BANKS.get(bankName);
+
+  return number ? [number] : null;
+};
+
 const isTelecelBankTransfer = (payload) =>
   payload?.provider === 'telecel' &&
   payload?.transaction_type === 'send_money_to_bank';
+
+const isMtnBankTransfer = (payload) =>
+  payload?.provider === 'mtn' &&
+  payload?.transaction_type === 'send_money_to_bank';
+
+const isBankTransfer = (payload) =>
+  isTelecelBankTransfer(payload) || isMtnBankTransfer(payload);
 
 const normalizedString = (value) =>
   typeof value === 'string' ? value.trim() : '';
@@ -266,14 +331,14 @@ router.post('/', [
 
   body('bank_name').custom(
     requireNonBlankWhen(
-      isTelecelBankTransfer,
+      isBankTransfer,
       'Bank name is required for Send Money to Bank',
     ),
   ),
 
   body('account_number').custom(
     requireNonBlankWhen(
-      isTelecelBankTransfer,
+      isBankTransfer,
       'Account number is required for Send Money to Bank',
     ),
   ),
@@ -295,7 +360,8 @@ router.post('/', [
             ) ||
             payload?.transaction_type === 'send_money_to_bank'
           )
-        ),
+        ) ||
+        isMtnBankTransfer(payload),
       'Reference is required for this Send Money transaction',
     ),
   ),
@@ -320,6 +386,34 @@ router.post('/', [
   body('selections_in_order').custom((value, { req }) => {
     const provider =
       normalizedString(req.body.provider).toLowerCase();
+
+    if (isMtnBankTransfer(req.body)) {
+      const bankName =
+        normalizedString(req.body.bank_name).toLowerCase();
+
+      const expectedSelections = mtnBankSelections(bankName);
+
+      if (!expectedSelections) {
+        throw new Error(
+          'Bank name is not supported for MTN Send Money to Bank',
+        );
+      }
+
+      if (
+        !Array.isArray(value) ||
+        value.length !== expectedSelections.length ||
+        value.some(
+          (item, index) =>
+            normalizedString(item) !== expectedSelections[index],
+        )
+      ) {
+        throw new Error(
+          'Bank routing selections do not match the selected MTN bank',
+        );
+      }
+
+      return true;
+    }
 
     if (isTelecelBankTransfer(req.body)) {
       const bankName =

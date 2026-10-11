@@ -85,6 +85,21 @@ const isTrustedPinlessRuntimeFlow = (flow, steps = []) => {
     return true;
   }
 
+  // MTN Allow Cash Out: *170# -> 4 -> 1. PIN-less, no inputs. Trusted only
+  // when the steps are exactly those two menu digits.
+  if (
+    flow.transaction_type === 'allow_cash_out' &&
+    flow.dial_code === '*170#'
+  ) {
+    return (
+      Array.isArray(steps) &&
+      steps.length === 2 &&
+      steps.every((step) => step?.action === 'send_digit') &&
+      steps[0]?.action_value === '4' &&
+      steps[1]?.action_value === '1'
+    );
+  }
+
   return (
     flow.transaction_type === 'buy_data' &&
     flow.dial_code === '*138#' &&
