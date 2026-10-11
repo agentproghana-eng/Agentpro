@@ -5,6 +5,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'zero_input_flow_preflight.dart';
+import 'ussd_flow_input_check.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
@@ -871,7 +872,10 @@ class _TransactionScreenState extends State<TransactionScreen> {
   bool get _isTelecelAirtimeSelf =>
       _selectedProvider == 'telecel' &&
       _transactionType == 'airtime' &&
-      _initialRecipientMode?.toLowerCase() == 'self';
+      _initialRecipientMode?.toLowerCase() == 'self' &&
+      // Only the Merchant flow has a no-phone Self variant. The Agent
+      // Airtime flow always types a phone number.
+      _selectedBusinessSimRole == 'merchant';
 
   bool get _needsCustomer =>
       !_isMtnCashInOutWorkspace &&
@@ -1873,6 +1877,25 @@ class _TransactionScreenState extends State<TransactionScreen> {
                     _transactionType == 'send_money')) ||
             (_selectedProvider == 'telecel' &&
                 _transactionType == 'cash_in'));
+
+    // Telecel flows type a protected Operator ID or shortcode that only the
+    // server issues. Starting one offline would record a transaction that can
+    // never dial, so say so before anything is recorded.
+    if (isOffline &&
+        _selectedProvider == 'telecel' &&
+        (ussdFlowNeedsProtectedCredential(cachedFlow) ||
+            (cachedFlow == null && _transactionType == 'cash_in'))) {
+      if (mounted) {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(
+            'This Telecel transaction needs a protected credential and '
+            'requires an online connection before USSD can start.',
+          )),
+        );
+      }
+      return;
+    }
 
     if (isOffline &&
         (isAccessibilityHardcodedFlow ||

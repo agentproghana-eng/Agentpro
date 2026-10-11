@@ -111,8 +111,12 @@ const requiresCustomerPhone = (payload) => {
 
   // Telecel Agent Data Bundle selects a bundle directly from the provider
   // menu and has no recipient/customer-phone step.
+  // The Merchant "Other" variant does type the recipient's number.
   if (type === "data_bundle" && provider === "telecel") {
-    return false;
+    return (
+      payload?.sim_role === "merchant" &&
+      payload?.recipient_mode === "other"
+    );
   }
 
   // Telecel Merchant Airtime has two live recipient variants:
