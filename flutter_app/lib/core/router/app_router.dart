@@ -278,6 +278,7 @@ class AppRouter {
                   ? int.tryParse(simSubscriptionIdStr)
                   : null,
               mtnPayToWorkspace: true,
+              mtnPayToOperation: state.uri.queryParameters['operation'],
             );
           },
         ),

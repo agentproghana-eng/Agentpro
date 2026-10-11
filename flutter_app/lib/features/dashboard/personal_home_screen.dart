@@ -19,6 +19,7 @@ import '../../shared/widgets/personal_ad_banner.dart';
 import '../../shared/widgets/personal_transaction_item.dart';
 import '../ussd_settings/quick_action_catalog.dart';
 import '../ussd_settings/quick_action_preference.dart';
+import '../ussd_settings/quick_action_swap.dart';
 import '../../shared/widgets/offline_status_banner.dart';
 import '../../shared/widgets/dashboard_skeleton.dart';
 import '../../shared/widgets/dashboard_empty_state.dart';
@@ -426,6 +427,35 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
         );
       }
     } catch (_) {}
+  }
+
+  Future<void> _swapPersonalTiles(String fromKey, String toKey) async {
+    final profile = Map<String, List<QuickActionPreference>>.from(
+      _personalQuickActions,
+    );
+
+    profile[_provider] = swapQuickActionOrder(
+      displayed: _homeQuickActions,
+      saved: profile[_provider] ?? const <QuickActionPreference>[],
+      fromKey: fromKey,
+      toKey: toKey,
+    );
+
+    final messenger = ScaffoldMessenger.of(context);
+    final saved = await saveQuickActionProfile(
+      role: 'subscriber',
+      profile: profile,
+    );
+
+    if (!mounted) return;
+
+    if (saved) {
+      setState(() => _personalQuickActions = profile);
+    } else {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Could not save the new order.')),
+      );
+    }
   }
 
   QuickActionCatalogDefinition? _quickActionDefinition(
@@ -1241,14 +1271,19 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
                                             ),
                                       );
 
-                                      return _QuickActionTile(
-                                        icon: icon,
-                                        iconColor: preference.resolvedIconColor(
-                                          AppTheme.primaryColor,
-                                        ),
-                                        label: label,
-                                        onTap: () => _startTransaction(
-                                          preference,
+                                      return SwappableTile(
+                                        identityKey: preference.identityKey,
+                                        onSwap: _swapPersonalTiles,
+                                        child: _QuickActionTile(
+                                          icon: icon,
+                                          iconColor:
+                                              preference.resolvedIconColor(
+                                            AppTheme.primaryColor,
+                                          ),
+                                          label: label,
+                                          onTap: () => _startTransaction(
+                                            preference,
+                                          ),
                                         ),
                                       );
                                     },

@@ -9,6 +9,7 @@ import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/dashboard_empty_state.dart';
 import '../../ussd_settings/quick_action_catalog.dart';
 import '../../ussd_settings/quick_action_preference.dart';
+import '../../ussd_settings/quick_action_swap.dart';
 import '../../transactions/zero_input_direct_execution_policy.dart';
 
 class DashboardQuickActionsSection extends StatelessWidget {
@@ -329,6 +330,22 @@ class DashboardQuickActionsSection extends StatelessWidget {
       }
     }
 
+    // MTN Agent combined Pay To is a presentation-only action. It reuses the
+    // certified pay_to_agent and merchant_payment transactions.
+    if (provider == 'mtn' && role == 'agent' && type == 'pay_to') {
+      final payTo = catalog?.definitionFor(provider, 'pay_to_agent') ??
+          catalog?.definitionFor(provider, 'merchant_payment');
+
+      if (payTo != null) {
+        return QuickActionCatalogDefinition(
+          provider: 'mtn',
+          type: 'pay_to',
+          displayLabel: 'Pay To',
+          quickActionGroup: payTo.quickActionGroup,
+        );
+      }
+    }
+
     return null;
   }
 
@@ -619,7 +636,12 @@ class DashboardQuickActionsSection extends StatelessWidget {
       final isMtnAgentStandaloneCashIn =
           provider == 'mtn' && role == 'agent' && type == 'cash_in';
 
+      // Combined Pay To page: both actions behind one tile.
       final isMtnAgentPayToWorkspace =
+          provider == 'mtn' && role == 'agent' && type == 'pay_to';
+
+      // Standalone Pay to Agent and Pay to Merchant pages.
+      final isMtnAgentPayToSingle =
           provider == 'mtn' &&
           role == 'agent' &&
           (type == 'pay_to_agent' || type == 'merchant_payment');
@@ -659,6 +681,10 @@ class DashboardQuickActionsSection extends StatelessWidget {
           ? 'Cash In'
           : isMtnAgentCashWorkspace
           ? 'Cash In/Out'
+          : isMtnAgentPayToWorkspace
+          ? 'Pay To'
+          : isMtnAgentPayToSingle
+          ? (type == 'merchant_payment' ? 'Pay to Merchant' : 'Pay to Agent')
           : isTelecelMerchantSendMoney
               ? 'Send Money'
               : isTelecelMerchantECash
@@ -711,12 +737,22 @@ class DashboardQuickActionsSection extends StatelessWidget {
           !isMtnAgentCashWorkspace &&
           !isMtnAgentStandaloneCashIn &&
           !isMtnAgentPayToWorkspace &&
+          !isMtnAgentPayToSingle &&
           !isTelecelMerchantECash &&
           !isTelecelMerchantSendMoney &&
           !isTelecelMerchantBankTransfer;
 
       tiles.add(
-        _buildTile(
+        SwappableTile(
+          identityKey: preference.identityKey,
+          onSwap: (from, to) => _swapTiles(
+            context: context,
+            role: role,
+            displayed: actions,
+            fromKey: from,
+            toKey: to,
+          ),
+          child: _buildTile(
           context: context,
           icon: icon,
           label: label,
@@ -733,6 +769,7 @@ class DashboardQuickActionsSection extends StatelessWidget {
               'provider': provider,
               if (bundleCategory.isNotEmpty) 'bundle_category': bundleCategory,
               if (recipientMode.isNotEmpty) 'recipient_mode': recipientMode,
+              if (isMtnAgentPayToSingle) 'operation': type,
               'sim_slot': sim.slot.toString(),
               if (sim.iccid.isNotEmpty) 'sim_iccid': sim.iccid,
               'sim_subscription_id': sim.subscriptionId.toString(),
@@ -742,7 +779,7 @@ class DashboardQuickActionsSection extends StatelessWidget {
                 ? '/personal-transactions/new'
                 : isMtnAgentCashWorkspace
                     ? '/transactions/mtn-cash-in-out'
-                    : isMtnAgentPayToWorkspace
+                    : isMtnAgentPayToWorkspace || isMtnAgentPayToSingle
                         ? '/transactions/mtn-pay-to'
                         : isTelecelMerchantECash
                             ? '/transactions/telecel-merchant-ecash'
@@ -765,10 +802,41 @@ class DashboardQuickActionsSection extends StatelessWidget {
             );
           },
         ),
+        ),
       );
     }
 
     return tiles;
+  }
+
+  Future<void> _swapTiles({
+    required BuildContext context,
+    required String role,
+    required List<QuickActionPreference> displayed,
+    required String fromKey,
+    required String toKey,
+  }) async {
+    final profile = Map<String, List<QuickActionPreference>>.from(
+      _profileForRole(role),
+    );
+
+    profile[provider] = swapQuickActionOrder(
+      displayed: displayed,
+      saved: profile[provider] ?? const <QuickActionPreference>[],
+      fromKey: fromKey,
+      toKey: toKey,
+    );
+
+    final messenger = ScaffoldMessenger.of(context);
+    final saved = await saveQuickActionProfile(role: role, profile: profile);
+
+    if (saved) {
+      onReloadQuickActions();
+    } else {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Could not save the new order.')),
+      );
+    }
   }
 
   Widget _buildTile({

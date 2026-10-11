@@ -45,15 +45,31 @@ void main() {
       );
     });
 
-    test('uses one shared identifier field', () {
+    test('Agent shows a phone field and Merchant an alphanumeric code', () {
+      expect(transaction, contains("'Agent Phone Number'"));
+      expect(transaction, contains("'Merchant Code'"));
+      expect(transaction, contains('bool get _isMtnPayToMerchant'));
+      expect(transaction, contains("RegExp(r'^[A-Za-z0-9]+\$')"));
       expect(
         transaction,
-        contains("'Mobile Number / Merchant ID'"),
+        isNot(contains("'Mobile Number / Merchant ID'")),
       );
+    });
 
+    test('combined page shows its fields only after a choice', () {
+      expect(transaction, contains('bool _mtnPayToChosen = false;'));
+      expect(transaction, contains('bool get _payToFieldsVisible'));
+      expect(transaction, contains('_mtnPayToChosen = true;'));
+    });
+
+    test('standalone pages carry a single locked action', () {
+      expect(transaction, contains('final String? mtnPayToOperation;'));
+      expect(transaction, contains('bool get _mtnPayToStandalone'));
+      expect(transaction, contains("'Pay to Merchant'"));
+      expect(transaction, contains("'Pay to Agent'"));
       expect(
-        transaction,
-        contains("'Enter mobile number or merchant ID'"),
+        router,
+        contains("mtnPayToOperation: state.uri.queryParameters['operation']"),
       );
     });
 
@@ -114,18 +130,17 @@ void main() {
       expect(router, contains('mtnPayToWorkspace: true'));
     });
 
-    test('both canonical quick actions enter the shared workspace', () {
+    test('Pay To, Pay to Agent and Pay to Merchant are separate tiles', () {
       expect(
         dashboard,
-        contains(
-          "(type == 'pay_to_agent' || type == 'merchant_payment')",
-        ),
+        contains("provider == 'mtn' && role == 'agent' && type == 'pay_to'"),
       );
-
       expect(
         dashboard,
-        contains("'/transactions/mtn-pay-to'"),
+        contains("(type == 'pay_to_agent' || type == 'merchant_payment')"),
       );
+      expect(dashboard, contains("if (isMtnAgentPayToSingle) 'operation': type"));
+      expect(dashboard, contains("'/transactions/mtn-pay-to'"));
     });
   });
 }

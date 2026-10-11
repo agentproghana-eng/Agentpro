@@ -215,6 +215,24 @@ class _QuickActionCustomizationScreenState
         );
       }
 
+      // Combined MTN Agent Pay To sits beside the standalone Pay to Agent and
+      // Pay to Merchant actions.
+      if (_isAgentRole &&
+          _provider == 'mtn' &&
+          definition.type == 'pay_to_agent' &&
+          !_availableDefinitions.any((item) => item.type == 'pay_to')) {
+        choices.add(
+          _QuickActionChoice(
+            definition: QuickActionCatalogDefinition(
+              provider: 'mtn',
+              type: 'pay_to',
+              displayLabel: 'Pay To',
+              quickActionGroup: definition.quickActionGroup,
+            ),
+          ),
+        );
+      }
+
       choices.add(_QuickActionChoice(definition: definition));
 
       for (final variant in definition.variants) {
@@ -280,6 +298,19 @@ class _QuickActionCustomizationScreenState
           type: 'cash_in',
           displayLabel: 'Cash In',
           quickActionGroup: cashWorkspace.quickActionGroup,
+        );
+      }
+    }
+
+    if (_isAgentRole && _provider == 'mtn' && type == 'pay_to') {
+      final payTo = _catalog?.definitionFor(_provider, 'pay_to_agent');
+
+      if (payTo != null) {
+        return QuickActionCatalogDefinition(
+          provider: 'mtn',
+          type: 'pay_to',
+          displayLabel: 'Pay To',
+          quickActionGroup: payTo.quickActionGroup,
         );
       }
     }
@@ -1215,15 +1246,21 @@ class _QuickActionCustomizationScreenState
     );
   }
 
+  // Dropping an action on another one swaps the two places.
   void _reorder(int oldIndex, int newIndex) {
     final items = List<QuickActionPreference>.from(_selected);
 
-    if (newIndex > oldIndex) {
-      newIndex -= 1;
+    if (oldIndex < 0 ||
+        oldIndex >= items.length ||
+        newIndex < 0 ||
+        newIndex >= items.length ||
+        oldIndex == newIndex) {
+      return;
     }
 
-    final item = items.removeAt(oldIndex);
-    items.insert(newIndex, item);
+    final moved = items[oldIndex];
+    items[oldIndex] = items[newIndex];
+    items[newIndex] = moved;
 
     setState(() {
       _preferences[_provider] = items

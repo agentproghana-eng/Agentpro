@@ -55,6 +55,10 @@ class TransactionScreen extends StatefulWidget {
   /// Pay to Merchant on one form. The canonical backend identities remain
   /// pay_to_agent and merchant_payment.
   final bool mtnPayToWorkspace;
+
+  /// When set (pay_to_agent or merchant_payment), the Pay To screen is a
+  /// standalone page for that single action with no switch to the other.
+  final String? mtnPayToOperation;
   final bool autoStart;
 
   /// Telecel Merchant-only workspace for moving E-Cash between the
@@ -74,6 +78,7 @@ class TransactionScreen extends StatefulWidget {
     this.catalogDefinition,
     this.mtnCashInOutWorkspace = false,
     this.mtnPayToWorkspace = false,
+    this.mtnPayToOperation,
     this.autoStart = false,
     this.telecelMerchantECashWorkspace = false,
   });
@@ -326,6 +331,18 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // The backend always receives one of the certified identities below.
   String _mtnPayToOperation = 'pay_to_agent';
 
+  // The combined Pay To page shows its fields only after Agent or Merchant is
+  // chosen, so each choice shows the right identifier field. A standalone
+  // page has already made its choice.
+  bool _mtnPayToChosen = false;
+
+  bool get _mtnPayToStandalone =>
+      widget.mtnPayToOperation == 'pay_to_agent' ||
+      widget.mtnPayToOperation == 'merchant_payment';
+
+  bool get _payToFieldsVisible =>
+      !_isMtnPayToWorkspace || _mtnPayToChosen || _mtnPayToStandalone;
+
   // Historical names are retained as canonical backend identities:
   // float_to_working = Merchant Account -> Working Account
   // working_to_float = Working Account -> Merchant Account
@@ -567,6 +584,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
   bool get _isMtnPayToWorkspace =>
       widget.mtnPayToWorkspace && _selectedProvider == 'mtn';
 
+  bool get _isMtnPayToMerchant =>
+      _isMtnPayToWorkspace && _mtnPayToOperation == 'merchant_payment';
+
   // MTN Agent Data Bundle presentation only.
   // No new backend transaction identity or USSD flow is introduced.
   // Standalone MTN Agent Cash In and Cash Out presentation.
@@ -693,6 +713,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
   void initState() {
     super.initState();
 
+    if (_mtnPayToStandalone) {
+      _mtnPayToOperation = widget.mtnPayToOperation!;
+      _mtnPayToChosen = true;
+    }
+
     final initialRecipientMode =
         widget.initialRecipientMode?.trim().toLowerCase();
     if (initialRecipientMode == 'self' ||
@@ -760,6 +785,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
       return 'Cash In/Out';
     }
     if (_isMtnPayToWorkspace) {
+      if (_mtnPayToStandalone) {
+        return _mtnPayToOperation == 'merchant_payment'
+            ? 'Pay to Merchant'
+            : 'Pay to Agent';
+      }
       return 'Pay To';
     }
     if (_isTelecelMerchantECashWorkspace) {
@@ -807,7 +837,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
   bool get _needsRecipient =>
       (_isMtnCashInOutWorkspace && !_workspaceZeroInput) ||
-      _isMtnPayToWorkspace ||
+      (_isMtnPayToWorkspace && _payToFieldsVisible) ||
       ['send_money'].contains(_transactionType) ||
       _isTelecelMerchantSendMoneyWorkspace;
   // Pay to Agent and Pay to Merchant (MTN's "Pay To" menu, both
@@ -866,7 +896,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'commission_balance',
         'cash_in_commission',
       ].contains(_transactionType) &&
-      !_isTelecelDataBundle;
+      !_isTelecelDataBundle &&
+      _payToFieldsVisible;
   // Telecel Merchant Data leaves the changing bundle catalogue on the
   // provider menu. Self needs no customer number; Other requires one.
   bool get _isTelecelAirtimeSelf =>
@@ -3385,16 +3416,18 @@ class _TransactionScreenState extends State<TransactionScreen> {
                   transactionEmphasis: true,
                   compactTransactionField: _compactMtnAgentForm,
                   controller: _recipientPhoneCtrl,
-                  label: _isMtnPayToWorkspace
-                      ? 'Mobile Number / Merchant ID'
-                      : 'Phone Number',
-                  hint: _isMtnPayToWorkspace
-                      ? 'Enter mobile number or merchant ID'
+                  label: _isMtnPayToMerchant
+                      ? 'Merchant Code'
+                      : _isMtnPayToWorkspace
+                          ? 'Agent Phone Number'
+                          : 'Phone Number',
+                  hint: _isMtnPayToMerchant
+                      ? 'Letters and numbers, e.g. MR4521A'
                       : '024XXXXXXX',
-                  keyboardType: _isMtnPayToWorkspace
+                  keyboardType: _isMtnPayToMerchant
                       ? TextInputType.text
                       : TextInputType.phone,
-                  prefixIcon: _isMtnPayToWorkspace
+                  prefixIcon: _isMtnPayToMerchant
                       ? Icons.badge_outlined
                       : Icons.phone_outlined,
                   validator: (v) {
@@ -3402,7 +3435,10 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
                     if (_isMtnPayToWorkspace &&
                         _transactionType == 'merchant_payment') {
-                      return value.isEmpty ? 'Merchant ID is required' : null;
+                      if (value.isEmpty) return 'Merchant ID is required';
+                      return RegExp(r'^[A-Za-z0-9]+$').hasMatch(value)
+                          ? null
+                          : 'Merchant code can only have letters and numbers';
                     }
 
                     if (value.isEmpty) {
@@ -3479,7 +3515,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
               // 3. REFERENCE — only when required by the provider flow.
               if (!_usesServerDrivenForm &&
                   (_needsReference ||
-                      _needsTelecelMerchantReference)) ...[
+                      _needsTelecelMerchantReference) &&
+                  _payToFieldsVisible) ...[
                 AppTextField(
                   transactionEmphasis: true,
                   transactionValueFontSize: 20,
@@ -3740,41 +3777,56 @@ class _TransactionScreenState extends State<TransactionScreen> {
               ],
 
               if (_isMtnPayToWorkspace) ...[
-                Row(
-                  children: [
-                    Expanded(
-                      child: AppButton(
-                        label: 'Agent',
-                        onPressed: () {
-                          // Pay To buttons stay tappable while loading, so
-                          // the operation must not change mid-submission.
-                          if (_submissionInFlight) return;
-                          setState(() {
-                            _mtnPayToOperation = 'pay_to_agent';
-                          });
-                          _proceed();
-                        },
-                        isLoading:
-                            _loading && _mtnPayToOperation == 'pay_to_agent',
+                if (!_mtnPayToStandalone)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: AppButton(
+                          label: 'Agent',
+                          onPressed: () {
+                            // The operation must not change mid-submission.
+                            if (_submissionInFlight) return;
+                            if (_mtnPayToOperation != 'pay_to_agent') {
+                              _recipientPhoneCtrl.clear();
+                            }
+                            setState(() {
+                              _mtnPayToOperation = 'pay_to_agent';
+                              _mtnPayToChosen = true;
+                            });
+                          },
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: AppButton(
-                        label: 'Merchant',
-                        onPressed: () {
-                          if (_submissionInFlight) return;
-                          setState(() {
-                            _mtnPayToOperation = 'merchant_payment';
-                          });
-                          _proceed();
-                        },
-                        isLoading: _loading &&
-                            _mtnPayToOperation == 'merchant_payment',
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: AppButton(
+                          label: 'Merchant',
+                          onPressed: () {
+                            if (_submissionInFlight) return;
+                            if (_mtnPayToOperation != 'merchant_payment') {
+                              _recipientPhoneCtrl.clear();
+                            }
+                            setState(() {
+                              _mtnPayToOperation = 'merchant_payment';
+                              _mtnPayToChosen = true;
+                            });
+                          },
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                if (_payToFieldsVisible) ...[
+                  if (!_mtnPayToStandalone) const SizedBox(height: 10),
+                  AppButton(
+                    label: _mtnPayToOperation == 'merchant_payment'
+                        ? 'Pay to Merchant'
+                        : 'Pay to Agent',
+                    onPressed: () {
+                      if (_submissionInFlight) return;
+                      _proceed();
+                    },
+                    isLoading: _loading,
+                  ),
+                ],
                 const SizedBox(height: 14),
               ],
 

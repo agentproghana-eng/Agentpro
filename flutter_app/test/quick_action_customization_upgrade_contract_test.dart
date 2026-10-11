@@ -66,7 +66,7 @@ void main() {
       );
       expect(
         customization,
-        contains('if (newIndex > oldIndex)'),
+        contains('items[oldIndex] = items[newIndex];'),
       );
 
       expect(
