@@ -13,6 +13,7 @@ import '../../features/dashboard/agent_dashboard.dart';
 import '../../features/dashboard/manager_dashboard.dart';
 import '../../features/dashboard/owner_dashboard.dart';
 import '../../features/transactions/transaction_screen.dart';
+import '../../features/transactions/zero_input_direct_execution_policy.dart';
 import '../../features/transactions/transaction_progress_screen.dart';
 import '../../features/transactions/transaction_detail_screen.dart';
 import '../../features/transactions/transaction_history_screen.dart';
@@ -257,6 +258,32 @@ class AppRouter {
             );
           },
         ),
+        // MTN Agent Commissions: Cash In Commission, Cash Out Commission and
+        // Transfer Commission on one page. It runs inside the Cash In/Out
+        // workspace so SIM, role and offline checks are shared.
+        GoRoute(
+          path: '/transactions/mtn-commissions',
+          builder: (_, state) {
+            final simSlotStr = state.uri.queryParameters['sim_slot'];
+            final simIccid = state.uri.queryParameters['sim_iccid'];
+            final simSubscriptionIdStr =
+                state.uri.queryParameters['sim_subscription_id'];
+
+            return TransactionScreen(
+              transactionType: 'commission_transfer',
+              initialProvider: 'mtn',
+              initialSimSlot:
+                  simSlotStr != null ? int.tryParse(simSlotStr) : null,
+              initialSimIccid: simIccid,
+              initialSimSubscriptionId: simSubscriptionIdStr != null
+                  ? int.tryParse(simSubscriptionIdStr)
+                  : null,
+              mtnCashInOutWorkspace: true,
+              mtnCommissionsWorkspace: true,
+            );
+          },
+        ),
+
         // MTN Agent Pay To is a UI workspace. It preserves the certified
         // pay_to_agent and merchant_payment identities underneath.
         GoRoute(
@@ -277,6 +304,7 @@ class AppRouter {
                   ? int.tryParse(simSubscriptionIdStr)
                   : null,
               mtnPayToWorkspace: true,
+              mtnPayToOperation: state.uri.queryParameters['operation'],
             );
           },
         ),
@@ -307,7 +335,7 @@ class AppRouter {
         ),
         GoRoute(
           path: '/transactions',
-          builder: (_, state) {
+          pageBuilder: (_, state) {
             final provider = state.uri.queryParameters['provider'];
             final type = canonicalBusinessTransactionType(
               state.uri.queryParameters['type'],
@@ -318,7 +346,10 @@ class AppRouter {
             // initiate money movement. Send a bare route to history instead
             // of silently defaulting to the retired legacy Cash In flow.
             if (type == null) {
-              return const TransactionHistoryScreen();
+              return MaterialPage<void>(
+                key: state.pageKey,
+                child: const TransactionHistoryScreen(),
+              );
             }
             final simSlotStr = state.uri.queryParameters['sim_slot'];
             final simIccid = state.uri.queryParameters['sim_iccid'];
@@ -339,7 +370,7 @@ class AppRouter {
                     ? routeExtra
                     : null;
 
-            return TransactionScreen(
+            final screen = TransactionScreen(
               transactionType: type,
               initialProvider: provider,
               catalogDefinition: catalogDefinition,
@@ -353,6 +384,24 @@ class AppRouter {
               initialRecipientMode: recipientMode,
               autoStart: autoStart,
             );
+
+            // A zero-input quick action (Balance, Cash In Commission,
+            // Commission Balance) starts dialing by itself. Keep the screen
+            // it came from visible until the progress screen opens, instead
+            // of showing an empty transaction screen in between.
+            if (autoStart &&
+                ZeroInputDirectExecutionPolicy.supportedTypes.contains(type)) {
+              return CustomTransitionPage<void>(
+                key: state.pageKey,
+                opaque: false,
+                transitionDuration: Duration.zero,
+                reverseTransitionDuration: Duration.zero,
+                child: screen,
+                transitionsBuilder: (_, __, ___, child) => child,
+              );
+            }
+
+            return MaterialPage<void>(key: state.pageKey, child: screen);
           },
         ),
         GoRoute(

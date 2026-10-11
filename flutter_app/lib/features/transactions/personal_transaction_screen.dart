@@ -1318,6 +1318,11 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         : null;
     if (zeroInput && reservationToken == null) return;
     if (zeroInput) _activeZeroInputReservationToken = reservationToken;
+    if (zeroInput) {
+      await ZeroInputExecutionSession.recoverStaleEnquiryLock(
+        reservationToken,
+      );
+    }
     if (zeroInput &&
         !await ZeroInputExecutionSession.persistBeforeInitiation(reservationToken)) {
       // Durable state may exist from a prior run: do not initiate.
@@ -2132,7 +2137,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
             AppButton(
               label: 'Continue',
               onPressed: () {
-                if (!RegExp(r'^\\d{10}$').hasMatch(_phoneCtrl.text.trim())) {
+                if (!RegExp(r'^\d{10}$').hasMatch(_phoneCtrl.text.trim())) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Enter a valid 10-digit mobile number')),
                   );
@@ -2333,7 +2338,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       return;
     }
 
-    if (_recipientMode == 'other' && !RegExp(r'^\\d{10}$').hasMatch(_phoneCtrl.text.trim())) {
+    if (_recipientMode == 'other' && !RegExp(r'^\d{10}$').hasMatch(_phoneCtrl.text.trim())) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Enter a valid 10-digit mobile number')),
       );
@@ -2573,7 +2578,7 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         AppButton(
           label: 'Continue',
           onPressed: () {
-            if (!RegExp(r'^\\d{10}$').hasMatch(_phoneCtrl.text.trim())) {
+            if (!RegExp(r'^\d{10}$').hasMatch(_phoneCtrl.text.trim())) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Enter a valid 10-digit mobile number')),
               );

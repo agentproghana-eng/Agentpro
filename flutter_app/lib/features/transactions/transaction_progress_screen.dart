@@ -18,6 +18,7 @@ import '../../core/services/storage_service.dart';
 import '../ussd_flows/ussd_flow_runtime_policy.dart';
 import '../ussd_flows/ussd_flow_draft_validation.dart';
 import 'transaction_reference_display.dart';
+import 'ussd_flow_input_check.dart';
 import 'zero_input_direct_execution_policy.dart';
 import 'zero_input_execution_session.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -1275,6 +1276,37 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       );
 
       return;
+    }
+
+    // Business flows type the values below into the provider menu. Stop
+    // before dialing if the form did not supply one of them.
+    if (!widget.isPersonal) {
+      final missingInput = missingUssdFlowInput(
+        steps: steps,
+        params: automationParams,
+        transactionType: transactionType,
+      );
+
+      if (missingInput != null) {
+        final reason =
+            'This transaction is missing its $missingInput. '
+            'No USSD request was sent.';
+
+        if (mounted) {
+          setState(() => _simWarning = reason);
+        }
+
+        await _reportResult(
+          transactionId,
+          USSDResult(
+            outcome: USSDStatus.failed,
+            failureReason: reason,
+            sessionLog: const [],
+          ),
+        );
+
+        return;
+      }
     }
 
     if (executionMode == 'direct') {

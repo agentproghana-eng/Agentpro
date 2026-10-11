@@ -790,3 +790,55 @@ jobs:
           fi
 
           echo "ANDROID_ROLLING_RELEASE=PASS"
+
+
+  # ── Google Play Internal Testing Upload ────────────────────
+  # Uploads the signed AAB built above to the Play Console INTERNAL
+  # testing track as a draft release. Nothing reaches production: the
+  # draft must be reviewed and rolled out by hand in Play Console.
+  # Requires the PLAY_SERVICE_ACCOUNT_JSON repository secret.
+  play-internal-upload:
+    name: Upload AAB to Play Internal Testing
+
+    needs:
+      - mobile-release-changes
+      - flutter-build
+
+    if: >-
+      github.ref == 'refs/heads/master' &&
+      needs.mobile-release-changes.outputs.should_publish == 'true'
+
+    runs-on: ubuntu-latest
+
+    concurrency:
+      group: agentpro-play-internal
+      cancel-in-progress: false
+
+    steps:
+      - name: Download signed AAB
+        uses: actions/download-artifact@v4
+        with:
+          name: play-store-aab
+          path: aab
+
+      - name: Check Play credentials
+        id: creds
+        env:
+          PLAY_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$PLAY_JSON" ]; then
+            echo "PLAY_SERVICE_ACCOUNT_JSON is not set; skipping Play upload."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload to Play internal track (draft)
+        if: steps.creds.outputs.present == 'true'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.agentpro.ghana
+          releaseFiles: aab/app-release.aab
+          track: internal
+          status: draft

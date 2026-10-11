@@ -9,6 +9,8 @@ import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/dashboard_empty_state.dart';
 import '../../ussd_settings/quick_action_catalog.dart';
 import '../../ussd_settings/quick_action_preference.dart';
+import '../../ussd_settings/quick_action_swap.dart';
+import '../../transactions/zero_input_direct_execution_policy.dart';
 
 class DashboardQuickActionsSection extends StatelessWidget {
   const DashboardQuickActionsSection({
@@ -166,6 +168,44 @@ class DashboardQuickActionsSection extends StatelessWidget {
     };
   }
 
+  // MTN Agent default layout: the three commission actions share one tile,
+  // placed where the first of them would have been.
+  List<QuickActionPreference> _withCommissionsTile(
+    List<QuickActionPreference> items,
+  ) {
+    if (provider != 'mtn') return items;
+
+    const commissionTypes = {
+      'cash_in_commission',
+      'commission_balance',
+      'commission_transfer',
+    };
+
+    final first = items.indexWhere(
+      (item) => commissionTypes.contains(item.actionKey),
+    );
+
+    if (first < 0) return items;
+
+    final result = <QuickActionPreference>[];
+
+    for (var index = 0; index < items.length; index++) {
+      final item = items[index];
+
+      if (index == first) {
+        result.add(QuickActionPreference(actionKey: 'commissions', position: 0));
+      } else if (!commissionTypes.contains(item.actionKey)) {
+        result.add(item);
+      }
+    }
+
+    return result
+        .asMap()
+        .entries
+        .map((entry) => entry.value.copyWith(position: entry.key))
+        .toList();
+  }
+
   List<QuickActionPreference> _quickActions(
     String role,
   ) {
@@ -195,7 +235,10 @@ class DashboardQuickActionsSection extends StatelessWidget {
       }
 
       if (role == 'agent') {
-        return fallback.where((item) => item.isVisible).take(9).toList();
+        return _withCommissionsTile(fallback)
+            .where((item) => item.isVisible)
+            .take(9)
+            .toList();
       }
 
       // EVD and Merchant now consume their own server-trusted role catalog.
@@ -301,6 +344,17 @@ class DashboardQuickActionsSection extends StatelessWidget {
         .toList();
   }
 
+  QuickActionCatalogDefinition? _firstDefinition(
+    QuickActionCatalog? catalog,
+    List<String> types,
+  ) {
+    for (final type in types) {
+      final definition = catalog?.definitionFor(provider, type);
+      if (definition != null) return definition;
+    }
+    return null;
+  }
+
   QuickActionCatalogDefinition? _definition(
     String type,
     String role,
@@ -324,6 +378,41 @@ class DashboardQuickActionsSection extends StatelessWidget {
           type: 'cash_in',
           displayLabel: 'Cash In',
           quickActionGroup: 'Cash Services',
+        );
+      }
+    }
+
+    // MTN Agent Commissions is a presentation-only action: one tile for the
+    // Cash In, Cash Out and Transfer Commission actions.
+    if (provider == 'mtn' && role == 'agent' && type == 'commissions') {
+      final commission = _firstDefinition(catalog, const [
+        'cash_in_commission',
+        'commission_balance',
+        'commission_transfer',
+      ]);
+
+      if (commission != null) {
+        return QuickActionCatalogDefinition(
+          provider: 'mtn',
+          type: 'commissions',
+          displayLabel: 'Commissions',
+          quickActionGroup: commission.quickActionGroup,
+        );
+      }
+    }
+
+    // MTN Agent combined Pay To is a presentation-only action. It reuses the
+    // certified pay_to_agent and merchant_payment transactions.
+    if (provider == 'mtn' && role == 'agent' && type == 'pay_to') {
+      final payTo = catalog?.definitionFor(provider, 'pay_to_agent') ??
+          catalog?.definitionFor(provider, 'merchant_payment');
+
+      if (payTo != null) {
+        return QuickActionCatalogDefinition(
+          provider: 'mtn',
+          type: 'pay_to',
+          displayLabel: 'Pay To',
+          quickActionGroup: payTo.quickActionGroup,
         );
       }
     }
@@ -618,7 +707,16 @@ class DashboardQuickActionsSection extends StatelessWidget {
       final isMtnAgentStandaloneCashIn =
           provider == 'mtn' && role == 'agent' && type == 'cash_in';
 
+      // Combined Pay To page: both actions behind one tile.
       final isMtnAgentPayToWorkspace =
+          provider == 'mtn' && role == 'agent' && type == 'pay_to';
+
+      // One Commissions tile for the three commission actions.
+      final isMtnAgentCommissions =
+          provider == 'mtn' && role == 'agent' && type == 'commissions';
+
+      // Standalone Pay to Agent and Pay to Merchant pages.
+      final isMtnAgentPayToSingle =
           provider == 'mtn' &&
           role == 'agent' &&
           (type == 'pay_to_agent' || type == 'merchant_payment');
@@ -648,16 +746,25 @@ class DashboardQuickActionsSection extends StatelessWidget {
         role,
       );
 
-      final defaultLabel = quickActionDisplayLabel(
-        provider: provider,
-        type: type,
-        catalogLabel: definition?.displayLabel,
-      );
+      final defaultLabel = (provider == 'mtn' && role == 'agent'
+              ? mtnAgentQuickActionLabel(type)
+              : null) ??
+          quickActionDisplayLabel(
+            provider: provider,
+            type: type,
+            catalogLabel: definition?.displayLabel,
+          );
 
       final label = isMtnAgentStandaloneCashIn
           ? 'Cash In'
           : isMtnAgentCashWorkspace
           ? 'Cash In/Out'
+          : isMtnAgentCommissions
+          ? 'Commissions'
+          : isMtnAgentPayToWorkspace
+          ? 'Pay To'
+          : isMtnAgentPayToSingle
+          ? (type == 'merchant_payment' ? 'Pay to Merchant' : 'Pay to Agent')
           : isTelecelMerchantSendMoney
               ? 'Send Money'
               : isTelecelMerchantECash
@@ -694,20 +801,39 @@ class DashboardQuickActionsSection extends StatelessWidget {
           (!requiresBundleChoice || bundleCategory.isNotEmpty) &&
           (!requiresRecipientChoice || recipientMode.isNotEmpty);
 
+      // Balance and Commission enquiries need no input, so they start
+      // dialing as soon as the tile is tapped instead of waiting on a
+      // "Proceed to Execute" screen. The transaction screen still verifies the
+      // SIM, role and flow first, and shows its form if that check fails.
+      final isAgentZeroInputEnquiry = role == 'agent' &&
+          ZeroInputDirectExecutionPolicy.supportedTypes.contains(type);
+
       final directStart =
-          definition != null &&
-          definition.hasServerDrivenFormSchema &&
-          definition.formFields.isEmpty &&
+          ((definition != null &&
+                      definition.hasServerDrivenFormSchema &&
+                      definition.formFields.isEmpty) ||
+                  isAgentZeroInputEnquiry) &&
           variantResolved &&
           !isMtnAgentCashWorkspace &&
           !isMtnAgentStandaloneCashIn &&
           !isMtnAgentPayToWorkspace &&
+          !isMtnAgentPayToSingle &&
+          !isMtnAgentCommissions &&
           !isTelecelMerchantECash &&
           !isTelecelMerchantSendMoney &&
           !isTelecelMerchantBankTransfer;
 
       tiles.add(
-        _buildTile(
+        SwappableTile(
+          identityKey: preference.identityKey,
+          onSwap: (from, to) => _swapTiles(
+            context: context,
+            role: role,
+            displayed: actions,
+            fromKey: from,
+            toKey: to,
+          ),
+          child: _buildTile(
           context: context,
           icon: icon,
           label: label,
@@ -724,6 +850,7 @@ class DashboardQuickActionsSection extends StatelessWidget {
               'provider': provider,
               if (bundleCategory.isNotEmpty) 'bundle_category': bundleCategory,
               if (recipientMode.isNotEmpty) 'recipient_mode': recipientMode,
+              if (isMtnAgentPayToSingle) 'operation': type,
               'sim_slot': sim.slot.toString(),
               if (sim.iccid.isNotEmpty) 'sim_iccid': sim.iccid,
               'sim_subscription_id': sim.subscriptionId.toString(),
@@ -733,7 +860,9 @@ class DashboardQuickActionsSection extends StatelessWidget {
                 ? '/personal-transactions/new'
                 : isMtnAgentCashWorkspace
                     ? '/transactions/mtn-cash-in-out'
-                    : isMtnAgentPayToWorkspace
+                    : isMtnAgentCommissions
+                        ? '/transactions/mtn-commissions'
+                    : isMtnAgentPayToWorkspace || isMtnAgentPayToSingle
                         ? '/transactions/mtn-pay-to'
                         : isTelecelMerchantECash
                             ? '/transactions/telecel-merchant-ecash'
@@ -756,10 +885,41 @@ class DashboardQuickActionsSection extends StatelessWidget {
             );
           },
         ),
+        ),
       );
     }
 
     return tiles;
+  }
+
+  Future<void> _swapTiles({
+    required BuildContext context,
+    required String role,
+    required List<QuickActionPreference> displayed,
+    required String fromKey,
+    required String toKey,
+  }) async {
+    final profile = Map<String, List<QuickActionPreference>>.from(
+      _profileForRole(role),
+    );
+
+    profile[provider] = swapQuickActionOrder(
+      displayed: displayed,
+      saved: profile[provider] ?? const <QuickActionPreference>[],
+      fromKey: fromKey,
+      toKey: toKey,
+    );
+
+    final messenger = ScaffoldMessenger.of(context);
+    final saved = await saveQuickActionProfile(role: role, profile: profile);
+
+    if (saved) {
+      onReloadQuickActions();
+    } else {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Could not save the new order.')),
+      );
+    }
   }
 
   Widget _buildTile({

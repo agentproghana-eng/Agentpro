@@ -46,9 +46,10 @@ void main() {
       expect(block, contains("label: 'Merchant'"));
       expect(block, contains("'pay_to_agent'"));
       expect(block, contains("'merchant_payment'"));
+      // Agent and Merchant only choose the form; one action button submits.
       expect(
         RegExp(r'_proceed\(\);').allMatches(block).length,
-        2,
+        1,
       );
     });
   });

@@ -5,6 +5,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'zero_input_flow_preflight.dart';
+import 'ussd_flow_input_check.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
@@ -54,6 +55,15 @@ class TransactionScreen extends StatefulWidget {
   /// Pay to Merchant on one form. The canonical backend identities remain
   /// pay_to_agent and merchant_payment.
   final bool mtnPayToWorkspace;
+
+  /// MTN Agent Commissions page. It runs inside the Cash In/Out workspace
+  /// machinery (so SIM, role and offline checks are shared) but shows the
+  /// commission actions instead of the cash form.
+  final bool mtnCommissionsWorkspace;
+
+  /// When set (pay_to_agent or merchant_payment), the Pay To screen is a
+  /// standalone page for that single action with no switch to the other.
+  final String? mtnPayToOperation;
   final bool autoStart;
 
   /// Telecel Merchant-only workspace for moving E-Cash between the
@@ -73,6 +83,8 @@ class TransactionScreen extends StatefulWidget {
     this.catalogDefinition,
     this.mtnCashInOutWorkspace = false,
     this.mtnPayToWorkspace = false,
+    this.mtnCommissionsWorkspace = false,
+    this.mtnPayToOperation,
     this.autoStart = false,
     this.telecelMerchantECashWorkspace = false,
   });
@@ -84,6 +96,30 @@ class TransactionScreen extends StatefulWidget {
 class _TransactionScreenState extends State<TransactionScreen> {
   bool _zeroInputSubmissionInFlight = false;
   bool _zeroInputBackendInitiationStarted = false;
+
+  // Synchronous re-entrancy gate for every submission path. `_loading` is
+  // only set after several awaits inside _proceedInternal (role refresh,
+  // device identity, ...), so a second tap in that window used to start a
+  // second submission with its own clientOperationId. The gate is taken
+  // before the first await and released in `finally`, and also released
+  // just before the progress result is handled so Retry Now can re-enter.
+  //
+  // The owner token lets a finishing call release only its own hold, so an
+  // outer `finally` can never clobber a gate that a newer call has taken.
+  Object? _submissionGateOwner;
+
+  bool get _submissionGateHeld => _submissionGateOwner != null;
+
+  // True while any submission or enquiry preflight is running. Workspace
+  // button handlers check this before they mutate the selected operation,
+  // because their captured onPressed closures can be stale until the next
+  // rebuild.
+  bool get _submissionInFlight =>
+      _loading || _submissionGateHeld || _workspaceEnquiryBusy;
+
+  void _releaseSubmissionGate() {
+    _submissionGateOwner = null;
+  }
 
   OfflineQueueIdentity? get _offlineIdentity {
     final state = context.read<AuthBloc>().state;
@@ -143,6 +179,23 @@ class _TransactionScreenState extends State<TransactionScreen> {
       (_transactionType == 'airtime' ||
           _transactionType == 'data_bundle');
 
+  // The standalone MTN Cash In / Cash Out screens present themselves once the
+  // SIM role is known. Until then, show the same short loading state as the
+  // airtime and data screens instead of a generic form with a Proceed bar
+  // that is replaced a moment later.
+  bool get _awaitingStandaloneMtnCashRole =>
+      _selectedProvider == 'mtn' &&
+      !widget.mtnCashInOutWorkspace &&
+      !widget.mtnPayToWorkspace &&
+      !widget.telecelMerchantECashWorkspace &&
+      (_transactionType == 'send_money' || _transactionType == 'cash_out') &&
+      // Only while the role is still being resolved. A verified non-agent
+      // SIM or a resolution error falls through to the normal form.
+      (!_simDetectionComplete ||
+          (_selectedSim != null &&
+              _selectedBusinessSimRole == null &&
+              _businessRoleResolutionError == null));
+
   bool get _mtnPurchaseRoleReady =>
       _simDetectionComplete &&
       _selectedSim != null &&
@@ -158,10 +211,119 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // a combined workspace transaction type to the backend:
   // Cash In remains send_money and Cash Out remains cash_out.
   String _mtnCashInOutOperation = 'send_money';
+
+  bool get _isMtnCommissionsMode =>
+      widget.mtnCommissionsWorkspace && _isMtnCashInOutWorkspace;
+
+  // Transfer Commission is the only commission action that needs an amount,
+  // so the amount field appears once it is chosen.
+  bool _commissionTransferChosen = false;
   String? _activeMtnCashEnquiry;
   bool _workspaceEnquiryBusy = false;
   bool _workspaceEnquiryRetryRequested = false;
   String? _workspaceEnquirySimKey;
+
+  // Short-lived record of server-verified Balance/Commission preflights, so a
+  // tap does not wait on two network round trips. Entries are keyed by SIM,
+  // enquiry type and flow selectors, and expire quickly so a disabled flow or
+  // a changed SIM role is still picked up by a fresh live check.
+  static const Duration _enquiryPreflightTtl = Duration(minutes: 3);
+  static const List<String> _enquiryPreflightTypes = <String>[
+    'balance_enquiry',
+    'cash_in_commission',
+    'commission_balance',
+  ];
+  final Map<String, DateTime> _enquiryPreflightVerifiedAt =
+      ZeroInputPreflightApprovals.verifiedAt;
+
+  String? _enquiryPreflightKey(String type) {
+    final simKey = _currentBusinessRoleSimKey;
+    if (simKey == null) return null;
+    return '$simKey|$type|${_initialBundleCategory ?? ''}|'
+        '${_effectiveRecipientMode ?? ''}';
+  }
+
+  bool _hasFreshEnquiryPreflight(String type) {
+    final key = _enquiryPreflightKey(type);
+    final verifiedAt = key == null ? null : _enquiryPreflightVerifiedAt[key];
+    return verifiedAt != null &&
+        DateTime.now().difference(verifiedAt) < _enquiryPreflightTtl;
+  }
+
+  void _recordEnquiryPreflight(String type) {
+    final key = _enquiryPreflightKey(type);
+    if (key != null) _enquiryPreflightVerifiedAt[key] = DateTime.now();
+  }
+
+  /// Verifies the three MTN Agent enquiry flows in the background as soon as
+  /// the SIM is known. A failure only means the tap falls back to the live
+  /// check; it never authorizes execution.
+  Future<void> _prewarmEnquiryPreflight() async {
+    final sim = _selectedSim;
+    final simKey = _currentBusinessRoleSimKey;
+    if (!_isMtnCashInOutWorkspace ||
+        !_simDetectionComplete ||
+        sim == null ||
+        simKey == null ||
+        _initialSimIdentityUnavailable) {
+      return;
+    }
+
+    try {
+      final role = await SimRoleAssignmentService.businessRoleForSlot(
+        sim.slot,
+        refreshFromServer: true,
+        allowLegacyAgentFallback: false,
+        simIccid: sim.iccid,
+        simSubscriptionId: sim.subscriptionId,
+        provider: sim.network,
+      );
+      if (!mounted || role != 'agent' || _currentBusinessRoleSimKey != simKey) {
+        return;
+      }
+
+      final keyedTypes = <String, String>{};
+      for (final type in _enquiryPreflightTypes) {
+        final key = _enquiryPreflightKey(type);
+        if (key != null) keyedTypes[type] = key;
+      }
+
+      await Future.wait(
+        keyedTypes.entries.map((entry) async {
+          final approved = await ZeroInputFlowPreflight.verify(
+            provider: _selectedProvider,
+            transactionType: entry.key,
+            isPersonal: false,
+            businessSimRole: role,
+            bundleCategory: _initialBundleCategory,
+            recipientMode: _effectiveRecipientMode,
+            // Keep the approved flow so this enquiry can also dial offline.
+            onApprovedFlow: (flow) {
+              final identity = _offlineIdentity;
+              if (identity == null) return;
+              unawaited(OfflineQueueService.cacheFlow(
+                _selectedProvider,
+                entry.key,
+                flow,
+                identity: identity,
+                isPersonal: false,
+                businessSimRole: role,
+                bundleCategory: _initialBundleCategory,
+                recipientMode: _effectiveRecipientMode,
+              ));
+            },
+          );
+          if (mounted &&
+              approved &&
+              _currentBusinessRoleSimKey == simKey) {
+            _enquiryPreflightVerifiedAt[entry.value] = DateTime.now();
+          }
+        }),
+      );
+    } catch (_) {
+      // Best effort only: the tap performs the live check instead.
+    }
+  }
 
   bool get _workspaceEnquirySimStillSelected =>
       !_workspaceZeroInput ||
@@ -181,6 +343,18 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // MTN Agent Pay To is a presentation workspace only.
   // The backend always receives one of the certified identities below.
   String _mtnPayToOperation = 'pay_to_agent';
+
+  // The combined Pay To page shows its fields only after Agent or Merchant is
+  // chosen, so each choice shows the right identifier field. A standalone
+  // page has already made its choice.
+  bool _mtnPayToChosen = false;
+
+  bool get _mtnPayToStandalone =>
+      widget.mtnPayToOperation == 'pay_to_agent' ||
+      widget.mtnPayToOperation == 'merchant_payment';
+
+  bool get _payToFieldsVisible =>
+      !_isMtnPayToWorkspace || _mtnPayToChosen || _mtnPayToStandalone;
 
   // Historical names are retained as canonical backend identities:
   // float_to_working = Merchant Account -> Working Account
@@ -423,6 +597,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
   bool get _isMtnPayToWorkspace =>
       widget.mtnPayToWorkspace && _selectedProvider == 'mtn';
 
+  bool get _isMtnPayToMerchant =>
+      _isMtnPayToWorkspace && _mtnPayToOperation == 'merchant_payment';
+
   // MTN Agent Data Bundle presentation only.
   // No new backend transaction identity or USSD flow is introduced.
   // Standalone MTN Agent Cash In and Cash Out presentation.
@@ -491,16 +668,29 @@ class _TransactionScreenState extends State<TransactionScreen> {
       return false;
     }
 
+    // A recent server-verified approval for this exact SIM and enquiry lets
+    // the tap start dialing immediately instead of waiting on the network.
+    if (_workspaceZeroInput && _hasFreshEnquiryPreflight(_transactionType)) {
+      return _workspaceEnquirySimStillSelected;
+    }
+
     try {
-      final role =
+      // The screen has usually resolved this SIM's role already. Reuse it
+      // rather than waiting on the network again; the backend re-verifies
+      // the role when the transaction is initiated.
+      final knownRole =
+          _verifiedBusinessRoleSimKey == _currentBusinessRoleSimKey
+              ? _selectedBusinessSimRole
+              : null;
+      final role = knownRole ??
           await SimRoleAssignmentService.businessRoleForSlot(
-        selectedSim.slot,
-        refreshFromServer: true,
-        allowLegacyAgentFallback: false,
-        simIccid: selectedSim.iccid,
-        simSubscriptionId: selectedSim.subscriptionId,
-        provider: selectedSim.network,
-      );
+            selectedSim.slot,
+            refreshFromServer: true,
+            allowLegacyAgentFallback: false,
+            simIccid: selectedSim.iccid,
+            simSubscriptionId: selectedSim.subscriptionId,
+            provider: selectedSim.network,
+          );
 
       if (!mounted) return false;
 
@@ -516,6 +706,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
       if (!mounted || !approved || (_workspaceZeroInput && role != 'agent')) {
         return false;
       }
+
+      if (_workspaceZeroInput) _recordEnquiryPreflight(_transactionType);
 
       final currentSim = _selectedSim;
       return _workspaceEnquirySimStillSelected &&
@@ -533,6 +725,15 @@ class _TransactionScreenState extends State<TransactionScreen> {
   @override
   void initState() {
     super.initState();
+
+    if (_mtnPayToStandalone) {
+      _mtnPayToOperation = widget.mtnPayToOperation!;
+      _mtnPayToChosen = true;
+    }
+
+    if (widget.mtnCommissionsWorkspace) {
+      _mtnCashInOutOperation = 'commission_transfer';
+    }
 
     final initialRecipientMode =
         widget.initialRecipientMode?.trim().toLowerCase();
@@ -598,9 +799,14 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
   String get _title {
     if (_isMtnCashInOutWorkspace) {
-      return 'Cash In/Out';
+      return _isMtnCommissionsMode ? 'Commissions' : 'Cash In/Out';
     }
     if (_isMtnPayToWorkspace) {
+      if (_mtnPayToStandalone) {
+        return _mtnPayToOperation == 'merchant_payment'
+            ? 'Pay to Merchant'
+            : 'Pay to Agent';
+      }
       return 'Pay To';
     }
     if (_isTelecelMerchantECashWorkspace) {
@@ -635,9 +841,22 @@ class _TransactionScreenState extends State<TransactionScreen> {
         _ => _selectedProvider,
       };
 
+  // While a Balance/Commission enquiry runs, the active transaction type
+  // changes so the enquiry needs no form input. That must not change what the
+  // agent sees: keep showing the Cash In/Out form exactly as before the tap.
+  bool get _keepWorkspaceFormVisible =>
+      !_isMtnCommissionsMode &&
+      _isMtnCashInOutWorkspace && _workspaceEnquiryBusy;
+  bool get _showsRecipientField =>
+      (_needsRecipient || _keepWorkspaceFormVisible) &&
+      !_isMtnCommissionsMode;
+  bool get _showsAgentServiceFee =>
+      _isAgentServiceFeeFlow ||
+      (_keepWorkspaceFormVisible && _mtnCashInOutOperation == 'send_money');
+
   bool get _needsRecipient =>
       (_isMtnCashInOutWorkspace && !_workspaceZeroInput) ||
-      _isMtnPayToWorkspace ||
+      (_isMtnPayToWorkspace && _payToFieldsVisible) ||
       ['send_money'].contains(_transactionType) ||
       _isTelecelMerchantSendMoneyWorkspace;
   // Pay to Agent and Pay to Merchant (MTN's "Pay To" menu, both
@@ -696,13 +915,18 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'commission_balance',
         'cash_in_commission',
       ].contains(_transactionType) &&
-      !_isTelecelDataBundle;
+      !_isTelecelDataBundle &&
+      !_isMtnCommissionsMode &&
+      _payToFieldsVisible;
   // Telecel Merchant Data leaves the changing bundle catalogue on the
   // provider menu. Self needs no customer number; Other requires one.
   bool get _isTelecelAirtimeSelf =>
       _selectedProvider == 'telecel' &&
       _transactionType == 'airtime' &&
-      _initialRecipientMode?.toLowerCase() == 'self';
+      _initialRecipientMode?.toLowerCase() == 'self' &&
+      // Only the Merchant flow has a no-phone Self variant. The Agent
+      // Airtime flow always types a phone number.
+      _selectedBusinessSimRole == 'merchant';
 
   bool get _needsCustomer =>
       !_isMtnCashInOutWorkspace &&
@@ -906,6 +1130,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
         _scheduleFlowPreload(immediate: true);
       }
 
+      // Warm the Balance/Commission preflight so those taps start instantly.
+      if (_isMtnCashInOutWorkspace && _selectedSim != null) {
+        unawaited(_prewarmEnquiryPreflight());
+      }
+
       if (ZeroInputDirectExecutionPolicy.supportedTypes.contains(_transactionType) &&
           widget.autoStart &&
           !_autoStartAttempted &&
@@ -995,6 +1224,33 @@ class _TransactionScreenState extends State<TransactionScreen> {
       setState(() {
         _businessRoleResolutionError = null;
       });
+    }
+
+    // Show the screen from the trusted, identity-bound local assignment right
+    // away. The server confirmation below stays authoritative: it replaces
+    // this role, or withdraws it with an error, as soon as it answers, and the
+    // backend verifies the role again when a transaction is initiated.
+    if (_verifiedBusinessRoleSimKey != selectedSimKey) {
+      final localRole = await SimRoleAssignmentService.cachedRoleForSlot(
+        selectedSim.slot,
+        simIccid: selectedSim.iccid,
+        simSubscriptionId: selectedSim.subscriptionId,
+        provider: selectedSim.network,
+      );
+
+      if (!mounted ||
+          _businessRoleRequestGeneration != requestGeneration ||
+          _currentBusinessRoleSimKey != selectedSimKey) return;
+
+      if (localRole == 'agent' ||
+          localRole == 'evd' ||
+          localRole == 'merchant') {
+        setState(() {
+          _selectedBusinessSimRole = localRole;
+          _verifiedBusinessRoleSimKey = selectedSimKey;
+          _businessRoleResolutionError = null;
+        });
+      }
     }
 
     String businessSimRole;
@@ -1199,6 +1455,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
     };
     if (!permitted.contains(transactionType) ||
         _loading ||
+        _submissionGateHeld ||
         _workspaceEnquiryBusy ||
         _zeroInputSubmissionInFlight ||
         !_isMtnCashInOutWorkspace) {
@@ -1265,9 +1522,145 @@ class _TransactionScreenState extends State<TransactionScreen> {
     );
   }
 
+  Widget _buildMtnCommissionsActions() {
+    ButtonStyle style() => ElevatedButton.styleFrom(
+          backgroundColor: AppTheme.primaryColor,
+          foregroundColor: Colors.white,
+          minimumSize: const Size(0, 44),
+          maximumSize: const Size(double.infinity, 44),
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          textStyle: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(9),
+          ),
+        );
+
+    final amountField = _amountCtrl;
+    final blocked = _loading && !_workspaceEnquiryBusy;
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton(
+                style: style(),
+                onPressed: blocked
+                    ? null
+                    : () => _openMtnAgentCashEnquiry('cash_in_commission'),
+                child: const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('Cash In Commission'),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ElevatedButton(
+                style: style(),
+                onPressed: blocked
+                    ? null
+                    : () => _openMtnAgentCashEnquiry('commission_balance'),
+                child: const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('Cash Out Commission'),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Center(
+          child: SizedBox(
+            width: 200,
+            child: ElevatedButton(
+              style: style(),
+              onPressed: blocked
+                  ? null
+                  : () {
+                      if (_submissionInFlight) return;
+                      setState(() => _commissionTransferChosen = true);
+                    },
+              child: const Text('Transfer Commission'),
+            ),
+          ),
+        ),
+        if (_commissionTransferChosen) ...[
+          const SizedBox(height: 14),
+          TextFormField(
+            controller: amountField,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+            ],
+            decoration: const InputDecoration(
+              labelText: 'Commission amount (GH₵)',
+              prefixIcon: Icon(Icons.payments_outlined),
+            ),
+            validator: (value) {
+              final amount = double.tryParse((value ?? '').trim());
+              return amount == null || amount <= 0
+                  ? 'Enter a valid amount'
+                  : null;
+            },
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: style(),
+              onPressed: _loading
+                  ? null
+                  : () {
+                      if (_submissionInFlight) return;
+                      _proceed();
+                    },
+              child: const Text('Confirm Transfer'),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   Future<void> _proceed() async {
+    // A second tap while a submission is still preparing must be ignored.
+    if (_submissionGateHeld) return;
+
+    // While a Balance/Commission enquiry is in its preflight, only that
+    // enquiry's own call (which sets _autoStartPreflightApproved) may run.
+    // Otherwise a Cash In/Out tap would execute the active enquiry type
+    // through the unreserved, non-zero-input path.
+    if (_workspaceEnquiryBusy && !_autoStartPreflightApproved) return;
+
+    final gateOwner = Object();
+    _submissionGateOwner = gateOwner;
+    try {
+      await _proceedGated();
+    } finally {
+      if (identical(_submissionGateOwner, gateOwner)) {
+        _releaseSubmissionGate();
+
+        // This call still owns the gate, so nothing newer is running and a
+        // leftover `_loading` is a leak from an early exit or exception.
+        // Without this, the in-flight guards above would keep every
+        // workspace button disabled until the screen is reopened.
+        if (_loading && mounted) {
+          setState(() => _loading = false);
+        }
+      }
+    }
+  }
+
+  Future<void> _proceedGated() async {
     final zeroInput = _authorizedZeroInput;
     if (zeroInput && _zeroInputSubmissionInFlight) return;
+    if (zeroInput) {
+      await ZeroInputExecutionSession.clearPreUnificationOrphanOnce();
+    }
     final reservationToken = zeroInput
         ? ZeroInputExecutionSession.reserveForInitiation()
         : null;
@@ -1280,6 +1673,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
         );
       }
       return;
+    }
+    if (zeroInput) {
+      await ZeroInputExecutionSession.recoverStaleEnquiryLock(
+        reservationToken,
+      );
     }
     if (zeroInput &&
         !await ZeroInputExecutionSession.persistBeforeInitiation(reservationToken)) {
@@ -1525,15 +1923,34 @@ class _TransactionScreenState extends State<TransactionScreen> {
       (result) => result == ConnectivityResult.none,
     );
     if (_authorizedZeroInput && isOffline) {
-      if (mounted) {
-        setState(() => _loading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(
-            'A verified internet connection is required to start this enquiry.',
-          )),
-        );
+      // Balance and commission enquiries move no money, so they may dial
+      // offline from a flow this device saved earlier. Without one, an
+      // online run is still required first. The reservation taken for the
+      // online path is released because no backend initiation starts here.
+      final savedIdentity = _offlineIdentity;
+      final hasSavedFlow = savedIdentity != null &&
+          OfflineQueueService.getCachedFlow(
+                _selectedProvider,
+                _transactionType,
+                identity: savedIdentity,
+                isPersonal: false,
+                businessSimRole: businessSimRole,
+                bundleCategory: _initialBundleCategory,
+                recipientMode: _effectiveRecipientMode,
+              ) !=
+              null;
+
+      if (!hasSavedFlow) {
+        if (mounted) {
+          setState(() => _loading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text(
+              'A verified internet connection is required to start this enquiry.',
+            )),
+          );
+        }
+        return;
       }
-      return;
     }
 
     final transactionDisabled = await FeatureFlagService.isTransactionDisabled(
@@ -1621,6 +2038,25 @@ class _TransactionScreenState extends State<TransactionScreen> {
             (_selectedProvider == 'telecel' &&
                 _transactionType == 'cash_in'));
 
+    // Telecel flows type a protected Operator ID or shortcode that only the
+    // server issues. Starting one offline would record a transaction that can
+    // never dial, so say so before anything is recorded.
+    if (isOffline &&
+        _selectedProvider == 'telecel' &&
+        (ussdFlowNeedsProtectedCredential(cachedFlow) ||
+            (cachedFlow == null && _transactionType == 'cash_in'))) {
+      if (mounted) {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(
+            'This Telecel transaction needs a protected credential and '
+            'requires an online connection before USSD can start.',
+          )),
+        );
+      }
+      return;
+    }
+
     if (isOffline &&
         (isAccessibilityHardcodedFlow ||
             cachedTemplate != null ||
@@ -1676,7 +2112,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
       );
       if (mounted) setState(() => _loading = false);
 
-    await _handleProgressAction(progressAction);
+      // Release before handling the result: Retry Now re-enters _proceed.
+      _releaseSubmissionGate();
+      await _handleProgressAction(progressAction);
       return;
     }
 
@@ -1781,6 +2219,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
       setState(() => _loading = false);
     }
 
+    // Release before handling the result: Retry Now re-enters _proceed.
+    _releaseSubmissionGate();
     await _handleProgressAction(progressAction);
   }
 
@@ -2091,8 +2531,24 @@ class _TransactionScreenState extends State<TransactionScreen> {
     );
   }
 
+  // A zero-input quick action that starts by itself shows nothing of its own
+  // while it prepares: the screen it came from stays visible until the
+  // progress screen opens. Problems and the form fallback still show.
+  bool get _autoStartRunsSilently =>
+      widget.autoStart &&
+      !_autoStartFallbackToForm &&
+      ZeroInputDirectExecutionPolicy.supportedTypes.contains(_transactionType) &&
+      (!_simDetectionComplete || _loading || _autoStartInProgress);
+
   @override
   Widget build(BuildContext context) {
+    if (_autoStartRunsSilently) {
+      return const Scaffold(
+        backgroundColor: Colors.transparent,
+        body: AbsorbPointer(child: SizedBox.expand()),
+      );
+    }
+
     return Scaffold(
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
@@ -2106,7 +2562,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
           const SizedBox(width: 4),
         ],
       ),
-      body: _isMtnPurchaseScreen && !_mtnPurchaseRoleReady
+      body: _isMtnPurchaseScreen && !_mtnPurchaseRoleReady ||
+              _awaitingStandaloneMtnCashRole
           ? Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -2129,7 +2586,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
                           : _selectedSim == null
                               ? 'The selected MTN SIM is unavailable.'
                               : _businessRoleResolutionError ??
-                                  (_selectedBusinessSimRole == 'agent'
+                                  (_selectedBusinessSimRole == null ||
+                                          _selectedBusinessSimRole == 'agent'
                                       ? 'Verifying selected SIM…'
                                       : 'This transaction requires a verified Agent SIM. Check Settings > SIM Purpose.'),
                       textAlign: TextAlign.center,
@@ -3077,21 +3535,23 @@ class _TransactionScreenState extends State<TransactionScreen> {
               ],
 
               if (!_usesServerDrivenForm &&
-                  _needsRecipient) ...[
+                  _showsRecipientField) ...[
                 AppTextField(
                   transactionEmphasis: true,
                   compactTransactionField: _compactMtnAgentForm,
                   controller: _recipientPhoneCtrl,
-                  label: _isMtnPayToWorkspace
-                      ? 'Mobile Number / Merchant ID'
-                      : 'Phone Number',
-                  hint: _isMtnPayToWorkspace
-                      ? 'Enter mobile number or merchant ID'
+                  label: _isMtnPayToMerchant
+                      ? 'Merchant Code'
+                      : _isMtnPayToWorkspace
+                          ? 'Agent Phone Number'
+                          : 'Phone Number',
+                  hint: _isMtnPayToMerchant
+                      ? 'Letters and numbers, e.g. MR4521A'
                       : '024XXXXXXX',
-                  keyboardType: _isMtnPayToWorkspace
+                  keyboardType: _isMtnPayToMerchant
                       ? TextInputType.text
                       : TextInputType.phone,
-                  prefixIcon: _isMtnPayToWorkspace
+                  prefixIcon: _isMtnPayToMerchant
                       ? Icons.badge_outlined
                       : Icons.phone_outlined,
                   validator: (v) {
@@ -3099,7 +3559,10 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
                     if (_isMtnPayToWorkspace &&
                         _transactionType == 'merchant_payment') {
-                      return value.isEmpty ? 'Merchant ID is required' : null;
+                      if (value.isEmpty) return 'Merchant ID is required';
+                      return RegExp(r'^[A-Za-z0-9]+$').hasMatch(value)
+                          ? null
+                          : 'Merchant code can only have letters and numbers';
                     }
 
                     if (value.isEmpty) {
@@ -3117,7 +3580,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
               ],
 
               // 2. AMOUNT
-              if (!_usesServerDrivenForm &&
+              if (_keepWorkspaceFormVisible ||
+                  !_usesServerDrivenForm &&
                   _needsAmount) ...[
                 TextFormField(
                   controller: _amountCtrl,
@@ -3175,7 +3639,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
               // 3. REFERENCE — only when required by the provider flow.
               if (!_usesServerDrivenForm &&
                   (_needsReference ||
-                      _needsTelecelMerchantReference)) ...[
+                      _needsTelecelMerchantReference) &&
+                  _payToFieldsVisible) ...[
                 AppTextField(
                   transactionEmphasis: true,
                   transactionValueFontSize: 20,
@@ -3196,7 +3661,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
               // Enabled:
               //   starts at 1% of the transaction amount but the agent can
               //   manually replace the calculated figure.
-              if (_isAgentServiceFeeFlow) ...[
+              if (_showsAgentServiceFee) ...[
                 TextFormField(
                   controller: _feeCtrl,
                   enabled: _agentServiceFeeEnabled && !_loading,
@@ -3275,6 +3740,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
               // MTN Agent Cash In/Out: compact, text-only actions.
               // Unverified enquiry and commission flows stay disabled.
               if (_isMtnCashInOutWorkspace) ...[
+                if (_isMtnCommissionsMode)
+                  _buildMtnCommissionsActions()
+                else
                 Builder(
                   builder: (context) {
                     ButtonStyle style(double fontSize) =>
@@ -3302,9 +3770,13 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             Expanded(
                               child: ElevatedButton(
                                 style: style(14),
-                                onPressed: _loading || _workspaceEnquiryBusy
+                                onPressed: _loading && !_workspaceEnquiryBusy
                                     ? null
                                     : () {
+                                        // onPressed can be stale until the
+                                        // next rebuild; re-check before
+                                        // changing the operation.
+                                        if (_submissionInFlight) return;
                                         setState(() {
                                           _mtnCashInOutOperation =
                                               'send_money';
@@ -3318,9 +3790,10 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             Expanded(
                               child: ElevatedButton(
                                 style: style(14),
-                                onPressed: _loading || _workspaceEnquiryBusy
+                                onPressed: _loading && !_workspaceEnquiryBusy
                                     ? null
                                     : () {
+                                        if (_submissionInFlight) return;
                                         setState(() {
                                           _mtnCashInOutOperation =
                                               'cash_out';
@@ -3341,7 +3814,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             width: 170,
                             child: ElevatedButton(
                               style: style(14),
-                              onPressed: _loading || _workspaceEnquiryBusy
+                              onPressed: _loading && !_workspaceEnquiryBusy
                                   ? null
                                   : () => _openMtnAgentCashEnquiry(
                                         'balance_enquiry',
@@ -3356,7 +3829,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             Expanded(
                               child: ElevatedButton(
                                 style: style(13),
-                                onPressed: _loading || _workspaceEnquiryBusy
+                                onPressed: _loading && !_workspaceEnquiryBusy
                                     ? null
                                     : () => _openMtnAgentCashEnquiry(
                                           'cash_in_commission',
@@ -3371,7 +3844,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
                             Expanded(
                               child: ElevatedButton(
                                 style: style(13),
-                                onPressed: _loading || _workspaceEnquiryBusy
+                                onPressed: _loading && !_workspaceEnquiryBusy
                                     ? null
                                     : () => _openMtnAgentCashEnquiry(
                                           'commission_balance',
@@ -3431,37 +3904,58 @@ class _TransactionScreenState extends State<TransactionScreen> {
               ],
 
               if (_isMtnPayToWorkspace) ...[
-                Row(
-                  children: [
-                    Expanded(
-                      child: AppButton(
-                        label: 'Agent',
-                        onPressed: () {
-                          setState(() {
-                            _mtnPayToOperation = 'pay_to_agent';
-                          });
-                          _proceed();
-                        },
-                        isLoading:
-                            _loading && _mtnPayToOperation == 'pay_to_agent',
+                if (!_mtnPayToStandalone)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: AppButton(
+                          label: 'Agent',
+                          onPressed: () {
+                            // The operation must not change mid-submission.
+                            final changed = _mtnPayToOperation != 'pay_to_agent';
+                            if (_submissionInFlight) return;
+                            setState(() {
+                              _mtnPayToOperation = 'pay_to_agent';
+                              _mtnPayToChosen = true;
+                            });
+                            // A phone number and a merchant code never carry
+                            // over from one choice to the other.
+                            if (changed) _recipientPhoneCtrl.clear();
+                          },
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: AppButton(
-                        label: 'Merchant',
-                        onPressed: () {
-                          setState(() {
-                            _mtnPayToOperation = 'merchant_payment';
-                          });
-                          _proceed();
-                        },
-                        isLoading: _loading &&
-                            _mtnPayToOperation == 'merchant_payment',
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: AppButton(
+                          label: 'Merchant',
+                          onPressed: () {
+                            final changed = _mtnPayToOperation != 'merchant_payment';
+                            if (_submissionInFlight) return;
+                            setState(() {
+                              _mtnPayToOperation = 'merchant_payment';
+                              _mtnPayToChosen = true;
+                            });
+                            // A phone number and a merchant code never carry
+                            // over from one choice to the other.
+                            if (changed) _recipientPhoneCtrl.clear();
+                          },
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                if (_payToFieldsVisible) ...[
+                  if (!_mtnPayToStandalone) const SizedBox(height: 10),
+                  AppButton(
+                    label: _mtnPayToOperation == 'merchant_payment'
+                        ? 'Pay to Merchant'
+                        : 'Pay to Agent',
+                    onPressed: () {
+                      if (_submissionInFlight) return;
+                      _proceed();
+                    },
+                    isLoading: _loading,
+                  ),
+                ],
                 const SizedBox(height: 14),
               ],
 

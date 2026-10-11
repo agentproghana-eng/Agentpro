@@ -114,9 +114,20 @@ class _QuickActionCustomizationScreenState
     return <String>{...?_catalog?.providers, ..._preferences.keys}.toList();
   }
 
+  QuickActionCatalogDefinition _agentNamed(
+    QuickActionCatalogDefinition definition,
+  ) {
+    if (!_isAgentRole || _provider != 'mtn') return definition;
+
+    final label = mtnAgentQuickActionLabel(definition.type);
+    return label == null ? definition : definition.withDisplayLabel(label);
+  }
+
   List<QuickActionCatalogDefinition> get _availableDefinitions =>
-      _catalog?.definitionsFor(_provider) ??
-      const <QuickActionCatalogDefinition>[];
+      (_catalog?.definitionsFor(_provider) ??
+              const <QuickActionCatalogDefinition>[])
+          .map(_agentNamed)
+          .toList();
 
   List<_QuickActionChoice> get _availableChoices {
     final choices = <_QuickActionChoice>[];
@@ -215,6 +226,41 @@ class _QuickActionCustomizationScreenState
         );
       }
 
+      // One MTN Agent Commissions action covers the three commission actions.
+      if (_isAgentRole &&
+          _provider == 'mtn' &&
+          definition.type == 'cash_in_commission' &&
+          !_availableDefinitions.any((item) => item.type == 'commissions')) {
+        choices.add(
+          _QuickActionChoice(
+            definition: QuickActionCatalogDefinition(
+              provider: 'mtn',
+              type: 'commissions',
+              displayLabel: 'Commissions',
+              quickActionGroup: definition.quickActionGroup,
+            ),
+          ),
+        );
+      }
+
+      // Combined MTN Agent Pay To sits beside the standalone Pay to Agent and
+      // Pay to Merchant actions.
+      if (_isAgentRole &&
+          _provider == 'mtn' &&
+          definition.type == 'pay_to_agent' &&
+          !_availableDefinitions.any((item) => item.type == 'pay_to')) {
+        choices.add(
+          _QuickActionChoice(
+            definition: QuickActionCatalogDefinition(
+              provider: 'mtn',
+              type: 'pay_to',
+              displayLabel: 'Pay To',
+              quickActionGroup: definition.quickActionGroup,
+            ),
+          ),
+        );
+      }
+
       choices.add(_QuickActionChoice(definition: definition));
 
       for (final variant in definition.variants) {
@@ -264,7 +310,7 @@ class _QuickActionCustomizationScreenState
     }
 
     final definition = _catalog?.definitionFor(_provider, type);
-    if (definition != null) return definition;
+    if (definition != null) return _agentNamed(definition);
 
     // Standalone MTN Agent Cash In is a presentation-only action.
     // It reuses the existing send_money transaction capability.
@@ -280,6 +326,34 @@ class _QuickActionCustomizationScreenState
           type: 'cash_in',
           displayLabel: 'Cash In',
           quickActionGroup: cashWorkspace.quickActionGroup,
+        );
+      }
+    }
+
+    if (_isAgentRole && _provider == 'mtn' && type == 'commissions') {
+      final commission = _catalog?.definitionFor(_provider, 'cash_in_commission') ??
+          _catalog?.definitionFor(_provider, 'commission_balance') ??
+          _catalog?.definitionFor(_provider, 'commission_transfer');
+
+      if (commission != null) {
+        return QuickActionCatalogDefinition(
+          provider: 'mtn',
+          type: 'commissions',
+          displayLabel: 'Commissions',
+          quickActionGroup: commission.quickActionGroup,
+        );
+      }
+    }
+
+    if (_isAgentRole && _provider == 'mtn' && type == 'pay_to') {
+      final payTo = _catalog?.definitionFor(_provider, 'pay_to_agent');
+
+      if (payTo != null) {
+        return QuickActionCatalogDefinition(
+          provider: 'mtn',
+          type: 'pay_to',
+          displayLabel: 'Pay To',
+          quickActionGroup: payTo.quickActionGroup,
         );
       }
     }
@@ -1215,15 +1289,21 @@ class _QuickActionCustomizationScreenState
     );
   }
 
+  // Dropping an action on another one swaps the two places.
   void _reorder(int oldIndex, int newIndex) {
     final items = List<QuickActionPreference>.from(_selected);
 
-    if (newIndex > oldIndex) {
-      newIndex -= 1;
+    if (oldIndex < 0 ||
+        oldIndex >= items.length ||
+        newIndex < 0 ||
+        newIndex >= items.length ||
+        oldIndex == newIndex) {
+      return;
     }
 
-    final item = items.removeAt(oldIndex);
-    items.insert(newIndex, item);
+    final moved = items[oldIndex];
+    items[oldIndex] = items[newIndex];
+    items[newIndex] = moved;
 
     setState(() {
       _preferences[_provider] = items
@@ -1337,7 +1417,7 @@ class _QuickActionCustomizationScreenState
                 ),
                 const SizedBox(height: 20),
                 const Text(
-                  'Selected Quick Actions — drag to reorder',
+                  'Selected Quick Actions — hold and drag onto another to swap',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                 ),
                 const SizedBox(height: 8),
