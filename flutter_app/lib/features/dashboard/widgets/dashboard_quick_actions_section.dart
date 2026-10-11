@@ -168,6 +168,44 @@ class DashboardQuickActionsSection extends StatelessWidget {
     };
   }
 
+  // MTN Agent default layout: the three commission actions share one tile,
+  // placed where the first of them would have been.
+  List<QuickActionPreference> _withCommissionsTile(
+    List<QuickActionPreference> items,
+  ) {
+    if (provider != 'mtn') return items;
+
+    const commissionTypes = {
+      'cash_in_commission',
+      'commission_balance',
+      'commission_transfer',
+    };
+
+    final first = items.indexWhere(
+      (item) => commissionTypes.contains(item.actionKey),
+    );
+
+    if (first < 0) return items;
+
+    final result = <QuickActionPreference>[];
+
+    for (var index = 0; index < items.length; index++) {
+      final item = items[index];
+
+      if (index == first) {
+        result.add(QuickActionPreference(actionKey: 'commissions', position: 0));
+      } else if (!commissionTypes.contains(item.actionKey)) {
+        result.add(item);
+      }
+    }
+
+    return result
+        .asMap()
+        .entries
+        .map((entry) => entry.value.copyWith(position: entry.key))
+        .toList();
+  }
+
   List<QuickActionPreference> _quickActions(
     String role,
   ) {
@@ -197,7 +235,10 @@ class DashboardQuickActionsSection extends StatelessWidget {
       }
 
       if (role == 'agent') {
-        return fallback.where((item) => item.isVisible).take(9).toList();
+        return _withCommissionsTile(fallback)
+            .where((item) => item.isVisible)
+            .take(9)
+            .toList();
       }
 
       // EVD and Merchant now consume their own server-trusted role catalog.
@@ -303,6 +344,17 @@ class DashboardQuickActionsSection extends StatelessWidget {
         .toList();
   }
 
+  QuickActionCatalogDefinition? _firstDefinition(
+    QuickActionCatalog? catalog,
+    List<String> types,
+  ) {
+    for (final type in types) {
+      final definition = catalog?.definitionFor(provider, type);
+      if (definition != null) return definition;
+    }
+    return null;
+  }
+
   QuickActionCatalogDefinition? _definition(
     String type,
     String role,
@@ -326,6 +378,25 @@ class DashboardQuickActionsSection extends StatelessWidget {
           type: 'cash_in',
           displayLabel: 'Cash In',
           quickActionGroup: 'Cash Services',
+        );
+      }
+    }
+
+    // MTN Agent Commissions is a presentation-only action: one tile for the
+    // Cash In, Cash Out and Transfer Commission actions.
+    if (provider == 'mtn' && role == 'agent' && type == 'commissions') {
+      final commission = _firstDefinition(catalog, const [
+        'cash_in_commission',
+        'commission_balance',
+        'commission_transfer',
+      ]);
+
+      if (commission != null) {
+        return QuickActionCatalogDefinition(
+          provider: 'mtn',
+          type: 'commissions',
+          displayLabel: 'Commissions',
+          quickActionGroup: commission.quickActionGroup,
         );
       }
     }
@@ -640,6 +711,10 @@ class DashboardQuickActionsSection extends StatelessWidget {
       final isMtnAgentPayToWorkspace =
           provider == 'mtn' && role == 'agent' && type == 'pay_to';
 
+      // One Commissions tile for the three commission actions.
+      final isMtnAgentCommissions =
+          provider == 'mtn' && role == 'agent' && type == 'commissions';
+
       // Standalone Pay to Agent and Pay to Merchant pages.
       final isMtnAgentPayToSingle =
           provider == 'mtn' &&
@@ -681,6 +756,8 @@ class DashboardQuickActionsSection extends StatelessWidget {
           ? 'Cash In'
           : isMtnAgentCashWorkspace
           ? 'Cash In/Out'
+          : isMtnAgentCommissions
+          ? 'Commissions'
           : isMtnAgentPayToWorkspace
           ? 'Pay To'
           : isMtnAgentPayToSingle
@@ -738,6 +815,7 @@ class DashboardQuickActionsSection extends StatelessWidget {
           !isMtnAgentStandaloneCashIn &&
           !isMtnAgentPayToWorkspace &&
           !isMtnAgentPayToSingle &&
+          !isMtnAgentCommissions &&
           !isTelecelMerchantECash &&
           !isTelecelMerchantSendMoney &&
           !isTelecelMerchantBankTransfer;
@@ -779,6 +857,8 @@ class DashboardQuickActionsSection extends StatelessWidget {
                 ? '/personal-transactions/new'
                 : isMtnAgentCashWorkspace
                     ? '/transactions/mtn-cash-in-out'
+                    : isMtnAgentCommissions
+                        ? '/transactions/mtn-commissions'
                     : isMtnAgentPayToWorkspace || isMtnAgentPayToSingle
                         ? '/transactions/mtn-pay-to'
                         : isTelecelMerchantECash

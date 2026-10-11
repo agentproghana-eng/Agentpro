@@ -56,6 +56,11 @@ class TransactionScreen extends StatefulWidget {
   /// pay_to_agent and merchant_payment.
   final bool mtnPayToWorkspace;
 
+  /// MTN Agent Commissions page. It runs inside the Cash In/Out workspace
+  /// machinery (so SIM, role and offline checks are shared) but shows the
+  /// commission actions instead of the cash form.
+  final bool mtnCommissionsWorkspace;
+
   /// When set (pay_to_agent or merchant_payment), the Pay To screen is a
   /// standalone page for that single action with no switch to the other.
   final String? mtnPayToOperation;
@@ -78,6 +83,7 @@ class TransactionScreen extends StatefulWidget {
     this.catalogDefinition,
     this.mtnCashInOutWorkspace = false,
     this.mtnPayToWorkspace = false,
+    this.mtnCommissionsWorkspace = false,
     this.mtnPayToOperation,
     this.autoStart = false,
     this.telecelMerchantECashWorkspace = false,
@@ -205,6 +211,13 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // a combined workspace transaction type to the backend:
   // Cash In remains send_money and Cash Out remains cash_out.
   String _mtnCashInOutOperation = 'send_money';
+
+  bool get _isMtnCommissionsMode =>
+      widget.mtnCommissionsWorkspace && _isMtnCashInOutWorkspace;
+
+  // Transfer Commission is the only commission action that needs an amount,
+  // so the amount field appears once it is chosen.
+  bool _commissionTransferChosen = false;
   String? _activeMtnCashEnquiry;
   bool _workspaceEnquiryBusy = false;
   bool _workspaceEnquiryRetryRequested = false;
@@ -718,6 +731,10 @@ class _TransactionScreenState extends State<TransactionScreen> {
       _mtnPayToChosen = true;
     }
 
+    if (widget.mtnCommissionsWorkspace) {
+      _mtnCashInOutOperation = 'commission_transfer';
+    }
+
     final initialRecipientMode =
         widget.initialRecipientMode?.trim().toLowerCase();
     if (initialRecipientMode == 'self' ||
@@ -782,7 +799,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
   String get _title {
     if (_isMtnCashInOutWorkspace) {
-      return 'Cash In/Out';
+      return _isMtnCommissionsMode ? 'Commissions' : 'Cash In/Out';
     }
     if (_isMtnPayToWorkspace) {
       if (_mtnPayToStandalone) {
@@ -828,9 +845,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
   // changes so the enquiry needs no form input. That must not change what the
   // agent sees: keep showing the Cash In/Out form exactly as before the tap.
   bool get _keepWorkspaceFormVisible =>
+      !_isMtnCommissionsMode &&
       _isMtnCashInOutWorkspace && _workspaceEnquiryBusy;
   bool get _showsRecipientField =>
-      _needsRecipient || _keepWorkspaceFormVisible;
+      (_needsRecipient || _keepWorkspaceFormVisible) &&
+      !_isMtnCommissionsMode;
   bool get _showsAgentServiceFee =>
       _isAgentServiceFeeFlow ||
       (_keepWorkspaceFormVisible && _mtnCashInOutOperation == 'send_money');
@@ -897,6 +916,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         'cash_in_commission',
       ].contains(_transactionType) &&
       !_isTelecelDataBundle &&
+      !_isMtnCommissionsMode &&
       _payToFieldsVisible;
   // Telecel Merchant Data leaves the changing bundle catalogue on the
   // provider menu. Self needs no customer number; Other requires one.
@@ -1499,6 +1519,109 @@ class _TransactionScreenState extends State<TransactionScreen> {
           '$balanceType configuration is coming soon.',
         ),
       ),
+    );
+  }
+
+  Widget _buildMtnCommissionsActions() {
+    ButtonStyle style() => ElevatedButton.styleFrom(
+          backgroundColor: AppTheme.primaryColor,
+          foregroundColor: Colors.white,
+          minimumSize: const Size(0, 44),
+          maximumSize: const Size(double.infinity, 44),
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          textStyle: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(9),
+          ),
+        );
+
+    final blocked = _loading && !_workspaceEnquiryBusy;
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton(
+                style: style(),
+                onPressed: blocked
+                    ? null
+                    : () => _openMtnAgentCashEnquiry('cash_in_commission'),
+                child: const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('Cash In Commission'),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ElevatedButton(
+                style: style(),
+                onPressed: blocked
+                    ? null
+                    : () => _openMtnAgentCashEnquiry('commission_balance'),
+                child: const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('Cash Out Commission'),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Center(
+          child: SizedBox(
+            width: 200,
+            child: ElevatedButton(
+              style: style(),
+              onPressed: blocked
+                  ? null
+                  : () {
+                      if (_submissionInFlight) return;
+                      setState(() => _commissionTransferChosen = true);
+                    },
+              child: const Text('Transfer Commission'),
+            ),
+          ),
+        ),
+        if (_commissionTransferChosen) ...[
+          const SizedBox(height: 14),
+          TextFormField(
+            controller: _amountCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+            ],
+            decoration: const InputDecoration(
+              labelText: 'Commission amount (GH₵)',
+              prefixIcon: Icon(Icons.payments_outlined),
+            ),
+            validator: (value) {
+              final amount = double.tryParse((value ?? '').trim());
+              return amount == null || amount <= 0
+                  ? 'Enter a valid amount'
+                  : null;
+            },
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: style(),
+              onPressed: _loading
+                  ? null
+                  : () {
+                      if (_submissionInFlight) return;
+                      _proceed();
+                    },
+              child: const Text('Confirm Transfer'),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -3616,6 +3739,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
               // MTN Agent Cash In/Out: compact, text-only actions.
               // Unverified enquiry and commission flows stay disabled.
               if (_isMtnCashInOutWorkspace) ...[
+                if (_isMtnCommissionsMode)
+                  _buildMtnCommissionsActions()
+                else
                 Builder(
                   builder: (context) {
                     ButtonStyle style(double fontSize) =>

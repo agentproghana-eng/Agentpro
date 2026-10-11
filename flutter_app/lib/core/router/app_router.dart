@@ -258,6 +258,32 @@ class AppRouter {
             );
           },
         ),
+        // MTN Agent Commissions: Cash In Commission, Cash Out Commission and
+        // Transfer Commission on one page. It runs inside the Cash In/Out
+        // workspace so SIM, role and offline checks are shared.
+        GoRoute(
+          path: '/transactions/mtn-commissions',
+          builder: (_, state) {
+            final simSlotStr = state.uri.queryParameters['sim_slot'];
+            final simIccid = state.uri.queryParameters['sim_iccid'];
+            final simSubscriptionIdStr =
+                state.uri.queryParameters['sim_subscription_id'];
+
+            return TransactionScreen(
+              transactionType: 'commission_transfer',
+              initialProvider: 'mtn',
+              initialSimSlot:
+                  simSlotStr != null ? int.tryParse(simSlotStr) : null,
+              initialSimIccid: simIccid,
+              initialSimSubscriptionId: simSubscriptionIdStr != null
+                  ? int.tryParse(simSubscriptionIdStr)
+                  : null,
+              mtnCashInOutWorkspace: true,
+              mtnCommissionsWorkspace: true,
+            );
+          },
+        ),
+
         // MTN Agent Pay To is a UI workspace. It preserves the certified
         // pay_to_agent and merchant_payment identities underneath.
         GoRoute(

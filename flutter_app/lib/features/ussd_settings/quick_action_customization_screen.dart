@@ -215,6 +215,23 @@ class _QuickActionCustomizationScreenState
         );
       }
 
+      // One MTN Agent Commissions action covers the three commission actions.
+      if (_isAgentRole &&
+          _provider == 'mtn' &&
+          definition.type == 'cash_in_commission' &&
+          !_availableDefinitions.any((item) => item.type == 'commissions')) {
+        choices.add(
+          _QuickActionChoice(
+            definition: QuickActionCatalogDefinition(
+              provider: 'mtn',
+              type: 'commissions',
+              displayLabel: 'Commissions',
+              quickActionGroup: definition.quickActionGroup,
+            ),
+          ),
+        );
+      }
+
       // Combined MTN Agent Pay To sits beside the standalone Pay to Agent and
       // Pay to Merchant actions.
       if (_isAgentRole &&
@@ -298,6 +315,21 @@ class _QuickActionCustomizationScreenState
           type: 'cash_in',
           displayLabel: 'Cash In',
           quickActionGroup: cashWorkspace.quickActionGroup,
+        );
+      }
+    }
+
+    if (_isAgentRole && _provider == 'mtn' && type == 'commissions') {
+      final commission = _catalog?.definitionFor(_provider, 'cash_in_commission') ??
+          _catalog?.definitionFor(_provider, 'commission_balance') ??
+          _catalog?.definitionFor(_provider, 'commission_transfer');
+
+      if (commission != null) {
+        return QuickActionCatalogDefinition(
+          provider: 'mtn',
+          type: 'commissions',
+          displayLabel: 'Commissions',
+          quickActionGroup: commission.quickActionGroup,
         );
       }
     }
