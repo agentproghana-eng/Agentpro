@@ -1318,6 +1318,11 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
         : null;
     if (zeroInput && reservationToken == null) return;
     if (zeroInput) _activeZeroInputReservationToken = reservationToken;
+    if (zeroInput) {
+      await ZeroInputExecutionSession.recoverStaleEnquiryLock(
+        reservationToken,
+      );
+    }
     if (zeroInput &&
         !await ZeroInputExecutionSession.persistBeforeInitiation(reservationToken)) {
       // Durable state may exist from a prior run: do not initiate.

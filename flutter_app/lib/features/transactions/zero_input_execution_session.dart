@@ -75,6 +75,46 @@ class ZeroInputExecutionSession {
     }
   }
 
+  /// Clears a lock left behind by an EARLIER enquiry so it stops blocking
+  /// every Balance and Commission button.
+  ///
+  /// Only Balance and Commission enquiries ever use this lock. They read a
+  /// value and move no money, so repeating one is harmless, while a stale lock
+  /// blocks them all until support steps in. The caller must already hold this
+  /// process's lease ([token]), which proves no enquiry is running here. A
+  /// record that is not a known enquiry, or that cannot be read, is left
+  /// alone and keeps blocking.
+  static Future<bool> recoverStaleEnquiryLock(String? token) async {
+    if (!ownsReservation(token)) return false;
+    try {
+      final stored = await _storage.read(key: _unresolvedKey);
+      final encoded = await _storage.read(key: _identityKey);
+      if (stored == null && encoded == null) return false;
+      if (stored == token) return false;
+
+      if (encoded != null) {
+        final dynamic decoded;
+        try {
+          decoded = jsonDecode(encoded);
+        } catch (_) {
+          return false;
+        }
+        if (decoded is! Map ||
+            !ZeroInputDirectExecutionPolicy.supportedTypes
+                .contains(decoded['transaction_type']?.toString())) {
+          return false;
+        }
+      }
+
+      await _storage.delete(key: _identityKey);
+      await _storage.delete(key: _unresolvedKey);
+      return await _storage.read(key: _identityKey) == null &&
+          await _storage.read(key: _unresolvedKey) == null;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static const _storageUnifiedKey = 'zero_input_storage_unified_v1';
 
   /// One-time cleanup after the reservation moved to the app's encrypted

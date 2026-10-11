@@ -1519,6 +1519,11 @@ class _TransactionScreenState extends State<TransactionScreen> {
       }
       return;
     }
+    if (zeroInput) {
+      await ZeroInputExecutionSession.recoverStaleEnquiryLock(
+        reservationToken,
+      );
+    }
     if (zeroInput &&
         !await ZeroInputExecutionSession.persistBeforeInitiation(reservationToken)) {
       // Durable state may exist from a prior run: do not initiate.
