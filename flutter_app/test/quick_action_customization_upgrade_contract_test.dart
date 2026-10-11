@@ -28,7 +28,7 @@ void main() {
       );
       expect(
         customization,
-        contains('Change icon background colour'),
+        contains('Icon background colour'),
       );
     });
 
@@ -56,13 +56,15 @@ void main() {
         customization,
         contains('buildDefaultDragHandles: false'),
       );
+      // The whole row drags after a press-and-hold; there is no separate
+      // handle icon.
       expect(
         customization,
-        contains('ReorderableDragStartListener'),
+        contains('ReorderableDelayedDragStartListener'),
       );
       expect(
         customization,
-        contains('Icons.drag_handle_rounded'),
+        isNot(contains('Icons.drag_handle_rounded')),
       );
       expect(
         customization,

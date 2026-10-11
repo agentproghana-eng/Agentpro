@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
 import 'quick_action_preference.dart';
 import 'quick_action_catalog.dart';
+import 'quick_action_refresh.dart';
+import 'tile_font_preference.dart';
 
 class QuickActionCustomizationScreen extends StatefulWidget {
   final bool isPersonal;
@@ -96,6 +100,11 @@ class _QuickActionCustomizationScreenState
   String _provider = '';
   bool _loading = true;
   bool _saving = false;
+  bool _saveFailed = false;
+  bool _savePending = false;
+  bool _changedThisVisit = false;
+  Future<void>? _saveFuture;
+  Timer? _autoSaveTimer;
   String? _error;
 
   QuickActionCatalog? _catalog;
@@ -626,6 +635,7 @@ class _QuickActionCustomizationScreenState
           .map((entry) => entry.value.copyWith(position: entry.key))
           .toList();
     });
+    _scheduleAutoSave();
   }
 
   void _removePreference(QuickActionPreference preference) {
@@ -640,12 +650,14 @@ class _QuickActionCustomizationScreenState
           .map((entry) => entry.value.copyWith(position: entry.key))
           .toList();
     });
+    _scheduleAutoSave();
   }
 
   void _restoreDefaults() {
     setState(() {
       _preferences[_provider] = _defaultPreferencesFor(_provider);
     });
+    _scheduleAutoSave();
   }
 
   Future<void> _restoreAllDefaults() async {
@@ -684,41 +696,140 @@ class _QuickActionCustomizationScreenState
 
       _preferences = restored;
     });
+    _scheduleAutoSave();
+  }
+
+  // Every change saves itself shortly after it is made. There is no Save
+  // button; the status line under the title shows the result.
+  void _scheduleAutoSave() {
+    _savePending = true;
+    _changedThisVisit = true;
+    _autoSaveTimer?.cancel();
+    _autoSaveTimer = Timer(const Duration(milliseconds: 700), _save);
   }
 
   Future<void> _save() async {
-    setState(() => _saving = true);
+    _autoSaveTimer?.cancel();
+    if (_saving) {
+      // A save is running; run again afterwards so the latest state lands.
+      _autoSaveTimer = Timer(const Duration(milliseconds: 400), _save);
+      return;
+    }
+    _savePending = false;
+    if (mounted) {
+      setState(() {
+        _saving = true;
+        _saveFailed = false;
+      });
+    }
 
     try {
-      final field = _preferenceField;
-
-      final payload = {
-        for (final entry in _preferences.entries)
-          entry.key: entry.value.map((item) => item.toJson()).toList(),
-      };
-
-      await ApiClient.instance.patch(
-        '/users/me/quick-actions',
-        data: {field: payload},
-      );
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$_roleLabel Quick Actions saved')),
-      );
+      final sending = _sendPreferences();
+      _saveFuture = sending;
+      await sending;
     } catch (_) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to save Quick Actions'),
-          backgroundColor: AppTheme.errorColor,
-        ),
-      );
+      _savePending = true;
+      if (mounted) setState(() => _saveFailed = true);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<void> _sendPreferences() {
+    final payload = {
+      for (final entry in _preferences.entries)
+        entry.key: entry.value.map((item) => item.toJson()).toList(),
+    };
+
+    return ApiClient.instance.patch(
+      '/users/me/quick-actions',
+      data: {_preferenceField: payload},
+    );
+  }
+
+  @override
+  void dispose() {
+    _autoSaveTimer?.cancel();
+    if (_changedThisVisit) {
+      // Finish any save still in flight, send the last change, then tell the
+      // home screens to reload so the tiles update without a restart.
+      final inFlight = _saveFuture;
+      final needsSend = _savePending;
+      unawaited(() async {
+        try {
+          await inFlight;
+        } catch (_) {}
+        try {
+          if (needsSend) await _sendPreferences();
+          QuickActionRefresh.notifySaved();
+        } catch (_) {}
+      }());
+    }
+    super.dispose();
+  }
+
+  String get _saveStatusText {
+    if (_saveFailed) return 'Not saved. Tap to retry';
+    if (_saving || _savePending) return 'Saving…';
+    return 'All changes saved';
+  }
+
+  Future<void> _chooseTileFont() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: ValueListenableBuilder<String>(
+          valueListenable: TileFontPreference.notifier,
+          builder: (context, current, _) => ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Text(
+                  'Tile font',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ),
+              Text(
+                'Applies to every home tile on this phone.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: context.appSecondaryText,
+                ),
+              ),
+              const SizedBox(height: 8),
+              for (final font in TileFontPreference.fonts)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    font,
+                    style: TileFontPreference.style(
+                      font,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'COMMISSIONS',
+                    style: TileFontPreference.style(
+                      font,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  trailing: font == current
+                      ? const Icon(Icons.check_circle_rounded)
+                      : null,
+                  onTap: () => TileFontPreference.select(font),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _updatePreference(
@@ -738,6 +849,7 @@ class _QuickActionCustomizationScreenState
     setState(() {
       _preferences[_provider] = selected;
     });
+    _scheduleAutoSave();
   }
 
   Future<void> _renameAction(QuickActionPreference preference) async {
@@ -1312,6 +1424,7 @@ class _QuickActionCustomizationScreenState
           .map((entry) => entry.value.copyWith(position: entry.key))
           .toList();
     });
+    _scheduleAutoSave();
   }
 
   @override
@@ -1420,6 +1533,19 @@ class _QuickActionCustomizationScreenState
                   'Selected Quick Actions — hold and drag onto another to swap',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                 ),
+                const SizedBox(height: 4),
+                InkWell(
+                  onTap: _saveFailed ? _save : null,
+                  child: Text(
+                    _saveStatusText,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: _saveFailed
+                          ? AppTheme.errorColor
+                          : context.appSecondaryText,
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 8),
                 if (_selected.isEmpty)
                   Container(
@@ -1455,8 +1581,10 @@ class _QuickActionCustomizationScreenState
                         defaultLabel,
                       );
 
-                      return Card(
+                      return ReorderableDelayedDragStartListener(
                         key: ValueKey(preference.identityKey),
+                        index: index,
+                        child: Card(
                         margin: const EdgeInsets.only(bottom: 6),
                         elevation: 0,
                         child: ListTile(
@@ -1529,18 +1657,21 @@ class _QuickActionCustomizationScreenState
                                   ),
                                 ),
                               ),
-                              ReorderableDragStartListener(
-                                index: index,
-                                child: const Padding(
-                                  padding: EdgeInsets.symmetric(horizontal: 6),
-                                  child: Icon(Icons.drag_handle_rounded),
-                                ),
-                              ),
                               PopupMenuButton<String>(
+                                icon: const Icon(Icons.menu_rounded),
                                 tooltip: _selectedActionTooltip(
                                   preference,
                                   defaultLabel,
                                 ),
+                                elevation: 8,
+                                color: context.appSurface,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                constraints: const BoxConstraints(
+                                  minWidth: 230,
+                                ),
+                                padding: EdgeInsets.zero,
                                 onSelected: (value) {
                                   if (value == 'rename') {
                                     _renameAction(preference);
@@ -1550,47 +1681,59 @@ class _QuickActionCustomizationScreenState
                                     _chooseIconColor(preference);
                                   } else if (value == 'background') {
                                     _chooseIconBackgroundColor(preference);
+                                  } else if (value == 'font') {
+                                    _chooseTileFont();
                                   } else if (value == 'remove') {
                                     _removePreference(preference);
                                   }
                                 },
-                                itemBuilder: (context) => const [
-                                  PopupMenuItem(
+                                itemBuilder: (context) => [
+                                  const PopupMenuItem(
                                     value: 'rename',
+                                    height: 50,
                                     child: Text('Rename'),
                                   ),
-                                  PopupMenuItem(
+                                  const PopupMenuDivider(height: 1),
+                                  const PopupMenuItem(
                                     value: 'icon',
+                                    height: 50,
                                     child: Text('Change icon'),
                                   ),
-                                  PopupMenuItem(
+                                  const PopupMenuDivider(height: 1),
+                                  const PopupMenuItem(
                                     value: 'color',
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.palette_outlined),
-                                        SizedBox(width: 10),
-                                        Text('Change icon colour'),
-                                      ],
-                                    ),
+                                    height: 50,
+                                    child: Text('Icon colour'),
                                   ),
-                                  PopupMenuItem(
+                                  const PopupMenuDivider(height: 1),
+                                  const PopupMenuItem(
                                     value: 'background',
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.format_color_fill_outlined),
-                                        SizedBox(width: 10),
-                                        Text('Change icon background colour'),
-                                      ],
-                                    ),
+                                    height: 50,
+                                    child: Text('Icon background colour'),
                                   ),
+                                  const PopupMenuDivider(height: 1),
+                                  const PopupMenuItem(
+                                    value: 'font',
+                                    height: 50,
+                                    child: Text('Font'),
+                                  ),
+                                  const PopupMenuDivider(height: 1),
                                   PopupMenuItem(
                                     value: 'remove',
-                                    child: Text('Remove'),
+                                    height: 50,
+                                    child: Text(
+                                      'Remove',
+                                      style: TextStyle(
+                                        color: AppTheme.errorColor,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ),
                             ],
                           ),
+                        ),
                         ),
                       );
                     },
@@ -1610,20 +1753,6 @@ class _QuickActionCustomizationScreenState
                 ),
                 const SizedBox(height: 10),
                 ..._buildGroupedAvailableActions(context),
-                const SizedBox(height: 18),
-                ElevatedButton.icon(
-                  onPressed: _saving ? null : _save,
-                  icon: _saving
-                      ? const SizedBox(
-                          width: 17,
-                          height: 17,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.save_outlined),
-                  label: Text(
-                    _saving ? 'Saving...' : 'Save $modeLabel Quick Actions',
-                  ),
-                ),
                 const SizedBox(height: 20),
               ],
             ),
