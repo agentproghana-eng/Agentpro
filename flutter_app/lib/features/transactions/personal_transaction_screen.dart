@@ -31,8 +31,8 @@ const Map<String, String> kPersonalTransactionLabels = {
   'buy_airtime': 'Buy Airtime',
   'buy_data': 'Buy Data',
   'buy_mashup': 'MashUp',
-  'check_momo_balance': 'Check MoMo Balance',
-  'check_airtime_balance': 'Check Airtime & Data Balance',
+  'check_momo_balance': 'MoMo Balance',
+  'check_airtime_balance': 'Mashup Balance',
   'withdraw_cash': 'Withdraw Cash',
   'allow_cash_out': 'Allow Cash Out',
   'my_approvals': 'My Approvals',
@@ -1694,12 +1694,56 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
     );
   }
 
+  Widget _buildMtnBankPicker() {
+    return FormField<String>(
+      key: ValueKey<String?>(_selectedBankName),
+      initialValue: _selectedBankName,
+      validator: (value) => value == null ? 'Bank is required' : null,
+      builder: (field) {
+        return InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () async {
+            final picked = await showModalBottomSheet<String>(
+              context: context,
+              isScrollControlled: true,
+              showDragHandle: true,
+              builder: (_) => _BankPickerSheet(
+                banks: _bankNames,
+                selected: _selectedBankName,
+              ),
+            );
+
+            if (picked == null || !mounted) {
+              return;
+            }
+
+            setState(() => _selectedBankName = picked);
+            field.didChange(picked);
+          },
+          child: InputDecorator(
+            decoration: InputDecoration(
+              labelText: 'Bank',
+              prefixIcon: const Icon(Icons.account_balance_outlined),
+              suffixIcon: const Icon(Icons.arrow_drop_down),
+              helperText: 'Choose the receiving bank',
+              errorText: field.errorText,
+            ),
+            child: Text(_selectedBankName ?? 'Select bank'),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final label = _isTelecelM4mQuickAction
         ? 'M4M'
-        : kPersonalTransactionLabels[widget.transactionType] ??
-            widget.transactionType;
+        : (widget.provider == 'telecel' &&
+                widget.transactionType == 'check_airtime_balance')
+            ? 'Check Airtime & Data Balance'
+            : kPersonalTransactionLabels[widget.transactionType] ??
+                widget.transactionType;
     final appBarLabel = switch (widget.transactionType) {
       'send_money_same_network' => 'Transfer Money',
       'send_money_cross_network' => 'Transfer Money',
@@ -1903,6 +1947,9 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
             const SizedBox(height: 14),
           ],
           if (_isBankTransfer) ...[
+            if (_isMtnBankTransfer)
+              _buildMtnBankPicker()
+            else
             DropdownButtonFormField<String>(
               initialValue: _selectedBankName,
               decoration: const InputDecoration(
@@ -2109,7 +2156,18 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                'This will dial your $label enquiry - no amount or recipient needed.',
+                switch (widget.transactionType) {
+                  'allow_cash_out' =>
+                    'This turns on Cash Out for your MTN wallet. '
+                        'No amount or recipient needed.',
+                  'my_approvals' =>
+                    'This opens your pending approvals. Enter your PIN on '
+                        'the MTN screen to continue. No amount or recipient '
+                        'needed.',
+                  _ =>
+                    'This will dial your $label enquiry - no amount or '
+                        'recipient needed.',
+                },
                 style: TextStyle(
                   fontSize: 12,
                   color: context.isDarkMode
@@ -3154,6 +3212,71 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
           ),
           Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
         ],
+      ),
+    );
+  }
+}
+
+
+/// Searchable bank list for MTN Send Money to Bank. Returns the chosen name.
+class _BankPickerSheet extends StatefulWidget {
+  final List<String> banks;
+  final String? selected;
+
+  const _BankPickerSheet({required this.banks, this.selected});
+
+  @override
+  State<_BankPickerSheet> createState() => _BankPickerSheetState();
+}
+
+class _BankPickerSheetState extends State<_BankPickerSheet> {
+  String _query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final needle = _query.trim().toLowerCase();
+    final matches = widget.banks
+        .where((name) => name.toLowerCase().contains(needle))
+        .toList();
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.7,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: TextField(
+                  decoration: const InputDecoration(
+                    hintText: 'Search banks',
+                    prefixIcon: Icon(Icons.search),
+                  ),
+                  onChanged: (value) => setState(() => _query = value),
+                ),
+              ),
+              Expanded(
+                child: matches.isEmpty
+                    ? const Center(child: Text('No bank matches your search'))
+                    : ListView.builder(
+                        itemCount: matches.length,
+                        itemBuilder: (context, index) {
+                          final name = matches[index];
+
+                          return ListTile(
+                            title: Text(name),
+                            selected: name == widget.selected,
+                            onTap: () => Navigator.of(context).pop(name),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

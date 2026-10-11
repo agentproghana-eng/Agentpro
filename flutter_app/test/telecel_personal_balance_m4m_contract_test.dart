@@ -95,20 +95,23 @@ void main() {
       'lib/features/reports/personal_reports_screen.dart',
     );
 
+    // Telecel keeps its own title; MTN's generic label is Mashup Balance.
     expect(
       transactionScreen,
       contains(
-        "'check_airtime_balance': "
-        "'Check Airtime & Data Balance'",
+        "widget.transactionType == 'check_airtime_balance')\n"
+        "            ? 'Check Airtime & Data Balance'",
       ),
     );
 
     expect(
+      transactionScreen,
+      contains("'check_airtime_balance': 'Mashup Balance'"),
+    );
+
+    expect(
       reports,
-      contains(
-        "'check_airtime_balance': "
-        "'Check Airtime & Data Balance'",
-      ),
+      contains("'check_airtime_balance': 'Mashup Balance'"),
     );
   });
 

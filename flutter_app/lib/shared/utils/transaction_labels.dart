@@ -75,8 +75,12 @@ String transactionTypeLabel(String type, String provider) {
       return 'Data Bundle';
     case 'balance_enquiry':
       return 'Check Balance';
+    case 'check_momo_balance':
+      return 'MoMo Balance';
     case 'check_airtime_balance':
-      return 'Check Airtime & Data Balance';
+      return provider == 'telecel'
+          ? 'Check Airtime & Data Balance'
+          : 'Mashup Balance';
     case 'commission_balance':
       return 'Commission Balance';
     case 'cash_in_commission':
