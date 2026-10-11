@@ -12,6 +12,7 @@ import '../../core/services/dashboard_refresh_service.dart';
 import '../../core/services/app_cache_service.dart';
 import '../../core/services/storage_service.dart';
 import '../../core/router/app_router.dart';
+import '../ussd_settings/quick_action_refresh.dart';
 import '../ussd_settings/quick_action_preference.dart';
 import '../ussd_settings/quick_action_catalog.dart';
 import '../../shared/widgets/offline_status_banner.dart';
@@ -68,6 +69,7 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
   void dispose() {
     routeObserver.unsubscribe(this);
     _dashboardRefreshSubscription?.cancel();
+    QuickActionRefresh.tick.removeListener(_onQuickActionsSaved);
     super.dispose();
   }
 
@@ -93,11 +95,19 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
       _handleDashboardRefresh,
     );
 
+    QuickActionRefresh.tick.addListener(_onQuickActionsSaved);
+
     // Secondary dashboard data loads in the background so the main
     // dashboard appears as quickly as possible.
     unawaited(_loadSimMap());
     unawaited(_loadFeatureFlags());
     unawaited(_loadSimPurposes());
+    unawaited(_loadQuickActions());
+  }
+
+  // Customization just saved: reload the tiles now (no app restart needed).
+  void _onQuickActionsSaved() {
+    if (!mounted) return;
     unawaited(_loadQuickActions());
   }
 

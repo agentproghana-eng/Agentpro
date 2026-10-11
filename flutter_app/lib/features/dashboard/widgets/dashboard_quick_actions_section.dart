@@ -7,6 +7,7 @@ import '../../../shared/models/sim_role.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../shared/widgets/dashboard_empty_state.dart';
+import '../../../shared/widgets/fitted_tile_label.dart';
 import '../../ussd_settings/quick_action_catalog.dart';
 import '../../ussd_settings/quick_action_preference.dart';
 import '../../ussd_settings/quick_action_swap.dart';
@@ -1064,15 +1065,9 @@ class _QuickActionState extends State<_QuickAction> {
                 const SizedBox(height: 7),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Text(
+                  child: FittedTileLabel(
                     widget.label.toUpperCase(),
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    maxFontSize: 13,
                   ),
                 ),
               ],

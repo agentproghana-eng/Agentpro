@@ -15,8 +15,10 @@ import '../../core/services/offline_queue_service.dart';
 import '../../core/router/app_router.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/widgets/fitted_tile_label.dart';
 import '../../shared/widgets/personal_ad_banner.dart';
 import '../../shared/widgets/personal_transaction_item.dart';
+import '../ussd_settings/quick_action_refresh.dart';
 import '../ussd_settings/quick_action_catalog.dart';
 import '../ussd_settings/quick_action_preference.dart';
 import '../ussd_settings/quick_action_swap.dart';
@@ -68,7 +70,15 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
       _handleDashboardRefresh,
     );
 
+    QuickActionRefresh.tick.addListener(_onQuickActionsSaved);
+
     unawaited(_refreshPersonalContext());
+  }
+
+  // Customization just saved: reload the tiles now (no app restart needed).
+  void _onQuickActionsSaved() {
+    if (!mounted) return;
+    unawaited(_loadQuickActions());
   }
 
   @override
@@ -1087,6 +1097,7 @@ class _PersonalHomeScreenState extends State<PersonalHomeScreen>
   void dispose() {
     routeObserver.unsubscribe(this);
     _dashboardRefreshSubscription?.cancel();
+    QuickActionRefresh.tick.removeListener(_onQuickActionsSaved);
     super.dispose();
   }
 
@@ -1477,15 +1488,10 @@ class _QuickActionTileState extends State<_QuickActionTile> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text(
+                FittedTileLabel(
                   widget.label,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  maxFontSize: 10,
+                  fontWeight: FontWeight.w600,
                 ),
               ],
             ),
