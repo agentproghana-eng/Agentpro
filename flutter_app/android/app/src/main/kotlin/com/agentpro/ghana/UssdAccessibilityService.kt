@@ -103,13 +103,16 @@ class UssdAccessibilityService : AccessibilityService() {
             // amount is GHS 0.38; Tax amount is GHS 0.00 Reference ..."
             //
             // Trusted only after the PIN boundary, like every terminal
-            // success marker.
+            // success marker. Use "sent to", not the fee sentence: the
+            // bank-transfer PIN screen ("Transfer to NAME ... Transaction
+            // Fee amount is ... Tax amount is ...") also shows the fee text
+            // and must never read as success.
             //
             // Live-confirmed MTN data/MashUp result ("MTN GH Message"):
             // "Payment of 10.00 has been made successfully. Current
             // Balance: GHS ..., Available Balance: GHS ...."
             "mtn" to listOf(
-                "transaction fee amount is",
+                "sent to",
                 "has been made successfully"
             ),
             // Live-confirmed Telecel Cash result:
