@@ -1538,6 +1538,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
           ),
         );
 
+    final amountField = _amountCtrl;
     final blocked = _loading && !_workspaceEnquiryBusy;
 
     return Column(
@@ -1590,7 +1591,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
         if (_commissionTransferChosen) ...[
           const SizedBox(height: 14),
           TextFormField(
-            controller: _amountCtrl,
+            controller: amountField,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [
               FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
