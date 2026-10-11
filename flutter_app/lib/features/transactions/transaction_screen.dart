@@ -3785,14 +3785,15 @@ class _TransactionScreenState extends State<TransactionScreen> {
                           label: 'Agent',
                           onPressed: () {
                             // The operation must not change mid-submission.
+                            final changed = _mtnPayToOperation != 'pay_to_agent';
                             if (_submissionInFlight) return;
-                            if (_mtnPayToOperation != 'pay_to_agent') {
-                              _recipientPhoneCtrl.clear();
-                            }
                             setState(() {
                               _mtnPayToOperation = 'pay_to_agent';
                               _mtnPayToChosen = true;
                             });
+                            // A phone number and a merchant code never carry
+                            // over from one choice to the other.
+                            if (changed) _recipientPhoneCtrl.clear();
                           },
                         ),
                       ),
@@ -3801,14 +3802,15 @@ class _TransactionScreenState extends State<TransactionScreen> {
                         child: AppButton(
                           label: 'Merchant',
                           onPressed: () {
+                            final changed = _mtnPayToOperation != 'merchant_payment';
                             if (_submissionInFlight) return;
-                            if (_mtnPayToOperation != 'merchant_payment') {
-                              _recipientPhoneCtrl.clear();
-                            }
                             setState(() {
                               _mtnPayToOperation = 'merchant_payment';
                               _mtnPayToChosen = true;
                             });
+                            // A phone number and a merchant code never carry
+                            // over from one choice to the other.
+                            if (changed) _recipientPhoneCtrl.clear();
                           },
                         ),
                       ),
