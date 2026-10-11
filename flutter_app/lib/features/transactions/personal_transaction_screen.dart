@@ -551,7 +551,11 @@ class _PersonalTransactionScreenState extends State<PersonalTransactionScreen> {
       return false;
     }
 
-    if (_isBankTransfer) {
+    if (_isTelecelBankTransfer) {
+      return false;
+    }
+
+    if (_isMtnBankTransfer) {
       return false;
     }
 
