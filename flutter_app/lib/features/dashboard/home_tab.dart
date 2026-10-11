@@ -1,5 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../core/auth/auth_bloc.dart';
+import '../../core/services/offline_queue_service.dart';
 import '../../core/api/api_client.dart';
 import '../../core/services/sim_card_service.dart';
 import '../../core/services/sim_role_assignment_service.dart';
@@ -402,6 +405,11 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
 
       final simKey =
           '${sim.network}:${sim.slot}:${sim.iccid}:${sim.subscriptionId}';
+      if (!mounted) return;
+      final authState = context.read<AuthBloc>().state;
+      final identity = authState is AuthAuthenticated
+          ? OfflineQueueService.identityFromUser(authState.user)
+          : null;
 
       await Future.wait(types.map((type) async {
         try {
@@ -410,6 +418,18 @@ class _HomeTabState extends State<HomeTab> with RouteAware {
             transactionType: type,
             isPersonal: false,
             businessSimRole: 'agent',
+            // Keep the approved flow so the enquiry can also dial offline.
+            onApprovedFlow: (flow) {
+              if (identity == null) return;
+              unawaited(OfflineQueueService.cacheFlow(
+                'mtn',
+                type,
+                flow,
+                identity: identity,
+                isPersonal: false,
+                businessSimRole: 'agent',
+              ));
+            },
           );
           if (approved) {
             ZeroInputPreflightApprovals.verifiedAt['$simKey|$type||'] =

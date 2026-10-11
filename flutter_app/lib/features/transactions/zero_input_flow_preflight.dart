@@ -19,6 +19,7 @@ class ZeroInputFlowPreflight {
     String? businessSimRole,
     String? bundleCategory,
     String? recipientMode,
+    void Function(Map<String, dynamic> flow)? onApprovedFlow,
   }) async {
     final role = businessSimRole?.trim().toLowerCase();
 
@@ -65,7 +66,7 @@ class ZeroInputFlowPreflight {
         return false;
       }
 
-      return ZeroInputFlowEligibility.isEligible(
+      final eligible = ZeroInputFlowEligibility.isEligible(
         flow,
         provider: provider,
         transactionType: transactionType,
@@ -73,6 +74,11 @@ class ZeroInputFlowPreflight {
         bundleCategory: bundleCategory,
         recipientMode: recipientMode,
       );
+
+      // Lets the caller keep an approved flow for offline use.
+      if (eligible) onApprovedFlow?.call(flow);
+
+      return eligible;
     } catch (_) {
       return false;
     }

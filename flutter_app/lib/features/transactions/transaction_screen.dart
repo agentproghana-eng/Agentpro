@@ -278,6 +278,21 @@ class _TransactionScreenState extends State<TransactionScreen> {
             businessSimRole: role,
             bundleCategory: _initialBundleCategory,
             recipientMode: _effectiveRecipientMode,
+            // Keep the approved flow so this enquiry can also dial offline.
+            onApprovedFlow: (flow) {
+              final identity = _offlineIdentity;
+              if (identity == null) return;
+              unawaited(OfflineQueueService.cacheFlow(
+                _selectedProvider,
+                entry.key,
+                flow,
+                identity: identity,
+                isPersonal: false,
+                businessSimRole: role,
+                bundleCategory: _initialBundleCategory,
+                recipientMode: _effectiveRecipientMode,
+              ));
+            },
           );
           if (mounted &&
               approved &&
@@ -1744,15 +1759,34 @@ class _TransactionScreenState extends State<TransactionScreen> {
       (result) => result == ConnectivityResult.none,
     );
     if (_authorizedZeroInput && isOffline) {
-      if (mounted) {
-        setState(() => _loading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(
-            'A verified internet connection is required to start this enquiry.',
-          )),
-        );
+      // Balance and commission enquiries move no money, so they may dial
+      // offline from a flow this device saved earlier. Without one, an
+      // online run is still required first. The reservation taken for the
+      // online path is released because no backend initiation starts here.
+      final savedIdentity = _offlineIdentity;
+      final hasSavedFlow = savedIdentity != null &&
+          OfflineQueueService.getCachedFlow(
+                _selectedProvider,
+                _transactionType,
+                identity: savedIdentity,
+                isPersonal: false,
+                businessSimRole: businessSimRole,
+                bundleCategory: _initialBundleCategory,
+                recipientMode: _effectiveRecipientMode,
+              ) !=
+              null;
+
+      if (!hasSavedFlow) {
+        if (mounted) {
+          setState(() => _loading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text(
+              'A verified internet connection is required to start this enquiry.',
+            )),
+          );
+        }
+        return;
       }
-      return;
     }
 
     final transactionDisabled = await FeatureFlagService.isTransactionDisabled(
