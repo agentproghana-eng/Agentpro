@@ -182,6 +182,29 @@ bool isTrustedPinlessPersonalRuntimeFlow({
     return true;
   }
 
+  // MTN Allow Cash Out: *170# -> 4 -> 1. PIN-less and input-free, trusted
+  // only when the steps are exactly those two menu digits.
+  if (transactionType == 'allow_cash_out' && dialCode == '*170#') {
+    final rawSteps = flowData['steps'];
+
+    if (rawSteps is! List || rawSteps.length != 2) {
+      return false;
+    }
+
+    final values = <String>[];
+
+    for (final rawStep in rawSteps) {
+      if (rawStep is! Map ||
+          rawStep['action']?.toString() != 'send_digit') {
+        return false;
+      }
+
+      values.add(rawStep['action_value']?.toString() ?? '');
+    }
+
+    return values[0] == '4' && values[1] == '1';
+  }
+
   if (transactionType != 'buy_data' ||
       dialCode != '*138#' ||
       !flowData.containsKey('bundle_category') ||

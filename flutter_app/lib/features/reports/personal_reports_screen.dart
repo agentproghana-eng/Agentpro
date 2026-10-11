@@ -61,6 +61,8 @@ class _PersonalReportsScreenState extends State<PersonalReportsScreen> {
     'check_momo_balance': 'Check MoMo Balance',
     'check_airtime_balance': 'Check Airtime & Data Balance',
     'withdraw_cash': 'Withdraw Cash',
+    'allow_cash_out': 'Allow Cash Out',
+    'my_approvals': 'My Approvals',
   };
 
   static const Map<String, String> _statuses = {

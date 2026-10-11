@@ -26,6 +26,8 @@ class PersonalTransactionItem extends StatelessWidget {
     'buy_mashup': Icons.card_giftcard_outlined,
     'check_momo_balance': Icons.account_balance_wallet_outlined,
     'check_airtime_balance': Icons.sim_card_outlined,
+    'allow_cash_out': Icons.payments_outlined,
+    'my_approvals': Icons.fact_check_outlined,
   };
 
   Color _statusColor(String status) {
