@@ -535,8 +535,7 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Your ads have ended. Renew or repost them so buyers can '
-              'find you.',
+              'Your ads have ended. Post a new ad so buyers can find you.',
               style: TextStyle(
                 color: colors.onSurface.withValues(alpha: 0.7),
               ),
@@ -545,8 +544,8 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
             SizedBox(
               width: double.infinity,
               child: FilledButton(
-                onPressed: () => context.push('/marketplace/mine'),
-                child: const Text('Renew my ads'),
+                onPressed: () => context.push('/marketplace/post'),
+                child: const Text('Post a new ad'),
               ),
             ),
           ],
