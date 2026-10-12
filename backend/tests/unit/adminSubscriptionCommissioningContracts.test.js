@@ -99,7 +99,11 @@ describe("Admin subscription commissioning contracts", () => {
       "/users?personal_only=true&limit=100",
     );
 
-    expect(app).toContain(
+    expect(
+      read(
+        "admin_portal/src/features/shell/navigation.js",
+      ),
+    ).toContain(
       "path: '/personal-users'",
     );
 

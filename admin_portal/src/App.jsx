@@ -16,6 +16,9 @@ import {
   EmptyState,
 } from './components/PageState.jsx';
 import { ConfirmDialog } from './components/ConfirmDialog.jsx';
+import { NAV_GROUPS, isActivePath, pageTitleFor } from './features/shell/navigation.js';
+import { useAttentionCounts } from './features/shell/useAttentionCounts.js';
+import NeedsAttention from './features/shell/NeedsAttention.jsx';
 import {
   SupportConsolePage,
 } from './features/support/SupportConsolePage.jsx';
@@ -43,7 +46,7 @@ import {
   canAccessAdminPath,
   isAdminPortalUser,
 } from './lib/adminAccess.js';
-import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate, useLocation } from 'react-router-dom';
 import API from './lib/api.js';
 import {
   clearAuthSession,
@@ -1258,32 +1261,11 @@ function LoginPage() {
 
 // ── Sidebar Layout ────────────────────────────────────────────
 
-const NAV = [
-  { path: '/', icon: '📊', label: 'Dashboard' },
-  { path: '/registrations', icon: '🔔', label: 'Registrations' },
-  { path: '/subscriptions', icon: '💳', label: 'Subscriptions' },
-  { path: '/companies', icon: '🏢', label: 'Companies' },
-  { path: '/personal-users', icon: '👤', label: 'Personal Users' },
-  { path: '/community', icon: '💬', label: 'Community' },
-  {
-    path: '/marketplace-businesses',
-    icon: '✅',
-    label: 'Marketplace Businesses',
-  },
-  { path: '/shifts', icon: '⏱️', label: 'Shifts' },
-  { path: '/marketplace', icon: '🛒', label: 'Business Hub' },
-  { path: '/commissions', icon: '💰', label: 'Commissions' },
-  { path: '/ussd', icon: '📱', label: 'USSD Templates' },
-  { path: '/flows', icon: '🔀', label: 'USSD Flows' },
-  { path: '/config', icon: '⚙️', label: 'System Config' },
-  { path: '/support', icon: '🛟', label: 'Support' },
-  { path: '/audit', icon: '📋', label: 'Audit Logs' },
-  { path: '/admin-team', icon: '🛡️', label: 'Admin Team' },
-];
-
 function Layout({ children }) {
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const { pathname } = useLocation();
+  const counts = useAttentionCounts(user);
 
   return (
     <div className="flex h-screen bg-gray-100">
@@ -1295,30 +1277,70 @@ function Layout({ children }) {
       )}
 
       {/* Sidebar */}
-      <aside className={`${sidebarOpen ? 'w-56' : 'w-16'} bg-white shadow-md flex flex-col transition-all duration-200`}>
-        <div className="p-4 flex items-center gap-3 border-b">
+      <aside className={`${sidebarOpen ? 'w-56' : 'w-16'} bg-white shadow-md flex flex-col min-h-0 overflow-hidden transition-all duration-200`}>
+        <div className="p-4 flex items-center gap-3 border-b flex-shrink-0">
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center flex-shrink-0">
             <span className="text-white text-xs font-bold">AP</span>
           </div>
           {sidebarOpen && <span className="font-bold text-gray-900 text-sm">Admin Portal</span>}
         </div>
-        <nav className="flex-1 p-2 space-y-1">
-          {NAV
-            .filter(({ path }) =>
-              canAccessAdminPath(
-                user,
-                path,
-              ),
-            )
-            .map(({ path, icon, label }) => (
-            <Link key={path} to={path}
-              className="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-50 hover:text-primary transition text-sm">
-              <span className="text-lg">{icon}</span>
-              {sidebarOpen && <span>{label}</span>}
-            </Link>
-          ))}
+        <nav
+          aria-label="Main"
+          className="flex-1 min-h-0 overflow-y-auto p-2"
+        >
+          {NAV_GROUPS.map((group) => {
+            const visible = group.items.filter(({ path }) =>
+              canAccessAdminPath(user, path),
+            );
+            if (visible.length === 0) return null;
+            return (
+              <div key={group.title || 'top'} className="mb-2">
+                {group.title && sidebarOpen && (
+                  <p className="px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                    {group.title}
+                  </p>
+                )}
+                {group.title && !sidebarOpen && (
+                  <div className="mx-3 my-2 border-t border-gray-100" />
+                )}
+                <div className="space-y-1">
+                  {visible.map(({ path, icon, label, badge }) => {
+                    const active = isActivePath(pathname, path);
+                    const count = badge ? counts[badge] : undefined;
+                    return (
+                      <Link
+                        key={path}
+                        to={path}
+                        title={sidebarOpen ? undefined : label}
+                        aria-current={active ? 'page' : undefined}
+                        className={`relative flex items-center gap-3 px-3 py-2 rounded-lg transition text-sm ${
+                          active
+                            ? 'bg-primary/10 text-primary font-semibold'
+                            : 'text-gray-600 hover:bg-gray-50 hover:text-primary'
+                        }`}
+                      >
+                        <span className="text-lg" aria-hidden="true">{icon}</span>
+                        {sidebarOpen && <span className="flex-1 truncate">{label}</span>}
+                        {count > 0 && (
+                          <span
+                            className={
+                              sidebarOpen
+                                ? 'rounded-full bg-red-500 px-2 py-0.5 text-[11px] font-semibold text-white'
+                                : 'absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-red-500'
+                            }
+                          >
+                            {sidebarOpen ? count : <span className="sr-only">{count} waiting</span>}
+                          </span>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </nav>
-        <div className="p-4 border-t">
+        <div className="p-4 border-t flex-shrink-0">
           {sidebarOpen && (
             <>
               <p className="text-xs text-gray-500 truncate">
@@ -1339,13 +1361,15 @@ function Layout({ children }) {
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="bg-white shadow-sm px-6 py-3 flex items-center gap-4">
-          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-500 hover:text-gray-700">
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            aria-label={sidebarOpen ? 'Collapse menu' : 'Expand menu'}
+            className="text-gray-500 hover:text-gray-700"
+          >
             ☰
           </button>
-          <h1 className="text-lg font-semibold text-gray-800">AgentPro — Admin</h1>
-          <div className="ml-auto flex items-center gap-2">
-            <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full">● Live</span>
-          </div>
+          <h1 className="text-lg font-semibold text-gray-800">{pageTitleFor(pathname)}</h1>
         </header>
         <main className="flex-1 overflow-auto p-6">{children}</main>
       </div>
@@ -1358,6 +1382,8 @@ function Layout({ children }) {
 function DashboardPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+
+  const counts = useAttentionCounts(user);
 
   const canViewOperations =
     canAccessAdminPath(
@@ -1434,7 +1460,7 @@ function DashboardPage() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold text-gray-900">
-            Platform Overview
+            Welcome back
           </h2>
           <p className="mt-1 text-sm text-gray-500">
             Current operational status across AgentPro.
@@ -1460,6 +1486,8 @@ function DashboardPage() {
           {isFetching ? 'Refreshing...' : 'Refresh'}
         </button>
       </div>
+
+      <NeedsAttention user={user} counts={counts} />
 
       <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-5">
         {cards.map((card) => {
