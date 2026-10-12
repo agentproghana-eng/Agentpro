@@ -9,15 +9,25 @@ import {
   Bookmark,
   ChevronLeft,
   ChevronRight,
+  Briefcase,
+  Car,
   Download,
+  Home,
   MapPin,
+  MoreHorizontal,
   PlusCircle,
   Search,
   ShieldCheck,
+  Shirt,
   SlidersHorizontal,
+  Smartphone,
   Star,
   Store,
+  Tag,
+  UtensilsCrossed,
+  Wrench,
   X,
+  type LucideIcon,
 } from "lucide-react";
 
 import type {
@@ -49,6 +59,32 @@ const EMPTY_FILTERS: Filters = {
 };
 
 const DISCOVERY_MINIMUM_INVENTORY = 6;
+
+/**
+ * Set NEXT_PUBLIC_PLAY_STORE_URL once the app is public on Google Play.
+ * Until then the Android button links to the signed APK instead of a
+ * store page that would not open for everyone.
+ */
+const PLAY_STORE_URL = process.env.NEXT_PUBLIC_PLAY_STORE_URL?.trim() || "";
+const APK_URL = "/download/agentpro-latest.apk";
+
+const CATEGORY_ICONS: Array<{ match: RegExp; icon: LucideIcon; tone: string }> = [
+  { match: /phone|gadget|electronic|computer|laptop/i, icon: Smartphone, tone: "teal" },
+  { match: /fashion|cloth|wear|shoe|beauty/i, icon: Shirt, tone: "gold" },
+  { match: /food|drink|restaurant|agric/i, icon: UtensilsCrossed, tone: "clay" },
+  { match: /service|repair|tool|artisan|construction/i, icon: Wrench, tone: "blue" },
+  { match: /property|house|home|land|rent|real/i, icon: Home, tone: "violet" },
+  { match: /vehicle|car|auto|motor|transport/i, icon: Car, tone: "teal" },
+  { match: /job|work|career|employ/i, icon: Briefcase, tone: "gold" },
+];
+
+function categoryVisual(name: string): { icon: LucideIcon; tone: string } {
+  const found = CATEGORY_ICONS.find((entry) => entry.match.test(name));
+
+  return found
+    ? { icon: found.icon, tone: found.tone }
+    : { icon: Tag, tone: "slate" };
+}
 
 function parseInitialFilters(): Filters {
   if (typeof window === "undefined") {
@@ -200,14 +236,16 @@ function ListingCard({ ad, saved, saving, onToggleSaved }: ListingCardProps) {
           {ad.category_name && (
             <span className="ic-market-category-chip">{ad.category_name}</span>
           )}
+
+          <span className="ic-market-price-badge">
+            {money(ad.price, ad.currency)}
+          </span>
         </div>
 
         <div className="ic-market-card-body">
           <div className="ic-market-card-heading">
             <div>
               <h2>{ad.title}</h2>
-
-              <strong>{money(ad.price, ad.currency)}</strong>
             </div>
 
             <ArrowRight size={18} aria-hidden="true" />
@@ -965,12 +1003,16 @@ export function MarketplaceBrowse({
   return (
     <main id="main-content" className="ic-marketplace">
       <section className="ic-market-hero">
-        <div className="ic-shell">
+        <div className="ic-shell ic-market-hero-grid">
+          <div className="ic-market-hero-main">
           <p className="ic-eyebrow">AgentPro Marketplace</p>
 
-          <h1>Find what you need.</h1>
+          <h1>Buy, sell and hire across Ghana.</h1>
 
-          <p>Products, services and businesses across Ghana.</p>
+          <p>
+            Phones, fashion, food, repairs and trusted local services
+            from verified sellers near you.
+          </p>
 
           <form className="ic-market-search" onSubmit={submit}>
             <label className="ic-market-search-main">
@@ -1022,26 +1064,151 @@ export function MarketplaceBrowse({
               className="ic-market-hero-primary-action"
             >
               <PlusCircle size={18} aria-hidden="true" />
-              Post an ad
+              Post a free ad
             </Link>
-
-            <a
-              href="/download/agentpro-latest.apk"
-              className="ic-market-hero-secondary-action"
-            >
-              <Download size={18} aria-hidden="true" />
-              Get Android app
-            </a>
 
             <span className="ic-market-hero-trust">
               <ShieldCheck size={17} aria-hidden="true" />
-              Buy, sell and discover across Ghana
+              Free to post. No account needed to browse.
             </span>
           </div>
+          </div>
+
+          <aside
+            className="ic-market-app-card"
+            aria-label="Get the AgentPro app"
+          >
+            <div className="ic-market-app-card-head">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/agentpro-shield.png"
+                alt=""
+                width={52}
+                height={52}
+              />
+
+              <div>
+                <strong>Get the AgentPro app</strong>
+                <span>One app for every business</span>
+              </div>
+            </div>
+
+            <p>
+              Post ads, chat with buyers and manage your business from
+              your phone.
+            </p>
+
+            {PLAY_STORE_URL ? (
+              <>
+                <a
+                  href={PLAY_STORE_URL}
+                  className="ic-market-store-button"
+                  rel="noopener"
+                >
+                  <span>Get it on</span>
+                  <strong>Google Play</strong>
+                </a>
+
+                <a href={APK_URL} className="ic-market-app-card-link">
+                  Direct APK download
+                </a>
+              </>
+            ) : (
+              <a href={APK_URL} className="ic-market-store-button">
+                <span>Android</span>
+                <strong>
+                  <Download size={16} aria-hidden="true" /> Download the app
+                </strong>
+              </a>
+            )}
+          </aside>
         </div>
       </section>
 
-      {!categoriesLoading && categories.length > 0 && (
+      {showMarketplaceHome && !categoriesLoading && categories.length > 0 && (
+        <section
+          className="ic-market-category-tiles"
+          aria-label="Browse by category"
+        >
+          <div className="ic-shell">
+            <h2>Browse by category</h2>
+
+            <div className="ic-market-tile-grid">
+              {categories.slice(0, 8).map((category) => {
+                const visual = categoryVisual(category.name);
+                const Icon = visual.icon;
+
+                return (
+                  <button
+                    key={category.id}
+                    type="button"
+                    className="ic-market-tile"
+                    data-tone={visual.tone}
+                    onClick={() => {
+                      const next = {
+                        ...filters,
+                        categoryId: String(category.id),
+                      };
+                      setFilters(next);
+                      setApplied(next);
+                      setPage(1);
+                    }}
+                  >
+                    <span className="ic-market-tile-icon">
+                      <Icon size={24} aria-hidden="true" />
+                    </span>
+
+                    <strong>{category.name}</strong>
+                  </button>
+                );
+              })}
+
+              {categories.length > 8 && (
+                <button
+                  type="button"
+                  className="ic-market-tile"
+                  data-tone="slate"
+                  onClick={() => setMobileFiltersOpen(true)}
+                >
+                  <span className="ic-market-tile-icon">
+                    <MoreHorizontal size={24} aria-hidden="true" />
+                  </span>
+
+                  <strong>More</strong>
+                </button>
+              )}
+            </div>
+
+            <div className="ic-market-trust-strip">
+              <div>
+                <ShieldCheck size={22} aria-hidden="true" />
+                <div>
+                  <strong>Verified sellers</strong>
+                  <p>Look for the badge on sellers whose profile has been checked.</p>
+                </div>
+              </div>
+
+              <div>
+                <PlusCircle size={22} aria-hidden="true" />
+                <div>
+                  <strong>Free to post</strong>
+                  <p>Create an account and list an ad in minutes. No listing fee.</p>
+                </div>
+              </div>
+
+              <div>
+                <MapPin size={22} aria-hidden="true" />
+                <div>
+                  <strong>Meet safely</strong>
+                  <p>Meet in public, check the item, and pay on delivery.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {!showMarketplaceHome && !categoriesLoading && categories.length > 0 && (
         <section
           className="ic-market-categories"
           aria-label="Marketplace categories"
