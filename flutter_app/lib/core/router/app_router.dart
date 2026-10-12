@@ -690,7 +690,9 @@ class AppRouter {
             builder: (_, __) => const BusinessHubScreen()),
         GoRoute(
             path: '/marketplace/post',
-            builder: (_, __) => const PostAdScreen()),
+            builder: (_, state) => PostAdScreen(
+                  repostFromAdId: state.uri.queryParameters['repost'],
+                )),
         GoRoute(
             path: '/marketplace/mine', builder: (_, __) => const MyAdsScreen()),
         GoRoute(

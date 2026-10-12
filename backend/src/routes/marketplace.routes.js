@@ -2422,10 +2422,45 @@ mpRouter.post('/', uploadLimiter, upload.array('images', 8), async (req, res) =>
   try {
     const files = Array.isArray(req.files) ? req.files : [];
 
-    if (files.length < 1) {
+    // "Post again": photos may be kept from the seller's own earlier ad.
+    // Only URLs that really belong to that ad, owned by this seller, are
+    // accepted, so nobody can reuse another seller's photos.
+    let keptImageUrls = [];
+
+    if (req.body.repost_from_ad_id) {
+      const source = await query(
+        `SELECT image_urls
+         FROM advertisements
+         WHERE id = $1
+           AND posted_by = $2`,
+        [req.body.repost_from_ad_id, req.user.id]
+      );
+
+      let requested = [];
+      try {
+        requested = JSON.parse(req.body.kept_image_urls || '[]');
+      } catch (_) {
+        requested = [];
+      }
+
+      const sourceUrls = source.rows[0]?.image_urls || [];
+
+      keptImageUrls = Array.isArray(requested)
+        ? requested.filter((url) => sourceUrls.includes(url))
+        : [];
+    }
+
+    if (files.length + keptImageUrls.length < 1) {
       return res.status(422).json({
         success: false,
         message: 'At least one photo is required',
+      });
+    }
+
+    if (files.length + keptImageUrls.length > 8) {
+      return res.status(422).json({
+        success: false,
+        message: 'An ad can have at most 8 photos',
       });
     }
 
@@ -2433,7 +2468,7 @@ mpRouter.post('/', uploadLimiter, upload.array('images', 8), async (req, res) =>
     const feePercent = parseFloat(feeConfig.rows[0]?.value || 0.01);
     const publishingFee = price ? Math.round(parseFloat(price) * feePercent * 100) / 100 : 0;
 
-    const imageUrls = await Promise.all(
+    const uploadedUrls = await Promise.all(
       files.map((file) =>
         uploadFile(`data:${file.mimetype};base64,${file.buffer.toString('base64')}`, {
           folder: 'ads',
@@ -2441,6 +2476,8 @@ mpRouter.post('/', uploadLimiter, upload.array('images', 8), async (req, res) =>
         })
       )
     );
+
+    const imageUrls = [...keptImageUrls, ...uploadedUrls];
 
     const result = await query(
       `INSERT INTO advertisements (posted_by, company_id, category_id, title, description, price, location, contact_phone, publishing_fee, fee_percent, status, image_urls)

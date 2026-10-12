@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -17,7 +18,10 @@ import '../../shared/widgets/app_widgets.dart';
 /// a MoMo payment reference, then a superuser verifies that payment and
 /// publishes it. This screen's job ends at successful submission.
 class PostAdScreen extends StatefulWidget {
-  const PostAdScreen({super.key});
+  /// When set, the form is pre-filled from the seller's own earlier ad.
+  final String? repostFromAdId;
+
+  const PostAdScreen({super.key, this.repostFromAdId});
 
   @override
   State<PostAdScreen> createState() => _PostAdScreenState();
@@ -42,8 +46,15 @@ class _PostAdScreenState extends State<PostAdScreen> {
   final _picker = ImagePicker();
   final List<XFile> _selectedImages = [];
 
+  // Photos kept from the earlier ad when posting again.
+  final List<String> _keptImageUrls = [];
+
+  bool get _isRepost => widget.repostFromAdId != null;
+
+  int get _photoCount => _selectedImages.length + _keptImageUrls.length;
+
   Future<void> _pickImage() async {
-    if (_selectedImages.length >= _maxAdPhotos) return;
+    if (_photoCount >= _maxAdPhotos) return;
 
     final image = await _picker.pickImage(
       source: ImageSource.gallery,
@@ -54,7 +65,7 @@ class _PostAdScreenState extends State<PostAdScreen> {
 
     if (image != null &&
         mounted &&
-        _selectedImages.length < _maxAdPhotos) {
+        _photoCount < _maxAdPhotos) {
       setState(() => _selectedImages.add(image));
     }
   }
@@ -75,11 +86,52 @@ class _PostAdScreenState extends State<PostAdScreen> {
       if (mounted) {
         setState(() {
           _categories = res.data['data'] ?? [];
-          _loadingCategories = false;
         });
       }
     } on DioException {
-      if (mounted) setState(() => _loadingCategories = false);
+      // The form still opens; the category list simply stays empty.
+    }
+
+    await _prefillFromEarlierAd();
+
+    if (mounted) setState(() => _loadingCategories = false);
+  }
+
+  Future<void> _prefillFromEarlierAd() async {
+    final adId = widget.repostFromAdId;
+    if (adId == null) return;
+
+    try {
+      final res = await ApiClient.instance.get('/marketplace/$adId');
+      final ad = res.data['data'];
+      if (ad is! Map || !mounted) return;
+
+      _titleCtrl.text = ad['title']?.toString() ?? '';
+      _descriptionCtrl.text = ad['description']?.toString() ?? '';
+      _locationCtrl.text = ad['location']?.toString() ?? '';
+      _phoneCtrl.text = ad['contact_phone']?.toString() ?? '';
+
+      final price = double.tryParse(ad['price']?.toString() ?? '');
+      if (price != null) {
+        _priceCtrl.text = price == price.roundToDouble()
+            ? price.toStringAsFixed(0)
+            : price.toString();
+      }
+
+      final categoryId = ad['category_id']?.toString();
+      if (categoryId != null &&
+          _categories.any((c) => c['id']?.toString() == categoryId)) {
+        _categoryId = categoryId;
+      }
+
+      final images = ad['image_urls'];
+      if (images is List) {
+        _keptImageUrls
+          ..clear()
+          ..addAll(images.map((e) => e.toString()).take(_maxAdPhotos));
+      }
+    } on DioException {
+      // Fall back to an empty form if the earlier ad cannot be loaded.
     }
   }
 
@@ -92,7 +144,7 @@ class _PostAdScreenState extends State<PostAdScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedImages.isEmpty) {
+    if (_photoCount == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content:
@@ -111,6 +163,10 @@ class _PostAdScreenState extends State<PostAdScreen> {
         'category_id': _categoryId,
         'location': _locationCtrl.text.trim(),
         'contact_phone': _phoneCtrl.text.trim(),
+        if (_isRepost) ...{
+          'repost_from_ad_id': widget.repostFromAdId,
+          'kept_image_urls': jsonEncode(_keptImageUrls),
+        },
         'images': await Future.wait(_selectedImages.map(
           (img) async =>
               await MultipartFile.fromFile(img.path, filename: img.name),
@@ -148,7 +204,7 @@ class _PostAdScreenState extends State<PostAdScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Post an Ad')),
+      appBar: AppBar(title: Text(_isRepost ? 'Post again' : 'Post an Ad')),
       body: _loadingCategories
           ? const Center(child: CircularProgressIndicator())
           : Form(
@@ -180,9 +236,14 @@ class _PostAdScreenState extends State<PostAdScreen> {
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
-                                    'Ads are reviewed before going live. Once approved, '
-                                    'you\'ll pay a small publishing fee via MTN MoMo to '
-                                    'publish for 30 days.',
+                                    _isRepost
+                                        ? 'We filled this in from your earlier ad. Change '
+                                            'anything you like, then submit. It is reviewed '
+                                            'and priced like a new ad: once approved, you\'ll '
+                                            'pay a small publishing fee to publish for 30 days.'
+                                        : 'Ads are reviewed before going live. Once approved, '
+                                            'you\'ll pay a small publishing fee via MTN MoMo to '
+                                            'publish for 30 days.',
                                     style: TextStyle(
                                         fontSize: 12,
                                         color: context.isDarkMode
@@ -223,6 +284,46 @@ class _PostAdScreenState extends State<PostAdScreen> {
                     child: ListView(
                       scrollDirection: Axis.horizontal,
                       children: [
+                        ..._keptImageUrls
+                            .asMap()
+                            .entries
+                            .map((entry) => Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: Stack(children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Image.network(entry.value,
+                                          width: 80,
+                                          height: 80,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) =>
+                                              Container(
+                                                width: 80,
+                                                height: 80,
+                                                color: context.appDivider,
+                                                child: const Icon(
+                                                    Icons.broken_image_outlined),
+                                              )),
+                                    ),
+                                    Positioned(
+                                      top: 2,
+                                      right: 2,
+                                      child: GestureDetector(
+                                        onTap: () => setState(() =>
+                                            _keptImageUrls
+                                                .removeAt(entry.key)),
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                              color: context.appSecondaryText,
+                                              shape: BoxShape.circle),
+                                          padding: const EdgeInsets.all(2),
+                                          child: const Icon(Icons.close,
+                                              size: 14, color: Colors.white),
+                                        ),
+                                      ),
+                                    ),
+                                  ]),
+                                )),
                         ..._selectedImages
                             .asMap()
                             .entries
@@ -253,7 +354,7 @@ class _PostAdScreenState extends State<PostAdScreen> {
                                     ),
                                   ]),
                                 )),
-                        if (_selectedImages.length < _maxAdPhotos)
+                        if (_photoCount < _maxAdPhotos)
                           GestureDetector(
                             onTap: _pickImage,
                             child: Container(

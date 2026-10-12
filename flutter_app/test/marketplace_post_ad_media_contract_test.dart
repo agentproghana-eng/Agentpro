@@ -48,14 +48,14 @@ void main() {
     expect(
       source,
       contains(
-        '_selectedImages.length >= _maxAdPhotos',
+        '_photoCount >= _maxAdPhotos',
       ),
     );
 
     expect(
       source,
       contains(
-        '_selectedImages.length < _maxAdPhotos',
+        '_photoCount < _maxAdPhotos',
       ),
     );
 
@@ -63,5 +63,17 @@ void main() {
       source,
       contains('Photos (1–8 required)'),
     );
+
+    // Posting again keeps photos from the seller's own earlier ad, and the
+    // 8-photo limit counts kept and newly chosen photos together.
+    expect(
+      source,
+      contains(
+        'int get _photoCount => _selectedImages.length + _keptImageUrls.length;',
+      ),
+    );
+
+    expect(source, contains("'repost_from_ad_id': widget.repostFromAdId"));
+    expect(source, contains("'kept_image_urls': jsonEncode(_keptImageUrls)"));
   });
 }

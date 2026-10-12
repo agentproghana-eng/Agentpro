@@ -160,7 +160,10 @@ class _MyAdsScreenState extends State<MyAdsScreen> {
                                 ? AppTheme.secondaryColor
                                     .withValues(alpha: 0.05)
                                 : null,
-                            child: ListTile(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                            ListTile(
                               leading: CircleAvatar(
                                 backgroundColor: needsAction
                                     ? AppTheme.secondaryColor
@@ -243,6 +246,23 @@ class _MyAdsScreenState extends State<MyAdsScreen> {
                               onTap: () => context.push(
                                 '/marketplace/ads/${ad['id']}',
                               ),
+                            ),
+                                if (status == 'expired')
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                        16, 0, 16, 12),
+                                    child: SizedBox(
+                                      width: double.infinity,
+                                      child: OutlinedButton.icon(
+                                        onPressed: () => context.push(
+                                          '/marketplace/post?repost=${ad['id']}',
+                                        ),
+                                        icon: const Icon(Icons.replay),
+                                        label: const Text('Post again'),
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                           );
                         },
