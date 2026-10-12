@@ -601,15 +601,14 @@ class UssdAccessibilityService : AccessibilityService() {
             return
         }
 
-        val rawScreenText = collectText(root)
-        val screenText = rawScreenText.lowercase().trim()
+        val screenText = collectText(root).lowercase().trim()
 
         if (screenText.isEmpty()) {
             Log.w(TAG, "Active accessibility root contained no readable text")
             return
         }
 
-        latestProviderMessage = compactProviderMessage(rawScreenText)
+        latestProviderMessage = compactProviderMessage(collectText(root))
 
         val normalizedScreen = normalizeUssdText(screenText)
 
