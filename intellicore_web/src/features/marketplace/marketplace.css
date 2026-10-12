@@ -2306,3 +2306,57 @@
     padding: 28px 22px;
   }
 }
+
+.ic-notfound {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 70vh;
+  padding: 48px 18px;
+  background: var(--ic-soft);
+}
+
+.ic-notfound-card {
+  max-width: 520px;
+  padding: 40px 32px;
+  border-radius: 28px;
+  background: #0c2d28;
+  color: #ffffff;
+  text-align: center;
+}
+
+.ic-notfound-card h1 {
+  margin: 8px 0 0;
+  color: #ffffff;
+  font-size: clamp(1.6rem, 5vw, 2.2rem);
+  letter-spacing: -0.02em;
+}
+
+.ic-notfound-card p {
+  margin: 12px 0 0;
+  color: #c4d9d4;
+  line-height: 1.5;
+}
+
+.ic-notfound-card .ic-notfound-code {
+  margin: 0;
+  color: #e8b33c;
+  font-size: 0.85rem;
+  font-weight: 760;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.ic-notfound-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 24px;
+}
+
+.ic-notfound-actions button {
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+}
