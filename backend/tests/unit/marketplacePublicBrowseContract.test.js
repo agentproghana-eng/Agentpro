@@ -236,11 +236,16 @@ describe("Marketplace public browse contract", () => {
     expect(source).toMatch(/message:\s*["']Ad not found["']/);
   });
 
-  test("does not manufacture anonymous marketplace view identities", () => {
-    expect(source).toContain("if (viewerId !== null && !isOwner)");
+  test("counts anonymous views only through a one-way hash, never an IP", () => {
+    // Signed-in viewers are still counted by account.
+    expect(source).toContain("[adId, viewerId]");
 
-    expect(source).toContain("[req.params.ad_id, viewerId]");
+    // Visitors who are not signed in are counted only from the website's
+    // verified pseudonymous identity, hashed with the ad and the day.
+    expect(source).toContain("verifiedWebRateLimitIdentity(req)");
+    expect(source).toContain("ad-view:v1:");
 
+    // No raw IP address or device data is ever read for view analytics.
     expect(source).not.toMatch(/req\.(ip|ips)\b/);
   });
 
