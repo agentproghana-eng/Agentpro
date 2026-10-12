@@ -32,19 +32,13 @@ void main() {
     expect(block, contains('pendingTerminalSuccessMarkers'));
   });
 
-  test('provider result dialog is closed after a result, never with Send', () {
-    final start = service.indexOf('private fun dismissProviderResultDialog(');
-    final end = service.indexOf('private fun findByText(');
-    final helper = service.substring(start, end);
+  test('provider final message stays on screen for the user to press OK', () {
+    expect(service, isNot(contains('dismissProviderResultDialog')));
+    expect(service, isNot(contains('ACTION_CLICK)) {\n                    Log.d(TAG, "Closed provider result dialog')));
+  });
 
-    expect(helper, contains('listOf("ok", "cancel")'));
-    expect(helper, isNot(contains('"send"')));
-    expect(helper, contains('if (isSessionActive) return'));
-    expect(
-      RegExp(r'endSession\(\)\s*dismissProviderResultDialog\(root\)')
-          .allMatches(service)
-          .length,
-      3,
-    );
+  test('provider final message is passed to the app for the result page', () {
+    expect(service, contains('providerMessage = latestProviderMessage'));
+    expect(service, contains('latestProviderMessage = null'));
   });
 }
