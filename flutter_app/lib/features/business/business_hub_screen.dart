@@ -15,6 +15,7 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
   Map<String, dynamic> _performance = <String, dynamic>{};
   bool _loading = true;
   String? _error;
+  bool _showMoreStats = false;
 
   @override
   void initState() {
@@ -70,6 +71,8 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
     return double.tryParse(value?.toString() ?? '') ?? 0;
   }
 
+  bool get _noLiveAds => _asInt('active_ads') == 0 && _asInt('total_ads') > 0;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -107,6 +110,30 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
               ),
             ),
             const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () => context.push('/marketplace/post'),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Post an ad'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => context.push('/marketplace/mine'),
+                    icon: const Icon(Icons.inventory_2_outlined),
+                    label: const Text('My Ads'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            if (!_loading && _error == null && _noLiveAds) ...[
+              _buildRenewCard(),
+              const SizedBox(height: 14),
+            ],
             _buildPerformanceSection(),
             if (!_loading && _error == null) ...[
               const SizedBox(height: 16),
@@ -122,16 +149,18 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
               const SizedBox(height: 10),
               _buildTopAds(),
               const SizedBox(height: 24),
-              const Text(
-                'Ads Needing Attention',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+              if (!_noLiveAds || _asMapList('attention_ads').isNotEmpty) ...[
+                const Text(
+                  'Ads Needing Attention',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              _buildAttentionAds(),
-              const SizedBox(height: 24),
+                const SizedBox(height: 10),
+                _buildAttentionAds(),
+                const SizedBox(height: 24),
+              ],
               const Text(
                 'Recent Customer Activity',
                 style: TextStyle(
@@ -153,7 +182,7 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
             const SizedBox(height: 12),
             _HubCard(
               icon: Icons.favorite_outline,
-              title: 'Saved Ads',
+              title: 'Ads I Saved',
               subtitle: 'View advertisements you have saved',
               onTap: () => context.push('/marketplace/saved'),
             ),
@@ -244,8 +273,17 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
             const SizedBox(height: 18),
             SizedBox(
               height: 190,
-              child: visibleTrend.isEmpty
-                  ? const Center(child: Text('No view data yet'))
+              child: visibleTrend.isEmpty || highestValue == 0
+                  ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 12),
+                        child: Text(
+                          'No views in the last 30 days.\n'
+                          'Ads with clear photos and a price get more views.',
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    )
                   : LineChart(
                       LineChartData(
                         minX: 0,
@@ -268,7 +306,7 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
                                     : DateTime.tryParse(date);
                                 final label = parsedDate == null
                                     ? date ?? ''
-                                    : '${parsedDate.day}/${parsedDate.month}';
+                                    : _shortDate(parsedDate);
 
                                 return LineTooltipItem(
                                   '${spot.y.toInt()} view'
@@ -316,6 +354,12 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
                                   return const SizedBox.shrink();
                                 }
 
+                                // Label about every 7th day, always the last.
+                                if ((visibleTrend.length - 1 - index) % 7 !=
+                                    0) {
+                                  return const SizedBox.shrink();
+                                }
+
                                 final date = DateTime.tryParse(
                                   visibleTrend[index]['date']?.toString() ?? '',
                                 );
@@ -326,8 +370,8 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
                                 return Padding(
                                   padding: const EdgeInsets.only(top: 6),
                                   child: Text(
-                                    '${date.day}/${date.month}',
-                                    style: const TextStyle(fontSize: 9),
+                                    _shortDate(date),
+                                    style: const TextStyle(fontSize: 11),
                                   ),
                                 );
                               },
@@ -389,59 +433,124 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
     final averageRating = _asDouble('average_rating');
     final growth = _asDouble('view_growth_percent');
 
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      childAspectRatio: 1.42,
-      crossAxisSpacing: 10,
-      mainAxisSpacing: 10,
+    final ratingCount = _asInt('review_count');
+
+    return Column(
       children: [
-        _PerformanceCard(
-          icon: Icons.inventory_2_outlined,
-          label: 'Total Ads',
-          value: _asInt('total_ads').toString(),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          childAspectRatio: 1.42,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          children: [
+            _PerformanceCard(
+              icon: Icons.check_circle_outline,
+              label: 'Active Ads',
+              value: _asInt('active_ads').toString(),
+              onTap: () => context.push('/marketplace/mine'),
+            ),
+            _PerformanceCard(
+              icon: Icons.calendar_view_week_outlined,
+              label: 'Views This Week',
+              value: _asInt('views_this_week').toString(),
+              detail: growth == 0
+                  ? null
+                  : '${growth >= 0 ? '+' : ''}${growth.toStringAsFixed(1)}%',
+            ),
+            _PerformanceCard(
+              icon: Icons.favorite_outline,
+              label: 'Saves on Your Ads',
+              value: _asInt('saved_ads').toString(),
+            ),
+            _PerformanceCard(
+              icon: Icons.mark_chat_unread_outlined,
+              label: 'Enquiries',
+              value: _asInt('enquiries').toString(),
+              detail: '${_asInt('unread_messages')} unread',
+              onTap: () => context.push('/marketplace/enquiries'),
+            ),
+          ],
         ),
-        _PerformanceCard(
-          icon: Icons.check_circle_outline,
-          label: 'Active Ads',
-          value: _asInt('active_ads').toString(),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => setState(() => _showMoreStats = !_showMoreStats),
+            icon: Icon(
+              _showMoreStats ? Icons.expand_less : Icons.expand_more,
+            ),
+            label: Text(_showMoreStats ? 'Fewer stats' : 'More stats'),
+          ),
         ),
-        _PerformanceCard(
-          icon: Icons.visibility_outlined,
-          label: 'Total Views',
-          value: _asInt('total_views').toString(),
-        ),
-        _PerformanceCard(
-          icon: Icons.calendar_view_week_outlined,
-          label: 'Views This Week',
-          value: _asInt('views_this_week').toString(),
-          detail: '${growth >= 0 ? '+' : ''}${growth.toStringAsFixed(1)}%',
-        ),
-        _PerformanceCard(
-          icon: Icons.favorite_outline,
-          label: 'Saved Ads',
-          value: _asInt('saved_ads').toString(),
-        ),
-        _PerformanceCard(
-          icon: Icons.mark_chat_unread_outlined,
-          label: 'Enquiries',
-          value: _asInt('enquiries').toString(),
-          detail: '${_asInt('unread_messages')} unread',
-        ),
-        _PerformanceCard(
-          icon: Icons.star_outline,
-          label: 'Average Rating',
-          value: averageRating > 0
-              ? averageRating.toStringAsFixed(1)
-              : 'No ratings',
-        ),
-        _PerformanceCard(
-          icon: Icons.rate_review_outlined,
-          label: 'Reviews',
-          value: _asInt('review_count').toString(),
-        ),
+        if (_showMoreStats)
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            childAspectRatio: 1.42,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            children: [
+              _PerformanceCard(
+                icon: Icons.inventory_2_outlined,
+                label: 'Total Ads',
+                value: _asInt('total_ads').toString(),
+              ),
+              _PerformanceCard(
+                icon: Icons.visibility_outlined,
+                label: 'Total Views',
+                value: _asInt('total_views').toString(),
+              ),
+              _PerformanceCard(
+                icon: Icons.star_outline,
+                label: 'Rating',
+                value: averageRating > 0
+                    ? averageRating.toStringAsFixed(1)
+                    : 'No ratings',
+                detail: ratingCount == 0
+                    ? 'No reviews yet'
+                    : '$ratingCount review${ratingCount == 1 ? '' : 's'}',
+                onTap: () => context.push('/marketplace/reviews'),
+              ),
+            ],
+          ),
       ],
+    );
+  }
+
+  Widget _buildRenewCard() {
+    final colors = Theme.of(context).colorScheme;
+
+    return Card(
+      color: colors.tertiaryContainer.withValues(alpha: 0.5),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'You have no live ads right now.',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Your ads have ended. Post a new ad so buyers can find you.',
+              style: TextStyle(
+                color: colors.onSurface.withValues(alpha: 0.7),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () => context.push('/marketplace/post'),
+                child: const Text('Post a new ad'),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -457,11 +566,22 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
   }
 
   Widget _buildTopAds() {
-    final ads = _asMapList('top_ads');
+    int count(Map<String, dynamic> ad, String key) =>
+        int.tryParse(ad[key]?.toString() ?? '') ?? 0;
+
+    // Only ads that earned some attention can be "top performing".
+    final ads = _asMapList('top_ads')
+        .where((ad) =>
+            count(ad, 'views') + count(ad, 'saves') + count(ad, 'enquiries') >
+            0)
+        .toList();
 
     if (ads.isEmpty) {
-      return const _AnalyticsEmptyCard(
-        message: 'Publish advertisements to see performance rankings.',
+      return _AnalyticsEmptyCard(
+        message: _asInt('total_ads') == 0
+            ? 'Publish advertisements to see performance rankings.'
+            : 'No ad has had views, saves or enquiries yet. Clear photos '
+                'and a price help buyers find your ads.',
       );
     }
 
@@ -494,6 +614,20 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
 
   Widget _buildAttentionAds() {
     final ads = _asMapList('attention_ads');
+
+    if (ads.isEmpty && _asInt('total_ads') == 0) {
+      return Card(
+        child: ListTile(
+          onTap: () => context.push('/marketplace/post'),
+          leading: const CircleAvatar(
+            child: Icon(Icons.lightbulb_outline),
+          ),
+          title: const Text('You have not posted an ad yet.'),
+          subtitle: const Text('Post your first ad to start getting views.'),
+          trailing: const Icon(Icons.chevron_right),
+        ),
+      );
+    }
 
     if (ads.isEmpty) {
       return const _AnalyticsEmptyCard(
@@ -536,10 +670,33 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
       );
     }
 
+    // Merge consecutive anonymous views of the same ad into one line.
+    final grouped = <Map<String, dynamic>>[];
+    for (final activity in activities) {
+      final type = activity['activity_type']?.toString();
+      final isView = type != 'save' && type != 'enquiry' && type != 'review';
+      final previous = grouped.isEmpty ? null : grouped.last;
+
+      if (isView &&
+          previous != null &&
+          previous['_is_view'] == true &&
+          previous['advertisement_title'] == activity['advertisement_title']) {
+        previous['_views'] = (previous['_views'] as int) + 1;
+        continue;
+      }
+
+      grouped.add({
+        ...activity,
+        '_is_view': isView,
+        '_views': 1,
+      });
+    }
+
     return Card(
       child: Column(
-        children: activities.map((activity) {
+        children: grouped.map((activity) {
           final type = activity['activity_type']?.toString();
+          final viewCount = activity['_views'] as int;
           final customer = activity['customer_name']?.toString().trim();
           final title = activity['advertisement_title']?.toString() ??
               'your advertisement';
@@ -562,7 +719,9 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
               ),
             _ => (
                 Icons.visibility_outlined,
-                'Someone viewed $title',
+                viewCount > 1
+                    ? '$viewCount people viewed $title'
+                    : 'Someone viewed $title',
               ),
           };
 
@@ -585,6 +744,15 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
     );
   }
 
+  String _shortDate(DateTime date) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+
+    return '${date.day} ${months[date.month - 1]}';
+  }
+
   String _relativeTime(DateTime date) {
     final difference = DateTime.now().difference(date.toLocal());
 
@@ -600,6 +768,15 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
           '${difference.inDays == 1 ? '' : 's'} ago';
     }
 
+    if (difference.inDays < 30) {
+      final weeks = difference.inDays ~/ 7;
+      return '$weeks week${weeks == 1 ? '' : 's'} ago';
+    }
+    if (difference.inDays < 365) {
+      final months = difference.inDays ~/ 30;
+      return '$months month${months == 1 ? '' : 's'} ago';
+    }
+
     return '${date.toLocal().day}/${date.toLocal().month}/'
         '${date.toLocal().year}';
   }
@@ -610,12 +787,14 @@ class _PerformanceCard extends StatelessWidget {
   final String label;
   final String value;
   final String? detail;
+  final VoidCallback? onTap;
 
   const _PerformanceCard({
     required this.icon,
     required this.label,
     required this.value,
     this.detail,
+    this.onTap,
   });
 
   @override
@@ -623,7 +802,10 @@ class _PerformanceCard extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
 
     return Card(
-      child: Padding(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -663,6 +845,7 @@ class _PerformanceCard extends StatelessWidget {
             ],
           ],
         ),
+      ),
       ),
     );
   }
