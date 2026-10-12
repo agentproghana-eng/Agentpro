@@ -1591,14 +1591,26 @@ export function MarketplaceBrowse({
               (!showMarketplaceHome || ads.length === 0) && (
                 <div className="ic-market-state">
                   <Store size={28} aria-hidden="true" />
-                  <strong>No advertisements found</strong>
+                  <strong>
+                    {showMarketplaceHome
+                      ? "Be the first to post in your area"
+                      : "No advertisements found"}
+                  </strong>
                   <p>
                     {showMarketplaceHome
-                      ? "New advertisements will appear here."
+                      ? "Selling something or offering a service? Post a free ad and let buyers across Ghana find you."
                       : "Try changing or clearing your search and filters."}
                   </p>
 
-                  {!showMarketplaceHome && (
+                  {showMarketplaceHome ? (
+                    <Link
+                      href="/marketplace/post"
+                      className="ic-market-state-action"
+                    >
+                      <PlusCircle size={18} aria-hidden="true" />
+                      Post a free ad
+                    </Link>
+                  ) : (
                     <button type="button" onClick={resetFilters}>
                       Clear filters
                     </button>
