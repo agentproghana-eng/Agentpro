@@ -195,6 +195,10 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
 
   USSDStatus _outcome = USSDStatus.failed;
   String? _failureReason;
+
+  // The provider's own final wording, shown on the result page for the user
+  // to read. Display-only: never reported to the server or stored.
+  String? _providerMessage;
   Map<String, dynamic>? _completedTransaction;
   DateTime? _resultRecordedAt;
   USSDEngine? _engine;
@@ -1963,6 +1967,10 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
     USSDResult result, {
     bool autoReturnAfterAmbiguousResult = true,
   }) async {
+    if (result.providerMessage != null) {
+      _providerMessage = result.providerMessage;
+    }
+
     Map<String, dynamic>? flowHealth;
 
     final flowId =
@@ -3020,6 +3028,18 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
               ],
             ),
           ),
+          if (_providerMessage != null &&
+              _providerMessage!.trim().isNotEmpty) ...[
+            const SizedBox(height: 14),
+            _resultNotice(
+              icon: Icons.sms_outlined,
+              title: providerLabel.isEmpty
+                  ? 'Message from the network'
+                  : 'Message from $providerLabel',
+              message: _providerMessage!.trim(),
+              color: statusColor,
+            ),
+          ],
           if (_wasManuallyConfirmed) ...[
             const SizedBox(height: 14),
             _resultNotice(

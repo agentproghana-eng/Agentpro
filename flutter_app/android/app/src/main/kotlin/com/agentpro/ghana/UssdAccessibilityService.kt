@@ -204,6 +204,12 @@ class UssdAccessibilityService : AccessibilityService() {
         // Keep them alongside the other session fields so start/end can
         // explicitly wipe them rather than leaving them in service memory.
         @Volatile private var lastScreenText: String? = null
+
+        // The provider's own wording of the latest result screen, kept only so
+        // it can be shown to the user on the result page. It is passed to the
+        // app in memory, is never sent to the server or logged, and is cleared
+        // with the session. Password/PIN fields are never read.
+        @Volatile private var latestProviderMessage: String? = null
         @Volatile private var lastScreenHandledAt: Long = 0L
         @Volatile private var lastResponseValue: String? = null
         @Volatile private var lastResponseAt: Long = 0L
@@ -318,6 +324,7 @@ class UssdAccessibilityService : AccessibilityService() {
             // Never let duplicate-detection state bleed from a previous
             // transaction into the new one.
             lastScreenText = null
+            latestProviderMessage = null
             lastScreenHandledAt = 0L
             lastResponseValue = null
             lastResponseAt = 0L
@@ -361,6 +368,7 @@ class UssdAccessibilityService : AccessibilityService() {
             // Raw USSD screen text and the last value written into the USSD
             // input field must not survive the transaction lifecycle.
             lastScreenText = null
+            latestProviderMessage = null
             lastScreenHandledAt = 0L
             lastResponseValue = null
             lastResponseAt = 0L
@@ -394,7 +402,8 @@ class UssdAccessibilityService : AccessibilityService() {
             outcome: String,
             message: String,
             flowMismatchStepIndex: Int? = null,
-            flowStepCount: Int? = null
+            flowStepCount: Int? = null,
+            providerMessage: String? = null
         )
     }
 
@@ -599,6 +608,8 @@ class UssdAccessibilityService : AccessibilityService() {
             return
         }
 
+        latestProviderMessage = compactProviderMessage(collectText(root))
+
         val normalizedScreen = normalizeUssdText(screenText)
 
         // Definite failure responses terminate every flow immediately,
@@ -612,11 +623,11 @@ class UssdAccessibilityService : AccessibilityService() {
         if (matchedFailure != null) {
             listener?.onResult(
                 "failure",
-                "Provider reported failure"
+                "Provider reported failure",
+                providerMessage = latestProviderMessage
             )
 
             endSession()
-            dismissProviderResultDialog(root)
             UssdForegroundService.stop(this)
             return
         }
@@ -637,11 +648,11 @@ class UssdAccessibilityService : AccessibilityService() {
             if (matchedTerminalSuccess != null) {
                 listener?.onResult(
                     "success",
-                    "Provider reported success"
+                    "Provider reported success",
+                    providerMessage = latestProviderMessage
                 )
 
                 endSession()
-                dismissProviderResultDialog(root)
                 UssdForegroundService.stop(this)
                 return
             }
@@ -671,11 +682,11 @@ class UssdAccessibilityService : AccessibilityService() {
 
                 listener?.onResult(
                     "success",
-                    message
+                    message,
+                    providerMessage = latestProviderMessage
                 )
 
                 endSession()
-                dismissProviderResultDialog(root)
                 UssdForegroundService.stop(this)
                 return
             }
@@ -832,7 +843,8 @@ class UssdAccessibilityService : AccessibilityService() {
             if (screenText.contains("transaction failed")) {
                 listener?.onResult(
                     "failure",
-                    "Transaction failed"
+                    "Transaction failed",
+                    providerMessage = latestProviderMessage
                 )
 
                 endSession()
@@ -897,7 +909,8 @@ class UssdAccessibilityService : AccessibilityService() {
                     "Provider reported success"
                 } else {
                     "Provider reported failure"
-                }
+                },
+                providerMessage = latestProviderMessage
             )
 
             endSession()
@@ -1368,32 +1381,10 @@ class UssdAccessibilityService : AccessibilityService() {
         return null
     }
 
-    // After a definite result (success or failure) the provider's own
-    // dialog can stay on screen, for example the "# for next" prompt or an
-    // "MTN GH Message" with OK. Close it so it does not sit open.
-    //
-    // Only ever presses OK or Cancel, never Send, and only after
-    // endSession(), so nothing further can be submitted to the provider and
-    // the click is not mistaken for a user cancellation.
-    private fun dismissProviderResultDialog(root: AccessibilityNodeInfo) {
-        if (isSessionActive) return
-        if (root.packageName?.toString() == packageName) return
-
-        for (label in listOf("ok", "cancel")) {
-            var node: AccessibilityNodeInfo? = findByText(root, label)
-            var hops = 0
-            while (node != null && !node.isClickable && hops < 3) {
-                node = node.parent
-                hops++
-            }
-            if (node != null && node.isClickable) {
-                if (node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
-                    Log.d(TAG, "Closed provider result dialog with $label")
-                    return
-                }
-            }
-        }
-    }
+    // The provider's final result dialog (for example "Telecel Message" or
+    // "MTN GH Message" with OK) is deliberately left on screen so the user can
+    // read the provider's confirmation and press OK themselves. AgentPro never
+    // closes it. The same text is also shown on the app's result page.
 
     private fun findByText(node: AccessibilityNodeInfo, text: String): AccessibilityNodeInfo? {
         val nodeText = node.text?.toString()?.lowercase()
@@ -1404,6 +1395,13 @@ class UssdAccessibilityService : AccessibilityService() {
             if (found != null) return found
         }
         return null
+    }
+
+    // One tidy line of the provider's own screen text for display only.
+    private fun compactProviderMessage(raw: String): String? {
+        val tidy = raw.replace(Regex("\\s+"), " ").trim()
+        if (tidy.isEmpty()) return null
+        return if (tidy.length > 500) tidy.substring(0, 500) else tidy
     }
 
     private fun collectText(node: AccessibilityNodeInfo): String {

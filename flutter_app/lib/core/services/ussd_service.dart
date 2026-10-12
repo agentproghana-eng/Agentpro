@@ -100,6 +100,11 @@ class USSDResult {
   final int? flowMismatchStepIndex;
   final int? flowStepCount;
 
+  // The provider's own final screen text, for showing to the user on the
+  // result page only. Kept in memory: it is never added to sessionLog, never
+  // sent to the server and never stored with the transaction.
+  final String? providerMessage;
+
   const USSDResult({
     required this.outcome,
     this.networkReference,
@@ -107,6 +112,7 @@ class USSDResult {
     required this.sessionLog,
     this.flowMismatchStepIndex,
     this.flowStepCount,
+    this.providerMessage,
   });
 
   bool get success => outcome == USSDStatus.success;
@@ -658,6 +664,10 @@ class UssdAccessibilityEngine {
         final args = call.arguments as Map;
         final outcome = args['outcome'] as String? ?? 'failure';
         final nativeMessage = args['message']?.toString().trim() ?? '';
+        final rawProviderMessage =
+            args['provider_message']?.toString().trim() ?? '';
+        final providerMessage =
+            rawProviderMessage.isEmpty ? null : rawProviderMessage;
 
         final rawMismatchStepIndex =
             args['flow_mismatch_step_index'];
@@ -786,6 +796,7 @@ class UssdAccessibilityEngine {
                   flowMismatchStepIndex,
               flowStepCount:
                   flowStepCount,
+              providerMessage: providerMessage,
             ),
           );
         }

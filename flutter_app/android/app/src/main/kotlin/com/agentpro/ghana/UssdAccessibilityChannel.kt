@@ -537,11 +537,16 @@ class UssdAccessibilityChannel(
         outcome: String,
         message: String,
         flowMismatchStepIndex: Int?,
-        flowStepCount: Int?
+        flowStepCount: Int?,
+        providerMessage: String?
     ) {
         val args = HashMap<String, Any>()
         args["outcome"] = outcome
         args["message"] = message
+
+        if (!providerMessage.isNullOrBlank()) {
+            args["provider_message"] = providerMessage
+        }
 
         if (flowMismatchStepIndex != null) {
             args["flow_mismatch_step_index"] =
