@@ -356,6 +356,41 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
       }
     }
 
+    // For an online start the current flow definition is fetched while the
+    // server creates the transaction, instead of after it. The request, its
+    // fail-closed handling and its use are unchanged; only the start moves
+    // earlier. Skipped for the offline path and for the native MTN Agent
+    // flows, which never ask for a flow.
+    final prefetchType = widget.data['transaction_type']?.toString();
+    final prefetchBundleCategory = widget.data['bundle_category'] as String?;
+    final prefetchRecipientMode = widget.data['recipient_mode'] as String?;
+    final prefetchIsNativeMtn = expectedBusinessRole == 'agent' &&
+        provider == 'mtn' &&
+        (prefetchType == 'cash_in' ||
+            prefetchType == 'cash_out' ||
+            prefetchType == 'send_money');
+    Future<dynamic>? flowResolvePrefetch;
+    if (widget.data['transaction_future'] != null &&
+        prefetchType != null &&
+        prefetchType.isNotEmpty &&
+        !prefetchIsNativeMtn) {
+      flowResolvePrefetch = ApiClient.instance.get(
+        widget.isPersonal
+            ? '/personal-ussd-flows/resolve'
+            : '/ussd-flows/resolve',
+        queryParameters: {
+          'provider': provider,
+          'transaction_type': prefetchType,
+          if (widget.isPersonal == false)
+            'sim_role': expectedBusinessRole ?? 'agent',
+          if (prefetchBundleCategory != null)
+            'bundle_category': prefetchBundleCategory,
+          if (prefetchRecipientMode != null)
+            'recipient_mode': prefetchRecipientMode,
+        },
+      )..ignore();
+    }
+
     final transactionFuture = _resolveTransactionData();
     final deviceFuture = TransactionDevicePreparationService.prepare(
       provider: provider,
@@ -720,19 +755,20 @@ class _TransactionProgressScreenState extends State<TransactionProgressScreen>
           );
 
     try {
-      final resolveRes = await ApiClient.instance.get(
-        widget.isPersonal
-            ? '/personal-ussd-flows/resolve'
-            : '/ussd-flows/resolve',
-        queryParameters: {
-          'provider': provider,
-          'transaction_type': transactionType,
-          if (widget.isPersonal == false)
-            'sim_role': expectedBusinessRole ?? 'agent',
-          if (bundleCategory != null) 'bundle_category': bundleCategory,
-          if (recipientMode != null) 'recipient_mode': recipientMode,
-        },
-      );
+      final resolveRes = await (flowResolvePrefetch ??
+          ApiClient.instance.get(
+            widget.isPersonal
+                ? '/personal-ussd-flows/resolve'
+                : '/ussd-flows/resolve',
+            queryParameters: {
+              'provider': provider,
+              'transaction_type': transactionType,
+              if (widget.isPersonal == false)
+                'sim_role': expectedBusinessRole ?? 'agent',
+              if (bundleCategory != null) 'bundle_category': bundleCategory,
+              if (recipientMode != null) 'recipient_mode': recipientMode,
+            },
+          ));
 
       final rawFlowData = resolveRes.data['data'];
 
