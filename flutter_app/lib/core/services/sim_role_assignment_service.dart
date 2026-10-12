@@ -16,6 +16,24 @@ class SimRoleAssignmentService {
 
   static String _legacyCacheKey(int slot) => '$_legacyCachePrefix$slot';
 
+  // In-memory only: when this exact SIM identity last had its role confirmed
+  // by the server. It lets a tap skip a repeat round trip right after a
+  // fresh confirmation. It never survives an app restart, a sign-out, or a
+  // change of the stored role, and the backend still re-validates the SIM
+  // role on every transaction it records.
+  static final Map<String, DateTime> _serverVerifiedAt =
+      <String, DateTime>{};
+
+  /// Forget every server confirmation (call on sign-out).
+  static void clearServerVerification() => _serverVerifiedAt.clear();
+
+  static bool _recentlyVerified(String? key, Duration window) {
+    if (key == null) return false;
+    final at = _serverVerifiedAt[key];
+    if (at == null) return false;
+    return DateTime.now().difference(at) <= window;
+  }
+
   static String _canonicalProvider(
     String? provider,
   ) =>
@@ -88,6 +106,9 @@ class SimRoleAssignmentService {
     if (key == null) {
       return;
     }
+
+    // A role written from anywhere (e.g. Settings) is not yet confirmed.
+    _serverVerifiedAt.remove(key);
 
     await prefs.setString(
       key,
@@ -228,6 +249,16 @@ class SimRoleAssignmentService {
           provider: provider,
         );
 
+        final verifiedKey = _identityCacheKey(
+          slot: slot,
+          simIccid: simIccid,
+          simSubscriptionId: simSubscriptionId,
+          provider: provider,
+        );
+        if (verifiedKey != null) {
+          _serverVerifiedAt[verifiedKey] = DateTime.now();
+        }
+
         return purpose;
       }
     }
@@ -287,6 +318,7 @@ class SimRoleAssignmentService {
   static Future<String?> roleForSlot(
     int slot, {
     bool refreshFromServer = true,
+    Duration? skipRefreshIfVerifiedWithin,
     String? simIccid,
     int? simSubscriptionId,
     String? provider,
@@ -298,8 +330,21 @@ class SimRoleAssignmentService {
       provider: provider,
     );
 
+    final skipFetch = refreshFromServer &&
+        trustedCached != null &&
+        skipRefreshIfVerifiedWithin != null &&
+        _recentlyVerified(
+          _identityCacheKey(
+            slot: slot,
+            simIccid: simIccid,
+            simSubscriptionId: simSubscriptionId,
+            provider: provider,
+          ),
+          skipRefreshIfVerifiedWithin,
+        );
+
     final serverPurposes =
-        refreshFromServer ? await _fetchServerPurposes() : null;
+        (refreshFromServer && !skipFetch) ? await _fetchServerPurposes() : null;
 
     return _resolveRole(
       slot: slot,
@@ -314,6 +359,7 @@ class SimRoleAssignmentService {
   static Future<String> businessRoleForSlot(
     int slot, {
     bool refreshFromServer = true,
+    Duration? skipRefreshIfVerifiedWithin,
     bool allowLegacyAgentFallback = true,
     String? simIccid,
     int? simSubscriptionId,
@@ -322,6 +368,7 @@ class SimRoleAssignmentService {
     final purpose = await roleForSlot(
       slot,
       refreshFromServer: refreshFromServer,
+      skipRefreshIfVerifiedWithin: skipRefreshIfVerifiedWithin,
       simIccid: simIccid,
       simSubscriptionId: simSubscriptionId,
       provider: provider,

@@ -1750,6 +1750,14 @@ class _TransactionScreenState extends State<TransactionScreen> {
       if (_formKey.currentState?.validate() != true) return;
     }
 
+    // Independent local lookups start now so they finish while the user is
+    // looking at the amount warning or while the SIM role is confirmed.
+    // Their results are awaited at the original points, so every check and
+    // error message below behaves exactly as before.
+    final installationIdFuture = StorageService.getOrCreateInstallationId()
+      ..ignore();
+    final connectivityFuture = Connectivity().checkConnectivity()..ignore();
+
     final amountForWarning = _effectiveAmount;
 
     final continueAfterAmountWarning = await confirmHighAmountIfNeeded(
@@ -1785,12 +1793,32 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
     final selectedBusinessSim = _selectedSim!;
 
+    // The kill-switch check stays live (never cached) but now runs while the
+    // SIM role is confirmed instead of after it. The network fetch itself is
+    // unchanged; only its start moves earlier.
+    final transactionDisabledFuture = () async {
+      final connectivity = await connectivityFuture;
+      final offline = connectivity.every(
+        (result) => result == ConnectivityResult.none,
+      );
+      return FeatureFlagService.isTransactionDisabled(
+        provider: _selectedProvider,
+        transactionType: _transactionType,
+        allowNetwork: !offline,
+      );
+    }()
+      ..ignore();
+
     String businessSimRole;
 
     try {
       businessSimRole = await SimRoleAssignmentService.businessRoleForSlot(
         selectedBusinessSim.slot,
         refreshFromServer: true,
+        // Agent, EVD and Merchant SIMs alike: skip the repeat round trip
+        // right after a fresh server confirmation. The backend still
+        // validates the SIM role when it records the transaction.
+        skipRefreshIfVerifiedWithin: const Duration(minutes: 2),
         allowLegacyAgentFallback: false,
         simIccid: selectedBusinessSim.iccid,
         simSubscriptionId: selectedBusinessSim.subscriptionId,
@@ -1892,7 +1920,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
     String installationId;
     try {
-      installationId = await StorageService.getOrCreateInstallationId();
+      installationId = await installationIdFuture;
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1918,7 +1946,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
     // online attempt below, which will fail with a clear network error -
     // this combo needs to succeed online at least once before it can
     // work offline.
-    final connectivity = await Connectivity().checkConnectivity();
+    final connectivity = await connectivityFuture;
     final isOffline = connectivity.every(
       (result) => result == ConnectivityResult.none,
     );
@@ -1953,11 +1981,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
       }
     }
 
-    final transactionDisabled = await FeatureFlagService.isTransactionDisabled(
-      provider: _selectedProvider,
-      transactionType: _transactionType,
-      allowNetwork: !isOffline,
-    );
+    final transactionDisabled = await transactionDisabledFuture;
 
     if (transactionDisabled) {
       if (!mounted) return;

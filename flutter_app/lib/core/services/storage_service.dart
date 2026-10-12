@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:uuid/uuid.dart';
 
 import 'device_clock_service.dart';
+import 'sim_role_assignment_service.dart';
 
 enum OfflineServerTrustStatus {
   valid,
@@ -1036,6 +1037,7 @@ class StorageService {
     _installationIdCache = null;
     _offlineDashboardWrites.clear();
     _lastServerTrustPersistedServerAtByProof.clear();
+    SimRoleAssignmentService.clearServerVerification();
     await _storage.deleteAll();
   }
 }
