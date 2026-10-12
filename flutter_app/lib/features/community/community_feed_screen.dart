@@ -2,16 +2,17 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/auth/auth_bloc.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/app_theme.dart';
-import '../../shared/widgets/audio_player_bubble.dart';
-import '../../shared/widgets/reaction_button.dart';
+import '../../shared/widgets/community_widgets.dart';
 
 class CommunityFeedScreen extends StatefulWidget {
   const CommunityFeedScreen({super.key});
@@ -50,6 +51,11 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
   String _selectedPostType = 'general';
 
   String? _nextCursor;
+
+  // The composer starts as a slim bar and opens when tapped.
+  bool _composerExpanded = false;
+
+  static const int _maxRecordSeconds = 120;
 
   bool _isRecording = false;
   bool _hasRecording = false;
@@ -148,8 +154,8 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
     };
   }
 
-  Future<void> _load() async {
-    if (mounted) {
+  Future<void> _load({bool silent = false}) async {
+    if (mounted && !silent) {
       setState(() {
         _loading = true;
         _error = null;
@@ -182,6 +188,9 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
       });
     } catch (_) {
       if (!mounted) return;
+
+      // A quiet refresh that fails keeps the posts already on screen.
+      if (silent) return;
 
       setState(() {
         _error = 'Community posts could not be loaded.';
@@ -280,7 +289,7 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
         '/agent-posts/${post['id']}/like',
         data: {'reaction_type': reactionType},
       );
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
 
       setState(() {
@@ -289,7 +298,11 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
       });
 
       _showMessage(
-        'Subscription required to react to posts.',
+        communityActionError(
+          error,
+          fallback: 'Could not save your reaction. Please try again.',
+          restrictedMessage: 'A subscription is required to react to posts.',
+        ),
         error: true,
       );
     }
@@ -542,8 +555,13 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
     _recordTimer = Timer.periodic(
       const Duration(seconds: 1),
       (_) {
-        if (mounted) {
-          setState(() => _recordSeconds++);
+        if (!mounted) return;
+
+        setState(() => _recordSeconds++);
+
+        if (_recordSeconds >= _maxRecordSeconds && _isRecording) {
+          _showMessage('Voice notes are limited to 2 minutes.');
+          _stopRecording();
         }
       },
     );
@@ -596,14 +614,23 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
       _composerController.clear();
       _discardRecording();
 
+      if (mounted) {
+        setState(() => _composerExpanded = false);
+      }
+
       _showMessage(
         response.data['message']?.toString() ?? 'Posted.',
       );
 
-      await _load();
-    } catch (_) {
+      // Refresh quietly so the feed does not flash and keeps its place.
+      await _load(silent: true);
+    } catch (error) {
       _showMessage(
-        'Subscription required to post.',
+        communityActionError(
+          error,
+          fallback: 'Could not post. Please try again.',
+          restrictedMessage: 'A subscription is required to post.',
+        ),
         error: true,
       );
     } finally {
@@ -648,7 +675,11 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
 
           return FilterChip(
             selected: selected,
-            label: Text(entry.value),
+            showCheckmark: false,
+            label: Text(
+              entry.value,
+              style: const TextStyle(fontSize: 14),
+            ),
             onSelected: (_) {
               setState(() {
                 _selectedFilter = entry.key;
@@ -735,74 +766,123 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
       );
     }
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          children: [
-            DropdownButtonFormField<String>(
-              initialValue: _selectedPostType,
-              decoration: const InputDecoration(
-                labelText: 'Post type',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              items: _postTypes.entries
-                  .where((entry) => entry.key != 'all')
-                  .map(
-                    (entry) => DropdownMenuItem(
-                      value: entry.key,
-                      child: Text(entry.value),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  setState(() {
-                    _selectedPostType = value;
-                  });
-                }
-              },
+    if (!_composerExpanded && _composerController.text.trim().isEmpty) {
+      return CommunityComposerBar(
+        initial: _userInitial(),
+        hint: 'Share something with Agent Community...',
+        onTap: _openComposer,
+        onMic: _startRecording,
+      );
+    }
+
+    return CommunityComposerPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'What is this about?',
+            style: TextStyle(
+              fontSize: 12.5,
+              color: context.appSecondaryText,
+              fontWeight: FontWeight.w600,
             ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _composerController,
-              focusNode: _composerFocusNode,
-              minLines: 2,
-              maxLines: 5,
-              decoration: const InputDecoration(
-                hintText: 'Share something with Agent Community...',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 40,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
               children: [
-                IconButton(
-                  tooltip: 'Record voice note',
-                  onPressed: _startRecording,
-                  icon: const Icon(Icons.mic_none),
-                ),
-                const Spacer(),
-                FilledButton.icon(
-                  onPressed: _posting ? null : _submitPost,
-                  icon: _posting
-                      ? const SizedBox(
-                          width: 17,
-                          height: 17,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : const Icon(Icons.send),
-                  label: const Text('Post'),
-                ),
+                for (final entry
+                    in _postTypes.entries.where((e) => e.key != 'all'))
+                  Padding(
+                    padding: const EdgeInsets.only(right: 7),
+                    child: ChoiceChip(
+                      selected: _selectedPostType == entry.key,
+                      showCheckmark: false,
+                      label: Text(
+                        entry.value,
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                      onSelected: (_) {
+                        setState(() => _selectedPostType = entry.key);
+                      },
+                    ),
+                  ),
               ],
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _composerController,
+            focusNode: _composerFocusNode,
+            autofocus: true,
+            minLines: 3,
+            maxLines: 8,
+            textCapitalization: TextCapitalization.sentences,
+            style: const TextStyle(fontSize: 15, height: 1.45),
+            decoration: const InputDecoration(
+              hintText: 'Share something with Agent Community...',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              IconButton(
+                tooltip: 'Record voice note',
+                onPressed: _startRecording,
+                icon: const Icon(
+                  Icons.mic_none,
+                  color: AppTheme.primaryColor,
+                ),
+              ),
+              TextButton(
+                onPressed: _posting ? null : _closeComposer,
+                child: const Text('Cancel'),
+              ),
+              const Spacer(),
+              FilledButton.icon(
+                onPressed: _posting ? null : _submitPost,
+                icon: _posting
+                    ? const SizedBox(
+                        width: 17,
+                        height: 17,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Icon(Icons.send),
+                label: const Text('Post'),
+              ),
+            ],
+          ),
+        ],
       ),
     );
+  }
+
+  String _userInitial() {
+    final state = context.read<AuthBloc>().state;
+
+    if (state is AuthAuthenticated) {
+      final name = state.user['first_name']?.toString().trim() ?? '';
+      if (name.isNotEmpty) return name[0].toUpperCase();
+    }
+
+    return 'A';
+  }
+
+  void _openComposer() {
+    setState(() => _composerExpanded = true);
+  }
+
+  void _closeComposer() {
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _composerExpanded = false;
+      _composerController.clear();
+    });
   }
 
   @override
@@ -852,10 +932,10 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
               ),
             ),
             if (_loading)
-              const SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(
-                  child: CircularProgressIndicator(),
+              const SliverPadding(
+                padding: EdgeInsets.symmetric(horizontal: 14),
+                sliver: SliverToBoxAdapter(
+                  child: CommunitySkeletonList(),
                 ),
               )
             else if (_error != null)
@@ -864,23 +944,32 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
                   horizontal: 14,
                 ),
                 sliver: SliverToBoxAdapter(
-                  child: _CommunityStateCard(
+                  child: CommunityStateCard(
                     icon: Icons.cloud_off_outlined,
-                    message: _error!,
-                    actionLabel: 'Retry',
+                    title: 'Could not load posts',
+                    message: '$_error Check your connection and try again.',
+                    actionLabel: 'Try again',
                     onAction: _load,
                   ),
                 ),
               )
             else if (_posts.isEmpty)
-              const SliverPadding(
-                padding: EdgeInsets.symmetric(
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(
                   horizontal: 14,
                 ),
                 sliver: SliverToBoxAdapter(
-                  child: _CommunityStateCard(
+                  child: CommunityStateCard(
                     icon: Icons.forum_outlined,
-                    message: 'No posts are available in this category yet.',
+                    title: 'Nothing here yet',
+                    message: _selectedFilter == 'all'
+                        ? 'Be the first to share something with the community.'
+                        : 'No posts in this category yet.',
+                    actionLabel: 'Write a post',
+                    onAction: () {
+                      _openComposer();
+                      _scrollToComposer();
+                    },
                   ),
                 ),
               )
@@ -894,10 +983,11 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
                   itemBuilder: (context, index) {
                     final post = _posts[index];
 
-                    return _AgentCommunityPostCard(
+                    return CommunityPostCard(
                       key: ValueKey(
                         post['id']?.toString() ?? index,
                       ),
+                      showTypeAndRole: true,
                       post: post,
                       onReact: (type) => _toggleReaction(post, type),
                       onOpen: () async {
@@ -922,313 +1012,6 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
             const SliverToBoxAdapter(
               child: SizedBox(height: 14),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AgentCommunityPostCard extends StatelessWidget {
-  final Map<String, dynamic> post;
-  final void Function(String) onReact;
-  final VoidCallback onOpen;
-  final VoidCallback onActions;
-
-  const _AgentCommunityPostCard({
-    super.key,
-    required this.post,
-    required this.onReact,
-    required this.onOpen,
-    required this.onActions,
-  });
-
-  String _formatTime(String? value) {
-    if (value == null) return '';
-
-    final date = DateTime.tryParse(value)?.toLocal();
-
-    if (date == null) return '';
-
-    final difference = DateTime.now().difference(date);
-
-    if (difference.inMinutes < 1) return 'Just now';
-    if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}m ago';
-    }
-    if (difference.inHours < 24) {
-      return '${difference.inHours}h ago';
-    }
-    if (difference.inDays < 7) {
-      return '${difference.inDays}d ago';
-    }
-
-    return '${date.day}/${date.month}/${date.year}';
-  }
-
-  String _typeLabel(String? type) {
-    return switch (type) {
-      'question' => 'Question',
-      'network_issue' => 'Network Issue',
-      'fraud_alert' => 'Fraud Alert',
-      'business_tip' => 'Business Tip',
-      'announcement' => 'Announcement',
-      _ => 'General',
-    };
-  }
-
-  IconData _typeIcon(String? type) {
-    return switch (type) {
-      'question' => Icons.help_outline,
-      'network_issue' => Icons.signal_wifi_bad,
-      'fraud_alert' => Icons.warning_amber_outlined,
-      'business_tip' => Icons.lightbulb_outline,
-      'announcement' => Icons.campaign_outlined,
-      _ => Icons.forum_outlined,
-    };
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final content = post['content']?.toString();
-    final audioUrl = post['audio_url']?.toString();
-    final isPending = post['status'] == 'pending_review';
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 11),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onOpen,
-        onLongPress: onActions,
-        child: Padding(
-          padding: const EdgeInsets.all(13),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    child: Text(
-                      (post['first_name']?.toString().trim().isNotEmpty == true)
-                          ? post['first_name'].toString()[0].toUpperCase()
-                          : 'A',
-                    ),
-                  ),
-                  const SizedBox(width: 9),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${post['first_name'] ?? ''} '
-                                  '${post['last_name'] ?? ''}'
-                              .trim(),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          post['role']?.toString().replaceAll('_', ' ') ?? '',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: context.appSecondaryText,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Post actions',
-                    onPressed: onActions,
-                    icon: const Icon(Icons.more_horiz),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 9),
-              Wrap(
-                spacing: 6,
-                runSpacing: 5,
-                children: [
-                  _PostBadge(
-                    icon: _typeIcon(
-                      post['post_type']?.toString(),
-                    ),
-                    label: _typeLabel(
-                      post['post_type']?.toString(),
-                    ),
-                  ),
-                  if (post['is_pinned'] == true)
-                    const _PostBadge(
-                      icon: Icons.push_pin_outlined,
-                      label: 'Pinned',
-                    ),
-                  if (post['is_official'] == true)
-                    const _PostBadge(
-                      icon: Icons.verified_outlined,
-                      label: 'Official',
-                    ),
-                  if (post['is_urgent'] == true)
-                    const _PostBadge(
-                      icon: Icons.priority_high,
-                      label: 'Urgent',
-                    ),
-                  if (post['is_saved'] == true)
-                    const _PostBadge(
-                      icon: Icons.bookmark,
-                      label: 'Saved',
-                    ),
-                ],
-              ),
-              if (isPending) ...[
-                const SizedBox(height: 8),
-                const _PostBadge(
-                  icon: Icons.hourglass_top,
-                  label: 'Under Review',
-                ),
-              ],
-              if (content != null && content.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Text(content),
-              ],
-              if (audioUrl != null && audioUrl.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                AudioPlayerBubble(url: audioUrl),
-              ],
-              const SizedBox(height: 8),
-              Text(
-                _formatTime(
-                  post['created_at']?.toString(),
-                ),
-                style: TextStyle(
-                  fontSize: 11,
-                  color: context.appSecondaryText,
-                ),
-              ),
-              const Divider(height: 20),
-              Row(
-                children: [
-                  ReactionButton(
-                    myReaction: post['my_reaction']?.toString(),
-                    totalCount: post['reaction_counts'] is Map
-                        ? (post['reaction_counts'] as Map).values.fold<int>(
-                              0,
-                              (sum, value) =>
-                                  sum +
-                                  (int.tryParse(
-                                        value.toString(),
-                                      ) ??
-                                      0),
-                            )
-                        : 0,
-                    onReact: onReact,
-                    iconSize: 20,
-                  ),
-                  const SizedBox(width: 18),
-                  Icon(
-                    Icons.chat_bubble_outline,
-                    size: 20,
-                    color: context.appSecondaryText,
-                  ),
-                  const SizedBox(width: 4),
-                  Text('${post['comment_count'] ?? 0}'),
-                  const Spacer(),
-                  IconButton(
-                    tooltip: 'Share',
-                    onPressed: () async {
-                      await SharePlus.instance.share(
-                        ShareParams(
-                          text: content?.isNotEmpty == true
-                              ? content!
-                              : 'Voice note from Agent Community',
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.share_outlined),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PostBadge extends StatelessWidget {
-  final IconData icon;
-  final String label;
-
-  const _PostBadge({
-    required this.icon,
-    required this.label,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 8,
-        vertical: 4,
-      ),
-      decoration: BoxDecoration(
-        color: Theme.of(context)
-            .colorScheme
-            .primaryContainer
-            .withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CommunityStateCard extends StatelessWidget {
-  final IconData icon;
-  final String message;
-  final String? actionLabel;
-  final VoidCallback? onAction;
-
-  const _CommunityStateCard({
-    required this.icon,
-    required this.message,
-    this.actionLabel,
-    this.onAction,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            Icon(icon, size: 42),
-            const SizedBox(height: 10),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-            ),
-            if (actionLabel != null && onAction != null) ...[
-              const SizedBox(height: 10),
-              TextButton(
-                onPressed: onAction,
-                child: Text(actionLabel!),
-              ),
-            ],
           ],
         ),
       ),
