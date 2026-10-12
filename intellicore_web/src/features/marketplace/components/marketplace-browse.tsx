@@ -12,6 +12,8 @@ import {
   Briefcase,
   Car,
   Download,
+  GraduationCap,
+  HeartPulse,
   Home,
   MapPin,
   MoreHorizontal,
@@ -21,10 +23,12 @@ import {
   Shirt,
   SlidersHorizontal,
   Smartphone,
+  Sprout,
   Star,
   Store,
   Tag,
   UtensilsCrossed,
+  Wallet,
   Wrench,
   X,
   type LucideIcon,
@@ -69,13 +73,17 @@ const PLAY_STORE_URL = process.env.NEXT_PUBLIC_PLAY_STORE_URL?.trim() || "";
 const APK_URL = "/download/agentpro-latest.apk";
 
 const CATEGORY_ICONS: Array<{ match: RegExp; icon: LucideIcon; tone: string }> = [
+  { match: /mobile money|momo|finance|bank|payment/i, icon: Wallet, tone: "teal" },
+  { match: /agric|farm|crop|livestock/i, icon: Sprout, tone: "teal" },
+  { match: /health|beauty|medical|pharmacy|salon/i, icon: HeartPulse, tone: "clay" },
+  { match: /educat|school|training|tutor|book/i, icon: GraduationCap, tone: "violet" },
   { match: /phone|gadget|electronic|computer|laptop/i, icon: Smartphone, tone: "teal" },
-  { match: /fashion|cloth|wear|shoe|beauty/i, icon: Shirt, tone: "gold" },
-  { match: /food|drink|restaurant|agric/i, icon: UtensilsCrossed, tone: "clay" },
+  { match: /fashion|cloth|wear|shoe|accessor/i, icon: Shirt, tone: "gold" },
+  { match: /food|drink|beverage|restaurant|catering/i, icon: UtensilsCrossed, tone: "clay" },
   { match: /service|repair|tool|artisan|construction/i, icon: Wrench, tone: "blue" },
   { match: /property|house|home|land|rent|real/i, icon: Home, tone: "violet" },
   { match: /vehicle|car|auto|motor|transport/i, icon: Car, tone: "teal" },
-  { match: /job|work|career|employ/i, icon: Briefcase, tone: "gold" },
+  { match: /job|work|career|employ|recruit/i, icon: Briefcase, tone: "gold" },
 ];
 
 function categoryVisual(name: string): { icon: LucideIcon; tone: string } {
@@ -1027,7 +1035,7 @@ export function MarketplaceBrowse({
                     search: event.target.value,
                   }))
                 }
-                placeholder="Search Marketplace"
+                placeholder="Search"
                 aria-label="Search Marketplace"
               />
             </label>
