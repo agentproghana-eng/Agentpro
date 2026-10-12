@@ -29,7 +29,11 @@ class _SimPurposeSettingsScreenState extends State<SimPurposeSettingsScreen> {
   final Map<int, SimRole> _roles = {};
 
   bool _loading = true;
-  bool _saving = false;
+
+  // Slots currently being saved, and slots whose latest choice the server
+  // has accepted during this visit (shown as "Saved").
+  final Set<int> _savingSlots = <int>{};
+  final Set<int> _savedSlots = <int>{};
 
   String? _error;
 
@@ -155,31 +159,38 @@ class _SimPurposeSettingsScreenState extends State<SimPurposeSettingsScreen> {
     }
   }
 
-  Future<void> _save() async {
-    if (_simCards.isEmpty || _saving) {
+  /// Saves one SIM the moment its role is chosen. Only that SIM is sent, so a
+  /// SIM the user has not touched is never given a default role by accident.
+  /// On failure the previous role is restored and the user is told.
+  Future<void> _saveSlot(SimCard card, SimRole chosen) async {
+    if (_savingSlots.contains(card.slot)) {
       return;
     }
 
-    setState(() => _saving = true);
+    final previous = _roles[card.slot];
+
+    setState(() {
+      _roles[card.slot] = chosen;
+      _savingSlots.add(card.slot);
+      _savedSlots.remove(card.slot);
+    });
+
+    final role = _isPersonalOnlyCustomer ? SimRole.subscriber : chosen;
 
     try {
       final installationId =
           await StorageService.getOrCreateInstallationId();
 
-      final assignments = _simCards.map((card) {
-        final role = _isPersonalOnlyCustomer
-            ? SimRole.subscriber
-            : (_roles[card.slot] ?? SimRole.agent);
-
-        return {
+      final assignments = [
+        {
           'sim_slot': card.slot,
           'sim_iccid': card.iccid.isNotEmpty ? card.iccid : null,
           'installation_id': installationId,
           'sim_subscription_id': card.subscriptionId,
           'provider': card.network == 'unknown' ? null : card.network,
           'purpose': _roleValue(role),
-        };
-      }).toList();
+        },
+      ];
 
       await ApiClient.instance.put(
         '/user-sim-purposes',
@@ -191,41 +202,37 @@ class _SimPurposeSettingsScreenState extends State<SimPurposeSettingsScreen> {
       // Persist the server-accepted role locally so offline Business
       // execution does not lose an EVD/Merchant assignment and silently
       // fall back to Agent.
-      for (final card in _simCards) {
-        final role = _isPersonalOnlyCustomer
-            ? SimRole.subscriber
-            : (_roles[card.slot] ?? SimRole.agent);
-
-        await SimRoleAssignmentService.cacheRoleForSlot(
-          slot: card.slot,
-          role: _roleValue(role),
-          simIccid: card.iccid,
-          simSubscriptionId: card.subscriptionId,
-          provider: card.network,
-        );
-      }
+      await SimRoleAssignmentService.cacheRoleForSlot(
+        slot: card.slot,
+        role: _roleValue(role),
+        simIccid: card.iccid,
+        simSubscriptionId: card.subscriptionId,
+        provider: card.network,
+      );
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('SIM roles saved'),
-        ),
-      );
+      setState(() => _savedSlots.add(card.slot));
     } catch (_) {
       if (!mounted) return;
+
+      setState(() {
+        if (previous != null) {
+          _roles[card.slot] = previous;
+        }
+      });
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'AgentPro could not save the SIM roles.',
+            'AgentPro could not save the SIM role. Please try again.',
           ),
           backgroundColor: AppTheme.errorColor,
         ),
       );
     } finally {
       if (mounted) {
-        setState(() => _saving = false);
+        setState(() => _savingSlots.remove(card.slot));
       }
     }
   }
@@ -327,7 +334,8 @@ class _SimPurposeSettingsScreenState extends State<SimPurposeSettingsScreen> {
         const SizedBox(height: 6),
         Text(
           'AgentPro uses this to select the correct SIM '
-          'before starting a transaction.',
+          'before starting a transaction. Your choice is saved '
+          'as soon as you tap it.',
           style: TextStyle(
             color: context.appSecondaryText,
             height: 1.4,
@@ -340,12 +348,6 @@ class _SimPurposeSettingsScreenState extends State<SimPurposeSettingsScreen> {
           _buildSimCard(context, card),
           const SizedBox(height: 14),
         ],
-        const SizedBox(height: 6),
-        AppButton(
-          label: 'Save SIM Roles',
-          onPressed: _save,
-          isLoading: _saving,
-        ),
       ],
     );
   }
@@ -507,16 +509,41 @@ class _SimPurposeSettingsScreenState extends State<SimPurposeSettingsScreen> {
                     title: simRoleLabel(option),
                     subtitle: _roleDescription(option),
                     selected: option == role,
-                    onTap: () {
-                      setState(() {
-                        _roles[card.slot] = option;
-                      });
-                    },
+                    onTap: () => _saveSlot(card, option),
                   ),
                   if (option != availableRoles.last)
                     const SizedBox(
                       height: 8,
                     ),
+                ],
+                if (_savingSlots.contains(card.slot) ||
+                    _savedSlots.contains(card.slot)) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      if (_savingSlots.contains(card.slot))
+                        const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      else
+                        const Icon(
+                          Icons.check_circle_rounded,
+                          size: 16,
+                          color: AppTheme.primaryColor,
+                        ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _savingSlots.contains(card.slot) ? 'Saving…' : 'Saved',
+                        style: const TextStyle(
+                          color: AppTheme.primaryColor,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ],
             ),
