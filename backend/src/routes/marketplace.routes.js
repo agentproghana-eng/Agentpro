@@ -1,8 +1,10 @@
 // marketplace.routes.js
 const express = require('express');
+const crypto = require('crypto');
 const mpRouter = express.Router();
 const multer = require('multer');
 const { authenticate, authorize } = require('../middleware/auth');
+const { verifiedWebRateLimitIdentity } = require('../middleware/rateLimitIdentity');
 const { uploadLimiter } = require('../middleware/rateLimit');
 const { query, withTransaction } = require('../config/database');
 const { uploadFile } = require('../config/cloudinary');
@@ -139,6 +141,74 @@ function publicFeaturedSeller(seller) {
 }
 
 mpRouter.use(marketplaceAccess);
+
+const BOT_USER_AGENT_PATTERN =
+  /bot|crawl|spider|slurp|preview|monitor|headless|facebookexternalhit|whatsapp|curl|wget|python-requests|node-fetch|undici|go-http-client/i;
+
+function isLikelyBot(req) {
+  const userAgent = String(req.get('user-agent') || '').trim();
+
+  return !userAgent || BOT_USER_AGENT_PATTERN.test(userAgent);
+}
+
+// Records a view and, only when it is a new view for this visitor within
+// 30 minutes, increments the lifetime counter, so both always agree.
+async function recordAdView(adId, viewerId, req) {
+  let inserted;
+
+  if (viewerId !== null && viewerId !== undefined) {
+    inserted = await query(
+      `INSERT INTO advertisement_views
+         (advertisement_id, viewed_by)
+       SELECT $1, $2
+       WHERE NOT EXISTS (
+         SELECT 1
+         FROM advertisement_views
+         WHERE advertisement_id = $1
+           AND viewed_by = $2
+           AND viewed_at >= NOW() - INTERVAL '30 minutes'
+       )
+       RETURNING id`,
+      [adId, viewerId]
+    );
+  } else {
+    const identity = verifiedWebRateLimitIdentity(req);
+
+    // Without the website's verified pseudonymous identity there is no safe
+    // way to tell visitors apart, so do not count rather than inflate.
+    if (!identity) return;
+
+    const viewerHash = crypto
+      .createHash('sha256')
+      .update(
+        `ad-view:v1:${identity}:${adId}:${new Date().toISOString().slice(0, 10)}`
+      )
+      .digest('hex');
+
+    inserted = await query(
+      `INSERT INTO advertisement_views
+         (advertisement_id, viewer_hash)
+       SELECT $1, $2
+       WHERE NOT EXISTS (
+         SELECT 1
+         FROM advertisement_views
+         WHERE advertisement_id = $1
+           AND viewer_hash = $2
+           AND viewed_at >= NOW() - INTERVAL '30 minutes'
+       )
+       RETURNING id`,
+      [adId, viewerHash]
+    );
+  }
+
+  if (inserted.rows.length) {
+    await query(
+      'UPDATE advertisements SET views_count = views_count + 1 WHERE id = $1',
+      [adId]
+    );
+  }
+}
+
 
 // Ad photos: memoryStorage (buffer piped straight to Cloudinary, no
 // local disk writes), image MIME types only, capped at 5MB each and
@@ -2214,29 +2284,13 @@ mpRouter.get('/:ad_id', async (req, res) => {
       });
     }
 
-    // Keep authenticated third-party view deduplication exactly as before.
-    // Anonymous browsing does not manufacture a user identity or persist
-    // IP/device information merely for view analytics.
-    if (viewerId !== null && !isOwner) {
-      Promise.all([
-        query(
-          'UPDATE advertisements SET views_count = views_count + 1 WHERE id = $1',
-          [req.params.ad_id]
-        ),
-        query(
-          `INSERT INTO advertisement_views
-             (advertisement_id, viewed_by)
-           SELECT $1, $2
-           WHERE NOT EXISTS (
-             SELECT 1
-             FROM advertisement_views
-             WHERE advertisement_id = $1
-               AND viewed_by = $2
-               AND viewed_at >= NOW() - INTERVAL '30 minutes'
-           )`,
-          [req.params.ad_id, viewerId]
-        ),
-      ]).catch(() => {});
+    // Count one view per visitor per 30 minutes. Signed-in visitors are
+    // identified by account. Visitors who are not signed in (for example on
+    // agentproghana.com) are identified only by a one-way hash of the
+    // website's pseudonymous visitor identity, the ad and the day, so no IP
+    // address or device data is stored. Owners and known bots never count.
+    if (!isOwner && !isLikelyBot(req)) {
+      recordAdView(req.params.ad_id, viewerId, req).catch(() => {});
       // View analytics are non-blocking and must not prevent the ad from loading.
     }
 
