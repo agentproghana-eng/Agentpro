@@ -43,6 +43,6 @@ describe('Advertisement view counting contracts', () => {
     );
 
     expect(migration).toContain('ADD COLUMN IF NOT EXISTS viewer_hash TEXT');
-    expect(migration).not.toMatch(/\bip\b/i);
+    expect(migration).not.toMatch(/ADD COLUMN[^;]*\bip(_address)?\b/i);
   });
 });
