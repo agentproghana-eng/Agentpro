@@ -1,180 +1,154 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import {
+  BarChart3,
+  MessageSquare,
+  ShoppingBag,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
 
-import { PublicInfoPage } from "@/components/marketing/public-info-page";
+import {
+  HubFinalCta,
+  HubHero,
+  HubSection,
+  appLink,
+} from "@/components/marketing/hub-landing";
 import { createPageMetadata } from "@/lib/metadata";
 
 export const metadata: Metadata = createPageMetadata({
-  title: "AgentPro — One App Every Business",
+  title: "The AgentPro app",
   description:
-    "AgentPro is Coreintel Systems' integrated operating platform for business operations, transactions, reporting, people, discovery and opportunity.",
+    "Buy, sell and hire across Ghana from one app. Post free ads, join the community, grow your business and manage mobile money as an agent.",
   path: "/agentpro",
 });
 
-const sections = [
+const jobs: Array<{
+  title: string;
+  text: string;
+  icon: LucideIcon;
+  tone: string;
+}> = [
   {
-    eyebrow: "Run your business",
-    title: "Bring everyday operations into one connected workspace.",
-    description:
-      "AgentPro is designed around the activities businesses perform every day.",
-    items: [
-      {
-        title: "Transactions",
-        description:
-          "Record, review and understand important financial and operational activity.",
-      },
-      {
-        title: "Employees & roles",
-        description:
-          "Support owners, managers, agents, accountants and employees through clear responsibilities.",
-      },
-      {
-        title: "Balances & operations",
-        description:
-          "Keep operational balances and business activity easier to understand.",
-      },
-      {
-        title: "Customers & activity",
-        description:
-          "Maintain useful context around the people and activity connected to the business.",
-      },
-    ],
+    title: "Buy and sell",
+    text: "Post a free ad with photos and a price, or find what you need near you.",
+    icon: ShoppingBag,
+    tone: "teal",
   },
   {
-    eyebrow: "Understand your business",
-    title: "Turn daily activity into clearer business information.",
-    items: [
-      {
-        title: "Dashboards",
-        description:
-          "See performance, alerts and important activity without searching through scattered records.",
-      },
-      {
-        title: "Reports",
-        description:
-          "Create useful summaries from business and transaction activity.",
-      },
-      {
-        title: "Transaction history",
-        description:
-          "Maintain a structured record of what happened, when and within the correct business context.",
-      },
-      {
-        title: "Business analytics",
-        description:
-          "Use trends and operational information to support better decisions.",
-      },
-    ],
+    title: "Hire trusted services",
+    text: "Find repairs, fashion, food and local professionals, with ratings.",
+    icon: Wrench,
+    tone: "blue",
   },
   {
-    eyebrow: "Connect your business",
-    title:
-      "Connect businesses, professionals, customers and service providers.",
-    items: [
-      {
-        title: "Business profiles",
-        description:
-          "Publish controlled public information without exposing private operational data.",
-      },
-      {
-        title: "Community Hub",
-        description:
-          "Connect around industries, professions, opportunities and local needs.",
-      },
-      {
-        title: "Marketplace",
-        description:
-          "Help customers discover relevant businesses and services.",
-      },
-      {
-        title: "Messaging",
-        description:
-          "Support business enquiries and service conversations without automatically exposing private phone numbers.",
-      },
-    ],
+    title: "Join the Community",
+    text: "Share, ask and connect with people and businesses around you.",
+    icon: MessageSquare,
+    tone: "gold",
   },
   {
-    eyebrow: "Grow your business",
-    title: "Turn visibility and connection into practical opportunity.",
-    items: [
-      {
-        title: "Service requests",
-        description:
-          "Respond to nearby demand based on category, geography and service coverage.",
-      },
-      {
-        title: "Professional communities",
-        description:
-          "Participate in useful networks built around real professions and industries.",
-      },
-      {
-        title: "Business discovery",
-        description: "Become easier for relevant customers to find.",
-      },
-      {
-        title: "Customer trust",
-        description:
-          "Build reputation through verified interactions, reviews and professional business information.",
-      },
-    ],
+    title: "Grow with Business Hub",
+    text: "Track views, saves and enquiries on your ads.",
+    icon: BarChart3,
+    tone: "red",
   },
-  {
-    eyebrow: "Work anywhere",
-    title: "Mobile-first by design, with a web platform where it adds value.",
-    items: [
-      {
-        title: "Mobile-first workflows",
-        description:
-          "Designed for the devices many businesses already depend on.",
-      },
-      {
-        title: "Cloud-connected",
-        description:
-          "Keep authorised data available across supported AgentPro experiences.",
-      },
-      {
-        title: "Low-bandwidth awareness",
-        description:
-          "Avoid unnecessary payloads and heavy interactions where possible.",
-      },
-      {
-        title: "Secure web access",
-        description:
-          "Use authenticated web experiences for Community Hub and Business Hub.",
-      },
-    ],
-  },
-] as const;
+];
 
 export default function AgentProPage() {
   return (
-    <PublicInfoPage
-      eyebrow="AgentPro"
-      title="One App Every Business"
-      description="AgentPro is an integrated business operating platform designed to help businesses run their work, understand performance, connect with people and discover opportunity."
-      primaryAction={{
-        label: "Get AgentPro",
-        href: "/contact?topic=agentpro",
-      }}
-      secondaryAction={{
-        label: "Sign In",
-        href: "/login",
-      }}
-      highlights={[
-        "Business operations",
-        "Transactions and reporting",
-        "Community Hub",
-        "Business Hub",
-        "Marketplace and service discovery",
-      ]}
-      sections={sections}
-      cta={{
-        eyebrow: "AgentPro",
-        title: "Build a clearer, more connected business.",
-        description:
-          "Talk to Coreintel Systems about AgentPro, partnerships, deployment or support.",
-        label: "Contact Coreintel",
-        href: "/contact?topic=agentpro",
-      }}
-    />
+    <main id="main-content" className="ic-hub-page">
+      <HubHero
+        eyebrow="The AgentPro app"
+        title="Buy, sell and hire across Ghana, from one app."
+        lead="Post a free ad, find what you need near you, chat with sellers and grow your business. Mobile money agents get their own tools too."
+        primary={{ label: "Get the app", href: appLink() }}
+        secondary={{ label: "Browse the Marketplace", href: "/" }}
+      >
+        <div className="ic-ap-phone" aria-hidden="true">
+          <div className="ic-ap-screen">
+            <strong>Marketplace</strong>
+            <span className="ic-ap-search">Search phones, fashion, services</span>
+            <div className="ic-ap-tiles">
+              <i />
+              <i />
+              <i />
+              <i />
+            </div>
+            <div className="ic-ap-ad">
+              <div data-tone="teal">
+                <b>GH₵ 2,400</b>
+              </div>
+              <p>
+                Smartphone, 128GB
+                <small>East Legon, Accra</small>
+              </p>
+            </div>
+            <div className="ic-ap-ad">
+              <div data-tone="gold">
+                <b>GH₵ 180</b>
+              </div>
+              <p>Ankara dress</p>
+            </div>
+            <span className="ic-ap-post">Post a free ad</span>
+          </div>
+        </div>
+        <p className="ic-hub-sample-note">Sample screen for illustration</p>
+      </HubHero>
+
+      <HubSection title="What you can do with AgentPro">
+        <div className="ic-hub-card-grid ic-hub-card-grid-wide">
+          {jobs.map((item) => {
+            const Icon = item.icon;
+
+            return (
+              <article className="ic-hub-card ic-hub-card-row" key={item.title}>
+                <span className="ic-hub-icon" data-tone={item.tone}>
+                  <Icon size={24} aria-hidden="true" />
+                </span>
+
+                <div>
+                  <h3>{item.title}</h3>
+                  <p>{item.text}</p>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+
+        <div className="ic-ap-links">
+          <Link href="/">Marketplace</Link>
+          <Link href="/community">Community</Link>
+          <Link href="/business-hub">Business Hub</Link>
+        </div>
+      </HubSection>
+
+      <HubSection title="Already a mobile money agent?">
+        <div className="ic-ap-agents">
+          <div>
+            <p>
+              Use the same account for the agent tools: cash in and out,
+              float, commission and daily reports across MTN MoMo, Telecel
+              Cash and AirtelTigo Money.
+            </p>
+            <div className="ic-ap-networks">
+              <span data-tone="gold">MTN MoMo</span>
+              <span data-tone="red">Telecel Cash</span>
+              <span data-tone="blue">AirtelTigo Money</span>
+            </div>
+          </div>
+
+          <Link href="/login?next=/hub" className="ic-hub-button-dark">
+            See agent tools
+          </Link>
+        </div>
+      </HubSection>
+
+      <HubFinalCta
+        title="Your local market, in your pocket."
+        text="Get the app and post your first ad in minutes."
+        primary={{ label: "Join free", href: "/register" }}
+      />
+    </main>
   );
 }
