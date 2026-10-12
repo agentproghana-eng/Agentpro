@@ -8,6 +8,7 @@ const { query, withTransaction } = require('../config/database');
 const { uploadFile } = require('../config/cloudinary');
 const { logger } = require('../utils/logger');
 const { auditLog } = require('../services/auditService');
+const { sendAdNotification } = require('../services/notificationService');
 const { v4: uuidv4 } = require('uuid');
 const {
   amountToMinorUnits,
@@ -1391,6 +1392,15 @@ mpRouter.post('/:ad_id/enquiries', async (req, res) => {
       [conversation.id, req.user.id, body]
     );
 
+    // Tell the seller. Best effort: a failed push must never fail the enquiry.
+    sendAdNotification(
+      ad.posted_by,
+      { type: 'ad_enquiry', adTitle: ad.title, adId: ad.id },
+      { deliveryKey: `ad_enquiry:${messageResult.rows[0].id}` }
+    ).catch((error) => {
+      logger.warn('Enquiry notification failed', { error: error?.message });
+    });
+
     res.status(201).json({
       success: true,
       data: {
@@ -1713,7 +1723,7 @@ mpRouter.get('/:ad_id/saved-status', async (req, res) => {
 mpRouter.post('/:ad_id/save', async (req, res) => {
   try {
     const adResult = await query(
-      `SELECT id, status
+      `SELECT id, status, posted_by, title
        FROM advertisements
        WHERE id = $1`,
       [req.params.ad_id]
@@ -1733,12 +1743,26 @@ mpRouter.post('/:ad_id/save', async (req, res) => {
       });
     }
 
-    await query(
+    const saved = await query(
       `INSERT INTO marketplace_saved_ads (user_id, ad_id)
        VALUES ($1, $2)
-       ON CONFLICT (user_id, ad_id) DO NOTHING`,
+       ON CONFLICT (user_id, ad_id) DO NOTHING
+       RETURNING ad_id`,
       [req.user.id, req.params.ad_id]
     );
+
+    // Notify the seller about a new save, once per person and ad, so saving
+    // and unsaving repeatedly cannot spam them. Never notify about own ads.
+    const savedAd = adResult.rows[0];
+    if (saved.rows.length && savedAd.posted_by !== req.user.id) {
+      sendAdNotification(
+        savedAd.posted_by,
+        { type: 'ad_saved', adTitle: savedAd.title, adId: savedAd.id },
+        { deliveryKey: `ad_saved:${req.user.id}:${savedAd.id}` }
+      ).catch((error) => {
+        logger.warn('Save notification failed', { error: error?.message });
+      });
+    }
 
     res.json({
       success: true,
