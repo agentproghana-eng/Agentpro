@@ -403,11 +403,19 @@ async function sendAdNotification(
     },
     ad_expiring: {
       title: '⏰ Ad Expiring Soon',
-      body: `Your ad "${adTitle}" expires in 7 days. Renew to keep it active.`,
+      body: `Your ad "${adTitle}" expires in about 7 days. Post a new ad when it ends to stay visible.`,
     },
     ad_expired: {
       title: '📢 Ad Expired',
-      body: `Your ad "${adTitle}" has expired. Renew to repost.`,
+      body: `Your ad "${adTitle}" has expired. Post a new ad to get back in front of buyers.`,
+    },
+    ad_enquiry: {
+      title: '💬 New Enquiry',
+      body: `A customer sent an enquiry about "${adTitle}". Reply while they are interested.`,
+    },
+    ad_saved: {
+      title: '❤️ Ad Saved',
+      body: `Someone saved your ad "${adTitle}".`,
     },
   };
 

@@ -417,26 +417,41 @@ async function expireOldAds() {
        RETURNING id, posted_by, title`
     );
 
-    for (const ad of gracePeriod.rows) {
-      await sendAdNotification(ad.posted_by, { type: 'ad_expired', adTitle: ad.title });
-    }
-
-    // Hard remove after grace period
-    await query(
+    // Hard remove after grace period. Only ads that are still active are
+    // changed, so already expired ads are not rewritten every night.
+    const pastGrace = await query(
       `UPDATE advertisements
        SET status = 'expired', updated_at = NOW()
-       WHERE status IN ('active', 'expired')
-         AND grace_period_ends_at < NOW()`
+       WHERE status = 'active'
+         AND grace_period_ends_at < NOW()
+       RETURNING id, posted_by, title`
     );
 
-    // Send 7-day expiry warnings
+    // Tell the seller once per ad, whichever way it expired.
+    for (const ad of [...gracePeriod.rows, ...pastGrace.rows]) {
+      await sendAdNotification(
+        ad.posted_by,
+        { type: 'ad_expired', adTitle: ad.title, adId: ad.id },
+        { deliveryKey: `ad_expired:${ad.id}` }
+      );
+    }
+
+    // Send the 7-day expiry warning once per ad and expiry date, not every
+    // night while the ad is inside the window.
     const expiringSoon = await query(
-      `SELECT id, posted_by, title FROM advertisements
+      `SELECT id, posted_by, title, expires_at FROM advertisements
        WHERE status = 'active'
          AND expires_at BETWEEN NOW() AND NOW() + INTERVAL '7 days'`
     );
     for (const ad of expiringSoon.rows) {
-      await sendAdNotification(ad.posted_by, { type: 'ad_expiring', adTitle: ad.title });
+      await sendAdNotification(
+        ad.posted_by,
+        { type: 'ad_expiring', adTitle: ad.title, adId: ad.id },
+        {
+          deliveryKey:
+            `ad_expiring:${ad.id}:${new Date(ad.expires_at).toISOString()}`,
+        }
+      );
     }
 
     if (gracePeriod.rows.length > 0) {
