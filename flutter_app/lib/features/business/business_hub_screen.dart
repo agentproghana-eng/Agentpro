@@ -153,7 +153,7 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
             const SizedBox(height: 12),
             _HubCard(
               icon: Icons.favorite_outline,
-              title: 'Saved Ads',
+              title: 'Ads I Saved',
               subtitle: 'View advertisements you have saved',
               onTap: () => context.push('/marketplace/saved'),
             ),
@@ -268,7 +268,7 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
                                     : DateTime.tryParse(date);
                                 final label = parsedDate == null
                                     ? date ?? ''
-                                    : '${parsedDate.day}/${parsedDate.month}';
+                                    : _shortDate(parsedDate);
 
                                 return LineTooltipItem(
                                   '${spot.y.toInt()} view'
@@ -316,6 +316,12 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
                                   return const SizedBox.shrink();
                                 }
 
+                                // Label about every 7th day, always the last.
+                                if ((visibleTrend.length - 1 - index) % 7 !=
+                                    0) {
+                                  return const SizedBox.shrink();
+                                }
+
                                 final date = DateTime.tryParse(
                                   visibleTrend[index]['date']?.toString() ?? '',
                                 );
@@ -326,8 +332,8 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
                                 return Padding(
                                   padding: const EdgeInsets.only(top: 6),
                                   child: Text(
-                                    '${date.day}/${date.month}',
-                                    style: const TextStyle(fontSize: 9),
+                                    _shortDate(date),
+                                    style: const TextStyle(fontSize: 11),
                                   ),
                                 );
                               },
@@ -416,11 +422,13 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
           icon: Icons.calendar_view_week_outlined,
           label: 'Views This Week',
           value: _asInt('views_this_week').toString(),
-          detail: '${growth >= 0 ? '+' : ''}${growth.toStringAsFixed(1)}%',
+          detail: growth == 0
+              ? null
+              : '${growth >= 0 ? '+' : ''}${growth.toStringAsFixed(1)}%',
         ),
         _PerformanceCard(
           icon: Icons.favorite_outline,
-          label: 'Saved Ads',
+          label: 'Saves on Your Ads',
           value: _asInt('saved_ads').toString(),
         ),
         _PerformanceCard(
@@ -457,11 +465,22 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
   }
 
   Widget _buildTopAds() {
-    final ads = _asMapList('top_ads');
+    int count(Map<String, dynamic> ad, String key) =>
+        int.tryParse(ad[key]?.toString() ?? '') ?? 0;
+
+    // Only ads that earned some attention can be "top performing".
+    final ads = _asMapList('top_ads')
+        .where((ad) =>
+            count(ad, 'views') + count(ad, 'saves') + count(ad, 'enquiries') >
+            0)
+        .toList();
 
     if (ads.isEmpty) {
-      return const _AnalyticsEmptyCard(
-        message: 'Publish advertisements to see performance rankings.',
+      return _AnalyticsEmptyCard(
+        message: _asInt('total_ads') == 0
+            ? 'Publish advertisements to see performance rankings.'
+            : 'No ad has had views, saves or enquiries yet. Clear photos '
+                'and a price help buyers find your ads.',
       );
     }
 
@@ -494,6 +513,31 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
 
   Widget _buildAttentionAds() {
     final ads = _asMapList('attention_ads');
+
+    if (ads.isEmpty && _asInt('active_ads') == 0) {
+      final hasAds = _asInt('total_ads') > 0;
+
+      return Card(
+        child: ListTile(
+          onTap: () =>
+              context.push(hasAds ? '/marketplace/mine' : '/marketplace/post'),
+          leading: const CircleAvatar(
+            child: Icon(Icons.lightbulb_outline),
+          ),
+          title: Text(
+            hasAds
+                ? 'You have no live ads right now.'
+                : 'You have not posted an ad yet.',
+          ),
+          subtitle: Text(
+            hasAds
+                ? 'Open My Ads to renew or repost, so buyers can find you.'
+                : 'Post your first ad to start getting views.',
+          ),
+          trailing: const Icon(Icons.chevron_right),
+        ),
+      );
+    }
 
     if (ads.isEmpty) {
       return const _AnalyticsEmptyCard(
@@ -583,6 +627,15 @@ class _BusinessHubScreenState extends State<BusinessHubScreen> {
         }).toList(),
       ),
     );
+  }
+
+  String _shortDate(DateTime date) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+
+    return '${date.day} ${months[date.month - 1]}';
   }
 
   String _relativeTime(DateTime date) {
