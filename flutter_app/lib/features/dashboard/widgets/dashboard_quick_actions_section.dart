@@ -456,13 +456,14 @@ class DashboardQuickActionsSection extends StatelessWidget {
       return _withSimSelector(
         sims: sims,
         selected: sim,
-        child: const DashboardEmptyState(
+        child: DashboardEmptyState(
           icon: Icons.sim_card_alert_rounded,
           title: 'SIM role required',
           message: 'AgentPro could not verify this SIM as '
               'Agent, Subscriber, EVD or Merchant. '
-              'Open Settings > SIM Purpose and save '
-              'the correct role for this SIM.',
+              'Choose the correct role for this SIM.',
+          actionLabel: 'Set SIM role',
+          onAction: () => context.push('/settings/sim-purpose'),
         ),
       );
     }
