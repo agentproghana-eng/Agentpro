@@ -86,7 +86,7 @@ final List<HelpSection> _helpSections = [
         HelpItem(
           question: 'Which SIM does a transaction use?',
           answer:
-              'AgentPro detects the available network SIMs and uses the SIM assigned to the required purpose, such as Agent, Subscriber, EVD or Merchant. Check Settings → SIM Purpose if the role is missing or incorrect.',
+              'AgentPro detects the available network SIMs and uses the SIM assigned to the required purpose, such as Agent, Subscriber, EVD or Merchant. Check Settings → SIM Purpose if the role is missing or incorrect. A role saves automatically as soon as you choose it, and you can also hold a SIM tab on the home screen to change that SIM\'s purpose.',
         ),
         HelpItem(
           question: 'Why does AgentPro need Accessibility for USSD?',
@@ -107,6 +107,26 @@ final List<HelpSection> _helpSections = [
           question: 'Can I start another MTN Cash Out while one is waiting for confirmation?',
           answer:
               'Yes. After the safe USSD handoff, a Cash Out can remain pending confirmation while you start another transaction. Each pending Cash Out is reconciled independently when a matching trusted confirmation arrives.',
+        ),
+        HelpItem(
+          question: 'Where do I see the network\'s own message after a transaction?',
+          answer:
+              'The result page shows the final message from the network. If the network shows its own confirmation dialog, AgentPro leaves it on screen so you can read it and close it yourself.',
+        ),
+        HelpItem(
+          question: 'How do I use Commissions on an MTN Agent SIM?',
+          answer:
+              'MTN Agent has one Commissions tile with Cash In/Out, Cash Out Commission and Transfer Commission. Balance and Commission checks can also run offline from a saved flow.',
+        ),
+        HelpItem(
+          question: 'What is the difference between Pay to Agent and Pay to Merchant?',
+          answer:
+              'They are separate tiles with their own pages and fields. Pay to Agent opens with Agent selected and its fields showing; Pay to Merchant asks for the merchant details.',
+        ),
+        HelpItem(
+          question: 'What can MTN Subscriber users do besides sending money?',
+          answer:
+              'Allow Cash Out lets an agent cash out from your phone, My Approvals lists requests waiting for you, and Transfer to Bank sends money to a bank account chosen from a searchable list of banks.',
         ),
       ]),
   const HelpSection(
@@ -171,6 +191,61 @@ final List<HelpSection> _helpSections = [
         ),
       ]),
   const HelpSection(
+      title: 'Your Home Screen',
+      icon: Icons.dashboard_customize_outlined,
+      items: [
+        HelpItem(
+          question: 'How do I rearrange my tiles?',
+          answer:
+              'Hold a tile and drag it onto another tile to swap their places.',
+        ),
+        HelpItem(
+          question: 'Can I change how the tiles look?',
+          answer:
+              'Yes. In quick action customisation you can choose the tile font. Your changes save automatically and the home screen updates straight away.',
+        ),
+        HelpItem(
+          question: 'How do I change what a SIM is used for?',
+          answer:
+              'Hold the SIM tab on the home screen, or open Settings → SIM Purpose, and choose Agent, Subscriber, EVD or Merchant. It saves as soon as you choose.',
+        ),
+      ]),
+  const HelpSection(
+      title: 'Community',
+      icon: Icons.forum_outlined,
+      items: [
+        HelpItem(
+          question: 'What is the Community?',
+          answer:
+              'A feed where people share posts, ask questions and connect. Agents and Personal users each have their own community.',
+        ),
+        HelpItem(
+          question: 'How do I post?',
+          answer:
+              'Tap the composer bar at the top of the feed to write a post, add a photo or record a voice note. Voice notes can be up to 2 minutes.',
+        ),
+        HelpItem(
+          question: 'Who can post?',
+          answer:
+              'In the Personal community, posting needs a paid plan. You will see "Upgrade to Paid to post in the community" with an Upgrade button. Anyone can read the feed.',
+        ),
+        HelpItem(
+          question: 'How do I react to a post?',
+          answer:
+              'Tap a reaction on the post. It updates immediately. Tap it again to remove it.',
+        ),
+        HelpItem(
+          question: 'Why does my post say Under review?',
+          answer:
+              'Some posts are checked before everyone can see them. While a post is under review, only you can see it.',
+        ),
+        HelpItem(
+          question: 'The feed did not load. What now?',
+          answer:
+              'Check your internet connection, then pull down on the feed to refresh. Your posts are not lost.',
+        ),
+      ]),
+  const HelpSection(
       title: 'Business Hub',
       icon: Icons.storefront_outlined,
       items: [
@@ -192,7 +267,7 @@ final List<HelpSection> _helpSections = [
         HelpItem(
           question: 'Who can see a published ad?',
           answer:
-              'Anyone using the app, once it is active — the Business Hub is a shared marketplace across the whole app.',
+              'Anyone using the app, once it is active — the Business Hub is a shared marketplace across the whole app. Active ads also appear on the AgentPro website, agentproghana.com.',
         ),
       ]),
   const HelpSection(

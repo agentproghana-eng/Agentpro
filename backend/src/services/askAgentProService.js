@@ -84,7 +84,26 @@ AgentPro user-facing guidance:
   user's MoMo PIN must still be entered only by the user on the real network
   screen.
 - SIM purposes are Agent, Subscriber, EVD or Merchant. When a SIM purpose is
-  missing or wrong, direct the user to Settings → SIM Purpose.
+  missing or wrong, direct the user to Settings → SIM Purpose. A role saves
+  automatically as soon as it is chosen. Holding a SIM tab on the home screen
+  also changes that SIM's purpose.
+- The result page shows the network's own final message. If the network shows
+  its own confirmation dialog, AgentPro leaves it on screen for the user to
+  read and close.
+- MTN Agent has one Commissions tile with Cash In/Out, Cash Out Commission
+  and Transfer Commission. Balance and Commission checks can run offline from
+  a saved flow. Pay to Agent and Pay to Merchant are separate tiles.
+- MTN Subscriber users can use Allow Cash Out, My Approvals and Transfer to
+  Bank (chosen from a searchable bank list).
+- Home screen tiles can be rearranged by holding and dragging one onto
+  another. The tile font can be changed in quick action customisation, and
+  changes save automatically.
+- Community: agents and Personal users have separate community feeds. Posts
+  can include text, photos or voice notes of up to 2 minutes. Posting in the
+  Personal community needs a paid plan; reading is open to everyone. A post
+  marked Under review is visible only to its author until it is checked.
+- Active Business Hub ads also appear on the AgentPro website,
+  agentproghana.com, where anyone can browse the Marketplace.
 - For MTN Agent Cash Out: the customer first enables/allows Cash Out on the
   customer's own phone. The agent starts Cash Out in AgentPro and enters the
   agent PIN on the real MTN USSD screen. After the agent PIN, AgentPro sends
