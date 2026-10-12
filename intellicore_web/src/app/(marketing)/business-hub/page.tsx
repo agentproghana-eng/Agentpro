@@ -1,111 +1,161 @@
 import type { Metadata } from "next";
+import {
+  List,
+  MessageSquare,
+  Star,
+  TriangleAlert,
+  type LucideIcon,
+} from "lucide-react";
 
-import { PublicInfoPage } from "@/components/marketing/public-info-page";
+import {
+  HubFinalCta,
+  HubHero,
+  HubSection,
+} from "@/components/marketing/hub-landing";
 import { createPageMetadata } from "@/lib/metadata";
 
-export const metadata: Metadata =
-  createPageMetadata({
-    title: "Business Hub",
-    description:
-      "Manage Marketplace listings, buyer interest and seller performance with AgentPro Business Hub.",
-    path: "/business-hub",
-  });
+export const metadata: Metadata = createPageMetadata({
+  title: "Business Hub",
+  description:
+    "Post ads, track views, saves and enquiries, and see which Marketplace listings need attention with AgentPro Business Hub.",
+  path: "/business-hub",
+});
 
-const sections = [
+const stats = [
+  { label: "Views", value: "1,240", delta: "+18% this week" },
+  { label: "Saves", value: "86", delta: "+9 this week" },
+  { label: "Enquiries", value: "23", delta: "5 new" },
+];
+
+const sampleAds = [
+  { title: "Smartphone, 128GB", views: 412, status: "Live", tone: "teal" },
+  { title: "Ankara dress, made to order", views: 188, status: "In review", tone: "gold" },
+  { title: "Phone repairs", views: 31, status: "Expiring", tone: "red" },
+];
+
+const flow = [
+  { step: "Step 1", title: "Post", text: "Add clear photos, a price and where you are." },
+  { step: "Step 2", title: "Review", text: "We check each ad before buyers see it." },
+  { step: "Step 3", title: "Go live", text: "Buyers find you, save your ad and send enquiries." },
+];
+
+const tools: Array<{
+  title: string;
+  text: string;
+  icon: LucideIcon;
+  tone: string;
+}> = [
   {
-    eyebrow: "Seller performance",
-    title:
-      "Know how your Marketplace storefront is performing.",
-    items: [
-      {
-        title: "Listing performance",
-        description:
-          "Track views, saves, enquiries and the listings attracting the most buyer interest.",
-      },
-      {
-        title: "Buyer activity",
-        description:
-          "See recent Marketplace interest and identify new enquiries that need attention.",
-      },
-      {
-        title: "Seller reputation",
-        description:
-          "Follow ratings and reviews that help buyers understand your storefront.",
-      },
-      {
-        title: "Attention signals",
-        description:
-          "Spot listings that are expiring or are receiving little engagement.",
-      },
-    ],
+    title: "My Ads",
+    text: "Active, pending and expired listings in one list.",
+    icon: List,
+    tone: "teal",
   },
   {
-    eyebrow: "Marketplace management",
-    title:
-      "Manage your listings from one workspace.",
-    items: [
-      {
-        title: "My Ads",
-        description:
-          "See active, pending, expired and other listing statuses without losing track of submitted ads.",
-      },
-      {
-        title: "Post an Ad",
-        description:
-          "Create new Marketplace listings with reviewed photos and clear product details.",
-      },
-      {
-        title: "Publishing status",
-        description:
-          "Follow review and publishing progress before a listing becomes visible to buyers.",
-      },
-      {
-        title: "Storefront growth",
-        description:
-          "Use real Marketplace activity to improve the listings that need attention.",
-      },
-    ],
+    title: "Buyer activity",
+    text: "See new enquiries and reply while they are interested.",
+    icon: MessageSquare,
+    tone: "blue",
   },
   {
-    eyebrow: "Separate by design",
-    title:
-      "Marketplace Business Hub is not Mobile Money Agents Hub.",
-    items: [
-      {
-        title: "Business Hub",
-        description:
-          "Marketplace seller tools, listings and storefront performance.",
-      },
-      {
-        title: "Agents Hub",
-        description:
-          "Mobile Money operations remain available only to approved AgentPro agent-business roles.",
-      },
-    ],
+    title: "Ratings and reviews",
+    text: "Build the reputation that makes buyers choose you.",
+    icon: Star,
+    tone: "gold",
   },
-] as const;
+  {
+    title: "Attention signals",
+    text: "Spot ads that are about to expire or get little interest.",
+    icon: TriangleAlert,
+    tone: "red",
+  },
+];
 
 export default function BusinessHubPage() {
   return (
-    <PublicInfoPage
-      eyebrow="AgentPro Business Hub"
-      title="Run your Marketplace storefront with better visibility."
-      description="Business Hub is the private Marketplace seller workspace for managing ads, buyer interest and storefront performance."
-      primaryAction={{
-        label: "Sign In to Business Hub",
-        href: "/login?next=/hub/business",
-      }}
-      secondaryAction={{
-        label: "Browse Marketplace",
-        href: "/",
-      }}
-      highlights={[
-        "My Ads and listing status",
-        "Views, saves and enquiries",
-        "Seller ratings",
-        "Marketplace performance",
-      ]}
-      sections={sections}
-    />
+    <main id="main-content" className="ic-hub-page">
+      <HubHero
+        eyebrow="AgentPro Business Hub"
+        title="See who is looking at your listings."
+        lead="Post ads, track views, saves and enquiries, and know which listings need attention. Free to start."
+        primary={{ label: "Post your first ad", href: "/login?next=/marketplace/post" }}
+        secondary={{ label: "Sign in", href: "/login?next=/hub/business" }}
+      >
+        <div className="ic-hub-dashboard">
+          <div className="ic-hub-dashboard-head">
+            <strong>Your storefront</strong>
+            <span>Sample numbers for illustration</span>
+          </div>
+
+          <div className="ic-hub-stats">
+            {stats.map((stat) => (
+              <div key={stat.label}>
+                <span>{stat.label}</span>
+                <strong>{stat.value}</strong>
+                <small>{stat.delta}</small>
+              </div>
+            ))}
+          </div>
+
+          <div className="ic-hub-ads">
+            <strong>Your ads</strong>
+
+            {sampleAds.map((ad) => (
+              <div key={ad.title}>
+                <span>{ad.title}</span>
+                <small>{ad.views} views</small>
+                <em className="ic-hub-chip" data-tone={ad.tone}>
+                  {ad.status}
+                </em>
+              </div>
+            ))}
+          </div>
+        </div>
+      </HubHero>
+
+      <HubSection title="From first ad to first sale">
+        <div className="ic-hub-card-grid">
+          {flow.map((item) => (
+            <article className="ic-hub-card" key={item.title}>
+              <span className="ic-hub-step-label">{item.step}</span>
+              <h3>{item.title}</h3>
+              <p>{item.text}</p>
+            </article>
+          ))}
+        </div>
+      </HubSection>
+
+      <HubSection title="Everything in one workspace">
+        <div className="ic-hub-card-grid ic-hub-card-grid-wide">
+          {tools.map((item) => {
+            const Icon = item.icon;
+
+            return (
+              <article className="ic-hub-card ic-hub-card-row" key={item.title}>
+                <span className="ic-hub-icon" data-tone={item.tone}>
+                  <Icon size={24} aria-hidden="true" />
+                </span>
+
+                <div>
+                  <h3>{item.title}</h3>
+                  <p>{item.text}</p>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+
+        <p className="ic-hub-footnote">
+          Mobile money operations are in the separate Agents Hub for
+          approved agents.
+        </p>
+      </HubSection>
+
+      <HubFinalCta
+        title="Start selling for free."
+        text="Post your first ad in minutes, or get the app to manage listings from your phone."
+        primary={{ label: "Post your first ad", href: "/login?next=/marketplace/post" }}
+      />
+    </main>
   );
 }
