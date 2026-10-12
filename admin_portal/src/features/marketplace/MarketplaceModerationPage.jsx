@@ -6,6 +6,10 @@ import toast from 'react-hot-toast';
 
 import API from '../../lib/api.js';
 import {
+  ErrorState,
+  LoadingState,
+} from '../../components/PageState.jsx';
+import {
   MarketplaceModerationCard,
 } from './MarketplaceModerationCard.jsx';
 import {
@@ -31,7 +35,32 @@ export function MarketplacePage() {
     setImageViewer,
   ] = useState(null);
 
+  const [loading, setLoading] =
+    useState(true);
+
+  const [loadError, setLoadError] =
+    useState(null);
+
   const load = async () => {
+    setLoading(true);
+    setLoadError(null);
+
+    try {
+      await loadAds();
+    } catch (error) {
+      // Never show "no pending listings" when the list simply failed to load.
+      setLoadError(
+        error?.response?.data
+          ?.message ||
+          error?.message ||
+          'The listings could not be loaded.',
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadAds = async () => {
     const response =
       await API.get(
         '/admin/ads/pending',
@@ -332,6 +361,22 @@ export function MarketplacePage() {
           ad.momo_reference,
         ),
     ).length;
+
+  if (loading && ads.length === 0) {
+    return (
+      <LoadingState label="Loading listings..." />
+    );
+  }
+
+  if (loadError) {
+    return (
+      <ErrorState
+        title="Listings could not be loaded"
+        message={loadError}
+        onRetry={load}
+      />
+    );
+  }
 
   return (
     <div>

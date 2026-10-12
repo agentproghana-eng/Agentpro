@@ -61,6 +61,7 @@ export function MarketplaceModerationCard({
           <span
             className="
               text-xs
+              capitalize
               bg-yellow-100
               text-yellow-700
               px-2
@@ -68,7 +69,7 @@ export function MarketplaceModerationCard({
               rounded-full
             "
           >
-            {ad.status}
+            {String(ad.status).replace(/_/g, ' ')}
           </span>
         </div>
 

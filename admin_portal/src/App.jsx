@@ -1295,14 +1295,14 @@ function Layout({ children }) {
       )}
 
       {/* Sidebar */}
-      <aside className={`${sidebarOpen ? 'w-56' : 'w-16'} bg-white shadow-md flex flex-col transition-all duration-200`}>
-        <div className="p-4 flex items-center gap-3 border-b">
+      <aside className={`${sidebarOpen ? 'w-56' : 'w-16'} bg-white shadow-md flex flex-col min-h-0 overflow-hidden transition-all duration-200`}>
+        <div className="p-4 flex items-center gap-3 border-b flex-shrink-0">
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center flex-shrink-0">
             <span className="text-white text-xs font-bold">AP</span>
           </div>
           {sidebarOpen && <span className="font-bold text-gray-900 text-sm">Admin Portal</span>}
         </div>
-        <nav className="flex-1 p-2 space-y-1">
+        <nav className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1">
           {NAV
             .filter(({ path }) =>
               canAccessAdminPath(
@@ -1318,7 +1318,7 @@ function Layout({ children }) {
             </Link>
           ))}
         </nav>
-        <div className="p-4 border-t">
+        <div className="p-4 border-t flex-shrink-0">
           {sidebarOpen && (
             <>
               <p className="text-xs text-gray-500 truncate">
