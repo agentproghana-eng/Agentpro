@@ -38,6 +38,12 @@ export function MarketplacePage() {
   const [loading, setLoading] =
     useState(true);
 
+  const [tab, setTab] =
+    useState(null);
+
+  const [search, setSearch] =
+    useState('');
+
   const [loadError, setLoadError] =
     useState(null);
 
@@ -337,31 +343,6 @@ export function MarketplacePage() {
       );
     };
 
-  const pendingReviewCount =
-    ads.filter(
-      ad =>
-        ad.status ===
-        'pending_review',
-    ).length;
-
-  const awaitingUserPaymentCount =
-    ads.filter(
-      ad =>
-        ad.status ===
-          'pending_payment' &&
-        !ad.momo_reference,
-    ).length;
-
-  const paymentSubmittedCount =
-    ads.filter(
-      ad =>
-        ad.status ===
-          'pending_payment' &&
-        Boolean(
-          ad.momo_reference,
-        ),
-    ).length;
-
   if (loading && ads.length === 0) {
     return (
       <LoadingState label="Loading listings..." />
@@ -378,94 +359,163 @@ export function MarketplacePage() {
     );
   }
 
+  const verifyAds = ads.filter(
+    ad =>
+      ad.status === 'pending_payment' &&
+      Boolean(ad.momo_reference),
+  );
+  const reviewAds = ads.filter(
+    ad => ad.status === 'pending_review',
+  );
+  const waitingAds = ads.filter(
+    ad =>
+      ad.status === 'pending_payment' &&
+      !ad.momo_reference,
+  );
+
+  const tabs = [
+    {
+      key: 'review',
+      label: 'To review',
+      items: reviewAds,
+      urgent: true,
+      note:
+        'New ads. Set a price if needed, then approve or reject.',
+    },
+    {
+      key: 'verify',
+      label: 'Verify payment',
+      items: verifyAds,
+      urgent: true,
+      note:
+        'Sellers have sent their MoMo reference. Check it and verify the payment.',
+    },
+    {
+      key: 'waiting',
+      label: 'Waiting for seller',
+      items: waitingAds,
+      urgent: false,
+      note:
+        'Approved and priced. Waiting for the seller to pay. Nothing for you to do yet.',
+    },
+  ];
+
+  const defaultTab =
+    (
+      tabs.find(
+        item =>
+          item.urgent &&
+          item.items.length > 0,
+      ) ||
+      tabs.find(
+        item => item.items.length > 0,
+      ) ||
+      tabs[0]
+    ).key;
+
+  const activeKey = tab || defaultTab;
+  const active =
+    tabs.find(
+      item => item.key === activeKey,
+    ) || tabs[0];
+
+  const term = search
+    .trim()
+    .toLowerCase();
+
+  const visibleAds = term
+    ? active.items.filter(ad =>
+        [
+          ad.title,
+          ad.posted_by_email,
+          ad.momo_reference,
+        ].some(value =>
+          String(value || '')
+            .toLowerCase()
+            .includes(term),
+        ),
+      )
+    : active.items;
+
   return (
     <div>
-      <h2
-        className="
-          text-xl
-          font-bold
-          text-gray-900
-          mb-2
-        "
-      >
-        Business Hub Moderation
-        {' '}
-        ({ads.length})
+      <h2 className="text-xl font-bold text-gray-900">
+        Ads to moderate
       </h2>
-
-      {paymentSubmittedCount >
-        0 && (
-        <div
-          className="
-            bg-green-50
-            border
-            border-green-200
-            rounded-lg
-            px-4 py-3
-            mb-4
-            text-sm
-            text-green-800
-          "
-        >
-          <strong>
-            {
-              paymentSubmittedCount
-            }
-          </strong>
-          {' '}
-          payment
-          {paymentSubmittedCount ===
-          1
-            ? ''
-            : 's'}
-          {' '}
-          submitted and ready
-          for verification.
-        </div>
-      )}
-
-      <p
-        className="
-          text-sm
-          text-gray-500
-          mb-6
-        "
-      >
-        {pendingReviewCount}
-        {' '}
-        awaiting review ·
-        {' '}
-        {
-          awaitingUserPaymentCount
-        }
-        {' '}
-        waiting for user payment ·
-        {' '}
-        {paymentSubmittedCount}
-        {' '}
-        awaiting payment
-        verification
+      <p className="mb-4 mt-1 text-sm text-gray-500">
+        Each tab is one job. Ads waiting for the
+        seller to pay need nothing from you.
       </p>
 
-      {ads.length === 0 ? (
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3 border-b border-gray-200">
         <div
-          className="
-            text-center
-            py-16
-            text-gray-400
-          "
+          role="tablist"
+          aria-label="Moderation queues"
+          className="flex flex-wrap gap-x-6"
         >
-          <p className="text-4xl mb-4">
+          {tabs.map(item => {
+            const selected =
+              item.key === activeKey;
+
+            return (
+              <button
+                key={item.key}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                onClick={() => setTab(item.key)}
+                className={`-mb-px border-b-2 px-1 py-2.5 text-sm transition ${
+                  selected
+                    ? 'border-primary font-semibold text-primary'
+                    : 'border-transparent font-medium text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                {item.label}
+                <span
+                  className={`ml-2 rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                    item.urgent &&
+                    item.items.length > 0
+                      ? 'bg-red-500 text-white'
+                      : 'bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  {item.items.length}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <input
+          type="search"
+          value={search}
+          onChange={event =>
+            setSearch(event.target.value)
+          }
+          aria-label="Search ads"
+          placeholder="Search title, seller email…"
+          className="mb-2 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 sm:w-64"
+        />
+      </div>
+
+      <p className="mb-4 rounded-lg bg-emerald-50 px-4 py-2.5 text-sm text-emerald-900">
+        {active.note}
+      </p>
+
+      {visibleAds.length === 0 ? (
+        <div className="py-16 text-center text-gray-400">
+          <p className="mb-4 text-4xl">
             ✅
           </p>
           <p>
-            No pending Business Hub
-            listings
+            {term
+              ? 'No ads match your search in this tab.'
+              : 'Nothing here right now.'}
           </p>
         </div>
       ) : (
         <div className="grid gap-4">
-          {ads.map(ad => (
+          {visibleAds.map(ad => (
             <MarketplaceModerationCard
               key={ad.id}
               ad={ad}
