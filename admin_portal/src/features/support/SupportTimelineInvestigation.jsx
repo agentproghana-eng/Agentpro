@@ -2,6 +2,18 @@ import {
   useState,
 } from 'react';
 import {
+  attributeRows,
+  eventSummary,
+  eventTitle,
+  formatWhen,
+  humanize,
+  providerLabel,
+} from '../../lib/plainText.js';
+import {
+  PlainRows,
+  TechnicalDetails,
+} from '../../components/TechnicalDetails.jsx';
+import {
   useQuery,
 } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -691,10 +703,9 @@ export function SupportTimelineInvestigation() {
                       text-gray-900
                     "
                   >
-                    {
-                      caseSummary.provider ||
-                      '—'
-                    }
+                    {caseSummary.provider
+                      ? providerLabel(caseSummary.provider)
+                      : '—'}
                   </p>
                 </div>
 
@@ -717,10 +728,9 @@ export function SupportTimelineInvestigation() {
                       text-gray-900
                     "
                   >
-                    {
-                      caseSummary.transaction_type ||
-                      '—'
-                    }
+                    {caseSummary.transaction_type
+                      ? humanize(caseSummary.transaction_type)
+                      : '—'}
                   </p>
                 </div>
 
@@ -1164,140 +1174,39 @@ export function SupportTimelineInvestigation() {
                   event => (
                     <div
                       key={event.id}
-                      className="
-                        rounded-lg
-                        border
-                        border-gray-100
-                        p-4
-                      "
+                      className="rounded-lg border border-gray-100 p-4"
                     >
-                      <div
-                        className="
-                          flex
-                          flex-wrap
-                          items-start
-                          justify-between
-                          gap-2
-                        "
-                      >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
                         <div>
-                          <p
-                            className="
-                              text-sm
-                              font-semibold
-                              text-gray-900
-                            "
-                          >
-                            {
-                              event.event_name
-                            }
+                          <p className="text-base font-semibold text-gray-900">
+                            {eventTitle(event.event_name)}
                           </p>
-
-                          <p
-                            className="
-                              mt-1
-                              text-xs
-                              text-gray-500
-                            "
-                          >
-                            {
-                              event.subject_type
-                            }
-                            {' · '}
-                            {
-                              event.source
-                            }
-                          </p>
+                          {eventSummary(event.attributes) && (
+                            <p className="mt-1 text-sm text-gray-600">
+                              {eventSummary(event.attributes)}
+                            </p>
+                          )}
                         </div>
-
                         <time
-                          className="
-                            text-xs
-                            text-gray-400
-                          "
+                          dateTime={event.occurred_at}
+                          className="text-xs text-gray-400"
                         >
-                          {new Date(
-                            event.occurred_at,
-                          ).toLocaleString()}
+                          {formatWhen(event.occurred_at)}
                         </time>
                       </div>
 
-                      <div
-                        className="
-                          mt-3
-                          grid gap-2
-                          text-xs
-                          md:grid-cols-2
-                        "
-                      >
-                        <div>
-                          <span
-                            className="
-                              text-gray-400
-                            "
-                          >
-                            Subject
-                          </span>
+                      <PlainRows
+                        rows={attributeRows(event.attributes)}
+                      />
 
-                          <p
-                            className="
-                              break-all
-                              font-mono
-                              text-gray-600
-                            "
-                          >
-                            {
-                              event.subject_id
-                            }
-                          </p>
-                        </div>
-
-                        <div>
-                          <span
-                            className="
-                              text-gray-400
-                            "
-                          >
-                            Correlation
-                          </span>
-
-                          <p
-                            className="
-                              break-all
-                              font-mono
-                              text-gray-600
-                            "
-                          >
-                            {
-                              event.correlation_id
-                            }
-                          </p>
-                        </div>
-                      </div>
-
-                      {event.attributes &&
-                        Object.keys(
-                          event.attributes,
-                        ).length >
-                          0 && (
-                        <pre
-                          className="
-                            mt-3
-                            overflow-x-auto
-                            rounded-lg
-                            bg-gray-50
-                            p-3
-                            text-xs
-                            text-gray-600
-                          "
-                        >
-                          {JSON.stringify(
-                            event.attributes,
-                            null,
-                            2,
-                          )}
-                        </pre>
-                      )}
+                      <TechnicalDetails
+                        rows={[
+                          { label: 'Event name', value: event.event_name },
+                          { label: 'Subject', value: `${event.subject_type || ''} ${event.subject_id || ''}`.trim() },
+                          { label: 'Correlation ID', value: event.correlation_id },
+                          { label: 'Source', value: event.source },
+                        ]}
+                      />
                     </div>
                   ),
                 )}
