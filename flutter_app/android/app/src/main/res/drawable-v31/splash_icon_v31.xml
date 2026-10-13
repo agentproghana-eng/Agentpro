@@ -3,13 +3,13 @@
   The Android 12+ splash icon is drawn on a 288dp canvas and shown through a
   mask that only reveals a 192dp circle. A bitmap without an explicit size is
   drawn at its pixel size (scaled by screen density), which is far larger than
-  the canvas, so the system mask cut the logo. Pin the logo to a fixed size
+  the canvas, so the system mask cut the logo. Pin the logo to a fixed size (132dp: the corners of a larger square fall outside the circle and get cut)
   that sits inside the visible circle.
 -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item
-        android:width="176dp"
-        android:height="176dp"
+        android:width="132dp"
+        android:height="132dp"
         android:gravity="center">
         <bitmap
             android:gravity="fill"
