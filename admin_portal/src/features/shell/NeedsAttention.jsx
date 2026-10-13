@@ -36,6 +36,14 @@ function items(counts) {
       action: 'Review ads',
     },
     {
+      key: 'escalated',
+      path: '/support',
+      count: counts.escalated,
+      title: (n) => `${n} escalated fraud ${n === 1 ? 'signal' : 'signals'} still open`,
+      hint: 'Someone escalated these. Look into each one, then mark it resolved.',
+      action: 'Open fraud queue',
+    },
+    {
       key: 'support',
       path: '/support',
       count: counts.support,

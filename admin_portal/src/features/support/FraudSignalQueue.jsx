@@ -132,6 +132,14 @@ export function FraudSignalQueue() {
                 'fraud-signals',
               ],
             });
+
+          await queryClient
+            .invalidateQueries({
+              queryKey: [
+                'admin',
+                'fraud-signals-escalated',
+              ],
+            });
         },
 
       onError:
@@ -151,6 +159,8 @@ export function FraudSignalQueue() {
       'dismiss this signal',
     escalated:
       'escalate this signal for further investigation',
+    resolved:
+      'mark this escalated signal as resolved',
   };
 
   const reviewFraudSignal =
@@ -158,10 +168,15 @@ export function FraudSignalQueue() {
       signal,
       status,
     ) => {
+      const expectedStatus =
+        status === 'resolved'
+          ? 'escalated'
+          : 'open';
+
       if (
         !signal?.id ||
         signal.review_status !==
-          'open' ||
+          expectedStatus ||
         fraudReviewMutation
           .isPending
       ) {
@@ -257,6 +272,9 @@ export function FraudSignalQueue() {
               </option>
               <option value="dismissed">
                 Dismissed
+              </option>
+              <option value="resolved">
+                Resolved
               </option>
               <option value="all">
                 All
@@ -477,6 +495,22 @@ export function FraudSignalQueue() {
                           "
                         >
                           Escalate
+                        </button>
+                      </div>
+                    )}
+
+                    {signal.review_status === 'escalated' && (
+                      <div className="mt-4 flex flex-wrap items-center gap-3">
+                        <p className="text-xs text-gray-500">
+                          Escalated: superusers were alerted. Close it once it has been dealt with.
+                        </p>
+                        <button
+                          type="button"
+                          disabled={fraudReviewMutation.isPending}
+                          onClick={() => reviewFraudSignal(signal, 'resolved')}
+                          className="rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                        >
+                          Mark resolved
                         </button>
                       </div>
                     )}

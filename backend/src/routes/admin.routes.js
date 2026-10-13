@@ -1280,6 +1280,44 @@ router.get('/fraud-signals/:id', async (req, res) => {
   }
 });
 
+const FRAUD_RULE_TITLES = {
+  auth_login_failure_burst_10m: 'Repeated failed logins',
+};
+
+// Tells every superuser a fraud signal was escalated. Deduplicated per
+// signal and recipient, so a retry can never send it twice.
+async function notifySuperusersOfEscalation(signal) {
+  const recipients = await query(
+    `SELECT id FROM users WHERE role = 'superuser' AND status = 'active'`
+  );
+
+  const title =
+    FRAUD_RULE_TITLES[signal.rule_id] ||
+    String(signal.rule_id || signal.signal_type || 'Fraud signal')
+      .replace(/_/g, ' ');
+
+  const severity = String(signal.severity || '').toLowerCase();
+
+  await Promise.all(
+    recipients.rows.map(row =>
+      sendToUser(
+        row.id,
+        {
+          type: 'fraud_signal_escalated',
+          title: '🔴 Fraud signal escalated',
+          body: `${title} (${severity} risk, ${signal.risk_score}/100). Open Support, then Fraud Signal Queue, and choose Escalated.`,
+          data: {
+            fraud_signal_id: String(signal.id),
+          },
+        },
+        {
+          deliveryKey: `fraud_escalated:${signal.id}:${row.id}`,
+        }
+      )
+    )
+  );
+}
+
 router.patch('/fraud-signals/:id/review', async (req, res) => {
   try {
     const result =
@@ -1341,6 +1379,17 @@ router.patch('/fraud-signals/:id/review', async (req, res) => {
           return reviewed.signal;
         }
       );
+
+    if (result.review_status === 'escalated') {
+      // Best effort and outside the review transaction: a failed push must
+      // never undo or block the escalation itself.
+      notifySuperusersOfEscalation(result).catch(error => {
+        logger.error('Fraud escalation notification failed:', {
+          errorCode: error?.code,
+          requestId: req.requestId,
+        });
+      });
+    }
 
     return res.json({
       success: true,

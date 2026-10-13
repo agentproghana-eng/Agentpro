@@ -13,6 +13,7 @@ const REVIEW_STATUSES =
     'reviewed',
     'dismissed',
     'escalated',
+    'resolved',
   ]);
 
 const QUEUE_STATUSES =
@@ -21,6 +22,7 @@ const QUEUE_STATUSES =
     'reviewed',
     'dismissed',
     'escalated',
+    'resolved',
     'all',
   ]);
 
@@ -325,7 +327,7 @@ async function reviewFraudSignal({
     throw reviewError(
       400,
       'FRAUD_SIGNAL_INVALID_REVIEW_STATUS',
-      'Review status must be reviewed, dismissed, or escalated'
+      'Review status must be reviewed, dismissed, escalated, or resolved'
     );
   }
 
@@ -353,6 +355,21 @@ async function reviewFraudSignal({
     current.rows[0];
 
   if (
+    normalizedStatus ===
+    'resolved'
+  ) {
+    // Only an escalated signal can be closed out as resolved.
+    if (
+      previous.review_status !==
+      'escalated'
+    ) {
+      throw reviewError(
+        409,
+        'FRAUD_SIGNAL_NOT_ESCALATED',
+        'Only an escalated fraud signal can be marked resolved'
+      );
+    }
+  } else if (
     previous.review_status !==
     'open'
   ) {
@@ -372,13 +389,14 @@ async function reviewFraudSignal({
          reviewed_by = $2,
          updated_at = NOW()
        WHERE id = $3
-         AND review_status = 'open'
+         AND review_status = $4
        RETURNING
          ${SIGNAL_COLUMNS}`,
       [
         normalizedStatus,
         reviewedBy,
         id,
+        previous.review_status,
       ]
     );
 
