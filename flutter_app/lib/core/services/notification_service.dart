@@ -66,6 +66,19 @@ String notificationRouteForType(
 
       return '/marketplace';
 
+    case 'ad_enquiry':
+      // A buyer messaged the seller: open the enquiries inbox.
+      return '/marketplace/enquiries';
+
+    case 'ad_saved':
+      final savedAdId = adId?.trim();
+
+      if (savedAdId != null && savedAdId.isNotEmpty) {
+        return '/marketplace/ads/${Uri.encodeComponent(savedAdId)}';
+      }
+
+      return '/marketplace';
+
     case 'ad_approved':
     case 'ad_rejected':
     case 'ad_expiring':
