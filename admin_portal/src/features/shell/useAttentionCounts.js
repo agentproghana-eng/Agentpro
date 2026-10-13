@@ -52,6 +52,18 @@ export function useAttentionCounts(user) {
     15_000,
   );
 
+  const escalated = useCount(
+    canSupport,
+    ['admin', 'fraud-signals-escalated'],
+    async () => {
+      const response = await API.get('/admin/fraud-signals', {
+        params: { status: 'escalated', limit: 50 },
+      });
+      return response.data.data?.signals || [];
+    },
+    60_000,
+  );
+
   const adsAwaitingReview = Array.isArray(ads)
     ? ads.filter((ad) => ad.status === 'pending_review').length
     : undefined;
@@ -66,5 +78,6 @@ export function useAttentionCounts(user) {
     adsAwaitingVerification,
     support: Array.isArray(support) ? support.length : undefined,
     flows: Array.isArray(flows) ? flows.length : undefined,
+    escalated: Array.isArray(escalated) ? escalated.length : undefined,
   };
 }
