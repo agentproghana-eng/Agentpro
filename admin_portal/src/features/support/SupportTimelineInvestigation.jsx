@@ -31,6 +31,11 @@ export function SupportTimelineInvestigation() {
     setTimelineFilter,
   ] = useState('all');
 
+  const [
+    newestFirst,
+    setNewestFirst,
+  ] = useState(false);
+
   const searchQuery =
     useQuery({
       queryKey: [
@@ -114,6 +119,11 @@ export function SupportTimelineInvestigation() {
 
       return true;
     });
+
+  const sortedEvents =
+    newestFirst
+      ? [...filteredEvents].reverse()
+      : filteredEvents;
 
   const copySupportId =
     async (
@@ -1104,14 +1114,30 @@ export function SupportTimelineInvestigation() {
                   </option>
                 </select>
 
-                <span
+                <button
+                  type="button"
+                  onClick={() =>
+                    setNewestFirst(
+                      current => !current,
+                    )
+                  }
+                  aria-label="Reverse timeline order"
                   className="
+                    rounded-lg
+                    border
+                    border-gray-200
+                    bg-white
+                    px-2 py-1
                     text-xs
-                    text-gray-400
+                    text-gray-700
+                    hover:bg-gray-50
                   "
                 >
-                  Oldest → newest
-                </span>
+                  {newestFirst
+                    ? 'Newest → oldest'
+                    : 'Oldest → newest'}
+                  {' ⇅'}
+                </button>
               </div>
             </div>
 
@@ -1134,7 +1160,7 @@ export function SupportTimelineInvestigation() {
                   space-y-3
                 "
               >
-                {filteredEvents.map(
+                {sortedEvents.map(
                   event => (
                     <div
                       key={event.id}
