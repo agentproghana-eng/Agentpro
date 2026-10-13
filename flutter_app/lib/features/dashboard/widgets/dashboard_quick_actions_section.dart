@@ -570,8 +570,6 @@ class DashboardQuickActionsSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _customiseLink(context, role),
-          const SizedBox(height: 8),
           if (sims.length > 1) ...[
             _buildSimSelector(
               sims,
@@ -579,13 +577,20 @@ class DashboardQuickActionsSection extends StatelessWidget {
             ),
             const SizedBox(height: 10),
           ],
-          GridView.count(
-            crossAxisCount: 3,
+          _customiseLink(context, role),
+          const SizedBox(height: 10),
+          // Zero padding: a GridView otherwise inherits the status-bar inset
+          // and opens a large gap between the bar and the first row of tiles.
+          GridView(
+            padding: EdgeInsets.zero,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 6,
-            crossAxisSpacing: 6,
-            childAspectRatio: 0.9,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              mainAxisExtent: 56,
+            ),
             children: actions,
           ),
         ],
@@ -1042,6 +1047,15 @@ class _QuickActionState extends State<_QuickAction> {
     setState(() => _pressed = value);
   }
 
+  // Hold the highlight briefly after the finger lifts so a quick tap still
+  // shows it before the next screen opens.
+  void _release(TapUpDetails _) {
+    Future<void>.delayed(
+      const Duration(milliseconds: 160),
+      () => _setPressed(false),
+    );
+  }
+
   void _activate() {
     HapticFeedback.selectionClick();
     widget.onTap();
@@ -1055,61 +1069,49 @@ class _QuickActionState extends State<_QuickAction> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: (_) => _setPressed(true),
-        onTapUp: (_) => _setPressed(false),
+        onTapUp: _release,
         onTapCancel: () => _setPressed(false),
         onTap: _activate,
         child: AnimatedScale(
-          scale: _pressed ? 0.965 : 1,
+          scale: _pressed ? 0.97 : 1,
           duration: const Duration(milliseconds: 110),
           curve: Curves.easeOutCubic,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 110),
             curve: Curves.easeOutCubic,
+            padding: const EdgeInsets.symmetric(horizontal: 7),
             decoration: BoxDecoration(
-              color: context.appSurface,
-              borderRadius: BorderRadius.circular(14),
+              // Tapped tile: the tile's own tint, a stronger border in its
+              // icon colour and a tinted label, so the tap is clearly shown.
+              color: _pressed ? widget.bgColor : context.appSurface,
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(
+                width: _pressed ? 1.5 : 1,
                 color: _pressed
-                    ? widget.iconColor.withValues(alpha: 0.24)
-                    : context.appSecondaryText.withValues(alpha: 0.07),
+                    ? widget.iconColor.withValues(alpha: 0.75)
+                    : context.appSecondaryText.withValues(alpha: 0.10),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(
-                    alpha: _pressed ? 0.025 : 0.055,
-                  ),
-                  blurRadius: _pressed ? 4 : 9,
-                  offset: Offset(0, _pressed ? 1 : 3),
-                ),
-              ],
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+            child: Row(
               children: [
-                AnimatedScale(
-                  scale: _pressed ? 0.94 : 1,
-                  duration: const Duration(milliseconds: 110),
-                  curve: Curves.easeOutCubic,
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: widget.bgColor,
-                      borderRadius: BorderRadius.circular(11),
-                    ),
-                    child: Icon(
-                      widget.icon,
-                      size: 23,
-                      color: widget.iconColor,
-                    ),
-                  ),
+                Icon(
+                  widget.icon,
+                  size: 20,
+                  color: widget.iconColor,
                 ),
-                const SizedBox(height: 7),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: FittedTileLabel(
-                    widget.label.toUpperCase(),
-                    maxFontSize: 13,
+                const SizedBox(width: 6),
+                Expanded(
+                  child: DefaultTextStyle.merge(
+                    style: TextStyle(
+                      color: _pressed ? widget.iconColor : null,
+                    ),
+                    child: FittedTileLabel(
+                      widget.label,
+                      maxFontSize: 12,
+                      minFontSize: 8,
+                      fontWeight: FontWeight.w600,
+                      textAlign: TextAlign.start,
+                    ),
                   ),
                 ),
               ],

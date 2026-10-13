@@ -12,6 +12,7 @@ class FittedTileLabel extends StatelessWidget {
   final double minFontSize;
   final FontWeight fontWeight;
   final int maxLines;
+  final TextAlign textAlign;
 
   const FittedTileLabel(
     this.text, {
@@ -20,6 +21,7 @@ class FittedTileLabel extends StatelessWidget {
     this.minFontSize = 8,
     this.fontWeight = FontWeight.w700,
     this.maxLines = 2,
+    this.textAlign = TextAlign.center,
   });
 
   /// Largest size, between [minFontSize] and [maxFontSize], at which the
@@ -82,7 +84,7 @@ class FittedTileLabel extends StatelessWidget {
               : maxFontSize;
           return Text(
             text,
-            textAlign: TextAlign.center,
+            textAlign: textAlign,
             maxLines: maxLines,
             overflow: TextOverflow.ellipsis,
             style: TileFontPreference.style(
