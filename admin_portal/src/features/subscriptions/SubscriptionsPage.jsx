@@ -17,6 +17,12 @@ import {
   ConfirmDialog,
 } from '../../components/ConfirmDialog.jsx';
 import API from '../../lib/api.js';
+import {
+  ListSearch,
+  NoMatches,
+  ShowMore,
+  useListView,
+} from '../../components/ListTools.jsx';
 
 // ── Subscriptions Page ────────────────────────────────────────
 
@@ -316,6 +322,9 @@ export function SubscriptionsPage() {
     );
   };
 
+  const businessView = useListView(businessPayments);
+  const personalView = useListView(personalPayments);
+
   if (loading) {
     return (
       <LoadingState label="Loading subscription payment operations..." />
@@ -505,9 +514,18 @@ export function SubscriptionsPage() {
       )}
 
       <section className="mb-8">
-        <h3 className="mb-4 text-lg font-bold text-gray-900">
-          Business — Manual MoMo
-        </h3>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-lg font-bold text-gray-900">
+            Business — Manual MoMo
+          </h3>
+          {businessPayments.length > 3 && (
+            <ListSearch
+              view={businessView}
+              label="Search business payments"
+              placeholder="Search name, reference…"
+            />
+          )}
+        </div>
 
         {businessPayments.length === 0 ? (
           <EmptyState
@@ -516,21 +534,34 @@ export function SubscriptionsPage() {
             message="New Business manual MoMo references will appear here."
           />
         ) : (
-          <div className="grid gap-4">
-            {businessPayments.map((payment) =>
-              renderManualPayment(
-                payment,
-                'business',
-              ),
-            )}
-          </div>
+          <>
+            {businessView.visible.length === 0 && <NoMatches />}
+            <div className="grid gap-4">
+              {businessView.visible.map((payment) =>
+                renderManualPayment(
+                  payment,
+                  'business',
+                ),
+              )}
+            </div>
+            <ShowMore view={businessView} />
+          </>
         )}
       </section>
 
       <section>
-        <h3 className="mb-4 text-lg font-bold text-gray-900">
-          Personal — Manual MoMo
-        </h3>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-lg font-bold text-gray-900">
+            Personal — Manual MoMo
+          </h3>
+          {personalPayments.length > 3 && (
+            <ListSearch
+              view={personalView}
+              label="Search personal payments"
+              placeholder="Search name, reference…"
+            />
+          )}
+        </div>
 
         {personalPayments.length === 0 ? (
           <EmptyState
@@ -539,14 +570,18 @@ export function SubscriptionsPage() {
             message="New Personal manual MoMo references will appear here."
           />
         ) : (
-          <div className="grid gap-4">
-            {personalPayments.map((payment) =>
-              renderManualPayment(
-                payment,
-                'personal',
-              ),
-            )}
-          </div>
+          <>
+            {personalView.visible.length === 0 && <NoMatches />}
+            <div className="grid gap-4">
+              {personalView.visible.map((payment) =>
+                renderManualPayment(
+                  payment,
+                  'personal',
+                ),
+              )}
+            </div>
+            <ShowMore view={personalView} />
+          </>
         )}
       </section>
 

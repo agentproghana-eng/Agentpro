@@ -17,6 +17,12 @@ import {
   ConfirmDialog,
 } from '../../components/ConfirmDialog.jsx';
 import API from '../../lib/api.js';
+import {
+  ListSearch,
+  NoMatches,
+  ShowMore,
+  useListView,
+} from '../../components/ListTools.jsx';
 
 // ── Registrations Page ────────────────────────────────────────
 
@@ -70,6 +76,8 @@ export function RegistrationsPage() {
     },
   });
 
+  const view = useListView(registrations);
+
   if (isLoading) {
     return (
       <LoadingState label="Loading pending registrations..." />
@@ -102,6 +110,12 @@ export function RegistrationsPage() {
           </p>
         </div>
 
+        <div className="flex flex-wrap items-center gap-2">
+        <ListSearch
+          view={view}
+          label="Search registrations"
+          placeholder="Search company, owner, phone…"
+        />
         <button
           type="button"
           onClick={() => refetch()}
@@ -110,6 +124,7 @@ export function RegistrationsPage() {
         >
           {isFetching ? 'Refreshing...' : 'Refresh'}
         </button>
+        </div>
       </div>
 
       {registrations.length === 0 ? (
@@ -119,8 +134,10 @@ export function RegistrationsPage() {
           message="New company applications will appear here for review."
         />
       ) : (
+        <>
+        {view.visible.length === 0 && <NoMatches />}
         <div className="grid gap-4">
-          {registrations.map((registration) => (
+          {view.visible.map((registration) => (
             <article
               key={registration.id}
               className="rounded-xl bg-white p-6 shadow-sm"
@@ -196,6 +213,8 @@ export function RegistrationsPage() {
             </article>
           ))}
         </div>
+        <ShowMore view={view} />
+        </>
       )}
 
       <ConfirmDialog
