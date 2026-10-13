@@ -1,6 +1,7 @@
 import {
   useEffect,
   useRef,
+  useState,
 } from 'react';
 import {
   useMutation,
@@ -153,6 +154,13 @@ export function UssdFlowHealthAlerts() {
   const queryClient =
     useQueryClient();
 
+  const [
+    expandedIds,
+    setExpandedIds,
+  ] = useState(
+    () => new Set(),
+  );
+
   const {
     data: incidents = [],
     isLoading,
@@ -284,6 +292,24 @@ export function UssdFlowHealthAlerts() {
     );
   }
 
+  const builds = incidents
+    .map(incident => Number(incident.last_app_build))
+    .filter(Number.isFinite);
+  const newestBuild = builds.length ? Math.max(...builds) : null;
+  const isOlderBuild = incident =>
+    newestBuild !== null &&
+    Number.isFinite(Number(incident.last_app_build)) &&
+    Number(incident.last_app_build) < newestBuild;
+  const olderIncidents = incidents.filter(isOlderBuild);
+
+  const toggleExpanded = id =>
+    setExpandedIds(current => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
   return (
     <section
       className="
@@ -336,6 +362,27 @@ export function UssdFlowHealthAlerts() {
           {incidents.length} open
         </span>
       </div>
+
+      {olderIncidents.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg bg-white/70 px-3 py-2 text-sm text-amber-900">
+          <span>
+            {olderIncidents.length} of these came from older app builds
+            and may already be fixed.
+          </span>
+          <button
+            type="button"
+            disabled={dismissMutation.isPending}
+            onClick={() =>
+              olderIncidents.forEach(incident =>
+                dismissMutation.mutate(incident.id),
+              )
+            }
+            className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-950 disabled:opacity-50"
+          >
+            Dismiss older builds
+          </button>
+        </div>
+      )}
 
       <div className="mt-4 space-y-3">
         {incidents.map(
@@ -408,6 +455,11 @@ export function UssdFlowHealthAlerts() {
                       {provider}
                       {' · '}
                       {type}
+                      {isOlderBuild(incident) && (
+                        <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-600">
+                          Older app build {incident.last_app_build}
+                        </span>
+                      )}
                     </p>
 
                     <p
@@ -429,12 +481,7 @@ export function UssdFlowHealthAlerts() {
                       }.
                     </p>
 
-                    <p
-                      className="
-                        mt-2 text-xs
-                        text-gray-400
-                      "
-                    >
+                    <p className="mt-2 text-xs text-gray-400">
                       Last detected{' '}
                       {
                         incident.last_detected_at
@@ -443,53 +490,38 @@ export function UssdFlowHealthAlerts() {
                             ).toLocaleString()
                           : '—'
                       }
-
-                      {
-                        incident.last_app_build
-                          ? ` · App build ${incident.last_app_build}`
-                          : ''
-                      }
+                      {' · '}
+                      <button
+                        type="button"
+                        onClick={() => toggleExpanded(incident.id)}
+                        aria-expanded={expandedIds.has(incident.id)}
+                        className="font-semibold text-primary hover:underline"
+                      >
+                        {expandedIds.has(incident.id)
+                          ? 'Hide details'
+                          : 'Show details'}
+                      </button>
                     </p>
 
-                    {
-                      incident.last_source_commit && (
-                        <p
-                          className="
-                            mt-1 break-all
-                            text-xs text-gray-400
-                          "
-                        >
-                          Source{' '}
-                          {
-                            incident
-                              .last_source_commit
-                          }
-                        </p>
-                      )
-                    }
-
-                    {
-                      Array.isArray(
-                        incident.step_match_all,
-                      ) &&
-                      incident
-                        .step_match_all
-                        .length > 0 && (
-                        <p
-                          className="
-                            mt-2 text-xs
-                            text-gray-500
-                          "
-                        >
-                          Configured matcher:{' '}
-                          {
-                            incident
-                              .step_match_all
-                              .join(' + ')
-                          }
-                        </p>
-                      )
-                    }
+                    {expandedIds.has(incident.id) && (
+                      <div className="mt-2 space-y-1 rounded-lg bg-gray-50 p-3 text-xs text-gray-500">
+                        {incident.last_app_build && (
+                          <p>App build {incident.last_app_build}</p>
+                        )}
+                        {incident.last_source_commit && (
+                          <p className="break-all">
+                            Source {incident.last_source_commit}
+                          </p>
+                        )}
+                        {Array.isArray(incident.step_match_all) &&
+                          incident.step_match_all.length > 0 && (
+                            <p>
+                              Configured matcher:{' '}
+                              {incident.step_match_all.join(' + ')}
+                            </p>
+                          )}
+                      </div>
+                    )}
                   </div>
 
                   <div
