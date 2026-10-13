@@ -103,11 +103,15 @@ describe(
       "Admin separates waiting-for-payment from submitted-payment work",
       () => {
         expect(admin).toContain(
-          "awaitingUserPaymentCount"
+          "waitingAds"
         );
 
         expect(admin).toContain(
-          "paymentSubmittedCount"
+          "verifyAds"
+        );
+
+        expect(admin).toContain(
+          "Waiting for seller"
         );
 
         expect(admin).toContain(
