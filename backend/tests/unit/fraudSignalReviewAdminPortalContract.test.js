@@ -89,7 +89,7 @@ describe(
       () => {
         expect(source)
           .toContain(
-            'window.confirm('
+            '<ConfirmDialog'
           );
 
         expect(source)

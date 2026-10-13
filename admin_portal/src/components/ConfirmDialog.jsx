@@ -10,6 +10,9 @@ export function ConfirmDialog({
   requireReason = false,
   reasonLabel = 'Reason',
   reasonPlaceholder = 'Enter a reason...',
+  inputType = null,
+  initialValue = '',
+  inputHint = null,
   loading = false,
   onConfirm,
   onClose,
@@ -17,8 +20,8 @@ export function ConfirmDialog({
   const [reason, setReason] = useState('');
 
   useEffect(() => {
-    if (open) setReason('');
-  }, [open]);
+    if (open) setReason(String(initialValue));
+  }, [open, initialValue]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -76,16 +79,32 @@ export function ConfirmDialog({
               {reasonLabel}
             </label>
 
-            <textarea
-              id="confirmation-reason"
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-              rows={3}
-              autoFocus
-              disabled={loading}
-              placeholder={reasonPlaceholder}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:bg-gray-100"
-            />
+            {inputType ? (
+              <input
+                id="confirmation-reason"
+                type={inputType}
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                autoFocus
+                disabled={loading}
+                placeholder={reasonPlaceholder}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:bg-gray-100"
+              />
+            ) : (
+              <textarea
+                id="confirmation-reason"
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                rows={3}
+                autoFocus
+                disabled={loading}
+                placeholder={reasonPlaceholder}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:bg-gray-100"
+              />
+            )}
+            {inputHint && (
+              <p className="mt-1 text-xs text-gray-500">{inputHint}</p>
+            )}
           </div>
         )}
 
