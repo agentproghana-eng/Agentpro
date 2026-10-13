@@ -570,6 +570,8 @@ class DashboardQuickActionsSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          _customiseLink(context, role),
+          const SizedBox(height: 8),
           if (sims.length > 1) ...[
             _buildSimSelector(
               sims,
@@ -587,6 +589,45 @@ class DashboardQuickActionsSection extends StatelessWidget {
             children: actions,
           ),
         ],
+      ),
+    );
+  }
+
+  /// Slim link above the tiles that opens Quick Action Customisation for the
+  /// selected SIM's purpose.
+  Widget _customiseLink(BuildContext context, String role) {
+    const green = Color(0xFF006B5E);
+
+    return Semantics(
+      button: true,
+      label: 'Customise ${_roleLabel(role)} Quick Actions',
+      child: Material(
+        color: green.withValues(alpha: 0.09),
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => context.push(_customizeRoute(role)),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Icon(Icons.tune_rounded, size: 18, color: green),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Customise Quick Actions',
+                    style: TextStyle(
+                      color: green,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, size: 22, color: green),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
