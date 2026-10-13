@@ -31,7 +31,7 @@ export function Table({ columns, data, loading, emptyMsg = 'No data', onRowClick
       <table className="w-full text-sm">
         <thead className="bg-gray-50 border-b border-gray-200">
           <tr>{columns.map(c => (
-            <th key={c.key} className="text-left px-4 py-3 font-semibold text-gray-600">{c.label}</th>
+            <th key={c.key} className="min-w-[8rem] text-left px-4 py-3 font-semibold text-gray-600">{c.label}</th>
           ))}</tr>
         </thead>
         <tbody className="divide-y divide-gray-50">
@@ -40,7 +40,7 @@ export function Table({ columns, data, loading, emptyMsg = 'No data', onRowClick
               onClick={onRowClick ? () => onRowClick(row) : undefined}
               className={`hover:bg-gray-50 transition ${onRowClick ? 'cursor-pointer' : ''}`}>
               {columns.map(c => (
-                <td key={c.key} className="px-4 py-3 text-gray-700">
+                <td key={c.key} className="min-w-[8rem] px-4 py-3 text-gray-700">
                   {c.render ? c.render(row) : row[c.key] ?? '—'}
                 </td>
               ))}
@@ -54,12 +54,12 @@ export function Table({ columns, data, loading, emptyMsg = 'No data', onRowClick
 
 export function PageHeader({ title, subtitle, action }) {
   return (
-    <div className="flex items-start justify-between mb-6">
-      <div>
+    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0">
         <h2 className="text-xl font-bold text-gray-900">{title}</h2>
         {subtitle && <p className="text-sm text-gray-500 mt-1">{subtitle}</p>}
       </div>
-      {action}
+      {action && <div className="w-full sm:w-auto">{action}</div>}
     </div>
   );
 }

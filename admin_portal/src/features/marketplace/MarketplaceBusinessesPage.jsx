@@ -300,7 +300,7 @@ export function MarketplaceBusinessesPage({
               }
               placeholder="Search companies or seller email..."
               aria-label="Search marketplace businesses"
-              className="w-72 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full sm:w-72 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
 
             {search.trim().length === 1 && (

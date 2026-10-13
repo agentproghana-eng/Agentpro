@@ -136,7 +136,7 @@ export function CompaniesPage() {
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search companies..."
               aria-label="Search companies"
-              className="w-64 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full sm:w-64 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
             {search.trim().length === 1 && (
               <p className="mt-1 text-xs text-gray-400">
@@ -355,7 +355,7 @@ export function PersonalUsersPage() {
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search Personal users..."
               aria-label="Search Personal users"
-              className="w-64 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full sm:w-64 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
             {search.trim().length === 1 && (
               <p className="mt-1 text-xs text-gray-400">
