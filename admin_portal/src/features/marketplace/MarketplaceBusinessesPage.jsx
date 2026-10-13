@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 import API from '../../lib/api.js';
+import { ConfirmDialog } from '../../components/ConfirmDialog.jsx';
 import {
   Badge,
   PageHeader,
@@ -21,6 +22,7 @@ export function MarketplaceBusinessesPage({
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [search, setSearch] = useState('');
+  const [featureTarget, setFeatureTarget] = useState(null);
   const [nextCursor, setNextCursor] = useState(null);
   const [hasMore, setHasMore] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
@@ -221,43 +223,37 @@ export function MarketplaceBusinessesPage({
     };
 
   const toggleFeatured =
-    async company => {
-      let priority =
-        company.marketplace_featured_priority ||
-        0;
-
-      if (
-        !company.marketplace_featured
-      ) {
-        const entered =
-          window.prompt(
-            'Featured priority (higher numbers appear first):',
-            String(
-              priority || 10,
-            ),
-          );
-
-        if (entered === null) {
-          return;
-        }
-
-        priority =
-          Number(entered);
-
-        if (
-          !Number.isInteger(
-            priority,
-          ) ||
-          priority < 0 ||
-          priority > 10000
-        ) {
-          toast.error(
-            'Priority must be an integer between 0 and 10000.',
-          );
-          return;
-        }
+    company => {
+      if (company.marketplace_featured) {
+        applyFeatured(company, company.marketplace_featured_priority || 0);
+        return;
       }
 
+      setFeatureTarget(company);
+    };
+
+  const confirmFeatured =
+    value => {
+      const company = featureTarget;
+      const priority = Number(value);
+
+      if (
+        !Number.isInteger(priority) ||
+        priority < 0 ||
+        priority > 10000
+      ) {
+        toast.error(
+          'Priority must be a whole number between 0 and 10000.',
+        );
+        return;
+      }
+
+      setFeatureTarget(null);
+      applyFeatured(company, priority);
+    };
+
+  const applyFeatured =
+    async (company, priority) => {
       setUpdatingId(
         company.company_id,
       );
@@ -539,6 +535,20 @@ export function MarketplaceBusinessesPage({
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={Boolean(featureTarget)}
+        title="Feature this business"
+        message="Featured businesses appear first in the marketplace. Higher numbers appear first."
+        confirmLabel="Feature business"
+        requireReason
+        reasonLabel="Featured priority"
+        inputType="number"
+        initialValue={featureTarget?.marketplace_featured_priority || 10}
+        inputHint="Enter a whole number from 0 to 10000."
+        onClose={() => setFeatureTarget(null)}
+        onConfirm={confirmFeatured}
+      />
     </div>
   );
 }

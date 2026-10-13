@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 
 import API from '../../lib/api.js';
 import { Badge, PageHeader } from '../../components/AdminUi.jsx';
+import { ConfirmDialog } from '../../components/ConfirmDialog.jsx';
 
 // ── USSD Templates Page ───────────────────────────────────────
 
@@ -738,6 +739,7 @@ export function FlowsPage() {
     steps: [{ match_all: [''], action: 'send_digit', action_value: '' }],
   }, null, 2));
   const [saving, setSaving] = useState(false);
+  const [pendingActivation, setPendingActivation] = useState(null);
   const [validationError, setValidationError] = useState(null);
   const [formSchema, setFormSchema] = useState([]);
   const [testScreenText, setTestScreenText] = useState('');
@@ -914,21 +916,16 @@ export function FlowsPage() {
     }
   };
 
-  const changeActivation = async (
+  const changeActivation = (flow, nextActive) => {
+    setPendingActivation({ flow, nextActive });
+  };
+
+  const runActivation = async (
     flow,
     nextActive,
   ) => {
     const verb =
       nextActive ? 'activate' : 'deactivate';
-
-    const confirmed =
-      window.confirm(
-        nextActive
-          ? `Activate ${flow.provider?.toUpperCase()} ${flow.transaction_type?.replace(/_/g, ' ')}? The backend will run activation-readiness checks before making it available.`
-          : `Deactivate ${flow.provider?.toUpperCase()} ${flow.transaction_type?.replace(/_/g, ' ')}?`
-      );
-
-    if (!confirmed) return;
 
     setSaving(true);
 
@@ -1341,6 +1338,43 @@ export function FlowsPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={Boolean(pendingActivation)}
+        title={
+          pendingActivation?.nextActive
+            ? 'Activate this flow?'
+            : 'Deactivate this flow?'
+        }
+        message={
+          pendingActivation
+            ? pendingActivation.nextActive
+              ? `Activate ${pendingActivation.flow.provider?.toUpperCase()} ${pendingActivation.flow.transaction_type?.replace(/_/g, ' ')}? The backend will run activation-readiness checks before making it available.`
+              : `Deactivate ${pendingActivation.flow.provider?.toUpperCase()} ${pendingActivation.flow.transaction_type?.replace(/_/g, ' ')}? Agents will no longer be able to use it.`
+            : ''
+        }
+        confirmLabel={
+          pendingActivation?.nextActive
+            ? 'Activate'
+            : 'Deactivate'
+        }
+        tone={
+          pendingActivation?.nextActive
+            ? 'primary'
+            : 'danger'
+        }
+        onClose={() => setPendingActivation(null)}
+        onConfirm={() => {
+          const target = pendingActivation;
+          setPendingActivation(null);
+          if (target) {
+            runActivation(
+              target.flow,
+              target.nextActive,
+            );
+          }
+        }}
+      />
     </div>
   );
 }

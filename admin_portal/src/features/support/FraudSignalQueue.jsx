@@ -14,10 +14,16 @@ import {
   EmptyState,
 } from '../../components/PageState.jsx';
 import API from '../../lib/api.js';
+import { ConfirmDialog } from '../../components/ConfirmDialog.jsx';
 
 export function FraudSignalQueue() {
   const queryClient =
     useQueryClient();
+
+  const [
+    pendingReview,
+    setPendingReview,
+  ] = useState(null);
 
   const [
     fraudStatus,
@@ -104,6 +110,15 @@ export function FraudSignalQueue() {
         },
     });
 
+  const REVIEW_LABELS = {
+    reviewed:
+      'mark this signal as reviewed',
+    dismissed:
+      'dismiss this signal',
+    escalated:
+      'escalate this signal for further investigation',
+  };
+
   const reviewFraudSignal =
     (
       signal,
@@ -119,30 +134,10 @@ export function FraudSignalQueue() {
         return;
       }
 
-      const labels = {
-        reviewed:
-          'mark this signal as reviewed',
-        dismissed:
-          'dismiss this signal',
-        escalated:
-          'escalate this signal for further investigation',
-      };
-
-      const confirmed =
-        window.confirm(
-          `Are you sure you want to ${labels[status]}? This review state cannot be changed from this screen.`,
-        );
-
-      if (!confirmed) {
-        return;
-      }
-
-      fraudReviewMutation
-        .mutate({
-          signalId:
-            signal.id,
-          status,
-        });
+      setPendingReview({
+        signal,
+        status,
+      });
     };
 
   return (
@@ -647,6 +642,33 @@ export function FraudSignalQueue() {
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={Boolean(pendingReview)}
+        title="Review this signal?"
+        message={
+          pendingReview
+            ? `Are you sure you want to ${REVIEW_LABELS[pendingReview.status]}? This review state cannot be changed from this screen.`
+            : ''
+        }
+        confirmLabel="Yes, continue"
+        tone={
+          pendingReview?.status === 'dismissed'
+            ? 'danger'
+            : 'primary'
+        }
+        onClose={() => setPendingReview(null)}
+        onConfirm={() => {
+          const target = pendingReview;
+          setPendingReview(null);
+          if (target) {
+            fraudReviewMutation.mutate({
+              signalId: target.signal.id,
+              status: target.status,
+            });
+          }
+        }}
+      />
     </>
   );
 }
