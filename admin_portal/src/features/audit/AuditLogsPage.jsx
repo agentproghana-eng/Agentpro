@@ -5,6 +5,7 @@ import {
 import toast from 'react-hot-toast';
 
 import API from '../../lib/api.js';
+import { attributeRows, formatWhen, humanize } from '../../lib/plainText.js';
 import {
   PageHeader,
   Table,
@@ -108,7 +109,7 @@ export function AuditLogsPage() {
           emptyMsg="No audit logs found"
           columns={[
             { key: 'created_at', label: 'Time',
-              render: r => r.created_at ? new Date(r.created_at).toLocaleString() : '—' },
+              render: r => r.created_at ? formatWhen(r.created_at) : '—' },
             { key: 'user_email', label: 'User',
               render: r => (
                 <div>
@@ -117,22 +118,29 @@ export function AuditLogsPage() {
                 </div>
               )},
             { key: 'action', label: 'Action',
-              render: r => <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">{r.action}</span> },
-            { key: 'entity_type', label: 'Entity',
+              render: r => (
+                <span className="text-xs font-medium text-gray-800" title={r.action}>
+                  {humanize(r.action)}
+                </span>
+              ) },
+            { key: 'entity_type', label: 'What it affected',
               render: r => r.entity_type ? (
-                <span className="text-xs text-gray-500">{r.entity_type}</span>
+                <span className="text-xs text-gray-500" title={r.entity_type}>{humanize(r.entity_type)}</span>
               ) : '—' },
             { key: 'details', label: 'Details',
               render: r => {
                 const values = r.new_values || r.old_values;
                 if (!values || Object.keys(values).length === 0) return '—';
-                const summary = Object.entries(values)
-                  .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`)
-                  .join(', ');
+                const rows = attributeRows(values);
                 return (
-                  <span className="text-xs text-gray-600 truncate max-w-xs block" title={summary}>
-                    {summary}
-                  </span>
+                  <ul className="max-w-xs space-y-0.5 text-xs text-gray-600">
+                    {rows.map(row => (
+                      <li key={row.label}>
+                        <span className="text-gray-400">{row.label}:</span>{' '}
+                        {row.value}
+                      </li>
+                    ))}
+                  </ul>
                 );
               }},
             { key: 'ip_address', label: 'IP',

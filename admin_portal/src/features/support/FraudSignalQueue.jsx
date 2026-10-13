@@ -14,6 +14,40 @@ import {
   EmptyState,
 } from '../../components/PageState.jsx';
 import API from '../../lib/api.js';
+import {
+  formatWhen,
+  humanize,
+  providerLabel,
+  ruleTitle,
+} from '../../lib/plainText.js';
+import {
+  PlainRows,
+  TechnicalDetails,
+} from '../../components/TechnicalDetails.jsx';
+
+function minutesBetween(start, end) {
+  const a = new Date(start).getTime();
+  const b = new Date(end).getTime();
+  if (Number.isNaN(a) || Number.isNaN(b) || b <= a) return null;
+  return Math.max(1, Math.round((b - a) / 60000));
+}
+
+function signalSummary(signal) {
+  const count = Number(signal.observed_event_count);
+  const minutes = minutesBetween(
+    signal.window_started_at,
+    signal.window_ended_at,
+  );
+  const within = minutes ? ` within ${minutes} minutes` : '';
+
+  if (!Number.isFinite(count)) return 'Unusual activity was detected.';
+
+  if (signal.rule_id === 'auth_login_failure_burst_10m') {
+    return `${count} failed login attempt${count === 1 ? '' : 's'}${within}.`;
+  }
+
+  return `${count} related event${count === 1 ? '' : 's'}${within}.`;
+}
 import { ConfirmDialog } from '../../components/ConfirmDialog.jsx';
 
 export function FraudSignalQueue() {
@@ -306,228 +340,54 @@ export function FraudSignalQueue() {
                       p-4
                     "
                   >
-                    <div
-                      className="
-                        flex
-                        flex-wrap
-                        items-start
-                        justify-between
-                        gap-3
-                      "
-                    >
-                      <div>
-                        <div
-                          className="
-                            flex
-                            flex-wrap
-                            items-center
-                            gap-2
-                          "
-                        >
-                          <span
-                            className="
-                              rounded-full
-                              bg-gray-100
-                              px-2 py-1
-                              text-xs
-                              font-semibold
-                              uppercase
-                              tracking-wide
-                              text-gray-700
-                            "
-                          >
-                            {
-                              signal.severity
-                            }
-                          </span>
-
-                          <span
-                            className="
-                              rounded-full
-                              bg-gray-50
-                              px-2 py-1
-                              text-xs
-                              font-semibold
-                              text-gray-600
-                            "
-                          >
-                            Risk{' '}
-                            {
-                              signal.risk_score
-                            }
-                            /100
-                          </span>
-
-                          <span
-                            className="
-                              rounded-full
-                              bg-gray-50
-                              px-2 py-1
-                              text-xs
-                              font-semibold
-                              text-gray-600
-                            "
-                          >
-                            {
-                              signal.review_status
-                            }
-                          </span>
-                        </div>
-
-                        <p
-                          className="
-                            mt-3
-                            text-sm
-                            font-semibold
-                            text-gray-900
-                          "
-                        >
-                          {
-                            signal.rule_id
-                          }
-                        </p>
-
-                        <p
-                          className="
-                            mt-1
-                            text-xs
-                            text-gray-500
-                          "
-                        >
-                          {
-                            signal.signal_type
-                          }
-                          {' · '}
-                          {
-                            signal.provider ||
-                            'provider unknown'
-                          }
-                          {' · '}
-                          {
-                            signal.observed_event_count
-                          }{' '}
-                          observed events
-                        </p>
-                      </div>
-
-                      <time
-                        className="
-                          text-xs
-                          text-gray-400
-                        "
-                      >
-                        {signal.created_at
-                          ? new Date(
-                              signal.created_at,
-                            ).toLocaleString()
-                          : '—'}
-                      </time>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold text-gray-800">
+                        {humanize(signal.severity)} risk
+                      </span>
+                      <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
+                        {signal.risk_score} / 100
+                      </span>
+                      <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
+                        {humanize(signal.review_status)}
+                      </span>
                     </div>
 
-                    <div
-                      className="
-                        mt-4
-                        grid
-                        gap-3
-                        text-xs
-                        md:grid-cols-2
-                        xl:grid-cols-4
-                      "
-                    >
-                      <div>
-                        <p
-                          className="
-                            text-gray-400
-                          "
-                        >
-                          Signal ID
-                        </p>
+                    <p className="mt-3 text-base font-bold text-gray-900">
+                      {ruleTitle(signal.rule_id, signal.signal_type)}
+                    </p>
+                    <p className="mt-1 text-sm text-gray-600">
+                      {signalSummary(signal)}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-400">
+                      {formatWhen(signal.created_at)}
+                    </p>
 
-                        <p
-                          className="
-                            mt-1
-                            break-all
-                            font-mono
-                            text-gray-600
-                          "
-                        >
-                          {signal.id}
-                        </p>
-                      </div>
+                    <PlainRows
+                      rows={[
+                        {
+                          label: 'Provider',
+                          value: providerLabel(signal.provider),
+                        },
+                        {
+                          label: 'Events seen',
+                          value: String(signal.observed_event_count ?? '—'),
+                        },
+                        {
+                          label: 'Time window',
+                          value: `${formatWhen(signal.window_started_at)} to ${formatWhen(signal.window_ended_at)}`,
+                        },
+                      ]}
+                    />
 
-                      <div>
-                        <p
-                          className="
-                            text-gray-400
-                          "
-                        >
-                          Actor user
-                        </p>
-
-                        <p
-                          className="
-                            mt-1
-                            break-all
-                            font-mono
-                            text-gray-600
-                          "
-                        >
-                          {
-                            signal.actor_user_id ||
-                            '—'
-                          }
-                        </p>
-                      </div>
-
-                      <div>
-                        <p
-                          className="
-                            text-gray-400
-                          "
-                        >
-                          Company
-                        </p>
-
-                        <p
-                          className="
-                            mt-1
-                            break-all
-                            font-mono
-                            text-gray-600
-                          "
-                        >
-                          {
-                            signal.company_id ||
-                            '—'
-                          }
-                        </p>
-                      </div>
-
-                      <div>
-                        <p
-                          className="
-                            text-gray-400
-                          "
-                        >
-                          Window
-                        </p>
-
-                        <p
-                          className="
-                            mt-1
-                            text-gray-600
-                          "
-                        >
-                          {new Date(
-                            signal.window_started_at,
-                          ).toLocaleString()}
-                          {' → '}
-                          {new Date(
-                            signal.window_ended_at,
-                          ).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
+                    <TechnicalDetails
+                      rows={[
+                        { label: 'Signal ID', value: signal.id },
+                        { label: 'Account (user ID)', value: signal.actor_user_id },
+                        { label: 'Company ID', value: signal.company_id },
+                        { label: 'Rule', value: signal.rule_id },
+                        { label: 'Signal type', value: signal.signal_type },
+                      ]}
+                    />
 
                     {signal.review_status ===
                       'open' && (
