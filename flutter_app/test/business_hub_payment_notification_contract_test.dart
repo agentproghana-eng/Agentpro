@@ -58,6 +58,37 @@ void main() {
           );
         },
       );
+
+      test(
+        'new enquiry notification opens the enquiries inbox',
+        () {
+          expect(
+            notificationRouteForType(
+              'ad_enquiry',
+              adId: adId,
+            ),
+            '/marketplace/enquiries',
+          );
+        },
+      );
+
+      test(
+        'ad saved notification opens the exact listing',
+        () {
+          expect(
+            notificationRouteForType(
+              'ad_saved',
+              adId: adId,
+            ),
+            '/marketplace/ads/$adId',
+          );
+
+          expect(
+            notificationRouteForType('ad_saved'),
+            '/marketplace',
+          );
+        },
+      );
     },
   );
 }
