@@ -229,8 +229,47 @@ describe(
           dbClient.query
             .mock.calls[1][0]
         ).toContain(
-          "review_status = 'open'"
+          'AND review_status = $4'
         );
+
+        expect(
+          dbClient.query
+            .mock.calls[1][1][3]
+        ).toBe('open');
+      }
+    );
+
+    test(
+      'resolves only an escalated signal',
+      async () => {
+        const dbClient = {
+          query:
+            jest.fn()
+              .mockResolvedValueOnce({
+                rows: [
+                  {
+                    id: SIGNAL_ID,
+                    review_status:
+                      'open',
+                  },
+                ],
+              }),
+        };
+
+        await expect(
+          reviewFraudSignal({
+            dbClient,
+            id: SIGNAL_ID,
+            status: 'resolved',
+            reviewedBy:
+              REVIEWER_ID,
+          })
+        ).rejects
+          .toMatchObject({
+            statusCode: 409,
+            code:
+              'FRAUD_SIGNAL_NOT_ESCALATED',
+          });
       }
     );
 
