@@ -1079,12 +1079,18 @@ class _QuickActionState extends State<_QuickAction> {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 110),
             curve: Curves.easeOutCubic,
-            padding: const EdgeInsets.symmetric(horizontal: 7),
-            decoration: BoxDecoration(
-              // Tapped tile: the tile's own tint, a stronger border in its
-              // icon colour and a tinted label, so the tap is clearly shown.
-              color: _pressed ? widget.bgColor : context.appSurface,
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            // Tapped tile: a tint in the tile's icon colour over the card.
+            foregroundDecoration: BoxDecoration(
+              color: _pressed
+                  ? widget.iconColor.withValues(alpha: 0.14)
+                  : Colors.transparent,
               borderRadius: BorderRadius.circular(12),
+            ),
+            decoration: BoxDecoration(
+              color: context.appSurface,
+              borderRadius: BorderRadius.circular(12),
+              // Stronger border in the icon colour while tapped.
               border: Border.all(
                 width: _pressed ? 1.5 : 1,
                 color: _pressed
@@ -1094,12 +1100,22 @@ class _QuickActionState extends State<_QuickAction> {
             ),
             child: Row(
               children: [
-                Icon(
-                  widget.icon,
-                  size: 20,
-                  color: widget.iconColor,
+                // The small icon container keeps owning the customisable
+                // icon background colour (bgColor).
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: widget.bgColor,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    widget.icon,
+                    size: 17,
+                    color: widget.iconColor,
+                  ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 5),
                 Expanded(
                   child: DefaultTextStyle.merge(
                     style: TextStyle(
