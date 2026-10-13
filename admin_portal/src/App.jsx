@@ -1264,7 +1264,22 @@ function LoginPage() {
 function Layout({ children }) {
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const { pathname } = useLocation();
+  const showLabels = sidebarOpen || mobileOpen;
+
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!mobileOpen) return undefined;
+    const onKey = (event) => {
+      if (event.key === 'Escape') setMobileOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mobileOpen]);
   const counts = useAttentionCounts(user);
 
   return (
@@ -1277,12 +1292,33 @@ function Layout({ children }) {
       )}
 
       {/* Sidebar */}
-      <aside className={`${sidebarOpen ? 'w-56' : 'w-16'} bg-white shadow-md flex flex-col min-h-0 overflow-hidden transition-all duration-200`}>
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-gray-950/45 md:hidden"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        id="admin-sidebar"
+        className={`fixed inset-y-0 left-0 z-40 w-72 transform transition-transform duration-200 md:static md:z-auto md:translate-x-0 ${
+          mobileOpen ? 'translate-x-0' : '-translate-x-full invisible md:visible'
+        } ${sidebarOpen ? 'md:w-56' : 'md:w-16'} bg-white shadow-md flex flex-col min-h-0 overflow-hidden`}
+      >
         <div className="p-4 flex items-center gap-3 border-b flex-shrink-0">
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center flex-shrink-0">
             <span className="text-white text-xs font-bold">AP</span>
           </div>
-          {sidebarOpen && <span className="font-bold text-gray-900 text-sm">Admin Portal</span>}
+          {showLabels && <span className="flex-1 font-bold text-gray-900 text-sm">Admin Portal</span>}
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            aria-label="Close menu"
+            className="flex h-11 w-11 items-center justify-center text-xl text-gray-500 md:hidden"
+          >
+            ✕
+          </button>
         </div>
         <nav
           aria-label="Main"
@@ -1295,12 +1331,12 @@ function Layout({ children }) {
             if (visible.length === 0) return null;
             return (
               <div key={group.title || 'top'} className="mb-2">
-                {group.title && sidebarOpen && (
+                {group.title && showLabels && (
                   <p className="px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
                     {group.title}
                   </p>
                 )}
-                {group.title && !sidebarOpen && (
+                {group.title && !showLabels && (
                   <div className="mx-3 my-2 border-t border-gray-100" />
                 )}
                 <div className="space-y-1">
@@ -1311,7 +1347,7 @@ function Layout({ children }) {
                       <Link
                         key={path}
                         to={path}
-                        title={sidebarOpen ? undefined : label}
+                        title={showLabels ? undefined : label}
                         aria-current={active ? 'page' : undefined}
                         className={`relative flex items-center gap-3 px-3 py-2 rounded-lg transition text-sm ${
                           active
@@ -1320,16 +1356,16 @@ function Layout({ children }) {
                         }`}
                       >
                         <span className="text-lg" aria-hidden="true">{icon}</span>
-                        {sidebarOpen && <span className="flex-1 truncate">{label}</span>}
+                        {showLabels && <span className="flex-1 truncate">{label}</span>}
                         {count > 0 && (
                           <span
                             className={
-                              sidebarOpen
+                              showLabels
                                 ? 'rounded-full bg-red-500 px-2 py-0.5 text-[11px] font-semibold text-white'
                                 : 'absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-red-500'
                             }
                           >
-                            {sidebarOpen ? count : <span className="sr-only">{count} waiting</span>}
+                            {showLabels ? count : <span className="sr-only">{count} waiting</span>}
                           </span>
                         )}
                       </Link>
@@ -1341,7 +1377,7 @@ function Layout({ children }) {
           })}
         </nav>
         <div className="p-4 border-t flex-shrink-0">
-          {sidebarOpen && (
+          {showLabels && (
             <>
               <p className="text-xs text-gray-500 truncate">
                 {user?.email}
@@ -1353,25 +1389,33 @@ function Layout({ children }) {
           )}
           <button onClick={logout}
             className="flex items-center gap-2 text-red-500 hover:text-red-700 text-sm w-full">
-            <span>🚪</span>{sidebarOpen && 'Sign Out'}
+            <span>🚪</span>{showLabels && 'Sign Out'}
           </button>
         </div>
       </aside>
 
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-white shadow-sm px-6 py-3 flex items-center gap-4">
+        <header className="bg-white shadow-sm px-3 md:px-6 py-2 md:py-3 flex items-center gap-2 md:gap-4">
           <button
             type="button"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            aria-label={sidebarOpen ? 'Collapse menu' : 'Expand menu'}
-            className="text-gray-500 hover:text-gray-700"
+            onClick={() => {
+              if (window.matchMedia('(min-width: 768px)').matches) {
+                setSidebarOpen(!sidebarOpen);
+              } else {
+                setMobileOpen(!mobileOpen);
+              }
+            }}
+            aria-label="Toggle menu"
+            aria-controls="admin-sidebar"
+            aria-expanded={mobileOpen || sidebarOpen}
+            className="flex h-11 w-11 items-center justify-center text-xl text-gray-500 hover:text-gray-700"
           >
             ☰
           </button>
           <h1 className="text-lg font-semibold text-gray-800">{pageTitleFor(pathname)}</h1>
         </header>
-        <main className="flex-1 overflow-auto p-6">{children}</main>
+        <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
       </div>
     </div>
   );
